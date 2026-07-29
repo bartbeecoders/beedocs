@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beedocs
+  namespace: beedocs
+  labels:
+    app: beedocs
+    app.kubernetes.io/name: beedocs
+spec:
+  # Exactly one replica: SurrealDB runs embedded on RocksDB, which takes an
+  # exclusive lock on the data directory. A second pod would fail to start.
+  replicas: 1
+  strategy:
+    # Recreate, not RollingUpdate — the new pod must not come up while the old
+    # one still holds the RocksDB lock on the ReadWriteOnce volume.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: beedocs
+  template:
+    metadata:
+      labels:
+        app: beedocs
+        app.kubernetes.io/name: beedocs
+    spec:
+      imagePullSecrets:
+        - name: acr-secret
+      containers:
+        - name: beedocs
+          image: beecodersregistry.azurecr.io/beedocs:latest
+          # The deploy script always pushes :latest, so the tag alone never
+          # changes — Always + `rollout restart` is what picks up a new digest.
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: beedocs-config
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          # First boot opens RocksDB and applies the schema, so give startup a
+          # generous budget; liveness stays tight once the app is up.
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      # No runAsNonRoot: the PVC is backed by k3s local-path (hostPath), which
+      # ignores fsGroup, so a non-root UID could not write to /data.
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: beedocs-data

@@ -47,8 +47,10 @@ if (Directory.Exists(wwwroot))
     app.UseStaticFiles();
 }
 
-// Uploaded images (drag/drop & paste)
-var uploadsRoot = Path.Combine(app.Environment.ContentRootPath, "data", "uploads");
+// Uploaded images (drag/drop & paste). Configurable so containers can point it
+// at the same persistent volume as the database instead of the image layer.
+var uploadsRoot = builder.Configuration["BeeDocs:UploadsPath"]
+    ?? Path.Combine(app.Environment.ContentRootPath, "data", "uploads");
 Directory.CreateDirectory(uploadsRoot);
 app.UseStaticFiles(new StaticFileOptions
 {

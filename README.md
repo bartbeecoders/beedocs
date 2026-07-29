@@ -34,6 +34,8 @@ BeeDocs/
 ├── Dockerfile
 ├── README.md
 ├── Docs/                     # Human + agent docs (MCP connect guide)
+├── k8s/beedocs/              # K3S manifests (NodePort 32095)
+├── scripts/deploy-k3s.sh     # build → push → deploy to the K3S server
 ├── Vibecoding/Instructions.md
 └── src/
     ├── BeeDocs.Api/          # .NET 10 minimal API + SurrealDB
@@ -117,6 +119,39 @@ podman compose up --build
 Open http://localhost:8080 (static UI + API; serve static from API after wiring SPA — see next steps if you only run API image).
 
 > Note: the Dockerfile builds API + web assets into `wwwroot`. Production SPA hosting is enabled when the API maps static files (see `Program.cs`).
+
+## Deploy to K3S
+
+BeeDocs runs on the K3S server as a single pod — one ASP.NET Core process serving
+the SPA, the API, and uploaded images. SurrealDB is embedded (RocksDB), so there is
+no separate database container.
+
+```bash
+./scripts/deploy-k3s.sh            # build → push → deploy → status
+./scripts/deploy-k3s.sh build      # local podman build only
+./scripts/deploy-k3s.sh status     # pods, svc, deploy, pvc
+./scripts/deploy-k3s.sh logs       # tail pod logs
+./scripts/deploy-k3s.sh shell      # shell into the pod
+```
+
+| | |
+|---|---|
+| Namespace | `beedocs` |
+| Image | `beecodersregistry.azurecr.io/beedocs` (tag from `<Version>` in `BeeDocs.Api.csproj`, plus `:latest`) |
+| **NodePort** | **32095** → container `8080` |
+| Storage | one PVC at `/data` — RocksDB in `/data/surreal`, uploads in `/data/uploads` |
+| Health | `GET /api/health` (startup, readiness, and liveness probes) |
+
+Manifests live in [`k8s/beedocs/`](k8s/beedocs/) and are applied by the script.
+Overridable via environment: `REGISTRY`, `VPS_IP`, `VPS_USER`, `VPS_BASE_DIR`.
+
+**Cloudflare Tunnel** (configured outside this repo) forwards the public hostname
+to `http://<k3s-node>:32095`. Changing the NodePort means updating the tunnel
+ingress rule in lockstep.
+
+> The deployment is pinned to `replicas: 1` with a `Recreate` strategy on purpose:
+> RocksDB holds an exclusive lock on its data directory, so a rolling second pod
+> would fail to start.
 
 ## API (MVP)
 

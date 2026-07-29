@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: beedocs-data
+  namespace: beedocs
+  labels:
+    app.kubernetes.io/name: beedocs
+spec:
+  # RocksDB is a single-writer embedded store, so the volume is only ever
+  # mounted by one pod (see the Recreate strategy in deployment.yaml).
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # Omitted on purpose: k3s assigns its default StorageClass (local-path).

@@ -23,6 +23,7 @@ COPY --from=api-build /app/api ./
 COPY --from=web-build /web/dist ./wwwroot
 ENV ASPNETCORE_URLS=http://+:8080
 ENV BeeDocs__DataPath=/data/surreal
+ENV BeeDocs__UploadsPath=/data/uploads
 ENV ConnectionStrings__SurrealDB=Endpoint=rocksdb:///data/surreal
 EXPOSE 8080
 VOLUME ["/data"]

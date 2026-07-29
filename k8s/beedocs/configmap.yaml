@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beedocs-config
+  namespace: beedocs
+  labels:
+    app.kubernetes.io/name: beedocs
+data:
+  # Kestrel binds inside the pod; the Service maps 8080 -> NodePort 32095.
+  ASPNETCORE_URLS: "http://+:8080"
+  ASPNETCORE_ENVIRONMENT: "Production"
+
+  # Both paths live on the PVC mounted at /data so the RocksDB store and the
+  # uploaded images survive pod restarts and image upgrades.
+  BeeDocs__DataPath: "/data/surreal"
+  BeeDocs__UploadsPath: "/data/uploads"
+  ConnectionStrings__SurrealDB: "Endpoint=rocksdb:///data/surreal"
+
+  BeeDocs__Namespace: "beedocs"
+  BeeDocs__Database: "main"
