@@ -88,13 +88,19 @@ spec:
             # Loopback within the pod — the API container above.
             - name: BEEDOCS_API_URL
               value: "http://localhost:8080"
-            # Defence in depth behind Cloudflare Access. Created by
-            # scripts/deploy-k3s.sh on first deploy (random 32-byte hex).
-            - name: MCP_AUTH_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: beedocs-mcp-auth
-                  key: token
+            # MCP_AUTH_TOKEN is deliberately NOT set: the origin bearer check
+            # is disabled, so /mcp accepts every caller that can reach it.
+            # There is no Cloudflare Access policy on the MCP hostname either,
+            # which means the endpoint is open to the internet with full
+            # read/write/delete access to every document. The beedocs-mcp-auth
+            # secret is left in the cluster — restore the env block below and
+            # re-run ./scripts/deploy-k3s.sh deploy to turn auth back on.
+            #
+            # - name: MCP_AUTH_TOKEN
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: beedocs-mcp-auth
+            #       key: token
           readinessProbe:
             httpGet:
               path: /healthz
