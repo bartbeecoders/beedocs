@@ -11,6 +11,12 @@ Agents run the MCP process over **stdio**. The process then calls your local (or
 └─────────────┘                   └──────────────┘        └─────────────┘
 ```
 
+> **Using the hosted instance instead?** The K3S deployment runs the same server
+> over Streamable HTTP, so there is nothing to install locally — you point your
+> client at a URL. See **[MCP-HOSTING.md](MCP-HOSTING.md)** for that setup and
+> for the Cloudflare Access configuration. This document covers the local
+> stdio setup.
+
 ## Prerequisites
 
 1. **Node.js 20+** (22 recommended)
@@ -272,7 +278,7 @@ See [MCP-TOOLS.md](./MCP-TOOLS.md) for the full catalog.
 | Wrong Node version / pnpm sqlite errors | Use Node 20+ or 22; `export PATH` to nvm Node 22 |
 | Empty tool list in client | Rebuild MCP package; restart the MCP host app |
 | CORS / browser issues | MCP does not use the browser; only the API URL matters |
-| Remote API | Set `BEEDOCS_API_URL=https://your-host:8080` in the MCP `env` block |
+| Remote API | Set `BEEDOCS_API_URL=https://your-host:8080` in the MCP `env` block — or skip the local process entirely and use the hosted HTTP endpoint ([MCP-HOSTING.md](MCP-HOSTING.md)) |
 
 ### Logs
 

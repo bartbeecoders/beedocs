@@ -69,8 +69,61 @@ spec:
             limits:
               cpu: "1"
               memory: 1Gi
-      # No runAsNonRoot: the PVC is backed by k3s local-path (hostPath), which
-      # ignores fsGroup, so a non-root UID could not write to /data.
+
+        # MCP server for AI agents. Same pod as the API on purpose: it reaches
+        # BeeDocs over the pod loopback, so the REST API never has to be
+        # exposed to the cluster network for its sake.
+        - name: mcp
+          image: beecodersregistry.azurecr.io/beedocs-mcp:latest
+          imagePullPolicy: Always
+          ports:
+            - name: mcp
+              containerPort: 5090
+              protocol: TCP
+          env:
+            - name: MCP_TRANSPORT
+              value: "http"
+            - name: MCP_HTTP_PORT
+              value: "5090"
+            # Loopback within the pod — the API container above.
+            - name: BEEDOCS_API_URL
+              value: "http://localhost:8080"
+            # Defence in depth behind Cloudflare Access. Created by
+            # scripts/deploy-k3s.sh on first deploy (random 32-byte hex).
+            - name: MCP_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: beedocs-mcp-auth
+                  key: token
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: mcp
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: mcp
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      # No pod-level runAsNonRoot: the API container writes to a PVC backed by
+      # k3s local-path (hostPath), which ignores fsGroup, so a non-root UID
+      # could not write to /data. The MCP container touches no volume, so it
+      # drops privileges individually above.
       volumes:
         - name: data
           persistentVolumeClaim:

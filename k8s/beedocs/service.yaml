@@ -18,3 +18,12 @@ spec:
       # this repo). Do not change without updating the tunnel ingress rule.
       nodePort: 32095
       protocol: TCP
+    - name: mcp
+      port: 5090
+      targetPort: mcp
+      # MCP Streamable HTTP endpoint (/mcp on this port). Kept on its own
+      # hostname/port so Cloudflare Access can apply a service-token policy
+      # here and an interactive SSO policy to the web UI — agents cannot
+      # complete a browser login. See Docs/MCP-HOSTING.md.
+      nodePort: 32096
+      protocol: TCP

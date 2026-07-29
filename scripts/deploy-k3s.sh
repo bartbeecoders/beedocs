@@ -15,6 +15,14 @@ set -euo pipefail
 #                  NodePort 32095 — Cloudflare Tunnel forwards the public
 #                  hostname here (tunnel config managed outside this repo).
 #
+#   • beedocs-mcp  Node sidecar in the same pod, MCP over Streamable HTTP:
+#                    /mcp         agent endpoint
+#                    /healthz     probe endpoint
+#                  NodePort 32096 — its own tunnel hostname, because agents
+#                  authenticate with a Cloudflare Access *service token* while
+#                  the web UI uses interactive SSO. Reaches the API over the
+#                  pod loopback, so BeeDocs itself stays off the cluster net.
+#
 #   SurrealDB runs *embedded* on RocksDB inside the pod — there is no separate
 #   database container. That is why the deployment is pinned to one replica
 #   with a Recreate strategy: RocksDB takes an exclusive lock on its directory.
@@ -28,13 +36,14 @@ set -euo pipefail
 # Usage:
 #   ./scripts/deploy-k3s.sh [all|build|push|deploy|status|logs|shell]
 #
-#   all     build → push → deploy → status (default)
-#   build   build the image locally with podman
-#   push    podman login + push the image
-#   deploy  scp manifests + apply on the VPS, restart deployment
-#   status  kubectl get on the namespace
-#   logs    tail the BeeDocs logs
-#   shell   open a shell in the running pod
+#   all        build → push → deploy → status (default)
+#   build      build both images locally with podman
+#   push       podman login + push both images
+#   deploy     scp manifests + apply on the VPS, restart deployment
+#   status     kubectl get on the namespace
+#   logs       tail the API and MCP logs
+#   shell      open a shell in the running pod
+#   mcp-token  print the MCP bearer token from the cluster secret
 #
 # Required tools locally:
 #   podman, ssh, scp
@@ -48,7 +57,9 @@ COMMAND="${1:-all}"
 REGISTRY="${REGISTRY:-beecodersregistry.azurecr.io}"
 NAMESPACE="beedocs"
 IMAGE="$REGISTRY/beedocs"
+MCP_IMAGE="$REGISTRY/beedocs-mcp"
 NODE_PORT=32095
+MCP_NODE_PORT=32096
 
 # VPS target (override via environment variables).
 VPS_IP="${VPS_IP:-212.47.77.32}"
@@ -63,6 +74,14 @@ APP_VERSION=$(grep -m1 '<Version>' "$ROOT_DIR/src/BeeDocs.Api/BeeDocs.Api.csproj
   | sed -E 's/.*<Version>([^<]+)<\/Version>.*/\1/')
 if [[ -z "$APP_VERSION" ]]; then
   echo "could not parse <Version> from src/BeeDocs.Api/BeeDocs.Api.csproj"
+  exit 1
+fi
+
+# The MCP sidecar versions independently — package.json "version".
+MCP_VERSION=$(grep -m1 '"version"' "$ROOT_DIR/src/beedocs-mcp/package.json" \
+  | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+if [[ -z "$MCP_VERSION" ]]; then
+  echo "could not parse version from src/beedocs-mcp/package.json"
   exit 1
 fi
 
@@ -97,6 +116,14 @@ build_image() {
     -t "$IMAGE:$APP_VERSION" \
     -f "$ROOT_DIR/Dockerfile" \
     "$ROOT_DIR"
+
+  echo "==> Building $MCP_IMAGE:$MCP_VERSION"
+  podman build \
+    --pull=newer \
+    -t "$MCP_IMAGE:latest" \
+    -t "$MCP_IMAGE:$MCP_VERSION" \
+    -f "$ROOT_DIR/src/beedocs-mcp/Dockerfile" \
+    "$ROOT_DIR/src/beedocs-mcp"
 }
 
 # -----------------------------------------------------------------------------
@@ -113,6 +140,10 @@ push_image() {
   echo "==> Pushing $IMAGE"
   podman push "$IMAGE:latest"
   podman push "$IMAGE:$APP_VERSION"
+
+  echo "==> Pushing $MCP_IMAGE"
+  podman push "$MCP_IMAGE:latest"
+  podman push "$MCP_IMAGE:$MCP_VERSION"
 }
 
 # -----------------------------------------------------------------------------
@@ -139,6 +170,9 @@ deploy_manifests() {
   # 2. ImagePullSecret — copy from a namespace that already has it.
   ensure_acr_secret
 
+  # 2b. MCP bearer token. Generated on the VPS and never stored in this repo.
+  ensure_mcp_auth_secret
+
   # 3. Config, storage, service, workload.
   kubectl_vps "apply -f $VPS_K8S_DIR/beedocs/configmap.yaml"
   kubectl_vps "apply -f $VPS_K8S_DIR/beedocs/pvc.yaml"
@@ -151,15 +185,40 @@ deploy_manifests() {
   kubectl_vps "-n $NAMESPACE rollout status deployment beedocs --timeout=300s"
 
   echo ""
-  echo "Deployed BeeDocs v$APP_VERSION"
-  echo "  • NodePort:  http://$VPS_IP:$NODE_PORT   (cloudflare tunnel target)"
+  echo "Deployed BeeDocs v$APP_VERSION (mcp v$MCP_VERSION)"
   echo "  • Web UI:    http://$VPS_IP:$NODE_PORT/"
   echo "  • Health:    curl -s http://$VPS_IP:$NODE_PORT/api/health"
+  echo "  • MCP:       http://$VPS_IP:$MCP_NODE_PORT/mcp"
+  echo "  • MCP health: curl -s http://$VPS_IP:$MCP_NODE_PORT/healthz"
   echo ""
-  echo "  Cloudflare Tunnel: point the BeeDocs hostname at"
-  echo "    http://<k3s-node>:$NODE_PORT"
-  echo "  Agents reach the MCP server by setting BEEDOCS_API_URL to the"
-  echo "  tunnel hostname (see Docs/MCP-SERVER.md)."
+  echo "  Cloudflare Tunnel — two ingress rules:"
+  echo "    docs.<domain>  ->  http://<k3s-node>:$NODE_PORT"
+  echo "    mcp.<domain>   ->  http://<k3s-node>:$MCP_NODE_PORT"
+  echo ""
+  echo "  MCP bearer token:  ./scripts/deploy-k3s.sh mcp-token"
+  echo "  Cloudflare Access setup:  Docs/MCP-HOSTING.md"
+}
+
+# Bearer token guarding the MCP endpoint. Generated on the VPS on first deploy
+# and left alone afterwards — rotating it is a deliberate act:
+#   kubectl -n beedocs delete secret beedocs-mcp-auth && ./scripts/deploy-k3s.sh deploy
+# Never written to this repo. Read it back with `deploy-k3s.sh mcp-token`.
+ensure_mcp_auth_secret() {
+  if kubectl_vps "-n $NAMESPACE get secret beedocs-mcp-auth >/dev/null 2>&1"; then
+    echo "==> beedocs-mcp-auth already exists; leaving it alone"
+    return 0
+  fi
+
+  echo "==> Creating beedocs-mcp-auth (random 32-byte token, generated on the VPS)"
+  kubectl_vps "-n $NAMESPACE create secret generic beedocs-mcp-auth \
+    --from-literal=token=\$(openssl rand -hex 32)"
+}
+
+mcp_token() {
+  echo "==> MCP bearer token ($NAMESPACE/beedocs-mcp-auth):"
+  kubectl_vps "-n $NAMESPACE get secret beedocs-mcp-auth -o jsonpath='{.data.token}'" \
+    | base64 -d
+  echo ""
 }
 
 # Copy the existing acr-secret from a namespace that has one into beedocs.
@@ -198,14 +257,17 @@ status() {
 }
 
 logs() {
-  echo "==> beedocs (last 80 lines)"
-  kubectl_vps "-n $NAMESPACE logs deployment/beedocs --tail=80" || true
+  echo "==> beedocs / api (last 80 lines)"
+  kubectl_vps "-n $NAMESPACE logs deployment/beedocs -c beedocs --tail=80" || true
+  echo ""
+  echo "==> beedocs / mcp (last 40 lines)"
+  kubectl_vps "-n $NAMESPACE logs deployment/beedocs -c mcp --tail=40" || true
 }
 
 shell() {
-  echo "==> Opening a shell in the beedocs pod"
+  echo "==> Opening a shell in the beedocs pod (api container)"
   ssh -t -o StrictHostKeyChecking=accept-new "$VPS_USER@$VPS_IP" \
-    "kubectl -n $NAMESPACE exec -it deployment/beedocs -- bash || sudo k3s kubectl -n $NAMESPACE exec -it deployment/beedocs -- bash"
+    "kubectl -n $NAMESPACE exec -it deployment/beedocs -c beedocs -- bash || sudo k3s kubectl -n $NAMESPACE exec -it deployment/beedocs -c beedocs -- bash"
 }
 
 # -----------------------------------------------------------------------------
@@ -222,15 +284,16 @@ main() {
       deploy_manifests
       status
       ;;
-    build)  check_build_deps; build_image ;;
-    push)   check_build_deps; push_image ;;
-    deploy) check_remote_deps; deploy_manifests ;;
-    status) check_remote_deps; status ;;
-    logs)   check_remote_deps; logs ;;
-    shell)  check_remote_deps; shell ;;
+    build)     check_build_deps; build_image ;;
+    push)      check_build_deps; push_image ;;
+    deploy)    check_remote_deps; deploy_manifests ;;
+    status)    check_remote_deps; status ;;
+    logs)      check_remote_deps; logs ;;
+    shell)     check_remote_deps; shell ;;
+    mcp-token) check_remote_deps; mcp_token ;;
     *)
       echo "Unknown command: $COMMAND"
-      echo "Usage: $0 [all|build|push|deploy|status|logs|shell]"
+      echo "Usage: $0 [all|build|push|deploy|status|logs|shell|mcp-token]"
       exit 1
       ;;
   esac

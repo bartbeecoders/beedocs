@@ -53,7 +53,12 @@ cd src/beedocs-mcp && pnpm install && pnpm build
 ```
 
 Full setup for Cursor, Claude Desktop, Claude Code, VS Code: **[Docs/MCP-SERVER.md](Docs/MCP-SERVER.md)**  
-Tool catalog: **[Docs/MCP-TOOLS.md](Docs/MCP-TOOLS.md)**
+Tool catalog: **[Docs/MCP-TOOLS.md](Docs/MCP-TOOLS.md)**  
+Hosted MCP over HTTP + Cloudflare Access: **[Docs/MCP-HOSTING.md](Docs/MCP-HOSTING.md)**
+
+The server speaks **stdio** (local, default) or **Streamable HTTP** (`MCP_TRANSPORT=http`,
+used by the K3S deployment — agents connect to `https://mcp.<domain>/mcp` with no
+local install).
 
 ## Core entities
 
@@ -130,24 +135,29 @@ no separate database container.
 ./scripts/deploy-k3s.sh            # build → push → deploy → status
 ./scripts/deploy-k3s.sh build      # local podman build only
 ./scripts/deploy-k3s.sh status     # pods, svc, deploy, pvc
-./scripts/deploy-k3s.sh logs       # tail pod logs
+./scripts/deploy-k3s.sh logs       # tail API + MCP logs
 ./scripts/deploy-k3s.sh shell      # shell into the pod
+./scripts/deploy-k3s.sh mcp-token  # print the MCP bearer token
 ```
 
 | | |
 |---|---|
 | Namespace | `beedocs` |
-| Image | `beecodersregistry.azurecr.io/beedocs` (tag from `<Version>` in `BeeDocs.Api.csproj`, plus `:latest`) |
-| **NodePort** | **32095** → container `8080` |
+| Images | `beecodersregistry.azurecr.io/beedocs` (API + SPA) and `…/beedocs-mcp` (MCP sidecar) |
+| **NodePort — web** | **32095** → container `8080` |
+| **NodePort — MCP** | **32096** → container `5090` (`/mcp`) |
 | Storage | one PVC at `/data` — RocksDB in `/data/surreal`, uploads in `/data/uploads` |
-| Health | `GET /api/health` (startup, readiness, and liveness probes) |
+| Health | `GET /api/health` and `GET /healthz` (startup, readiness, and liveness probes) |
 
 Manifests live in [`k8s/beedocs/`](k8s/beedocs/) and are applied by the script.
 Overridable via environment: `REGISTRY`, `VPS_IP`, `VPS_USER`, `VPS_BASE_DIR`.
 
-**Cloudflare Tunnel** (configured outside this repo) forwards the public hostname
-to `http://<k3s-node>:32095`. Changing the NodePort means updating the tunnel
-ingress rule in lockstep.
+**Cloudflare Tunnel** (configured outside this repo) forwards two hostnames:
+`docs.<domain>` → `http://<k3s-node>:32095` and `mcp.<domain>` →
+`http://<k3s-node>:32096`. Changing a NodePort means updating the tunnel ingress
+rule in lockstep. Access policies and the agent setup are documented in
+**[Docs/MCP-HOSTING.md](Docs/MCP-HOSTING.md)** — including the firewall rule that
+must block the NodePorts, or Cloudflare Access can be bypassed entirely.
 
 > The deployment is pinned to `replicas: 1` with a `Recreate` strategy on purpose:
 > RocksDB holds an exclusive lock on its data directory, so a rolling second pod
