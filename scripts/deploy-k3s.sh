@@ -68,14 +68,51 @@ VPS_USER="${VPS_USER:-bart}"
 VPS_BASE_DIR="${VPS_BASE_DIR:-~/beedocs}"
 VPS_K8S_DIR="$VPS_BASE_DIR/k8s"
 
-# Single source of truth for the image tag: <Version> in the API csproj.
-# The script also always pushes :latest so the rollout picks it up.
-APP_VERSION=$(grep -m1 '<Version>' "$ROOT_DIR/src/BeeDocs.Api/BeeDocs.Api.csproj" \
-  | sed -E 's/.*<Version>([^<]+)<\/Version>.*/\1/')
+# Single source of truth for the image tag AND the version shown in the web UI:
+# <Version> in the API csproj. The script also always pushes :latest so the
+# rollout picks it up.
+CSPROJ="$ROOT_DIR/src/BeeDocs.Api/BeeDocs.Api.csproj"
+
+read_version() {
+  grep -m1 '<Version>' "$CSPROJ" | sed -E 's/.*<Version>([^<]+)<\/Version>.*/\1/'
+}
+
+APP_VERSION="$(read_version)"
 if [[ -z "$APP_VERSION" ]]; then
   echo "could not parse <Version> from src/BeeDocs.Api/BeeDocs.Api.csproj"
   exit 1
 fi
+
+# MAJOR.MINOR.BUILD — the last digit is the build number, incremented on every
+# deploy so the version pill in the header identifies exactly which build is
+# live. Bump major/minor by hand in the csproj; this only ever touches the last.
+# Set NO_BUMP=1 to rebuild or redeploy the current version unchanged.
+bump_build_number() {
+  if [[ "${NO_BUMP:-0}" == "1" ]]; then
+    echo "==> NO_BUMP=1, keeping version $APP_VERSION"
+    return 0
+  fi
+
+  if [[ ! "$APP_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    echo "ERROR: <Version> is '$APP_VERSION'; expected MAJOR.MINOR.BUILD (all numeric)."
+    echo "       Fix it in $CSPROJ, or set NO_BUMP=1 to deploy it as-is."
+    exit 1
+  fi
+
+  local next="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$(( BASH_REMATCH[3] + 1 ))"
+  # Anchored on the exact current value so nothing else in the csproj can match.
+  sed -i -E "s|<Version>${APP_VERSION}</Version>|<Version>${next}</Version>|" "$CSPROJ"
+
+  local written
+  written="$(read_version)"
+  if [[ "$written" != "$next" ]]; then
+    echo "ERROR: version bump failed (expected $next, file now says '$written')"
+    exit 1
+  fi
+
+  echo "==> Build number bumped: $APP_VERSION -> $next"
+  APP_VERSION="$next"
+}
 
 # The MCP sidecar versions independently — package.json "version".
 MCP_VERSION=$(grep -m1 '"version"' "$ROOT_DIR/src/beedocs-mcp/package.json" \
@@ -197,6 +234,10 @@ deploy_manifests() {
   echo ""
   echo "  MCP bearer token:  ./scripts/deploy-k3s.sh mcp-token"
   echo "  Cloudflare Access setup:  Docs/MCP-HOSTING.md"
+  echo ""
+  echo "  The build number was bumped in BeeDocs.Api.csproj — commit it so the"
+  echo "  version pill in the UI matches a known commit:"
+  echo "    git commit -am \"Release v$APP_VERSION\""
 }
 
 # Bearer token guarding the MCP endpoint. Generated on the VPS on first deploy
@@ -278,13 +319,14 @@ main() {
     all)
       check_build_deps
       check_remote_deps
+      bump_build_number
       echo "Deploying BeeDocs v$APP_VERSION to $VPS_USER@$VPS_IP"
       build_image
       push_image
       deploy_manifests
       status
       ;;
-    build)     check_build_deps; build_image ;;
+    build)     check_build_deps; bump_build_number; build_image ;;
     push)      check_build_deps; push_image ;;
     deploy)    check_remote_deps; deploy_manifests ;;
     status)    check_remote_deps; status ;;

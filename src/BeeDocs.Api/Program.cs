@@ -1,3 +1,4 @@
+using System.Reflection;
 using BeeDocs.Api.Models;
 using BeeDocs.Api.Services;
 using Microsoft.Extensions.FileProviders;
@@ -75,7 +76,19 @@ using (var scope = app.Services.CreateScope())
 
 var api = app.MapGroup("/api");
 
-api.MapGet("/health", () => Results.Ok(new { status = "ok", service = "BeeDocs.Api" }));
+// Build version, sourced from <Version> in BeeDocs.Api.csproj. The deploy script
+// bumps the last digit (the build number) on every deploy, so this is what the
+// UI shows to identify which build is live. SourceLink appends "+<sha>" to the
+// informational version when it is enabled — trim it for display.
+var appVersion = (Assembly.GetExecutingAssembly()
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+        ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString()
+        ?? "0.0.0")
+    .Split('+')[0];
+
+api.MapGet("/health", () => Results.Ok(new { status = "ok", service = "BeeDocs.Api", version = appVersion }));
+
+api.MapGet("/version", () => Results.Ok(new { version = appVersion }));
 
 // --- Books ---
 api.MapGet("/books", async (IDocumentService docs, CancellationToken ct) =>

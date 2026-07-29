@@ -159,10 +159,24 @@ no separate database container.
 ./scripts/deploy-k3s.sh mcp-token  # print the MCP bearer token
 ```
 
+### Versioning
+
+`MAJOR.MINOR.BUILD` in `src/BeeDocs.Api/BeeDocs.Api.csproj`. The **last digit is
+the build number and `deploy-k3s.sh` increments it on every deploy**, so the
+`v0.1.1` pill in the app header identifies exactly which build is live. The API
+serves it at `/api/version` and includes it in `/api/health`; the SPA fetches it
+once at startup.
+
+Bump major/minor by hand in the csproj — the script only ever touches the last
+digit. `NO_BUMP=1 ./scripts/deploy-k3s.sh` redeploys the current version
+unchanged. Commit the bumped csproj after deploying so the pill maps to a known
+commit.
+
 | | |
 |---|---|
 | Namespace | `beedocs` |
 | Images | `beecodersregistry.azurecr.io/beedocs` (API + SPA) and `…/beedocs-mcp` (MCP sidecar) |
+| Version | `<Version>` in `BeeDocs.Api.csproj`, shown as a pill in the app header |
 | **NodePort — web** | **32095** → container `8080` |
 | **NodePort — MCP** | **32096** → container `5090` (`/mcp`) |
 | Storage | one PVC at `/data` — RocksDB in `/data/surreal`, uploads in `/data/uploads` |
@@ -186,7 +200,8 @@ must block the NodePorts, or Cloudflare Access can be bypassed entirely.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/health` | Health check |
+| GET | `/api/health` | Health check (includes build version) |
+| GET | `/api/version` | Build version shown in the app header |
 | GET/POST | `/api/books` | List / create books |
 | GET/PUT/DELETE | `/api/books/{id}` | Book CRUD |
 | GET/POST | `/api/books/{bookId}/pages` | List / create pages |

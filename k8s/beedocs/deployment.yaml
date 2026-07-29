@@ -117,6 +117,11 @@ spec:
               memory: 512Mi
           securityContext:
             runAsNonRoot: true
+            # Must be numeric and set explicitly. The image's USER is uid 1000
+            # (`node`); with only a username the kubelet cannot verify it is
+            # non-root and fails with CreateContainerConfigError.
+            runAsUser: 1000
+            runAsGroup: 1000
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]

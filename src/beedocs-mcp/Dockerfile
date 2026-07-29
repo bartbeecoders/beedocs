@@ -32,6 +32,8 @@ COPY --from=deps  /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
 # Nothing is written to disk, so there is no volume to own — run unprivileged.
-USER node
+# Numeric, not `USER node`: with runAsNonRoot the kubelet must verify the user
+# is non-root before starting, and it cannot resolve a username to a UID.
+USER 1000
 EXPOSE 5090
 ENTRYPOINT ["node", "dist/index.js"]

@@ -17,6 +17,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  getVersion: () => request<{ version: string }>('/api/version'),
+
   listBooks: () => request<Book[]>('/api/books'),
   getBook: (id: string) => request<Book>(`/api/books/${id}`),
   createBook: (body: { title: string; description?: string; slug?: string }) =>

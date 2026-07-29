@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTheme } from '../theme'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { loadPaneLayout, savePaneLayout, type PaneLayout } from '../workspace/layoutPrefs'
+import { api } from '../api'
 import { NavTree } from './NavTree'
 import { ResizablePane } from './ResizablePane'
 import { PageCanvas, type PageEditorState } from './PageCanvas'
@@ -18,6 +19,22 @@ export function WorkspaceShell() {
   const [layout, setLayout] = useState<PaneLayout>(() => loadPaneLayout())
   const [pageState, setPageState] = useState<PageEditorState | null>(null)
   const [diagramState, setDiagramState] = useState<DiagramEditorState | null>(null)
+  const [version, setVersion] = useState<string | null>(null)
+
+  // Which build is live. Fetched once; failure is non-fatal — the pill just
+  // stays hidden rather than blocking the shell.
+  useEffect(() => {
+    let cancelled = false
+    api
+      .getVersion()
+      .then((v) => {
+        if (!cancelled) setVersion(v.version)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const view = useMemo(() => {
     if (location.pathname.startsWith('/settings')) return 'settings' as const
@@ -67,6 +84,11 @@ export function WorkspaceShell() {
             </span>
             <span className="brand-text">BeeDocs</span>
           </Link>
+          {version && (
+            <span className="ws-version-pill" title={`Build ${version}`}>
+              v{version}
+            </span>
+          )}
           <nav className="ws-breadcrumb" aria-label="Breadcrumb">
             {breadcrumb.map((c, i) => (
               <span key={`${c.label}-${i}`} className="ws-crumb">

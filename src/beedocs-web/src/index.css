@@ -254,6 +254,20 @@ select {
   background: var(--bg-soft);
 }
 
+/* Build identifier next to the brand — deliberately quiet. */
+.ws-version-pill {
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--bg-soft);
+  white-space: nowrap;
+  align-self: center;
+}
+
 .ws-body {
   display: flex;
   min-height: 0;
