@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "beedocs": {
+      "command": "node",
+      "args": [
+        "/run/media/bart/Development/dev/bartbeecoders/BeeDocs/src/beedocs-mcp/dist/index.js"
+      ],
+      "env": {
+        "BEEDOCS_API_URL": "http://localhost:5080"
+      }
+    }
+  }
+}

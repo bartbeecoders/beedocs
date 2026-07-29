@@ -1,0 +1,14 @@
+services:
+  beedocs:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - beedocs-data:/data
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      BeeDocs__DataPath: /data/surreal
+      ConnectionStrings__SurrealDB: Endpoint=rocksdb:///data/surreal
+
+volumes:
+  beedocs-data:

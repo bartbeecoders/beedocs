@@ -1,0 +1,125 @@
+import { THEMES, useTheme, type ThemeId } from '../theme'
+import { loadPaneLayout, savePaneLayout } from '../workspace/layoutPrefs'
+
+type Props = {
+  onResetPanes?: () => void
+}
+
+export function SettingsPanel({ onResetPanes }: Props) {
+  const {
+    theme,
+    setTheme,
+    density,
+    setDensity,
+    showPreviewDefault,
+    setShowPreviewDefault,
+    autoSaveEnabled,
+    setAutoSaveEnabled,
+  } = useTheme()
+
+  const resetPanes = () => {
+    const defaults = {
+      leftWidth: 280,
+      rightWidth: 300,
+      leftCollapsed: false,
+      rightCollapsed: false,
+    }
+    savePaneLayout(defaults)
+    onResetPanes?.()
+  }
+
+  return (
+    <div className="settings-panel">
+      <header className="settings-header">
+        <h1>Settings</h1>
+        <p className="muted">Appearance and editor defaults for this browser.</p>
+      </header>
+
+      <section className="settings-section">
+        <h2>Color theme</h2>
+        <div className="theme-grid">
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={`theme-card ${theme === t.id ? 'active' : ''}`}
+              data-preview-theme={t.id}
+              onClick={() => setTheme(t.id as ThemeId)}
+            >
+              <span className="theme-swatches" aria-hidden>
+                <i className="sw sw-bg" />
+                <i className="sw sw-elev" />
+                <i className="sw sw-accent" />
+              </span>
+              <span className="theme-card-body">
+                <strong>{t.label}</strong>
+                <span className="muted sm">{t.description}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h2>Density</h2>
+        <div className="segmented">
+          <button
+            type="button"
+            className={density === 'comfortable' ? 'active' : ''}
+            onClick={() => setDensity('comfortable')}
+          >
+            Comfortable
+          </button>
+          <button
+            type="button"
+            className={density === 'compact' ? 'active' : ''}
+            onClick={() => setDensity('compact')}
+          >
+            Compact
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h2>Editor</h2>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={showPreviewDefault}
+            onChange={(e) => setShowPreviewDefault(e.target.checked)}
+          />
+          <span>Open pages in split (edit + preview) by default</span>
+        </label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={autoSaveEnabled}
+            onChange={(e) => setAutoSaveEnabled(e.target.checked)}
+          />
+          <span>Auto-save pages and diagrams while editing</span>
+        </label>
+        <p className="muted sm settings-hint">
+          When enabled, saves about 1.5s after you stop typing. Manual Save and Ctrl/Cmd+S still work.
+        </p>
+      </section>
+
+      <section className="settings-section">
+        <h2>Layout</h2>
+        <p className="muted sm">
+          Pane widths and collapse state are remembered. Current: left{' '}
+          {loadPaneLayout().leftWidth}px, right {loadPaneLayout().rightWidth}px.
+        </p>
+        <button type="button" className="btn sm" onClick={resetPanes}>
+          Reset pane layout
+        </button>
+      </section>
+
+      <section className="settings-section about">
+        <h2>About</h2>
+        <p className="muted sm">
+          BeeDocs — self-hosted architecture documentation. Markdown, Mermaid, and BeeDiagram.
+        </p>
+      </section>
+    </div>
+  )
+}

@@ -1,0 +1,14 @@
+# Project-scoped Grok config for BeeDocs
+# https://modelcontextprotocol.io — see Docs/MCP-SERVER.md
+
+[mcp_servers.beedocs]
+command = "/home/bart/.nvm/versions/node/v22.22.2/bin/node"
+args = [
+    "/run/media/bart/Development/dev/bartbeecoders/BeeDocs/src/beedocs-mcp/dist/index.js",
+]
+enabled = true
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+
+[mcp_servers.beedocs.env]
+BEEDOCS_API_URL = "http://localhost:5080"
