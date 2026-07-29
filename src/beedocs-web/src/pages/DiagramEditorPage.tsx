@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
-import { BeeDiagramEditor } from '../components/BeeDiagramEditor'
+import { BeeDiagramWorkbench } from '../components/BeeDiagramWorkbench'
 import { MarkdownView } from '../components/MarkdownView'
 import type { Diagram } from '../types'
 
@@ -117,7 +117,7 @@ export function DiagramEditorPage() {
       </p>
 
       {kind === 'beediagram' ? (
-        <BeeDiagramEditor
+        <BeeDiagramWorkbench
           source={source}
           onChange={(s) => {
             setSource(s)

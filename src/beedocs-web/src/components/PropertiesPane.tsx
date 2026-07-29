@@ -7,13 +7,39 @@ import type { DiagramEditorState } from './DiagramCanvas'
 type Props = {
   pageState: PageEditorState | null
   diagramState: DiagramEditorState | null
-  view: 'welcome' | 'book' | 'page' | 'diagram' | 'settings'
+  view: 'welcome' | 'book' | 'page' | 'diagram' | 'settings' | 'help'
 }
 
 export function PropertiesPane({ pageState, diagramState, view }: Props) {
   const { bookId } = useParams()
   const { books } = useWorkspace()
   const book = books.find((b) => b.id === bookId)
+
+  if (view === 'help') {
+    return (
+      <div className="props-pane">
+        <h3>About &amp; Help</h3>
+        <p className="muted sm">
+          Workspace guide, diagram shortcuts, and how to connect an AI agent to this instance over
+          MCP.
+        </p>
+        <ul className="props-links">
+          <li>
+            <a href="#help-mcp">Connect an AI agent (MCP)</a>
+          </li>
+          <li>
+            <a href="#help-diagrams">Diagrams</a>
+          </li>
+          <li>
+            <a href="#help-shortcuts">Keyboard shortcuts</a>
+          </li>
+          <li>
+            <a href="#help-troubleshooting">Troubleshooting</a>
+          </li>
+        </ul>
+      </div>
+    )
+  }
 
   if (view === 'settings') {
     return (

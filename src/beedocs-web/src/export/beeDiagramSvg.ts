@@ -1,5 +1,15 @@
 import type { BeeNode } from '../types'
-import { defaultColor, edgePathD, parseBeeDoc } from '../diagram/beeModel'
+import { edgePathD, parseBeeDoc } from '../diagram/beeModel'
+import {
+  arrowMarkerId,
+  collectEdgeMarkers,
+  nodeLabelLayout,
+  nodePrimitives,
+  nodeTransform,
+  resolveEdgeStyle,
+  resolveShape,
+  type BeePrim,
+} from '../diagram/shapes'
 
 function esc(s: string): string {
   return s
@@ -9,61 +19,90 @@ function esc(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
-function nodeSvg(n: BeeNode): string {
-  const fill = esc(n.color || defaultColor(n.type))
-  const label = esc(n.label)
-  const t = n.type
-
-  if (t === 'image' && n.imageUrl) {
-    const href = esc(absoluteUrl(n.imageUrl))
-    return `<g transform="translate(${n.x},${n.y})">
-      <rect width="${n.w}" height="${n.h}" rx="8" fill="${fill}" opacity="0.35"/>
-      <image href="${href}" x="4" y="4" width="${n.w - 8}" height="${n.h - 28}" preserveAspectRatio="xMidYMid meet"/>
-      <text x="${n.w / 2}" y="${n.h - 8}" text-anchor="middle" fill="#111" font-size="11" font-weight="600">${label}</text>
-    </g>`
-  }
-
-  if (t === 'person') {
-    return `<g transform="translate(${n.x},${n.y})">
-      <rect width="${n.w}" height="${n.h}" rx="10" fill="${fill}"/>
-      <circle cx="${n.w / 2}" cy="28" r="12" fill="rgba(255,255,255,0.9)"/>
-      <text x="${n.w / 2}" y="${n.h - 12}" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">${label}</text>
-    </g>`
-  }
-
-  if (t === 'database') {
-    return `<g transform="translate(${n.x},${n.y})">
-      <ellipse cx="${n.w / 2}" cy="14" rx="${n.w / 2 - 4}" ry="12" fill="${fill}"/>
-      <rect x="4" y="14" width="${n.w - 8}" height="${n.h - 28}" fill="${fill}"/>
-      <ellipse cx="${n.w / 2}" cy="${n.h - 14}" rx="${n.w / 2 - 4}" ry="12" fill="${fill}"/>
-      <text x="${n.w / 2}" y="${n.h / 2 + 4}" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">${label}</text>
-    </g>`
-  }
-
-  if (t === 'note') {
-    return `<g transform="translate(${n.x},${n.y})">
-      <path d="M0 0 H${n.w - 16} L${n.w} 16 V${n.h} H0 Z" fill="${fill}"/>
-      <text x="12" y="28" fill="#fff" font-size="12" font-weight="600">${label}</text>
-    </g>`
-  }
-
-  const rx = t === 'system' ? 8 : 12
-  const systemTag =
-    t === 'system'
-      ? `<text x="10" y="16" fill="rgba(255,255,255,0.65)" font-size="9">«system»</text>`
-      : ''
-  const ty = n.h / 2 + (t === 'system' ? 6 : 4)
-  return `<g transform="translate(${n.x},${n.y})">
-    <rect width="${n.w}" height="${n.h}" rx="${rx}" fill="${fill}"/>
-    ${systemTag}
-    <text x="${n.w / 2}" y="${ty}" text-anchor="middle" fill="#fff" font-size="13" font-weight="650">${label}</text>
-  </g>`
+function attr(name: string, value: string | number | undefined): string {
+  if (value == null || value === '') return ''
+  return ` ${name}="${typeof value === 'string' ? esc(value) : value}"`
 }
 
 function absoluteUrl(url: string): string {
   if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url
   if (url.startsWith('/')) return `${window.location.origin}${url}`
   return url
+}
+
+function primToSvg(p: BeePrim): string {
+  const opacity = p.k === 'image' ? p.opacity : p.opacity
+  const common = `${attr('opacity', opacity == null ? undefined : opacity / 100)}`
+  if (p.k === 'rect') {
+    return (
+      `<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}"` +
+      attr('rx', p.rx) +
+      attr('fill', p.fill ?? 'none') +
+      (p.stroke && p.stroke !== 'none' ? attr('stroke', p.stroke) + attr('stroke-width', p.sw) : '') +
+      attr('stroke-dasharray', p.dash) +
+      common +
+      '/>'
+    )
+  }
+  if (p.k === 'ellipse') {
+    return (
+      `<ellipse cx="${p.cx}" cy="${p.cy}" rx="${Math.max(0, p.rx)}" ry="${Math.max(0, p.ry)}"` +
+      attr('fill', p.fill ?? 'none') +
+      (p.stroke && p.stroke !== 'none' ? attr('stroke', p.stroke) + attr('stroke-width', p.sw) : '') +
+      attr('stroke-dasharray', p.dash) +
+      common +
+      '/>'
+    )
+  }
+  if (p.k === 'text') {
+    return (
+      `<text x="${p.x}" y="${p.y}" font-size="${p.size}" fill="${esc(p.color)}"` +
+      attr('font-weight', p.weight) +
+      attr('text-anchor', p.anchor) +
+      common +
+      `>${esc(p.text)}</text>`
+    )
+  }
+  if (p.k === 'image') {
+    return (
+      `<image href="${esc(absoluteUrl(p.href))}" x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}"` +
+      ` preserveAspectRatio="xMidYMid meet"${common}/>`
+    )
+  }
+  return (
+    `<path d="${esc(p.d)}"` +
+    attr('fill', p.fill ?? 'none') +
+    (p.stroke && p.stroke !== 'none' ? attr('stroke', p.stroke) + attr('stroke-width', p.sw) : '') +
+    attr('stroke-dasharray', p.dash) +
+    ' stroke-linejoin="round"' +
+    common +
+    '/>'
+  )
+}
+
+function labelToSvg(n: BeeNode): string {
+  const layout = nodeLabelLayout(n)
+  if (!layout) return ''
+  const st = layout.style
+  // Legacy image captions sit on a pale plate — keep them dark for print
+  const fill = resolveShape(n) === 'beeImage' && !n.style?.fontColor ? '#111827' : st.fontColor
+  const tspans = layout.lines
+    .map(
+      (line, i) =>
+        `<tspan x="${layout.x}"${i === 0 ? '' : ` dy="${layout.lineHeight}"`}>${esc(line || ' ')}</tspan>`,
+    )
+    .join('')
+  return (
+    `<text x="${layout.x}" y="${layout.y}" text-anchor="${layout.anchor}" fill="${esc(fill)}"` +
+    ` font-size="${st.fontSize}" font-weight="${st.bold ? 700 : 400}"` +
+    (st.italic ? ' font-style="italic"' : '') +
+    `>${tspans}</text>`
+  )
+}
+
+function nodeSvg(n: BeeNode): string {
+  const prims = nodePrimitives(n).map(primToSvg).join('')
+  return `<g transform="${esc(nodeTransform(n))}">${prims}${labelToSvg(n)}</g>`
 }
 
 /** Standalone SVG markup for a BeeDiagram JSON source (print/export). */
@@ -90,18 +129,39 @@ export function beeDiagramToSvg(source: string, title?: string): string {
   maxY += pad
   const width = Math.max(320, maxX - minX)
   const height = Math.max(180, maxY - minY)
-  const mid = uidSafe()
+  const prefix = `bd${uidSafe()}`
+
+  const markers = collectEdgeMarkers(doc.edges, prefix, '#333333')
+    .map(
+      (m) =>
+        `<marker id="${m.id}" markerWidth="10" markerHeight="7" refX="${m.spec.refX}" refY="${m.spec.refY}"` +
+        ` orient="auto" markerUnits="strokeWidth">` +
+        `<path d="${m.spec.d}" fill="${m.spec.filled ? esc(m.color) : 'none'}"` +
+        `${m.spec.filled ? '' : ` stroke="${esc(m.color)}" stroke-width="1.2"`}/></marker>`,
+    )
+    .join('\n')
 
   const edges = doc.edges
     .map((e) => {
       const from = doc.nodes.find((n) => n.id === e.from)
       const to = doc.nodes.find((n) => n.id === e.to)
       if (!from || !to) return ''
-      const { d, mid: m } = edgePathD(from, to, e)
+      const st = resolveEdgeStyle(e, '#333333')
+      const { d, mid } = edgePathD(from, to, e)
+      const startId =
+        st.startArrow !== 'none' ? arrowMarkerId(prefix, st.startArrow, 'start', st.stroke) : null
+      const endId = st.endArrow !== 'none' ? arrowMarkerId(prefix, st.endArrow, 'end', st.stroke) : null
       const label = e.label
-        ? `<text x="${m.x}" y="${m.y - 6}" text-anchor="middle" font-size="11" fill="#222">${esc(e.label)}</text>`
+        ? `<text x="${mid.x}" y="${mid.y - 6}" text-anchor="middle" font-size="${st.fontSize}" fill="${esc(st.fontColor)}">${esc(e.label)}</text>`
         : ''
-      return `<path d="${esc(d)}" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr-${mid})"/>${label}`
+      return (
+        `<path d="${esc(d)}" fill="none" stroke="${esc(st.stroke)}" stroke-width="${st.strokeWidth}"` +
+        attr('stroke-dasharray', st.dash) +
+        ` stroke-linecap="round" stroke-linejoin="round"` +
+        (startId ? ` marker-start="url(#${startId})"` : '') +
+        (endId ? ` marker-end="url(#${endId})"` : '') +
+        `/>${label}`
+      )
     })
     .join('\n')
 
@@ -111,9 +171,7 @@ export function beeDiagramToSvg(source: string, title?: string): string {
     ${title ? `<figcaption>${esc(title)}</figcaption>` : ''}
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${width} ${height}" width="100%" style="max-height:480px">
       <defs>
-        <marker id="arr-${mid}" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-          <path d="M0,0 L8,3 L0,6 Z" fill="#333"/>
-        </marker>
+        ${markers}
       </defs>
       ${edges}
       ${nodes}

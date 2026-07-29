@@ -5,6 +5,7 @@
 | [MCP Server](./MCP-SERVER.md) | Connect AI agents (Cursor, Claude Desktop, Claude Code, VS Code, etc.) to BeeDocs — over HTTP or stdio |
 | [MCP Hosting](./MCP-HOSTING.md) | Running the MCP server on K3S and putting Cloudflare Access in front of it |
 | [MCP Tools reference](./MCP-TOOLS.md) | Full list of tools, resources, and prompts |
+| [Diagram Studio](./DIAGRAM-STUDIO.md) | The draw.io-style BeeDiagram editor — shapes, connections, shortcuts, JSON format |
 | [Architecture](./ARCHITECTURE.md) | High-level product architecture |
 
 Start the app with `./scripts/start.sh` — API on **5080**, UI on **5173**, MCP

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { THEMES, useTheme, type ThemeId } from '../theme'
 import { loadPaneLayout, savePaneLayout } from '../workspace/layoutPrefs'
 
@@ -118,6 +119,10 @@ export function SettingsPanel({ onResetPanes }: Props) {
         <h2>About</h2>
         <p className="muted sm">
           BeeDocs — self-hosted architecture documentation. Markdown, Mermaid, and BeeDiagram.
+        </p>
+        <p className="muted sm">
+          <Link to="/help">About &amp; Help</Link> — workspace guide, diagram shortcuts, and how to
+          connect an AI agent over MCP.
         </p>
       </section>
     </div>

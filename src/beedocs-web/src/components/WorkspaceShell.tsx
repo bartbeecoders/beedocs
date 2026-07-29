@@ -10,6 +10,7 @@ import { PageCanvas, type PageEditorState } from './PageCanvas'
 import { DiagramCanvas, type DiagramEditorState } from './DiagramCanvas'
 import { PropertiesPane } from './PropertiesPane'
 import { SettingsPanel } from './SettingsPanel'
+import { HelpPanel } from './HelpPanel'
 
 export function WorkspaceShell() {
   const location = useLocation()
@@ -38,6 +39,7 @@ export function WorkspaceShell() {
 
   const view = useMemo(() => {
     if (location.pathname.startsWith('/settings')) return 'settings' as const
+    if (location.pathname.startsWith('/help')) return 'help' as const
     if (params.pageId) return 'page' as const
     if (params.diagramId) return 'diagram' as const
     if (params.bookId) return 'book' as const
@@ -59,6 +61,7 @@ export function WorkspaceShell() {
 
   const breadcrumb = useMemo(() => {
     if (view === 'settings') return [{ label: 'Settings' }]
+    if (view === 'help') return [{ label: 'About & Help' }]
     const book = books.find((b) => b.id === params.bookId)
     const crumbs: { label: string; to?: string }[] = [{ label: 'Library', to: '/' }]
     if (book) {
@@ -102,6 +105,9 @@ export function WorkspaceShell() {
           <span className="ws-theme-pill" title="Active theme">
             {themeDef.label}
           </span>
+          <Link to="/help" className={`btn ghost sm ${view === 'help' ? 'active-nav' : ''}`}>
+            Help
+          </Link>
           <Link
             to="/settings"
             className={`btn ghost sm ${view === 'settings' ? 'active-nav' : ''}`}
@@ -136,6 +142,7 @@ export function WorkspaceShell() {
               }
             />
           )}
+          {view === 'help' && <HelpPanel />}
           {view === 'welcome' && <WelcomeCanvas />}
           {view === 'book' && <BookOverview bookId={params.bookId!} />}
           {view === 'page' && <PageCanvas onStateChange={setPageState} />}
@@ -179,6 +186,10 @@ function WelcomeCanvas() {
             <strong>3.</strong> Attach BeeDiagrams and embed them in Markdown
           </li>
         </ul>
+        <p className="muted sm">
+          New here? Read <Link to="/help">About &amp; Help</Link> — including how to connect an AI
+          agent to this instance over MCP.
+        </p>
       </div>
     </div>
   )

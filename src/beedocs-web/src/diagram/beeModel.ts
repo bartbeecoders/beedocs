@@ -1,6 +1,36 @@
 import type { BeeAnchor, BeeDiagramDoc, BeeEdge, BeeEdgeRoute, BeeNode, BeeNodeType, BeePoint } from '../types'
 
+/** Side anchors — the classic four connection points. */
 export const BEE_ANCHORS: BeeAnchor[] = ['n', 'e', 's', 'w']
+
+/** Side midpoints + corners — the primary connection points. */
+export const BEE_ANCHORS_PRIMARY: BeeAnchor[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']
+
+/** Quarter points along each side — shown on shapes with room for them. */
+export const BEE_ANCHORS_QUARTER: BeeAnchor[] = ['n1', 'n2', 'e1', 'e2', 's1', 's2', 'w1', 'w2']
+
+/** All sixteen fixed connection points used by studio mode. */
+export const BEE_ANCHORS_ALL: BeeAnchor[] = [...BEE_ANCHORS_PRIMARY, ...BEE_ANCHORS_QUARTER]
+
+/** Anchor position as a fraction of the node box (before rotation). */
+const ANCHOR_UV: Record<BeeAnchor, { u: number; v: number }> = {
+  nw: { u: 0, v: 0 },
+  n1: { u: 0.25, v: 0 },
+  n: { u: 0.5, v: 0 },
+  n2: { u: 0.75, v: 0 },
+  ne: { u: 1, v: 0 },
+  e1: { u: 1, v: 0.25 },
+  e: { u: 1, v: 0.5 },
+  e2: { u: 1, v: 0.75 },
+  se: { u: 1, v: 1 },
+  s2: { u: 0.75, v: 1 },
+  s: { u: 0.5, v: 1 },
+  s1: { u: 0.25, v: 1 },
+  sw: { u: 0, v: 1 },
+  w2: { u: 0, v: 0.75 },
+  w: { u: 0, v: 0.5 },
+  w1: { u: 0, v: 0.25 },
+}
 
 /** Visual + snap grid cell size (matches canvas pattern) */
 export const BEE_GRID_SIZE = 24
@@ -62,6 +92,7 @@ const NODE_TYPES: BeeNodeType[] = ['box', 'person', 'system', 'database', 'note'
 function normalizeNode(n: Partial<BeeNode>): BeeNode {
   const type = (n.type as BeeNodeType) || 'box'
   const safeType = NODE_TYPES.includes(type) ? type : 'box'
+  const rotation = Number(n.rotation)
   return {
     id: String(n.id || uid('n')),
     type: safeType,
@@ -72,11 +103,14 @@ function normalizeNode(n: Partial<BeeNode>): BeeNode {
     h: Number(n.h) || defaultSize(safeType).h,
     color: n.color,
     imageUrl: n.imageUrl ? String(n.imageUrl) : undefined,
+    shape: n.shape,
+    style: n.style && typeof n.style === 'object' ? { ...n.style } : undefined,
+    rotation: Number.isFinite(rotation) && rotation !== 0 ? rotation : undefined,
   }
 }
 
 function normalizeAnchor(a: unknown): BeeAnchor | undefined {
-  if (a === 'n' || a === 'e' || a === 's' || a === 'w') return a
+  if (typeof a === 'string' && a in ANCHOR_UV) return a as BeeAnchor
   return undefined
 }
 
@@ -107,6 +141,7 @@ function normalizeEdge(e: Partial<BeeEdge>): BeeEdge {
     route: normalizeRoute(e.route),
     waypoints: waypoints && waypoints.length > 0 ? waypoints : undefined,
     label: e.label ? String(e.label) : undefined,
+    style: e.style && typeof e.style === 'object' ? { ...e.style } : undefined,
   }
 }
 
@@ -190,38 +225,53 @@ export function nodeCenter(n: BeeNode): { x: number; y: number } {
   return { x: n.x + n.w / 2, y: n.y + n.h / 2 }
 }
 
+/** Rotate a point around a pivot (degrees). */
+export function rotatePoint(
+  p: BeePoint,
+  pivot: BeePoint,
+  degrees: number,
+): BeePoint {
+  if (!degrees) return { x: p.x, y: p.y }
+  const rad = (degrees * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  const dx = p.x - pivot.x
+  const dy = p.y - pivot.y
+  return {
+    x: pivot.x + dx * cos - dy * sin,
+    y: pivot.y + dx * sin + dy * cos,
+  }
+}
+
+/** World point → node-local point (undoes the node rotation). */
+export function toNodeLocal(n: BeeNode, worldX: number, worldY: number): BeePoint {
+  const c = nodeCenter(n)
+  const p = rotatePoint({ x: worldX, y: worldY }, c, -(n.rotation ?? 0))
+  return { x: p.x - n.x, y: p.y - n.y }
+}
+
 /** World-space point for a connector anchor on the node boundary. */
 export function anchorPoint(n: BeeNode, anchor: BeeAnchor): { x: number; y: number } {
-  switch (anchor) {
-    case 'n':
-      return { x: n.x + n.w / 2, y: n.y }
-    case 'e':
-      return { x: n.x + n.w, y: n.y + n.h / 2 }
-    case 's':
-      return { x: n.x + n.w / 2, y: n.y + n.h }
-    case 'w':
-      return { x: n.x, y: n.y + n.h / 2 }
-  }
+  const local = anchorLocal(n, anchor)
+  const p = { x: n.x + local.x, y: n.y + local.y }
+  return n.rotation ? rotatePoint(p, nodeCenter(n), n.rotation) : p
 }
 
 /** Local (node-space) position for drawing handles inside a translated group. */
 export function anchorLocal(n: BeeNode, anchor: BeeAnchor): { x: number; y: number } {
-  switch (anchor) {
-    case 'n':
-      return { x: n.w / 2, y: 0 }
-    case 'e':
-      return { x: n.w, y: n.h / 2 }
-    case 's':
-      return { x: n.w / 2, y: n.h }
-    case 'w':
-      return { x: 0, y: n.h / 2 }
-  }
+  const uv = ANCHOR_UV[anchor] ?? ANCHOR_UV.e
+  return { x: n.w * uv.u, y: n.h * uv.v }
 }
 
-export function nearestAnchor(n: BeeNode, worldX: number, worldY: number): BeeAnchor {
+export function nearestAnchor(
+  n: BeeNode,
+  worldX: number,
+  worldY: number,
+  anchors: BeeAnchor[] = BEE_ANCHORS,
+): BeeAnchor {
   let best: BeeAnchor = 'e'
   let bestDist = Infinity
-  for (const a of BEE_ANCHORS) {
+  for (const a of anchors) {
     const p = anchorPoint(n, a)
     const d = (p.x - worldX) ** 2 + (p.y - worldY) ** 2
     if (d < bestDist) {
@@ -266,16 +316,23 @@ export function edgeEndpoints(
 }
 
 function outwardNormal(anchor: BeeAnchor): { x: number; y: number } {
-  switch (anchor) {
-    case 'n':
-      return { x: 0, y: -1 }
-    case 'e':
-      return { x: 1, y: 0 }
-    case 's':
-      return { x: 0, y: 1 }
-    case 'w':
-      return { x: -1, y: 0 }
-  }
+  const uv = ANCHOR_UV[anchor] ?? ANCHOR_UV.e
+  // Only the sides the point actually lies on contribute to the normal, so a
+  // quarter point leaves straight out and a corner leaves diagonally.
+  const nx = uv.u === 0 ? -1 : uv.u === 1 ? 1 : 0
+  const ny = uv.v === 0 ? -1 : uv.v === 1 ? 1 : 0
+  const len = Math.hypot(nx, ny) || 1
+  return { x: nx / len, y: ny / len }
+}
+
+/** Corner anchors have no single axis — pick the dominant one for 90° routing. */
+function orthogonalNormal(anchor: BeeAnchor, a: BeePoint, b: BeePoint): { x: number; y: number } {
+  const n = outwardNormal(anchor)
+  if (n.x === 0 || n.y === 0) return n
+  // Diagonal: leave along whichever axis points more directly at the far end.
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  return Math.abs(dx) >= Math.abs(dy) ? { x: Math.sign(n.x), y: 0 } : { x: 0, y: Math.sign(n.y) }
 }
 
 export type EdgePathPick = Pick<BeeEdge, 'fromAnchor' | 'toAnchor' | 'route' | 'waypoints'>
@@ -299,6 +356,17 @@ export function edgePathD(
   const route: BeeEdgeRoute = edge?.route ?? 'straight'
 
   if (route === 'curved') {
+    const bends = edge?.waypoints ?? []
+    if (bends.length > 0) {
+      const pts = [a, ...bends.map((p) => ({ x: p.x, y: p.y })), b]
+      return {
+        d: smoothPathThrough(pts),
+        mid: polylineMidpoint(pts),
+        a,
+        b,
+        points: pts,
+      }
+    }
     const dist = Math.hypot(b.x - a.x, b.y - a.y) || 1
     const pull = Math.min(80, Math.max(36, dist * 0.35))
     const n1 = outwardNormal(fromAnchor)
@@ -330,14 +398,33 @@ export function edgePathD(
     return { d, mid, a, b, points: pts }
   }
 
-  // straight
+  // straight — bends (if any) turn it into a polyline
+  const bends = edge?.waypoints ?? []
+  const pts = bends.length > 0 ? [a, ...bends.map((p) => ({ x: p.x, y: p.y })), b] : [a, b]
   return {
-    d: `M ${a.x} ${a.y} L ${b.x} ${b.y}`,
-    mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    d: `M ${pts[0].x} ${pts[0].y}` + pts.slice(1).map((p) => ` L ${p.x} ${p.y}`).join(''),
+    mid: polylineMidpoint(pts),
     a,
     b,
-    points: [a, b],
+    points: pts,
   }
+}
+
+/** Catmull-Rom → cubic bezier path through every point. */
+function smoothPathThrough(pts: BeePoint[]): string {
+  if (pts.length < 2) return ''
+  if (pts.length === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`
+  let d = `M ${pts[0].x} ${pts[0].y}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[i + 2] ?? p2
+    const c1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 }
+    const c2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 }
+    d += ` C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${p2.x} ${p2.y}`
+  }
+  return d
 }
 
 /** Default + custom-waypoint orthogonal polyline (includes endpoints). */
@@ -349,8 +436,8 @@ export function orthogonalPolyline(
   waypoints?: BeePoint[],
 ): BeePoint[] {
   const stub = 18
-  const n1 = outwardNormal(fromAnchor)
-  const n2 = outwardNormal(toAnchor)
+  const n1 = orthogonalNormal(fromAnchor, a, b)
+  const n2 = orthogonalNormal(toAnchor, b, a)
   const p1 = { x: a.x + n1.x * stub, y: a.y + n1.y * stub }
   const p2 = { x: b.x + n2.x * stub, y: b.y + n2.y * stub }
 
@@ -360,7 +447,7 @@ export function orthogonalPolyline(
     return [a, ...ortho, b]
   }
 
-  return defaultOrthogonalPoints(a, b, p1, p2, fromAnchor, toAnchor)
+  return defaultOrthogonalPoints(a, b, p1, p2, n1.x !== 0, n2.x !== 0)
 }
 
 function defaultOrthogonalPoints(
@@ -368,11 +455,9 @@ function defaultOrthogonalPoints(
   b: BeePoint,
   p1: BeePoint,
   p2: BeePoint,
-  fromAnchor: BeeAnchor,
-  toAnchor: BeeAnchor,
+  fromHoriz: boolean,
+  toHoriz: boolean,
 ): BeePoint[] {
-  const fromHoriz = fromAnchor === 'e' || fromAnchor === 'w'
-  const toHoriz = toAnchor === 'e' || toAnchor === 'w'
 
   if (fromHoriz && toHoriz) {
     const midX = (p1.x + p2.x) / 2
@@ -599,6 +684,9 @@ function sampleEdgePath(
     return orthogonalPolyline(a, b, fromAnchor, toAnchor, edge.waypoints)
   }
   if (route === 'curved') {
+    if (edge.waypoints && edge.waypoints.length > 0) {
+      return [a, ...edge.waypoints.map((p) => ({ x: p.x, y: p.y })), b]
+    }
     const pull = Math.min(80, Math.max(36, Math.hypot(b.x - a.x, b.y - a.y) * 0.35))
     const n1 = outwardNormal(fromAnchor)
     const n2 = outwardNormal(toAnchor)
@@ -615,7 +703,8 @@ function sampleEdgePath(
     }
     return pts
   }
-  return [a, b]
+  const bends = edge.waypoints ?? []
+  return bends.length > 0 ? [a, ...bends.map((p) => ({ x: p.x, y: p.y })), b] : [a, b]
 }
 
 function distToSegment(
@@ -633,13 +722,18 @@ function distToSegment(
   return Math.hypot(px - (a.x + t * dx), py - (a.y + t * dy))
 }
 
+/** Point-in-node test that respects rotation. */
+export function containsPoint(n: BeeNode, worldX: number, worldY: number, pad = 0): boolean {
+  const local = toNodeLocal(n, worldX, worldY)
+  return (
+    local.x >= -pad && local.x <= n.w + pad && local.y >= -pad && local.y <= n.h + pad
+  )
+}
+
 export function hitTestNode(nodes: BeeNode[], worldX: number, worldY: number): BeeNode | null {
   // Top-most last
   for (let i = nodes.length - 1; i >= 0; i--) {
-    const n = nodes[i]
-    if (worldX >= n.x && worldX <= n.x + n.w && worldY >= n.y && worldY <= n.y + n.h) {
-      return n
-    }
+    if (containsPoint(nodes[i], worldX, worldY)) return nodes[i]
   }
   return null
 }

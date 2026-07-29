@@ -5,7 +5,7 @@ import { useAutoSave } from '../hooks/useAutoSave'
 import { useTheme } from '../theme'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { Diagram } from '../types'
-import { BeeDiagramEditor } from './BeeDiagramEditor'
+import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
 import { MarkdownView } from './MarkdownView'
 
 export type DiagramEditorState = {
@@ -256,7 +256,7 @@ export function DiagramCanvas({ onStateChange }: Props) {
       </div>
       {error && <div className="banner error compact">{error}</div>}
       {kind === 'beediagram' ? (
-        <BeeDiagramEditor
+        <BeeDiagramWorkbench
           source={source}
           onChange={(s) => {
             setSource(s)

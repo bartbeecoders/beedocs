@@ -49,6 +49,10 @@ Use **HTTP** unless you specifically want the client to manage the process.
 
 ---
 
+> **In a hurry?** The running app has the same instructions built in — open
+> **Help** (top right) → *Connect an AI agent (MCP)*. It fills the snippets below
+> in with your endpoint and token, ready to copy.
+
 ## Prerequisites
 
 **Connecting to the hosted instance over HTTP?** None — skip to

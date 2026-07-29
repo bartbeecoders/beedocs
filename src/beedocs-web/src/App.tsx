@@ -11,6 +11,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<WorkspaceShell />} />
             <Route path="/settings" element={<WorkspaceShell />} />
+            <Route path="/help" element={<WorkspaceShell />} />
             <Route path="/books/:bookId" element={<WorkspaceShell />} />
             <Route path="/books/:bookId/pages/:pageId" element={<WorkspaceShell />} />
             <Route path="/books/:bookId/diagrams/:diagramId" element={<WorkspaceShell />} />

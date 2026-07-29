@@ -118,6 +118,12 @@ Single-page professional layout:
 
 Open **Settings** for color themes (Honey Light/Dark, Slate, Ocean, Forest, Violet, High contrast), density, and pane reset.
 
+**Help** (top right, or `/help`) is the in-app guide: workspace basics, Markdown
+fences, the diagram studio, keyboard shortcuts, troubleshooting — and a
+**Connect an AI agent (MCP)** section that generates ready-to-paste client config
+for Claude Code, Cursor, VS Code, Claude Desktop and stdio from the endpoint and
+token you enter.
+
 ### Manual
 
 ```bash
@@ -214,7 +220,21 @@ must block the NodePorts, or Cloudflare Access can be bypassed entirely.
 ### BeeDiagram (custom editor)
 
 - Kind `beediagram` stores a JSON document (`nodes`, `edges`, `viewport`).
-- Canvas tools: place Box / Person / System / Database / Note, Select+drag, Connect edges, property panel.
+- Two editing modes on the same document, switchable at the top of the editor:
+  - **Studio** (default) — a diagrams.net/draw.io-style workspace: searchable shape
+    palette (drag or click to place), infinite pan/zoom canvas with grid + snapping,
+    hover-to-connect blue arrows and 16 green fixed connection points, rubber-band
+    multi-select, resize/rotate handles, alignment guides, undo/redo, clipboard,
+    right-click menu and a Style / Text / Arrange format panel.
+  - **Classic** — the original compact BeeDocs canvas (Box / Person / System /
+    Database / Note tools + properties pane). Still used for inline
+    ` ```beediagram ` fences inside pages.
+- Shapes are rendered from one shared model, so a diagram looks identical in the
+  editor, in page previews and in the PDF/HTML export.
+- Keyboard: `Ctrl+Z/Y` undo/redo, `Ctrl+C/X/V/D` clipboard, `Ctrl+A` select all,
+  `Del` delete, `F2` rename, arrows nudge (`Shift` = grid step),
+  `Ctrl+Shift+F/B` order, `Ctrl+Shift+H` fit page, `Ctrl` + `+/-/0` zoom,
+  space-drag or middle-drag to pan.
 - Embed in Markdown pages:
 
 ```md

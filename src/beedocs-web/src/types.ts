@@ -52,6 +52,58 @@ export type Diagram = DiagramSummary & {
 
 export type BeeNodeType = 'box' | 'person' | 'system' | 'database' | 'note' | 'image'
 
+/**
+ * Draw.io-style shape catalog (studio mode). When absent the legacy
+ * {@link BeeNodeType} drives the rendering, so old documents keep their look.
+ */
+export type BeeShape =
+  | 'rectangle'
+  | 'rounded'
+  | 'stadium'
+  | 'text'
+  | 'ellipse'
+  | 'circle'
+  | 'triangle'
+  | 'rhombus'
+  | 'parallelogram'
+  | 'trapezoid'
+  | 'hexagon'
+  | 'step'
+  | 'process'
+  | 'document'
+  | 'tape'
+  | 'card'
+  | 'callout'
+  | 'note'
+  | 'cube'
+  | 'cylinder'
+  | 'internalStorage'
+  | 'dataStorage'
+  | 'cloud'
+  | 'actor'
+  | 'container'
+  | 'image'
+
+export type BeeTextAlign = 'left' | 'center' | 'right'
+export type BeeTextVAlign = 'top' | 'middle' | 'bottom'
+
+/** Per-shape appearance overrides (studio mode). All optional. */
+export type BeeNodeStyle = {
+  fill?: string
+  stroke?: string
+  strokeWidth?: number
+  dashed?: boolean
+  /** 0–100 */
+  opacity?: number
+  shadow?: boolean
+  fontSize?: number
+  fontColor?: string
+  bold?: boolean
+  italic?: boolean
+  align?: BeeTextAlign
+  valign?: BeeTextVAlign
+}
+
 export type BeeNode = {
   id: string
   type: BeeNodeType
@@ -63,15 +115,53 @@ export type BeeNode = {
   color?: string
   /** For type=image: uploaded or remote image URL */
   imageUrl?: string
+  /** Studio-mode shape; falls back to `type` when omitted */
+  shape?: BeeShape
+  /** Studio-mode appearance overrides */
+  style?: BeeNodeStyle
+  /** Rotation in degrees around the shape centre */
+  rotation?: number
 }
 
-/** Connector endpoint on a node boundary */
-export type BeeAnchor = 'n' | 'e' | 's' | 'w'
+/**
+ * Connector endpoint on a node boundary: side midpoints, corners and the
+ * quarter points of every side (`n1` = 25% along the top, `n2` = 75%, …).
+ */
+export type BeeAnchor =
+  | 'n'
+  | 'e'
+  | 's'
+  | 'w'
+  | 'ne'
+  | 'se'
+  | 'sw'
+  | 'nw'
+  | 'n1'
+  | 'n2'
+  | 'e1'
+  | 'e2'
+  | 's1'
+  | 's2'
+  | 'w1'
+  | 'w2'
 
 /** How the connector is drawn between anchors */
 export type BeeEdgeRoute = 'straight' | 'curved' | 'orthogonal'
 
 export type BeePoint = { x: number; y: number }
+
+/** Arrow head at either end of a connection */
+export type BeeArrowHead = 'none' | 'arrow' | 'open' | 'diamond' | 'circle'
+
+export type BeeEdgeStyle = {
+  stroke?: string
+  strokeWidth?: number
+  dashed?: boolean
+  startArrow?: BeeArrowHead
+  endArrow?: BeeArrowHead
+  fontSize?: number
+  fontColor?: string
+}
 
 export type BeeEdge = {
   id: string
@@ -88,6 +178,8 @@ export type BeeEdge = {
    */
   waypoints?: BeePoint[]
   label?: string
+  /** Studio-mode appearance overrides */
+  style?: BeeEdgeStyle
 }
 
 export type BeeViewport = {

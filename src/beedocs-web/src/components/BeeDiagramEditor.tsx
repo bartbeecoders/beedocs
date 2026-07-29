@@ -31,9 +31,12 @@ import {
   uid,
   waypointsFromPolyline,
 } from '../diagram/beeModel'
+import { nodeLabelBox, nodeTransform } from '../diagram/shapes'
 import { useImageIntake } from '../hooks/useImageIntake'
 import { loadImageSize, type UploadedImage } from '../media/imageIntake'
 import { BeeDiagramView } from './BeeDiagramView'
+import { ShapeLabel, ShapePrimitives } from './BeeShapeNode'
+import { nodePrimitives } from '../diagram/shapes'
 
 const SNAP_STORAGE_KEY = 'beedocs-bee-snap-grid'
 
@@ -91,19 +94,8 @@ type Props = {
 }
 
 function inlineLabelBox(n: BeeNode): { x: number; y: number; w: number; h: number } {
-  const padX = 8
-  const w = Math.max(48, n.w - padX * 2)
-  if (n.type === 'person') {
-    return { x: padX, y: n.h - 36, w, h: 28 }
-  }
-  if (n.type === 'note') {
-    return { x: 10, y: 14, w: Math.max(48, n.w - 28), h: Math.max(28, n.h - 28) }
-  }
-  if (n.type === 'system') {
-    return { x: padX, y: n.h / 2 - 6, w, h: 28 }
-  }
-  // box / database — centered
-  return { x: padX, y: n.h / 2 - 14, w, h: 28 }
+  const box = nodeLabelBox(n)
+  return { x: box.x, y: box.y, w: Math.max(48, box.w), h: Math.max(28, box.h) }
 }
 
 export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props) {
@@ -955,7 +947,6 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
           )}
 
           {doc.nodes.map((n) => {
-            const fill = n.color || defaultColor(n.type)
             const active = n.id === selectedId
             const hovered = n.id === hoverId || n.id === linkDrag?.hoverId
             const showAnchors = showAnchorsFor(n.id) && labelEdit?.id !== n.id
@@ -965,7 +956,7 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
               <g
                 key={n.id}
                 data-node-id={n.id}
-                transform={`translate(${n.x},${n.y})`}
+                transform={nodeTransform(n)}
                 style={{
                   cursor: isEditingLabel
                     ? 'text'
@@ -997,114 +988,9 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                     opacity={active ? 1 : 0.55}
                   />
                 )}
-                {n.type === 'person' ? (
-                  <>
-                    <rect width={n.w} height={n.h} rx={10} fill={fill} />
-                    <circle cx={n.w / 2} cy={28} r={12} fill="rgba(255,255,255,0.9)" />
-                    {!isEditingLabel && (
-                      <text
-                        x={n.w / 2}
-                        y={n.h - 12}
-                        textAnchor="middle"
-                        fill="#fff"
-                        fontSize={12}
-                        fontWeight={600}
-                        className="bee-node-label"
-                      >
-                        {n.label}
-                      </text>
-                    )}
-                  </>
-                ) : n.type === 'database' ? (
-                  <>
-                    <ellipse cx={n.w / 2} cy={14} rx={n.w / 2 - 4} ry={12} fill={fill} />
-                    <rect x={4} y={14} width={n.w - 8} height={n.h - 28} fill={fill} />
-                    <ellipse cx={n.w / 2} cy={n.h - 14} rx={n.w / 2 - 4} ry={12} fill={fill} />
-                    {!isEditingLabel && (
-                      <text
-                        x={n.w / 2}
-                        y={n.h / 2 + 4}
-                        textAnchor="middle"
-                        fill="#fff"
-                        fontSize={12}
-                        fontWeight={600}
-                        className="bee-node-label"
-                      >
-                        {n.label}
-                      </text>
-                    )}
-                  </>
-                ) : n.type === 'note' ? (
-                  <>
-                    <path d={`M0 0 H${n.w - 16} L${n.w} 16 V${n.h} H0 Z`} fill={fill} />
-                    {!isEditingLabel && (
-                      <text x={12} y={28} fill="#fff" fontSize={12} fontWeight={600} className="bee-node-label">
-                        {n.label}
-                      </text>
-                    )}
-                  </>
-                ) : n.type === 'image' ? (
-                  <>
-                    <rect width={n.w} height={n.h} rx={8} fill={fill} opacity={0.35} />
-                    {n.imageUrl ? (
-                      <image
-                        href={n.imageUrl}
-                        x={4}
-                        y={4}
-                        width={n.w - 8}
-                        height={n.h - 28}
-                        preserveAspectRatio="xMidYMid meet"
-                        style={{ pointerEvents: 'none' }}
-                      />
-                    ) : (
-                      <text
-                        x={n.w / 2}
-                        y={n.h / 2}
-                        textAnchor="middle"
-                        fill="#fff"
-                        fontSize={12}
-                        opacity={0.8}
-                      >
-                        No image
-                      </text>
-                    )}
-                    {!isEditingLabel && (
-                      <text
-                        x={n.w / 2}
-                        y={n.h - 8}
-                        textAnchor="middle"
-                        fill="#fff"
-                        fontSize={11}
-                        fontWeight={600}
-                        className="bee-node-label"
-                      >
-                        {n.label}
-                      </text>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <rect width={n.w} height={n.h} rx={n.type === 'system' ? 8 : 12} fill={fill} />
-                    {n.type === 'system' && (
-                      <text x={10} y={16} fill="rgba(255,255,255,0.65)" fontSize={9}>
-                        «system»
-                      </text>
-                    )}
-                    {!isEditingLabel && (
-                      <text
-                        x={n.w / 2}
-                        y={n.h / 2 + (n.type === 'system' ? 6 : 4)}
-                        textAnchor="middle"
-                        fill="#fff"
-                        fontSize={13}
-                        fontWeight={650}
-                        className="bee-node-label"
-                      >
-                        {n.label}
-                      </text>
-                    )}
-                  </>
-                )}
+                <rect width={n.w} height={n.h} fill="transparent" />
+                <ShapePrimitives prims={nodePrimitives(n)} />
+                {!isEditingLabel && <ShapeLabel node={n} />}
 
                 {isEditingLabel && labelEdit && (
                   <foreignObject
