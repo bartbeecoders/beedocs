@@ -2,8 +2,9 @@
 
 How the MCP server runs on K3S, and how to put Cloudflare Access in front of it.
 
-For connecting a **local** MCP server (stdio) to a local API, see
-[MCP-SERVER.md](MCP-SERVER.md). This document is about the **hosted** instance.
+This document is about **operating** the hosted instance. For wiring a client up
+to it — or to a local server, over either transport — see
+[MCP-SERVER.md](MCP-SERVER.md).
 
 ---
 
@@ -60,7 +61,9 @@ write access to every document.
 
 ---
 
-## ⚠️ Firewall the NodePorts first
+## Firewall the NodePorts first
+
+> ⚠️ Do this before pointing a public hostname at the service.
 
 Cloudflare Access enforces at Cloudflare's edge. It does nothing for traffic
 that reaches your VPS by another route. If `212.47.77.32:32095` and `:32096` are
@@ -116,7 +119,7 @@ curl -s https://mcp.example.com/healthz
 
 ---
 
-## 2. Cloudflare Access — web UI (interactive SSO)
+## 2. Cloudflare Access for the web UI (interactive SSO)
 
 Zero Trust dashboard → **Access → Applications → Add an application →
 Self-hosted**.
@@ -140,7 +143,7 @@ covered by the same session cookie, so the SPA keeps working once you are in.
 
 ---
 
-## 3. Cloudflare Access — MCP (service token)
+## 3. Cloudflare Access for MCP (service token)
 
 Agents cannot complete a browser login, so this application uses a **service
 token**: a client ID/secret pair sent as headers.
