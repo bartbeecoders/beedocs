@@ -1,18 +1,29 @@
 #!/usr/bin/env bash
-# BeeDocs local dev: API (http://localhost:5080) + web (http://localhost:5173)
+# BeeDocs local dev: API (:5080) + web (:5173) + MCP over HTTP (:5090).
+#
+# Set SKIP_MCP=1 to run just the API and web. Agents using the stdio MCP
+# transport do not need this process — it is only the HTTP transport.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_DIR="$ROOT/src/BeeDocs.Api"
 WEB_DIR="$ROOT/src/beedocs-web"
+MCP_DIR="$ROOT/src/beedocs-mcp"
 LOG_DIR="$ROOT/scripts/.logs"
 API_PORT="${API_PORT:-5080}"
 WEB_PORT="${WEB_PORT:-5173}"
+MCP_PORT="${MCP_PORT:-5090}"
 API_URL="http://localhost:${API_PORT}"
 WEB_URL="http://localhost:${WEB_PORT}"
+MCP_URL="http://localhost:${MCP_PORT}"
+# Local-only shared secret. The deployed server gets a random one from the
+# cluster secret instead — see Docs/MCP-HOSTING.md.
+MCP_AUTH_TOKEN="${MCP_AUTH_TOKEN:-dev-token}"
+SKIP_MCP="${SKIP_MCP:-0}"
 
 API_PID=""
 WEB_PID=""
+MCP_PID=""
 
 mkdir -p "$LOG_DIR"
 
@@ -23,6 +34,10 @@ cleanup() {
   local code=$?
   trap - EXIT INT TERM
   log "Stopping BeeDocs…"
+  if [[ -n "${MCP_PID}" ]] && kill -0 "$MCP_PID" 2>/dev/null; then
+    kill "$MCP_PID" 2>/dev/null || true
+    wait "$MCP_PID" 2>/dev/null || true
+  fi
   if [[ -n "${WEB_PID}" ]] && kill -0 "$WEB_PID" 2>/dev/null; then
     kill "$WEB_PID" 2>/dev/null || true
     wait "$WEB_PID" 2>/dev/null || true
@@ -33,7 +48,7 @@ cleanup() {
   fi
   # Anything still bound to our ports
   if command -v lsof >/dev/null 2>&1; then
-    for port in "$API_PORT" "$WEB_PORT"; do
+    for port in "$API_PORT" "$WEB_PORT" "$MCP_PORT"; do
       local pids
       pids="$(lsof -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
       if [[ -n "$pids" ]]; then
@@ -106,11 +121,11 @@ port_in_use() {
 
 # Stop anything already bound to API/web ports so start is always a clean restart.
 stop_existing() {
-  log "Stopping any services already running on :$API_PORT / :$WEB_PORT …"
+  log "Stopping any services already running on :$API_PORT / :$WEB_PORT / :$MCP_PORT …"
   if [[ -x "$ROOT/scripts/stop.sh" ]]; then
-    API_PORT="$API_PORT" WEB_PORT="$WEB_PORT" "$ROOT/scripts/stop.sh" || true
+    API_PORT="$API_PORT" WEB_PORT="$WEB_PORT" MCP_PORT="$MCP_PORT" "$ROOT/scripts/stop.sh" || true
   else
-    for port in "$API_PORT" "$WEB_PORT"; do
+    for port in "$API_PORT" "$WEB_PORT" "$MCP_PORT"; do
       local pids=""
       if command -v lsof >/dev/null 2>&1; then
         pids="$(lsof -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
@@ -128,15 +143,15 @@ stop_existing() {
 
   local i
   for ((i = 1; i <= 20; i++)); do
-    if ! port_in_use "$API_PORT" && ! port_in_use "$WEB_PORT"; then
+    if ! port_in_use "$API_PORT" && ! port_in_use "$WEB_PORT" && ! port_in_use "$MCP_PORT"; then
       log "Ports are free."
       return 0
     fi
     sleep 0.15
   done
 
-  if port_in_use "$API_PORT" || port_in_use "$WEB_PORT"; then
-    err "Could not free API/web ports. Check: lsof -iTCP:$API_PORT -sTCP:LISTEN"
+  if port_in_use "$API_PORT" || port_in_use "$WEB_PORT" || port_in_use "$MCP_PORT"; then
+    err "Could not free API/web/MCP ports. Check: lsof -iTCP:$API_PORT -sTCP:LISTEN"
     exit 1
   fi
 }
@@ -166,6 +181,18 @@ main() {
   if [[ ! -d "$WEB_DIR/node_modules" ]]; then
     log "Installing web dependencies…"
     (cd "$WEB_DIR" && "${PNPM[@]}" install)
+  fi
+
+  if [[ "$SKIP_MCP" != "1" ]]; then
+    if [[ ! -d "$MCP_DIR/node_modules" ]]; then
+      log "Installing MCP dependencies…"
+      (cd "$MCP_DIR" && "${PNPM[@]}" install)
+    fi
+    # tsc output is gitignored, so a fresh clone always needs this once.
+    if [[ ! -f "$MCP_DIR/dist/index.js" ]]; then
+      log "Building MCP server…"
+      (cd "$MCP_DIR" && "${PNPM[@]}" build)
+    fi
   fi
 
   log "Starting API on $API_URL …"
@@ -199,17 +226,43 @@ main() {
     sleep 0.25
   done
 
+  local tail_logs=("$LOG_DIR/api.log" "$LOG_DIR/web.log")
+
+  if [[ "$SKIP_MCP" != "1" ]]; then
+    log "Starting MCP (http) on $MCP_URL/mcp …"
+    (
+      cd "$MCP_DIR"
+      export MCP_TRANSPORT=http
+      export MCP_HTTP_PORT="$MCP_PORT"
+      export MCP_AUTH_TOKEN="$MCP_AUTH_TOKEN"
+      export BEEDOCS_API_URL="$API_URL"
+      exec node dist/index.js
+    ) >"$LOG_DIR/mcp.log" 2>&1 &
+    MCP_PID=$!
+
+    if ! wait_http "$MCP_URL/healthz" "MCP" 40; then
+      tail -n 40 "$LOG_DIR/mcp.log" >&2 || true
+      exit 1
+    fi
+    tail_logs+=("$LOG_DIR/mcp.log")
+  fi
+
   log "BeeDocs is ready"
   log "  UI:  $WEB_URL"
   log "  API: $API_URL  (health: $API_URL/api/health)"
-  log "  Logs: $LOG_DIR/api.log , $LOG_DIR/web.log"
-  log "Press Ctrl+C to stop both."
+  if [[ "$SKIP_MCP" != "1" ]]; then
+    log "  MCP: $MCP_URL/mcp  (bearer: $MCP_AUTH_TOKEN)"
+    log "       claude mcp add --transport http beedocs-local $MCP_URL/mcp -H \"Authorization: Bearer $MCP_AUTH_TOKEN\""
+  fi
+  log "  Logs: ${tail_logs[*]}"
+  log "Press Ctrl+C to stop everything."
 
   # Stream logs while processes run
-  tail -n 0 -F "$LOG_DIR/api.log" "$LOG_DIR/web.log" &
+  tail -n 0 -F "${tail_logs[@]}" &
   local tail_pid=$!
 
-  while kill -0 "$API_PID" 2>/dev/null && kill -0 "$WEB_PID" 2>/dev/null; do
+  while kill -0 "$API_PID" 2>/dev/null && kill -0 "$WEB_PID" 2>/dev/null \
+    && { [[ "$SKIP_MCP" == "1" ]] || kill -0 "$MCP_PID" 2>/dev/null; }; do
     sleep 1
   done
 
@@ -223,6 +276,11 @@ main() {
   if ! kill -0 "$WEB_PID" 2>/dev/null; then
     err "Web exited unexpectedly. Last log lines:"
     tail -n 40 "$LOG_DIR/web.log" >&2 || true
+    exit 1
+  fi
+  if [[ "$SKIP_MCP" != "1" ]] && ! kill -0 "$MCP_PID" 2>/dev/null; then
+    err "MCP exited unexpectedly. Last log lines:"
+    tail -n 40 "$LOG_DIR/mcp.log" >&2 || true
     exit 1
   fi
 }

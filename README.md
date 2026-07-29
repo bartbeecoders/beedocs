@@ -80,11 +80,30 @@ local install).
 ./scripts/start.sh
 ```
 
-Starts the API (`http://localhost:5080`) and Vite UI (`http://localhost:5173`).  
-Stops anything already listening on those ports first (safe re-run).  
-Ctrl+C stops both. Logs: `scripts/.logs/`. Optional: `./scripts/stop.sh`.
+Starts all three services:
 
-Override ports: `API_PORT=5081 WEB_PORT=5174 ./scripts/start.sh`.
+| Service | URL |
+|---------|-----|
+| API | `http://localhost:5080` (health `/api/health`) |
+| Vite UI | `http://localhost:5173` |
+| MCP (HTTP) | `http://localhost:5090/mcp` (health `/healthz`, bearer `dev-token`) |
+
+Stops anything already listening on those ports first (safe re-run).  
+Ctrl+C stops all three. Logs: `scripts/.logs/`. Optional: `./scripts/stop.sh`.
+
+Override ports: `API_PORT=5081 WEB_PORT=5174 MCP_PORT=5091 ./scripts/start.sh`.  
+Skip the MCP process: `SKIP_MCP=1 ./scripts/start.sh` — agents using the **stdio**
+transport spawn their own and don't need it running.
+
+Point an agent at the local HTTP server:
+
+```bash
+claude mcp add --transport http beedocs-local http://localhost:5090/mcp \
+  -H "Authorization: Bearer dev-token"
+```
+
+On a fresh clone the first run also installs MCP dependencies and builds it
+(`dist/` is gitignored), which adds a few seconds.
 
 ### Workspace UI
 

@@ -275,10 +275,14 @@ startup — a quick way to confirm the secret was mounted.
 
 ## Local development
 
-Unchanged. `MCP_TRANSPORT` defaults to `stdio`, so the existing local setup in
+`MCP_TRANSPORT` defaults to `stdio`, so the existing local setup in
 [MCP-SERVER.md](MCP-SERVER.md) keeps working untouched.
 
-To exercise the HTTP transport locally:
+`./scripts/start.sh` now also runs the HTTP transport on `:5090` with the bearer
+token `dev-token`, alongside the API and Vite. Use `SKIP_MCP=1` to leave it out,
+or `MCP_PORT` / `MCP_AUTH_TOKEN` to override.
+
+To run it by hand instead:
 
 ```bash
 cd src/beedocs-mcp && pnpm build

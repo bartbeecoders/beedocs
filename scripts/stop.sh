@@ -4,6 +4,7 @@ set -euo pipefail
 
 API_PORT="${API_PORT:-5080}"
 WEB_PORT="${WEB_PORT:-5173}"
+MCP_PORT="${MCP_PORT:-5090}"
 
 log() { printf '🐝 %s\n' "$*"; }
 
@@ -27,4 +28,5 @@ stop_port() {
 
 stop_port "$API_PORT"
 stop_port "$WEB_PORT"
+stop_port "$MCP_PORT"
 log "Done."

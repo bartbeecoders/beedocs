@@ -49,8 +49,13 @@ if (Directory.Exists(wwwroot))
 
 // Uploaded images (drag/drop & paste). Configurable so containers can point it
 // at the same persistent volume as the database instead of the image layer.
-var uploadsRoot = builder.Configuration["BeeDocs:UploadsPath"]
-    ?? Path.Combine(app.Environment.ContentRootPath, "data", "uploads");
+// PhysicalFileProvider demands an absolute path, and the configured value may
+// be relative ("data/uploads") or absolute ("/data/uploads"), so resolve it
+// against the content root either way.
+var configuredUploads = builder.Configuration["BeeDocs:UploadsPath"];
+var uploadsRoot = string.IsNullOrWhiteSpace(configuredUploads)
+    ? Path.Combine(app.Environment.ContentRootPath, "data", "uploads")
+    : Path.GetFullPath(configuredUploads, app.Environment.ContentRootPath);
 Directory.CreateDirectory(uploadsRoot);
 app.UseStaticFiles(new StaticFileOptions
 {
