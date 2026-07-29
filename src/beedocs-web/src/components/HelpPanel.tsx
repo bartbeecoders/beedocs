@@ -22,6 +22,7 @@ const SECTIONS = [
   { id: 'workspace', label: 'Workspace basics' },
   { id: 'pages', label: 'Writing pages' },
   { id: 'diagrams', label: 'Diagrams' },
+  { id: 'export', label: 'Export & import' },
   { id: 'mcp', label: 'Connect an AI agent (MCP)' },
   { id: 'shortcuts', label: 'Keyboard shortcuts' },
   { id: 'troubleshooting', label: 'Troubleshooting' },
@@ -207,6 +208,38 @@ export function HelpPanel() {
             <code>beediagram</code> fences inside pages.
           </li>
           <li>Mermaid and C4 diagrams are edited as source with a live preview beside them.</li>
+        </ul>
+      </section>
+
+      <section className="settings-section" id="help-export">
+        <h2>Export &amp; import</h2>
+        <p className="muted">
+          Whole books or single documents, from the <strong>Export ▾</strong> button on a book, the{' '}
+          <strong>⭳</strong> button in the page toolbar, or by right-clicking anything in the
+          library tree.
+        </p>
+        <ul className="help-list">
+          <li>
+            <strong>PDF</strong> — opens a print-ready view; choose “Save as PDF”. The only format
+            that renders diagrams as pictures, so allow pop-ups for this site.
+          </li>
+          <li>
+            <strong>Markdown</strong> — a book becomes a zip mirroring its folders, a page becomes
+            one <code>.md</code> file. Front matter keeps titles and ordering, so it imports back.
+          </li>
+          <li>
+            <strong>Word (.docx)</strong> — headings, lists, tables and images. Diagrams appear as
+            their source, not as pictures.
+          </li>
+          <li>
+            <strong>BeeDocs archive</strong> — lossless and re-importable: folders, diagrams and
+            images all survive the round trip. Use this to move content between instances.
+          </li>
+          <li>
+            <strong>Import</strong> sits in the library toolbar. It previews the file first, and
+            lets you keep a clashing name or rename to a free one. Import never overwrites existing
+            pages.
+          </li>
         </ul>
       </section>
 

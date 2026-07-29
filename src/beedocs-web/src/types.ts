@@ -34,6 +34,41 @@ export type Page = PageSummary & {
   createdAt: string
 }
 
+/** Server-rendered export formats. PDF is produced in the browser instead. */
+export type ExportFormat = 'archive' | 'markdown' | 'docx'
+
+/** What to do when an imported title already exists. */
+export type ImportNameMode = 'rename' | 'keep'
+
+export type ImportPreview = {
+  /** How the file was recognised: archive | markdown-zip | markdown */
+  source: string
+  /** book | page */
+  kind: string
+  bookTitle: string
+  chapterCount: number
+  pageCount: number
+  diagramCount: number
+  assetCount: number
+  pageTitles: string[]
+  bookTitleExists: boolean
+  suggestedTitle?: string | null
+  warnings: string[]
+}
+
+export type ImportResult = {
+  kind: string
+  bookId: string
+  bookTitle: string
+  bookCreated: boolean
+  chaptersCreated: number
+  pagesCreated: number
+  diagramsCreated: number
+  assetsCreated: number
+  warnings: string[]
+  pages: { id: string; title: string; slug: string }[]
+}
+
 export type DiagramKind = 'beediagram' | 'mermaid' | 'plantuml' | 'c4'
 
 export type DiagramSummary = {

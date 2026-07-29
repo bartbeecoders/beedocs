@@ -11,6 +11,7 @@ import { DiagramCanvas, type DiagramEditorState } from './DiagramCanvas'
 import { PropertiesPane } from './PropertiesPane'
 import { SettingsPanel } from './SettingsPanel'
 import { HelpPanel } from './HelpPanel'
+import { ExportMenu } from './ExportMenu'
 
 export function WorkspaceShell() {
   const location = useLocation()
@@ -206,7 +207,10 @@ function BookOverview({ bookId }: { bookId: string }) {
 
   return (
     <div className="book-overview">
-      <h1>{book.title}</h1>
+      <div className="book-overview-head">
+        <h1>{book.title}</h1>
+        <ExportMenu scope="book" id={book.id} title={book.title} />
+      </div>
       {book.description && <p className="muted lead">{book.description}</p>}
       <div className="overview-stats">
         <div className="stat">

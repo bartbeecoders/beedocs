@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { exportBookToPdf } from '../export/bookPdf'
+import { exportBookToPdf } from '../export/pdf'
 
 type Props = {
   bookId: string

@@ -34,8 +34,26 @@ else
     surrealBuilder.AddRocksDbProvider();
 }
 
+// Uploaded images (drag/drop & paste) live here. Resolved before the container
+// is built so export/import can read and write the same directory the static
+// file middleware serves. PhysicalFileProvider demands an absolute path, and the
+// configured value may be relative ("data/uploads") or absolute ("/data/uploads").
+var configuredUploads = builder.Configuration["BeeDocs:UploadsPath"];
+var uploadsRoot = string.IsNullOrWhiteSpace(configuredUploads)
+    ? Path.Combine(builder.Environment.ContentRootPath, "data", "uploads")
+    : Path.GetFullPath(configuredUploads, builder.Environment.ContentRootPath);
+Directory.CreateDirectory(uploadsRoot);
+
+builder.Services.AddSingleton(new StorageOptions(uploadsRoot));
 builder.Services.AddSingleton<IDocumentService, DocumentService>();
 builder.Services.AddSingleton<IDiagramService, DiagramService>();
+builder.Services.AddSingleton<IExportService, ExportService>();
+builder.Services.AddSingleton<IImportService, ImportService>();
+
+// Imported archives carry their images, so the 30 MB Kestrel default is too
+// tight for a book of screenshots. Individual uploads stay capped at 8 MB by
+// the /api/uploads handler below.
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 256L * 1024 * 1024);
 
 var app = builder.Build();
 
@@ -48,16 +66,7 @@ if (Directory.Exists(wwwroot))
     app.UseStaticFiles();
 }
 
-// Uploaded images (drag/drop & paste). Configurable so containers can point it
-// at the same persistent volume as the database instead of the image layer.
-// PhysicalFileProvider demands an absolute path, and the configured value may
-// be relative ("data/uploads") or absolute ("/data/uploads"), so resolve it
-// against the content root either way.
-var configuredUploads = builder.Configuration["BeeDocs:UploadsPath"];
-var uploadsRoot = string.IsNullOrWhiteSpace(configuredUploads)
-    ? Path.Combine(app.Environment.ContentRootPath, "data", "uploads")
-    : Path.GetFullPath(configuredUploads, app.Environment.ContentRootPath);
-Directory.CreateDirectory(uploadsRoot);
+// Serve the uploads directory resolved above.
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(uploadsRoot),
@@ -242,6 +251,107 @@ api.MapDelete("/diagrams/{id}", async (string id, IDiagramService diagrams, Canc
 {
     var ok = await diagrams.DeleteAsync(id, ct);
     return ok ? Results.NoContent() : Results.NotFound();
+});
+
+// --- Export ---
+// PDF is produced in the browser (Print → Save as PDF) because rendering
+// Mermaid/BeeDiagram content needs a DOM; everything else is built here.
+static IResult ExportResult(ExportPayload? payload) =>
+    payload is null
+        ? Results.NotFound()
+        : Results.File(payload.Content, payload.ContentType, payload.FileName);
+
+static bool TryParseFormat(string? value, out ExportFormat format)
+{
+    format = ExportFormat.Archive;
+    switch ((value ?? "archive").Trim().ToLowerInvariant())
+    {
+        case "archive" or "beedocs" or "bundle": format = ExportFormat.Archive; return true;
+        case "markdown" or "md": format = ExportFormat.Markdown; return true;
+        case "docx" or "word": format = ExportFormat.Docx; return true;
+        default: return false;
+    }
+}
+
+api.MapGet("/books/{id}/export", async (string id, string? format, IExportService export, CancellationToken ct) =>
+{
+    if (!TryParseFormat(format, out var parsed))
+        return Results.BadRequest(new { error = "Unknown format. Use archive, markdown, or docx." });
+
+    return ExportResult(await export.ExportBookAsync(id, parsed, ct));
+});
+
+api.MapGet("/pages/{id}/export", async (string id, string? format, IExportService export, CancellationToken ct) =>
+{
+    if (!TryParseFormat(format, out var parsed))
+        return Results.BadRequest(new { error = "Unknown format. Use archive, markdown, or docx." });
+
+    return ExportResult(await export.ExportPageAsync(id, parsed, ct));
+});
+
+// --- Import ---
+// The form is read straight off HttpRequest (rather than via IFormFile binding)
+// to match /api/uploads and to stay clear of the minimal-API antiforgery filter.
+static async Task<(IFormFile? File, IFormCollection Form)> ReadUploadAsync(HttpRequest request, CancellationToken ct)
+{
+    var form = await request.ReadFormAsync(ct);
+    return (form.Files.GetFile("file") ?? form.Files.FirstOrDefault(), form);
+}
+
+api.MapPost("/import/inspect", async (HttpRequest request, IImportService import, CancellationToken ct) =>
+{
+    if (!request.HasFormContentType)
+        return Results.BadRequest(new { error = "Expected multipart form data with a file field." });
+
+    var (file, _) = await ReadUploadAsync(request, ct);
+    if (file is null || file.Length == 0)
+        return Results.BadRequest(new { error = "No file uploaded." });
+
+    try
+    {
+        await using var stream = file.OpenReadStream();
+        return Results.Ok(await import.InspectAsync(stream, file.FileName, ct));
+    }
+    catch (InvalidImportException e)
+    {
+        return Results.BadRequest(new { error = e.Message });
+    }
+});
+
+api.MapPost("/import", async (HttpRequest request, IImportService import, CancellationToken ct) =>
+{
+    if (!request.HasFormContentType)
+        return Results.BadRequest(new { error = "Expected multipart form data with a file field." });
+
+    var (file, form) = await ReadUploadAsync(request, ct);
+    if (file is null || file.Length == 0)
+        return Results.BadRequest(new { error = "No file uploaded." });
+
+    var mode = (form["mode"].ToString() ?? "rename").Trim().ToLowerInvariant() switch
+    {
+        "keep" or "same" or "keep-name" => ImportNameMode.Keep,
+        _ => ImportNameMode.Rename,
+    };
+
+    var targetBookId = form["targetBookId"].ToString();
+    var title = form["title"].ToString();
+
+    try
+    {
+        await using var stream = file.OpenReadStream();
+        var result = await import.ImportAsync(
+            stream,
+            file.FileName,
+            mode,
+            string.IsNullOrWhiteSpace(targetBookId) ? null : targetBookId,
+            string.IsNullOrWhiteSpace(title) ? null : title,
+            ct);
+        return Results.Ok(result);
+    }
+    catch (InvalidImportException e)
+    {
+        return Results.BadRequest(new { error = e.Message });
+    }
 });
 
 // --- Uploads (images) ---

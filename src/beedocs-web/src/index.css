@@ -2721,3 +2721,223 @@ select:focus {
   gap: 0.3rem;
   font-size: 0.85rem;
 }
+
+/* ===== Export menu ===== */
+.export-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.export-menu-pop {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 1200;
+  min-width: 240px;
+  padding: 0.35rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.export-menu-heading {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 0.3rem 0.5rem 0.2rem;
+}
+
+.export-menu-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0.4rem 0.55rem;
+  cursor: pointer;
+}
+
+.export-menu-item:hover,
+.export-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-soft));
+  outline: none;
+}
+
+.export-menu-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.export-menu-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.export-menu-status {
+  white-space: nowrap;
+}
+
+.export-menu-error {
+  color: var(--danger);
+  font-size: 0.75rem;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-context-heading.sub {
+  padding-top: 0.15rem;
+}
+
+.book-overview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.book-overview-head h1 {
+  margin: 0;
+}
+
+/* ===== Modal (import) ===== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.modal {
+  width: min(560px, 100%);
+  max-height: min(85vh, 720px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.modal-body {
+  padding: 1rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.field-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.field-hint {
+  line-height: 1.4;
+}
+
+.import-mode {
+  gap: 0.4rem;
+}
+
+.radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+/* The global `input { width: 100% }` rule would stretch the control and shove
+   the label to the far right, so radios opt out explicitly. */
+.radio input[type='radio'],
+.radio input[type='checkbox'] {
+  width: auto;
+  flex: 0 0 auto;
+  margin-top: 0.2rem;
+}
+
+.radio > span {
+  flex: 1 1 auto;
+}
+
+.import-summary {
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.import-summary-title {
+  font-weight: 700;
+}
+
+.import-page-list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.import-result p {
+  margin: 0 0 0.5rem;
+}
+
+.banner.warn {
+  background: color-mix(in srgb, #e6a700 16%, var(--bg-soft));
+  border: 1px solid color-mix(in srgb, #e6a700 45%, var(--border));
+  color: var(--text);
+}
