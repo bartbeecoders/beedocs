@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
-import { exportBookToPdf } from '../export/bookPdf'
+import { api } from '../api'
+import { exportBookToPdf, exportPageToPdf } from '../export/pdf'
+import { ImportDialog } from './ImportDialog'
+import type { ExportFormat } from '../types'
 import { useWorkspace, type TreeBook } from '../workspace/WorkspaceContext'
 import type { Chapter, DiagramSummary, PageSummary } from '../types'
 
@@ -75,7 +78,33 @@ export function NavTree() {
   const [menu, setMenu] = useState<CtxMenu | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
   const [busyExport, setBusyExport] = useState(false)
+  const [importOpen, setImportOpen] = useState<{ targetBookId?: string } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * Run one export from a context menu. PDF is rendered in the browser (it is
+   * the only route that can rasterise diagrams); the rest stream from the API.
+   */
+  const runExport = (
+    scope: 'book' | 'page',
+    id: string,
+    format: ExportFormat | 'pdf',
+  ) => {
+    setBusyExport(true)
+    const job =
+      format === 'pdf'
+        ? scope === 'book'
+          ? exportBookToPdf(id)
+          : exportPageToPdf(id)
+        : api.downloadExport(scope === 'book' ? 'books' : 'pages', id, format).then(() => undefined)
+
+    void job
+      .catch((err: unknown) => alert(err instanceof Error ? err.message : String(err)))
+      .finally(() => {
+        setBusyExport(false)
+        setMenu(null)
+      })
+  }
 
   useEffect(() => {
     if (!menu) return
@@ -221,6 +250,14 @@ export function NavTree() {
         <button type="button" className="btn primary sm" onClick={() => setNewBookOpen((v) => !v)}>
           New book
         </button>
+        <button
+          type="button"
+          className="btn sm"
+          onClick={() => setImportOpen({})}
+          title="Import a BeeDocs archive, a zip of Markdown, or a single .md file"
+        >
+          Import
+        </button>
         <button type="button" className="icon-btn" onClick={() => void refreshTree()} title="Refresh">
           ↻
         </button>
@@ -300,19 +337,18 @@ export function NavTree() {
                 }}
               />
               <div className="tree-context-sep" />
+              <ExportItems
+                busy={busyExport}
+                onPick={(format) => runExport('book', menu.bookId, format)}
+              />
               <MenuItem
-                label={busyExport ? 'Exporting PDF…' : 'Export PDF'}
-                disabled={busyExport}
+                label="Import into this book…"
                 onClick={() => {
-                  setBusyExport(true)
-                  void exportBookToPdf(menu.bookId)
-                    .catch((err) => alert(err instanceof Error ? err.message : String(err)))
-                    .finally(() => {
-                      setBusyExport(false)
-                      setMenu(null)
-                    })
+                  setImportOpen({ targetBookId: menu.bookId })
+                  setMenu(null)
                 }}
               />
+              <div className="tree-context-sep" />
               <MenuItem
                 label="Open book"
                 onClick={() => {
@@ -393,6 +429,11 @@ export function NavTree() {
                 }}
               />
               <div className="tree-context-sep" />
+              <ExportItems
+                busy={busyExport}
+                onPick={(format) => runExport('page', menu.pageId, format)}
+              />
+              <div className="tree-context-sep" />
               <MenuItem
                 label="Delete page"
                 danger
@@ -435,7 +476,43 @@ export function NavTree() {
           )}
         </div>
       )}
+
+      {importOpen && (
+        <ImportDialog
+          defaultTargetBookId={importOpen.targetBookId}
+          onClose={() => setImportOpen(null)}
+        />
+      )}
     </div>
+  )
+}
+
+/** The four export formats, shared by the book and page context menus. */
+function ExportItems({
+  busy,
+  onPick,
+}: {
+  busy: boolean
+  onPick: (format: ExportFormat | 'pdf') => void
+}) {
+  const formats: { format: ExportFormat | 'pdf'; label: string }[] = [
+    { format: 'pdf', label: 'PDF' },
+    { format: 'markdown', label: 'Markdown' },
+    { format: 'docx', label: 'Word (.docx)' },
+    { format: 'archive', label: 'BeeDocs archive' },
+  ]
+  return (
+    <>
+      <div className="tree-context-heading sub">{busy ? 'Exporting…' : 'Export as'}</div>
+      {formats.map((f) => (
+        <MenuItem
+          key={f.format}
+          label={f.label}
+          disabled={busy}
+          onClick={() => onPick(f.format)}
+        />
+      ))}
+    </>
   )
 }
 

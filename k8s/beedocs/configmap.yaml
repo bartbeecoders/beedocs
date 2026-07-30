@@ -18,3 +18,5 @@ data:
 
   BeeDocs__Namespace: "beedocs"
   BeeDocs__Database: "main"
+  # Optional: protect /api/v1 (external publish API). Prefer a Secret in production.
+  # BeeDocs__ApiKey: ""

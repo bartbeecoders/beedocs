@@ -43,6 +43,29 @@ BeeDocs/
     └── beedocs-mcp/          # MCP server for AI agents (stdio → API)
 ```
 
+## REST API (external apps)
+
+Other applications can **publish documentation** into BeeDocs over HTTP — for
+example pushing a book *Application1* with a *Configuration* Markdown page.
+
+```bash
+curl -sS -X PUT "http://localhost:5080/api/v1/publish" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "book": { "title": "Application1", "slug": "application1" },
+    "page": {
+      "title": "Configuration",
+      "slug": "configuration",
+      "content": "# Configuration\n\nport: 8080\n"
+    }
+  }'
+```
+
+Slug-based create/update of books and pages lives under **`/api/v1`**. Optional
+API key: set `BeeDocs__ApiKey` and send `Authorization: Bearer <key>`.
+
+Full reference: **[Docs/REST-API.md](Docs/REST-API.md)**
+
 ## MCP (AI agents)
 
 Agents can create books, pages, and diagrams via the Model Context Protocol server.
@@ -216,6 +239,23 @@ must block the NodePorts, or Cloudflare Access can be bypassed entirely.
 | GET/POST | `/api/books/{bookId}/diagrams` | List / create diagrams |
 | GET/PUT/DELETE | `/api/diagrams/{id}` | Diagram CRUD |
 | GET | `/api/pages/{pageId}/diagrams` | Diagrams linked to a page |
+| GET | `/api/books/{id}/export?format=` | Export a book — `archive`, `markdown`, `docx` |
+| GET | `/api/pages/{id}/export?format=` | Export one document — same formats |
+| POST | `/api/import/inspect` | Describe an import file without writing |
+| POST | `/api/import` | Import an archive, a Markdown zip, or a single `.md` |
+
+### Export & import
+
+Books and single documents export to **PDF**, **Markdown**, **Word (.docx)**, or
+a lossless **`.beedocs` archive** that imports back with folders, diagrams and
+images intact. In the UI: **Export ▾** on a book, **⭳** in the page toolbar, or
+right-click anything in the library tree. **Import** sits in the library
+toolbar and asks whether to keep or rename a clashing title.
+
+PDF is rendered in the browser (print → *Save as PDF*) because it is the only
+path that can rasterise Mermaid and BeeDiagram content.
+
+Full details: **[Docs/EXPORT-IMPORT.md](Docs/EXPORT-IMPORT.md)**
 
 ### BeeDiagram (custom editor)
 

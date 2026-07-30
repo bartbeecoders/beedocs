@@ -7,6 +7,7 @@ import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { Page } from '../types'
 import { HybridPageEditor } from './HybridPageEditor'
 import { MarkdownView } from './MarkdownView'
+import { ExportMenu } from './ExportMenu'
 
 export type PageEditorState = {
   page: Page | null
@@ -239,6 +240,7 @@ export function PageCanvas({ onStateChange }: Props) {
           <button type="button" className="btn primary sm" disabled={saving || !dirty} onClick={() => void save()}>
             {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
           </button>
+          <ExportMenu scope="page" id={page.id} title={page.title} variant="icon" />
         </div>
       </div>
       <div className="canvas-meta">

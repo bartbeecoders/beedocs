@@ -18,6 +18,8 @@ type Props = {
   source: string
   onChange: (source: string) => void
   readOnly?: boolean
+  /** Owning book — enables book shape collections in Studio. */
+  bookId?: string
 }
 
 /**
@@ -26,7 +28,7 @@ type Props = {
  * **Classic** (the original compact BeeDocs editor). Both read and write the
  * same BeeDiagram JSON.
  */
-export function BeeDiagramWorkbench({ source, onChange, readOnly }: Props) {
+export function BeeDiagramWorkbench({ source, onChange, readOnly, bookId }: Props) {
   const [mode, setMode] = useState<BeeEditorMode>(loadMode)
 
   useEffect(() => {
@@ -64,7 +66,7 @@ export function BeeDiagramWorkbench({ source, onChange, readOnly }: Props) {
         </div>
       </div>
       {mode === 'studio' ? (
-        <BeeStudioEditor source={source} onChange={onChange} readOnly={readOnly} />
+        <BeeStudioEditor source={source} onChange={onChange} readOnly={readOnly} bookId={bookId} />
       ) : (
         <BeeDiagramEditor source={source} onChange={onChange} readOnly={readOnly} />
       )}

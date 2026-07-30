@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import type { BeeArrowHead, BeeEdgeRoute, BeeShape, BeeTextAlign, BeeTextVAlign } from '../../types'
-import { resolveEdgeStyle, resolveNodeStyle } from '../../diagram/shapes'
+import {
+  resolveEdgeStyle,
+  resolveNodeStyle,
+  resolveShape,
+  shapeFillParts,
+} from '../../diagram/shapes'
 import type { StudioController } from './useStudioController'
 
 type Tab = 'style' | 'text' | 'arrange'
@@ -110,19 +115,28 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                 {primaryNode && nodeStyle && (
                   <section className="studio-format-section">
                     <h4>Shape</h4>
-                    <label className="studio-field">
-                      <span>Fill</span>
-                      <input
-                        type="color"
-                        value={normalizeColor(nodeStyle.fill)}
-                        onChange={(e) => ctrl.updateNodeStyle(nodeIds, { fill: e.target.value })}
-                      />
-                    </label>
-                    <Swatches
-                      colors={SWATCHES}
-                      onPick={(c) => ctrl.updateNodeStyle(nodeIds, { fill: c })}
-                      onNone={() => ctrl.updateNodeStyle(nodeIds, { fill: 'none' })}
-                    />
+                    {shapeFillParts(resolveShape(primaryNode)).map((part) => {
+                      const value = part.key === 'fill' ? nodeStyle.fill : nodeStyle.fill2
+                      return (
+                        <div key={part.key}>
+                          <label className="studio-field">
+                            <span>{part.label}</span>
+                            <input
+                              type="color"
+                              value={normalizeColor(value)}
+                              onChange={(e) =>
+                                ctrl.updateNodeStyle(nodeIds, { [part.key]: e.target.value })
+                              }
+                            />
+                          </label>
+                          <Swatches
+                            colors={SWATCHES}
+                            onPick={(c) => ctrl.updateNodeStyle(nodeIds, { [part.key]: c })}
+                            onNone={() => ctrl.updateNodeStyle(nodeIds, { [part.key]: 'none' })}
+                          />
+                        </div>
+                      )
+                    })}
                     <label className="studio-field">
                       <span>Line</span>
                       <input

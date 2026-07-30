@@ -35,6 +35,13 @@ import {
   resolveShape,
 } from '../../diagram/shapes'
 import {
+  containerAt,
+  dropTargetFor,
+  reparentNodes,
+  topLevelOf,
+  withDescendants,
+} from '../../diagram/containers'
+import {
   HANDLE_CURSOR,
   RESIZE_HANDLES,
   bendHandles,
@@ -56,6 +63,7 @@ import type { StudioController } from './useStudioController'
 
 export const STUDIO_GRID = 10
 export const SHAPE_DRAG_MIME = 'application/x-bee-shape'
+export const COLLECTION_DRAG_MIME = 'application/x-beedocs-shape-collection'
 const MIN_ZOOM = 0.2
 const MAX_ZOOM = 4
 /** Pointer distance (screen px) that still counts as a click, not a drag */
@@ -136,10 +144,14 @@ type Props = {
   onZoomChange?: (zoom: number) => void
   /** Ask the host to upload/pick an image and drop it at this world point */
   onRequestImage?: (world: BeePoint) => void
+  /** Drop a book shape collection at a world point (top-left of its bounds). */
+  onPlaceCollectionId?: (collectionId: string, world: BeePoint) => void
+  /** Save the current selection as a book collection (name/description dialog). */
+  onSaveAsCollection?: () => void
 }
 
 export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function StudioCanvas(
-  { ctrl, onZoomChange, onRequestImage },
+  { ctrl, onZoomChange, onRequestImage, onPlaceCollectionId, onSaveAsCollection },
   ref,
 ) {
   const { doc, prefs, readOnly } = ctrl
@@ -167,6 +179,15 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null)
   const [hoverEdgeId, setHoverEdgeId] = useState<string | null>(null)
   const [guides, setGuides] = useState<Guide[]>([])
+  /** Container highlighted as the drop target for the shapes being dragged. */
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+  /**
+   * Whether the current move gesture actually moved anything. Kept in a ref
+   * rather than read off `interaction.moved`, because a fast drag can deliver
+   * its only pointermove and the pointerup in one React batch — the re-render
+   * that refreshes interactionRef would not have happened yet.
+   */
+  const movedRef = useRef(false)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [shapePicker, setShapePicker] = useState<ShapePickerState | null>(null)
   const [labelEdit, setLabelEdit] = useState<LabelEdit | null>(null)
@@ -465,13 +486,15 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
       return
     }
     // Selection state is applied asynchronously — build the move set eagerly
-    const ids = selectedNodeIds.has(node.id) ? ctrl.selectionRef.current.nodes : [node.id]
+    const picked = selectedNodeIds.has(node.id) ? ctrl.selectionRef.current.nodes : [node.id]
+    // Dragging a container drags everything nested inside it.
+    const idSet = withDescendants(doc.nodes, picked)
+    const ids = [...idSet]
     const origin = new Map<string, BeePoint>()
     for (const id of ids) {
       const n = nodeById.get(id)
       if (n) origin.set(id, { x: n.x, y: n.y })
     }
-    const idSet = new Set(ids)
     const edgeOrigin = new Map<string, BeePoint[]>()
     for (const edge of ctrl.docRef.current.edges) {
       if (edge.waypoints?.length && idSet.has(edge.from) && idSet.has(edge.to)) {
@@ -479,6 +502,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
       }
     }
     ctrl.beginGesture()
+    movedRef.current = false
     setInteraction({
       kind: 'move',
       startWorld: world,
@@ -486,6 +510,35 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
       edgeOrigin,
       moved: false,
       startClient: { x: e.clientX, y: e.clientY },
+    })
+  }
+
+  /** Container that would adopt the shapes being dragged, for the highlight. */
+  const findDropTarget = (origin: Map<string, BeePoint>, dx: number, dy: number): string | null => {
+    const moving = new Set(origin.keys())
+    return dropTargetFor(ctrl.docRef.current.nodes, moving, (n) => {
+      const o = origin.get(n.id)
+      return o ? { x: o.x + dx, y: o.y + dy, w: n.w, h: n.h } : nodeRect(n)
+    })
+  }
+
+  /**
+   * Commit the parent change once the drag ends.
+   *
+   * Recomputed from the nodes' final positions rather than read off the
+   * highlight state: a fast drag can deliver the last pointermove and the
+   * pointerup in one batch, so the highlight may never have rendered.
+   */
+  const applyDrop = (origin: Map<string, BeePoint>) => {
+    const moving = new Set(origin.keys())
+    const nodes = ctrl.docRef.current.nodes
+    const target = dropTargetFor(nodes, moving, nodeRect)
+    const ids = topLevelOf(nodes, moving)
+      .filter((n) => (n.parentId ?? null) !== target)
+      .map((n) => n.id)
+    if (ids.length === 0) return
+    ctrl.apply((prev) => ({ ...prev, nodes: reparentNodes(prev.nodes, ids, target) }), {
+      history: false,
     })
   }
 
@@ -550,8 +603,11 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
         const rawDx = world.x - it.startWorld.x
         const rawDy = world.y - it.startWorld.y
         const moved =
-          it.moved || Math.hypot(e.clientX - it.startClient.x, e.clientY - it.startClient.y) > CLICK_SLOP
+          it.moved ||
+          movedRef.current ||
+          Math.hypot(e.clientX - it.startClient.x, e.clientY - it.startClient.y) > CLICK_SLOP
         if (!moved) return
+        movedRef.current = true
 
         const ids = [...it.origin.keys()]
         const useSnap = prefs.snap && !e.altKey
@@ -576,6 +632,9 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
           }
         }
         setGuides(nextGuides)
+
+        // Which container would take these shapes if the drag ended here?
+        setDropTargetId(findDropTarget(it.origin, dx, dy))
 
         ctrl.apply(
           (prev) => ({
@@ -713,7 +772,15 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
   const onPointerUp = (e: ReactPointerEvent) => {
     const it = interactionRef.current
     setGuides([])
-    if (!it) return
+    if (!it) {
+      setDropTargetId(null)
+      return
+    }
+    if (it.kind === 'move') {
+      if (it.moved || movedRef.current) applyDrop(it.origin)
+      movedRef.current = false
+      setDropTargetId(null)
+    }
     if (it.kind === 'marquee') {
       const rect = normalizeRect(it.start, it.current)
       if (rect.w > 3 || rect.h > 3) {
@@ -855,8 +922,18 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
   // ── Drag & drop from the palette ───────────────────────────────────────────
 
   const onDrop = (e: React.DragEvent) => {
+    if (readOnly) return
+    const collectionId = e.dataTransfer.getData(COLLECTION_DRAG_MIME)
+    if (collectionId && onPlaceCollectionId) {
+      e.preventDefault()
+      const world = clientToWorld(e.clientX, e.clientY)
+      onPlaceCollectionId(collectionId, { x: snap(world.x), y: snap(world.y) })
+      setDropTargetId(null)
+      return
+    }
+
     const itemId = e.dataTransfer.getData(SHAPE_DRAG_MIME)
-    if (!itemId || readOnly) return
+    if (!itemId) return
     e.preventDefault()
     const item = findLibraryItem(itemId)
     if (!item) return
@@ -868,7 +945,16 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
       onRequestImage?.({ x: world.x, y: world.y })
       return
     }
+    // Dropping a shape straight from the palette onto a container nests it.
+    const host = containerAt(ctrl.docRef.current.nodes, {
+      x: node.x,
+      y: node.y,
+      w: node.w,
+      h: node.h,
+    })
+    if (host && host.id !== node.id) node.parentId = host.id
     ctrl.addNodes([node])
+    setDropTargetId(null)
   }
 
   // ── Derived render data ────────────────────────────────────────────────────
@@ -914,7 +1000,8 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
       onPointerDownCapture={() => wrapRef.current?.focus({ preventScroll: true })}
       onContextMenu={(e) => openContextMenu(e)}
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes(SHAPE_DRAG_MIME)) {
+        const types = e.dataTransfer.types
+        if (types.includes(SHAPE_DRAG_MIME) || types.includes(COLLECTION_DRAG_MIME)) {
           e.preventDefault()
           e.dataTransfer.dropEffect = 'copy'
         }
@@ -1103,6 +1190,25 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
               </BeeShapeNode>
             )
           })}
+
+          {/* Container that will adopt the shapes currently being dragged */}
+          {dropTargetId &&
+            (() => {
+              const target = nodeById.get(dropTargetId)
+              if (!target) return null
+              return (
+                <rect
+                  className="studio-drop-target"
+                  x={target.x - 3}
+                  y={target.y - 3}
+                  width={target.w + 6}
+                  height={target.h + 6}
+                  rx={6}
+                  fill="none"
+                  pointerEvents="none"
+                />
+              )
+            })()}
 
           {/* Selection outlines */}
           {doc.nodes
@@ -1369,6 +1475,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
           onAddShape={(world, clientX, clientY) =>
             setShapePicker({ clientX, clientY, world, pending: null })
           }
+          onSaveAsCollection={onSaveAsCollection}
         />
       )}
 
@@ -1707,6 +1814,7 @@ function StudioContextMenu({
   onPaste,
   onFit,
   onAddShape,
+  onSaveAsCollection,
 }: {
   state: ContextMenuState
   ctrl: StudioController
@@ -1715,6 +1823,7 @@ function StudioContextMenu({
   onPaste: (world: BeePoint) => void
   onFit: () => void
   onAddShape: (world: BeePoint, clientX: number, clientY: number) => void
+  onSaveAsCollection?: () => void
 }) {
   const hasSelection = ctrl.selection.nodes.length > 0 || ctrl.selection.edges.length > 0
   const item = (label: string, action: () => void, opts?: { hint?: string; danger?: boolean }) => (
@@ -1744,6 +1853,9 @@ function StudioContextMenu({
           {item('Cut', () => ctrl.cutSelection(), { hint: 'Ctrl+X' })}
           {item('Copy', () => ctrl.copySelection(), { hint: 'Ctrl+C' })}
           {item('Duplicate', () => ctrl.duplicateSelection(), { hint: 'Ctrl+D' })}
+          {onSaveAsCollection &&
+            ctrl.selection.nodes.length > 0 &&
+            item('Save as collection…', onSaveAsCollection)}
           <div className="studio-menu-sep" />
           {state.nodeId && item('Edit label', () => onEditLabel('node', state.nodeId!), { hint: 'F2' })}
           {state.edgeId && item('Edit label', () => onEditLabel('edge', state.edgeId!), { hint: 'F2' })}

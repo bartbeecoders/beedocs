@@ -12,6 +12,79 @@ mermaid.initialize({
   fontFamily: 'ui-sans-serif, system-ui, sans-serif',
 })
 
+/** Resolve `beediagram-ref` fences, caching each diagram for the whole export. */
+function makeDiagramResolver() {
+  const cache = new Map<string, { title: string; source: string; kind: string }>()
+  return async (diagramId: string) => {
+    if (!cache.has(diagramId)) {
+      try {
+        const d = await api.getDiagram(diagramId)
+        cache.set(diagramId, { title: d.title, source: d.source, kind: d.kind })
+      } catch {
+        cache.set(diagramId, { title: diagramId, source: '', kind: 'beediagram' })
+      }
+    }
+    return cache.get(diagramId)!
+  }
+}
+
+/** Open the rendered HTML in a new tab, which auto-triggers the print dialog. */
+function openPrintWindow(html: string): void {
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const win = window.open(url, '_blank')
+  if (!win) {
+    URL.revokeObjectURL(url)
+    throw new Error('Pop-up blocked. Allow pop-ups for this site to export PDF.')
+  }
+  // Revoke after the print window has loaded
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
+const AUTO_PRINT_SCRIPT = `
+  <script>
+    // Auto-open print dialog after layout
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        window.focus();
+        window.print();
+      }, 400);
+    });
+  </script>`
+
+/**
+ * Load a single page and open a print-ready document so the user can save as
+ * PDF (browser Print → “Save as PDF”).
+ */
+export async function exportPageToPdf(pageId: string, onProgress?: ExportProgress): Promise<void> {
+  onProgress?.('Loading page…')
+  const page = await api.getPage(pageId)
+
+  onProgress?.('Rendering content…')
+  const body = await markdownToExportHtml(page.content, makeDiagramResolver())
+
+  const generated = new Date().toLocaleString()
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>${esc(page.title)} — PDF export</title>
+  <style>${PRINT_CSS}</style>
+</head>
+<body>
+  <section class="export-page">
+    <h1 class="export-page-title">${esc(page.title)}</h1>
+    <p class="export-meta">Exported from BeeDocs ${esc(generated)}</p>
+    <div class="export-page-body">${body}</div>
+  </section>
+  ${AUTO_PRINT_SCRIPT}
+</body>
+</html>`
+
+  onProgress?.('Opening print dialog…')
+  openPrintWindow(html)
+}
+
 /**
  * Load a book and open a print-ready document so the user can save as PDF
  * (browser Print → “Save as PDF”).
@@ -34,29 +107,14 @@ export async function exportBookToPdf(bookId: string, onProgress?: ExportProgres
     pages.push(await api.getPage(p.id))
   }
 
-  // Cache diagrams referenced by beediagram-ref
-  const diagramCache = new Map<string, { title: string; source: string; kind: string }>()
+  const resolveDiagram = makeDiagramResolver()
 
   onProgress?.('Rendering content…')
   const pageHtml: string[] = []
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i]
     onProgress?.(`Rendering “${page.title}” (${i + 1}/${pages.length})…`)
-    const body = await markdownToExportHtml(page.content, async (diagramId) => {
-      if (!diagramCache.has(diagramId)) {
-        try {
-          const d = await api.getDiagram(diagramId)
-          diagramCache.set(diagramId, { title: d.title, source: d.source, kind: d.kind })
-        } catch {
-          diagramCache.set(diagramId, {
-            title: diagramId,
-            source: '',
-            kind: 'beediagram',
-          })
-        }
-      }
-      return diagramCache.get(diagramId)!
-    })
+    const body = await markdownToExportHtml(page.content, resolveDiagram)
     pageHtml.push(`
       <section class="export-page" id="page-${esc(page.id)}">
         <h1 class="export-page-title">${esc(page.title)}</h1>
@@ -98,28 +156,12 @@ export async function exportBookToPdf(bookId: string, onProgress?: ExportProgres
   </header>
   ${toc}
   ${pageHtml.join('\n')}
-  <script>
-    // Auto-open print dialog after layout
-    window.addEventListener('load', function () {
-      setTimeout(function () {
-        window.focus();
-        window.print();
-      }, 400);
-    });
-  </script>
+  ${AUTO_PRINT_SCRIPT}
 </body>
 </html>`
 
   onProgress?.('Opening print dialog…')
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const win = window.open(url, '_blank')
-  if (!win) {
-    URL.revokeObjectURL(url)
-    throw new Error('Pop-up blocked. Allow pop-ups for this site to export PDF.')
-  }
-  // Revoke after the print window has loaded
-  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  openPrintWindow(html)
 }
 
 async function markdownToExportHtml(

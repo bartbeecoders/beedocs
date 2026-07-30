@@ -118,6 +118,7 @@ export function DiagramEditorPage() {
 
       {kind === 'beediagram' ? (
         <BeeDiagramWorkbench
+          bookId={bookId}
           source={source}
           onChange={(s) => {
             setSource(s)

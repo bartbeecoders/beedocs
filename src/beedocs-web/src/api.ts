@@ -1,4 +1,28 @@
-import type { Book, Chapter, Diagram, DiagramSummary, Page, PageSummary } from './types'
+import type {
+  Book,
+  Chapter,
+  Diagram,
+  DiagramSummary,
+  ExportFormat,
+  ImportNameMode,
+  ImportPreview,
+  ImportResult,
+  Page,
+  PageSummary,
+  ShapeCollection,
+} from './types'
+
+/** Pull the API's `{ error }` message out of a failed response when there is one. */
+async function errorText(res: Response): Promise<string> {
+  const text = await res.text()
+  if (!text) return `${res.status} ${res.statusText}`
+  try {
+    const parsed = JSON.parse(text) as { error?: string; title?: string }
+    return parsed.error ?? parsed.title ?? text
+  } catch {
+    return text
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -83,6 +107,92 @@ export const api = {
     body: { title: string; kind?: string; source?: string; pageId?: string | null },
   ) => request<Diagram>(`/api/diagrams/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteDiagram: (id: string) => request<void>(`/api/diagrams/${id}`, { method: 'DELETE' }),
+
+  /** Book-scoped collections only. */
+  listShapeCollections: (bookId: string) =>
+    request<ShapeCollection[]>(`/api/books/${bookId}/collections`),
+  /** App-wide library (available in every book). */
+  listAppShapeCollections: () => request<ShapeCollection[]>('/api/collections'),
+  getShapeCollection: (id: string) => request<ShapeCollection>(`/api/collections/${id}`),
+  /**
+   * Save a collection. Pass `bookId` for book scope; omit for the app-wide library.
+   */
+  createShapeCollection: (body: {
+    name: string
+    description?: string
+    source: string
+    bookId?: string
+  }) => {
+    const { bookId, ...payload } = body
+    if (bookId) {
+      return request<ShapeCollection>(`/api/books/${bookId}/collections`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+    }
+    return request<ShapeCollection>('/api/collections', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+  updateShapeCollection: (
+    id: string,
+    body: { name: string; description?: string | null; source?: string },
+  ) => request<ShapeCollection>(`/api/collections/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteShapeCollection: (id: string) =>
+    request<void>(`/api/collections/${id}`, { method: 'DELETE' }),
+
+  /**
+   * Download a book or page in one of the server-rendered formats and save it
+   * through the browser. PDF is not handled here — it is produced client-side
+   * by src/export/pdf.ts, which needs a DOM to render diagrams.
+   */
+  downloadExport: async (kind: 'books' | 'pages', id: string, format: ExportFormat) => {
+    const res = await fetch(`/api/${kind}/${id}/export?format=${format}`)
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(text || `${res.status} ${res.statusText}`)
+    }
+
+    // Prefer the server's filename; fall back to something sensible.
+    const disposition = res.headers.get('content-disposition') ?? ''
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)
+    const fileName = match ? decodeURIComponent(match[1]) : `${kind}-${id}.${format}`
+
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    return fileName
+  },
+
+  /** Describe an import file without writing anything. */
+  inspectImport: async (file: File): Promise<ImportPreview> => {
+    const form = new FormData()
+    form.append('file', file, file.name)
+    const res = await fetch('/api/import/inspect', { method: 'POST', body: form })
+    if (!res.ok) throw new Error(await errorText(res))
+    return res.json() as Promise<ImportPreview>
+  },
+
+  importFile: async (
+    file: File,
+    options: { mode: ImportNameMode; targetBookId?: string; title?: string },
+  ): Promise<ImportResult> => {
+    const form = new FormData()
+    form.append('file', file, file.name)
+    form.append('mode', options.mode)
+    if (options.targetBookId) form.append('targetBookId', options.targetBookId)
+    if (options.title) form.append('title', options.title)
+    const res = await fetch('/api/import', { method: 'POST', body: form })
+    if (!res.ok) throw new Error(await errorText(res))
+    return res.json() as Promise<ImportResult>
+  },
 
   /** Multipart image upload → { url: "/uploads/…", fileName, … } */
   uploadImage: async (file: File | Blob, fileName?: string) => {

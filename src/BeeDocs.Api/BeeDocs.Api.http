@@ -1,6 +1,71 @@
-@BeeDocs.Api_HostAddress = http://localhost:5087
+@host = http://localhost:5080
+@apiKey = 
 
-GET {{BeeDocs.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Health
+GET {{host}}/api/health
 
-###
+### v1 discovery
+GET {{host}}/api/v1
+# Authorization: Bearer {{apiKey}}
+
+### Publish book + configuration page (one-shot)
+PUT {{host}}/api/v1/publish
+Content-Type: application/json
+# Authorization: Bearer {{apiKey}}
+
+{
+  "book": {
+    "title": "Application1",
+    "slug": "application1",
+    "description": "Docs published by Application1"
+  },
+  "page": {
+    "title": "Configuration",
+    "slug": "configuration",
+    "content": "# Configuration\n\n| Key | Value |\n|-----|-------|\n| port | 8080 |\n| env | production |\n"
+  }
+}
+
+### List books
+GET {{host}}/api/v1/books
+# Authorization: Bearer {{apiKey}}
+
+### Get book by slug
+GET {{host}}/api/v1/books/application1
+# Authorization: Bearer {{apiKey}}
+
+### Upsert book
+PUT {{host}}/api/v1/books/application1
+Content-Type: application/json
+# Authorization: Bearer {{apiKey}}
+
+{
+  "title": "Application1",
+  "description": "Updated description"
+}
+
+### List pages in book
+GET {{host}}/api/v1/books/application1/pages
+# Authorization: Bearer {{apiKey}}
+
+### Get page
+GET {{host}}/api/v1/books/application1/pages/configuration
+# Authorization: Bearer {{apiKey}}
+
+### Upsert page only
+PUT {{host}}/api/v1/books/application1/pages/configuration
+Content-Type: application/json
+# Authorization: Bearer {{apiKey}}
+
+{
+  "title": "Configuration",
+  "content": "# Configuration\n\nUpdated from the API.\n"
+}
+
+### Delete page
+DELETE {{host}}/api/v1/books/application1/pages/configuration
+# Authorization: Bearer {{apiKey}}
+
+### Delete book
+DELETE {{host}}/api/v1/books/application1
+# Authorization: Bearer {{apiKey}}

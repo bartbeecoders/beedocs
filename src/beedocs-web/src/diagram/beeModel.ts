@@ -93,6 +93,7 @@ function normalizeNode(n: Partial<BeeNode>): BeeNode {
   const type = (n.type as BeeNodeType) || 'box'
   const safeType = NODE_TYPES.includes(type) ? type : 'box'
   const rotation = Number(n.rotation)
+  const parentId = typeof n.parentId === 'string' && n.parentId ? n.parentId : undefined
   return {
     id: String(n.id || uid('n')),
     type: safeType,
@@ -106,6 +107,7 @@ function normalizeNode(n: Partial<BeeNode>): BeeNode {
     shape: n.shape,
     style: n.style && typeof n.style === 'object' ? { ...n.style } : undefined,
     rotation: Number.isFinite(rotation) && rotation !== 0 ? rotation : undefined,
+    parentId,
   }
 }
 
