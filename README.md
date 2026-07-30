@@ -43,6 +43,29 @@ BeeDocs/
     └── beedocs-mcp/          # MCP server for AI agents (stdio → API)
 ```
 
+## REST API (external apps)
+
+Other applications can **publish documentation** into BeeDocs over HTTP — for
+example pushing a book *Application1* with a *Configuration* Markdown page.
+
+```bash
+curl -sS -X PUT "http://localhost:5080/api/v1/publish" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "book": { "title": "Application1", "slug": "application1" },
+    "page": {
+      "title": "Configuration",
+      "slug": "configuration",
+      "content": "# Configuration\n\nport: 8080\n"
+    }
+  }'
+```
+
+Slug-based create/update of books and pages lives under **`/api/v1`**. Optional
+API key: set `BeeDocs__ApiKey` and send `Authorization: Bearer <key>`.
+
+Full reference: **[Docs/REST-API.md](Docs/REST-API.md)**
+
 ## MCP (AI agents)
 
 Agents can create books, pages, and diagrams via the Model Context Protocol server.

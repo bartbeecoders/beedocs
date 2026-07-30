@@ -17,9 +17,31 @@ thumbnail and the PDF/HTML export.
 - **Drag** a shape from the left palette onto the canvas, or **click** it to drop
   it in the middle of the view (repeat clicks cascade so nothing stacks).
 - **Search** the palette to filter across all groups (General, Flowchart,
-  BeeDocs classic).
+  BeeDocs classic, **App collections**, and **Book collections** when a book is
+  open).
 - **Double-click empty canvas** to open the quick shape picker.
 - **Drop or paste an image** anywhere on the canvas to upload and place it.
+
+## Shape collections
+
+A **collection** is a reusable multi-shape snippet (nodes + edges between them).
+Select one or more shapes, then:
+
+- Toolbar **Save collection**, or
+- Right-click → **Save as collection…**
+
+Give it a **name**, optional **description**, and choose the scope:
+
+| Scope | Where it lives | Palette group |
+|-------|----------------|---------------|
+| **This book** | Only the current book | **Book collections** |
+| **App library** | Whole BeeDocs instance | **App collections** |
+
+App collections appear in every book's Studio palette. Book collections appear
+only for diagrams in that book.
+
+**Book** collections travel with the book in `.beedocs` archive export/import.
+Deleting a book removes its book collections but leaves the app library alone.
 
 ## Connecting shapes
 
@@ -52,7 +74,35 @@ curved — is in the toolbar, the Format panel, or the right-click menu.
 - **Rename**: double-click a shape or connection, or `F2`. `Esc` applies.
 - **Format panel**: Style (fill, line, width, opacity, dashed, shadow, shape
   swap), Text (label, size, colour, bold/italic, alignment), Arrange (size,
-  position, angle, z-order, align, distribute).
+  position, angle, z-order, align, distribute). Multi-part shapes expose more
+  than one fill colour — e.g. container header/body, cube front vs top/side,
+  note paper/fold, cylinder body/top.
+
+## Containers
+
+The **Container** shape (Shapes → General) groups other shapes.
+
+- **Put a shape in**: drag it over the container, or drop it straight from the
+  shape palette. The container outlines in the accent colour while it is the
+  drop target. A shape is taken in when it is fully inside, or when its centre
+  is — so a shape hanging over the edge still lands in the container it mostly
+  covers.
+- **Take a shape out**: drag it off the container. Dropping it on empty canvas
+  or on a different container moves it there.
+- **Move the container** and everything inside travels with it. Delete or copy
+  the container and its contents follow.
+- **Containers nest** — drop one container into another. A container can never
+  be dropped into itself or into its own contents.
+- Dragging a multi-selection only re-parents it when *every* shape lands in the
+  same container, so a selection straddling the border is never split up.
+
+Children keep absolute coordinates: **resizing** a container does not move or
+clip what is inside, and the contents are not confined to its bounds. The link
+is recorded as `parentId` on the child (see below), and a child always draws on
+top of its container.
+
+Classic mode has no container interaction — it ignores `parentId`, so moving a
+container there leaves its contents behind.
 
 ## Keyboard
 
@@ -79,7 +129,11 @@ documents keep working and stay editable in Classic mode:
     "x": 120, "y": 80, "w": 140, "h": 70,
     "shape": "rounded",              // draw.io-style shape (optional)
     "rotation": 15,                  // degrees (optional)
-    "style": { "fill": "#dae8fc", "stroke": "#6c8ebf", "dashed": true,
+    "parentId": "n_0",               // id of the container shape holding this
+                                     // node (optional); coordinates stay absolute
+    "style": { "fill": "#dae8fc", "fill2": "#ffffff", // fill2 = 2nd part of
+                                                     // multi-part shapes
+               "stroke": "#6c8ebf", "dashed": true,
                "fontSize": 12, "bold": true, "align": "center" }
   }],
   "edges": [{

@@ -27,6 +27,7 @@ public interface IExportService
 public sealed partial class ExportService(
     IDocumentService documents,
     IDiagramService diagrams,
+    IShapeCollectionService collections,
     StorageOptions storage
 ) : IExportService
 {
@@ -86,11 +87,13 @@ public sealed partial class ExportService(
             if (full is not null) pageDiagrams.Add(full);
         }
 
+        // Page exports don't carry book-level shape collections.
         var bundle = new BookBundle(
             book,
             chapter is null ? [] : [chapter],
             [page],
-            pageDiagrams);
+            pageDiagrams,
+            []);
 
         var name = SlugHelper.Slugify(page.Title) is { Length: > 0 } s ? s : "document";
 
@@ -112,7 +115,8 @@ public sealed partial class ExportService(
         BookDto Book,
         IReadOnlyList<ChapterDto> Chapters,
         IReadOnlyList<PageDto> Pages,
-        IReadOnlyList<DiagramDto> Diagrams);
+        IReadOnlyList<DiagramDto> Diagrams,
+        IReadOnlyList<ShapeCollectionDto> Collections);
 
     private async Task<BookBundle?> LoadBookAsync(string bookId, CancellationToken ct)
     {
@@ -136,7 +140,9 @@ public sealed partial class ExportService(
             if (full is not null) diagramList.Add(full);
         }
 
-        return new BookBundle(book, chapters, pages, diagramList);
+        var collectionList = (await collections.ListByBookAsync(bookId, ct)).ToList();
+
+        return new BookBundle(book, chapters, pages, diagramList, collectionList);
     }
 
     private static IEnumerable<string> ReferencedDiagramIds(string content)
@@ -162,6 +168,9 @@ public sealed partial class ExportService(
                 names.Add(m.Groups[1].Value);
         foreach (var diagram in bundle.Diagrams)
             foreach (Match m in UploadUrlRegex().Matches(diagram.Source ?? string.Empty))
+                names.Add(m.Groups[1].Value);
+        foreach (var collection in bundle.Collections)
+            foreach (Match m in UploadUrlRegex().Matches(collection.Source ?? string.Empty))
                 names.Add(m.Groups[1].Value);
         return [.. names];
     }
@@ -264,6 +273,19 @@ public sealed partial class ExportService(
             });
         }
 
+        for (var i = 0; i < bundle.Collections.Count; i++)
+        {
+            var collection = bundle.Collections[i];
+            manifest.Collections.Add(new ArchiveShapeCollection
+            {
+                Ref = $"c{i + 1}",
+                OriginalId = collection.Id,
+                Name = collection.Name,
+                Description = collection.Description,
+                Source = collection.Source,
+            });
+        }
+
         var assets = new List<(string Path, byte[] Data)>();
         foreach (var name in CollectAssetNames(bundle))
         {
@@ -288,7 +310,8 @@ public sealed partial class ExportService(
                   curl -F file=@<this-file> -F mode=rename http://<host>/api/import
 
                 Contents: {manifest.Pages.Count} page(s), {manifest.Chapters.Count} folder(s),
-                {manifest.Diagrams.Count} diagram(s), {manifest.Assets.Count} image(s).
+                {manifest.Diagrams.Count} diagram(s), {manifest.Collections.Count} shape collection(s),
+                {manifest.Assets.Count} image(s).
                 Exported {manifest.ExportedAt:u}.
                 """);
 

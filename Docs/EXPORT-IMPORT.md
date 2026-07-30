@@ -93,7 +93,7 @@ The lossless format, and the one to use for moving content between instances or
 for backups. It is a zip:
 
 ```
-beedocs.json     manifest: book, folders, pages, diagrams, asset list
+beedocs.json     manifest: book, folders, pages, diagrams, shape collections, asset list
 assets/<file>    every image the content references
 README.txt       what the file is and how to import it
 ```
@@ -154,7 +154,9 @@ deleted. Import never overwrites.
 - Every image in the file is written into the uploads store under a **fresh
   name**, and the URLs in page content and diagram sources are rewritten to
   match. Imported content never points at another instance's files.
-- Diagrams are recreated in the destination book and `beediagram-ref` fences are
+- Diagrams and **book** shape collections are recreated in the destination book
+  (app-wide collections stay on the instance and are not in the archive) and
+  `beediagram-ref` fences are
   rewritten to the new ids, so embedded diagrams keep working.
 - Importing a Markdown file that references stored diagrams produces a warning:
   Markdown does not carry them, so those blocks show as missing. Use an archive

@@ -1,7 +1,9 @@
-import { useCallback, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import type { BeePoint } from '../../types'
+import { useCallback, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { api } from '../../api'
+import type { BeePoint, ShapeCollection, ShapeCollectionScope } from '../../types'
 import { useImageIntake } from '../../hooks/useImageIntake'
 import { loadImageSize, type UploadedImage } from '../../media/imageIntake'
+import { fragmentBounds, parseFragment } from '../../diagram/collectionFragment'
 import { nodeFromLibraryItem, type ShapeLibraryItem } from '../../diagram/shapeLibrary'
 import { createShapeNode } from '../../diagram/shapes'
 import { snapToGrid } from '../../diagram/beeModel'
@@ -15,6 +17,8 @@ type Props = {
   source: string
   onChange: (source: string) => void
   readOnly?: boolean
+  /** Owning book — enables book-scoped collections (app collections always work). */
+  bookId?: string
 }
 
 /**
@@ -22,13 +26,21 @@ type Props = {
  * hover-to-connect, and a Format panel — editing the same BeeDiagram JSON as
  * the classic editor.
  */
-export function BeeStudioEditor({ source, onChange, readOnly }: Props) {
+export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
   const ctrl = useStudioController({ source, onChange, readOnly })
   const canvasRef = useRef<StudioCanvasHandle>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const dropWorldRef = useRef<BeePoint | null>(null)
   const [zoom, setZoom] = useState(1)
   const [mediaError, setMediaError] = useState<string | null>(null)
+  const [collectionsVersion, setCollectionsVersion] = useState(0)
+  const [saveDialog, setSaveDialog] = useState<{
+    name: string
+    description: string
+    scope: ShapeCollectionScope
+  } | null>(null)
+  const [saveBusy, setSaveBusy] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const placeImages = useCallback(
     async (images: UploadedImage[]) => {
@@ -92,6 +104,94 @@ export function BeeStudioEditor({ source, onChange, readOnly }: Props) {
       ctrl.addNodes([node])
     },
     [ctrl, pickFiles, readOnly],
+  )
+
+  const placeCollection = useCallback(
+    (collection: ShapeCollection, at?: BeePoint) => {
+      if (readOnly) return
+      const fragment = parseFragment(collection.source)
+      if (!fragment || fragment.nodes.length === 0) return
+      const bounds = fragmentBounds(fragment)
+      const center = at ?? canvasRef.current?.worldCenter() ?? { x: 200, y: 160 }
+      const topLeft = {
+        x: Math.round(center.x - bounds.w / 2),
+        y: Math.round(center.y - bounds.h / 2),
+      }
+      const grid = ctrl.prefs.snap
+      const origin = {
+        x: grid ? snapToGrid(topLeft.x, STUDIO_GRID, true) : topLeft.x,
+        y: grid ? snapToGrid(topLeft.y, STUDIO_GRID, true) : topLeft.y,
+      }
+      ctrl.placeFragment(fragment, origin)
+    },
+    [ctrl, readOnly],
+  )
+
+  const placeCollectionById = useCallback(
+    async (id: string, world: BeePoint) => {
+      if (readOnly) return
+      try {
+        const collection = await api.getShapeCollection(id)
+        // Drop point is the top-left of the collection bounds.
+        ctrl.placeFragment(collection.source, world)
+      } catch (e) {
+        setMediaError(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [ctrl, readOnly],
+  )
+
+  const openSaveCollection = useCallback(() => {
+    if (readOnly) return
+    if (ctrl.selection.nodes.length === 0) return
+    const first = ctrl.selectedNodes[0]
+    const fallback = first?.label?.trim() || 'Collection'
+    setSaveError(null)
+    setSaveDialog({
+      name: fallback,
+      description: '',
+      // Prefer book scope when a book is available; otherwise app-wide only.
+      scope: bookId ? 'book' : 'app',
+    })
+  }, [bookId, ctrl.selection.nodes.length, ctrl.selectedNodes, readOnly])
+
+  const submitSaveCollection = useCallback(
+    async (e: FormEvent) => {
+      e.preventDefault()
+      if (!saveDialog) return
+      const name = saveDialog.name.trim()
+      if (!name) {
+        setSaveError('Name is required.')
+        return
+      }
+      if (saveDialog.scope === 'book' && !bookId) {
+        setSaveError('This diagram is not linked to a book.')
+        return
+      }
+      const source = ctrl.selectionAsCollectionSource()
+      if (!source) {
+        setSaveError('Select at least one shape to save.')
+        return
+      }
+      setSaveBusy(true)
+      setSaveError(null)
+      try {
+        await api.createShapeCollection({
+          name,
+          description: saveDialog.description.trim() || undefined,
+          source,
+          bookId: saveDialog.scope === 'book' ? bookId : undefined,
+        })
+        setSaveDialog(null)
+        setCollectionsVersion((v) => v + 1)
+        if (!ctrl.prefs.paletteOpen) ctrl.setPrefs({ paletteOpen: true })
+      } catch (err) {
+        setSaveError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setSaveBusy(false)
+      }
+    },
+    [bookId, ctrl, saveDialog],
   )
 
   const nudge = useCallback(
@@ -183,6 +283,10 @@ export function BeeStudioEditor({ source, onChange, readOnly }: Props) {
         return
       }
       if (e.key === 'Escape') {
+        if (saveDialog) {
+          setSaveDialog(null)
+          return
+        }
         ctrl.clearSelection()
         return
       }
@@ -207,8 +311,10 @@ export function BeeStudioEditor({ source, onChange, readOnly }: Props) {
         else if (e.key === 'ArrowDown') nudge(0, step)
       }
     },
-    [ctrl, nudge, readOnly],
+    [ctrl, nudge, readOnly, saveDialog],
   )
+
+  const canSaveCollection = !readOnly
 
   return (
     <div
@@ -242,12 +348,19 @@ export function BeeStudioEditor({ source, onChange, readOnly }: Props) {
             dropWorldRef.current = canvasRef.current?.worldCenter() ?? null
             pickFiles()
           }}
+          onSaveAsCollection={canSaveCollection ? openSaveCollection : undefined}
         />
       )}
 
       <div className="studio-body">
         {ctrl.prefs.paletteOpen && !readOnly && (
-          <ShapePalette onPlace={placeFromPalette} disabled={readOnly} />
+          <ShapePalette
+            onPlace={placeFromPalette}
+            onPlaceCollection={placeCollection}
+            bookId={bookId}
+            collectionsVersion={collectionsVersion}
+            disabled={readOnly}
+          />
         )}
         <StudioCanvas
           ref={canvasRef}
@@ -257,6 +370,8 @@ export function BeeStudioEditor({ source, onChange, readOnly }: Props) {
             dropWorldRef.current = world
             pickFiles()
           }}
+          onPlaceCollectionId={canSaveCollection ? placeCollectionById : undefined}
+          onSaveAsCollection={canSaveCollection ? openSaveCollection : undefined}
         />
         {ctrl.prefs.formatOpen && !readOnly && (
           <FormatPanel
@@ -275,10 +390,84 @@ export function BeeStudioEditor({ source, onChange, readOnly }: Props) {
             : 'Nothing selected'}
         </span>
         <span className="muted">
-          Drag a shape from the left · hover a shape and drag the blue arrow to connect · double-click to
-          rename
+          Drag a shape or collection from the left · save a selection as a book or app collection
         </span>
       </div>
+
+      {saveDialog && (
+        <div className="studio-modal-backdrop" role="presentation" onClick={() => !saveBusy && setSaveDialog(null)}>
+          <form
+            className="studio-modal"
+            role="dialog"
+            aria-labelledby="save-collection-title"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => void submitSaveCollection(e)}
+          >
+            <h3 id="save-collection-title">Save as collection</h3>
+            <p className="muted sm">
+              Stores the selected shapes so you can place them again from the shape palette.
+            </p>
+            <fieldset className="studio-scope-fieldset">
+              <legend>Save to</legend>
+              {bookId && (
+                <label className="studio-scope-option">
+                  <input
+                    type="radio"
+                    name="collection-scope"
+                    checked={saveDialog.scope === 'book'}
+                    onChange={() => setSaveDialog({ ...saveDialog, scope: 'book' })}
+                  />
+                  <span className="studio-scope-option-text">
+                    <strong>This book</strong>
+                    <span className="muted sm">Only diagrams in the current book</span>
+                  </span>
+                </label>
+              )}
+              <label className="studio-scope-option">
+                <input
+                  type="radio"
+                  name="collection-scope"
+                  checked={saveDialog.scope === 'app'}
+                  onChange={() => setSaveDialog({ ...saveDialog, scope: 'app' })}
+                />
+                <span className="studio-scope-option-text">
+                  <strong>App library</strong>
+                  <span className="muted sm">Available in every book</span>
+                </span>
+              </label>
+            </fieldset>
+            <label className="studio-field studio-field--stack">
+              <span>Name</span>
+              <input
+                autoFocus
+                value={saveDialog.name}
+                onChange={(e) => setSaveDialog({ ...saveDialog, name: e.target.value })}
+                maxLength={120}
+                required
+              />
+            </label>
+            <label className="studio-field studio-field--stack">
+              <span>Description</span>
+              <textarea
+                value={saveDialog.description}
+                onChange={(e) => setSaveDialog({ ...saveDialog, description: e.target.value })}
+                rows={3}
+                maxLength={500}
+                placeholder="Optional — shown under the name in the palette"
+              />
+            </label>
+            {saveError && <div className="banner error compact">{saveError}</div>}
+            <div className="studio-modal-actions">
+              <button type="button" className="btn ghost" disabled={saveBusy} onClick={() => setSaveDialog(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="btn primary" disabled={saveBusy}>
+                {saveBusy ? 'Saving…' : 'Save collection'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   )
 }

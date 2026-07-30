@@ -79,6 +79,11 @@ export type BeePrim =
 
 export type ResolvedNodeStyle = {
   fill: string
+  /**
+   * Secondary fill for multi-part shapes. Always set after resolve:
+   * either the explicit `style.fill2` or a shape-aware fallback.
+   */
+  fill2: string
   stroke: string
   strokeWidth: number
   dash?: string
@@ -90,6 +95,45 @@ export type ResolvedNodeStyle = {
   italic: boolean
   align: BeeTextAlign
   valign: BeeTextVAlign
+}
+
+/** A named fill slot shown in the Format panel for multi-part shapes. */
+export type ShapeFillPart = {
+  key: 'fill' | 'fill2'
+  label: string
+}
+
+/**
+ * Fill colour slots for a shape. Most shapes have a single "Fill"; multi-part
+ * shapes (container, cube, note, cylinder, …) expose a second colour.
+ */
+export function shapeFillParts(shape: RenderShape): ShapeFillPart[] {
+  switch (shape) {
+    case 'container':
+      return [
+        { key: 'fill', label: 'Header' },
+        { key: 'fill2', label: 'Body' },
+      ]
+    case 'cube':
+      return [
+        { key: 'fill', label: 'Front' },
+        { key: 'fill2', label: 'Top / side' },
+      ]
+    case 'note':
+    case 'beeNote':
+      return [
+        { key: 'fill', label: 'Paper' },
+        { key: 'fill2', label: 'Fold' },
+      ]
+    case 'cylinder':
+    case 'beeDatabase':
+      return [
+        { key: 'fill', label: 'Body' },
+        { key: 'fill2', label: 'Top' },
+      ]
+    default:
+      return [{ key: 'fill', label: 'Fill' }]
+  }
 }
 
 export type LabelBox = {
@@ -174,9 +218,14 @@ export function resolveNodeStyle(n: BeeNode): ResolvedNodeStyle {
   const legacy = isLegacyShape(shape)
   const legacyFill = n.color || defaultColor(n.type)
 
+  const fill = legacy
+    ? (s.fill ?? legacyFill)
+    : (s.fill ?? n.color ?? defaultShapeFill(shape))
+
   const base: ResolvedNodeStyle = legacy
     ? {
-        fill: s.fill ?? legacyFill,
+        fill,
+        fill2: s.fill2 ?? defaultShapeFill2(shape, fill),
         stroke: s.stroke ?? 'none',
         strokeWidth: s.strokeWidth ?? 1,
         opacity: s.opacity ?? 100,
@@ -189,7 +238,8 @@ export function resolveNodeStyle(n: BeeNode): ResolvedNodeStyle {
         valign: s.valign ?? legacyVAlign(shape),
       }
     : {
-        fill: s.fill ?? n.color ?? defaultShapeFill(shape),
+        fill,
+        fill2: s.fill2 ?? defaultShapeFill2(shape, fill),
         stroke: s.stroke ?? defaultShapeStroke(shape),
         strokeWidth: s.strokeWidth ?? 1,
         opacity: s.opacity ?? 100,
@@ -204,6 +254,41 @@ export function resolveNodeStyle(n: BeeNode): ResolvedNodeStyle {
 
   if (s.dashed) base.dash = '6 4'
   return base
+}
+
+/**
+ * Fallback secondary fill when `style.fill2` is unset.
+ * Prefers the primary fill so older single-colour documents look unchanged;
+ * only a few shapes get a distinct default (note fold highlight, cube depth).
+ */
+function defaultShapeFill2(shape: RenderShape, fill: string): string {
+  switch (shape) {
+    case 'note':
+    case 'beeNote':
+      return 'rgba(255,255,255,0.28)'
+    case 'cube':
+      return shadeHex(fill, -0.12)
+    case 'container':
+      // Distinct body so header/body read as two parts on a new container.
+      // Explicit fill2 on the node still wins via resolveNodeStyle.
+      return fill === defaultShapeFill('container') ? '#ffffff' : fill
+    default:
+      return fill
+  }
+}
+
+/** Lighten (+) / darken (−) a #rrggbb colour. Non-hex values are returned as-is. */
+function shadeHex(color: string, amount: number): string {
+  if (!/^#[0-9a-f]{6}$/i.test(color)) return color
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)))
+  const r = parseInt(color.slice(1, 3), 16)
+  const g = parseInt(color.slice(3, 5), 16)
+  const b = parseInt(color.slice(5, 7), 16)
+  const t = amount >= 0 ? 255 : 0
+  const p = Math.abs(amount)
+  const mix = (c: number) => clamp(c + (t - c) * p)
+  const hex = (c: number) => mix(c).toString(16).padStart(2, '0')
+  return `#${hex(r)}${hex(g)}${hex(b)}`
 }
 
 function legacyVAlign(shape: LegacyShape): BeeTextVAlign {
@@ -353,6 +438,7 @@ export function nodePrimitives(n: BeeNode): BeePrim[] {
   const w = Math.max(1, n.w)
   const h = Math.max(1, n.h)
   const fill = st.fill
+  const fill2 = st.fill2
   const stroke = st.stroke
   const sw = st.strokeWidth
   const dash = st.dash
@@ -374,14 +460,25 @@ export function nodePrimitives(n: BeeNode): BeePrim[] {
       ]
     case 'beeDatabase':
       return [
-        { k: 'ellipse', cx: w / 2, cy: 14, rx: Math.max(2, w / 2 - 4), ry: 12, fill },
+        { k: 'ellipse', cx: w / 2, cy: 14, rx: Math.max(2, w / 2 - 4), ry: 12, fill: fill2 },
         { k: 'rect', x: 4, y: 14, w: Math.max(1, w - 8), h: Math.max(1, h - 28), fill },
         { k: 'ellipse', cx: w / 2, cy: h - 14, rx: Math.max(2, w / 2 - 4), ry: 12, fill },
+        {
+          k: 'ellipse',
+          cx: w / 2,
+          cy: 14,
+          rx: Math.max(2, w / 2 - 4),
+          ry: 12,
+          fill: 'none',
+          stroke: stroke === 'none' ? undefined : stroke,
+          sw: stroke === 'none' ? undefined : sw,
+          dash,
+        },
       ]
     case 'beeNote':
       return [
         { k: 'path', d: `M0 0 H${w - 16} L${w} 16 V${h} H0 Z`, fill },
-        { k: 'path', d: `M${w - 16} 0 V16 H${w} Z`, fill: 'rgba(255,255,255,0.25)' },
+        { k: 'path', d: `M${w - 16} 0 V16 H${w} Z`, fill: fill2 },
       ]
     case 'beeImage':
       return [
@@ -508,16 +605,24 @@ export function nodePrimitives(n: BeeNode): BeePrim[] {
     case 'note': {
       const f = Math.min(24, Math.min(w, h) * 0.28)
       return [
-        { k: 'path', d: `M0 0 H${w - f} L${w} ${f} V${h} H0 Z`, ...body },
-        { k: 'path', d: `M${w - f} 0 V${f} H${w}`, fill: 'none', stroke, sw, dash },
+        { k: 'path', d: `M0 0 H${w - f} L${w} ${f} V${h} H0 Z`, fill, stroke, sw, dash },
+        { k: 'path', d: `M${w - f} 0 V${f} H${w} Z`, fill: fill2, stroke, sw, dash },
       ]
     }
     case 'cube': {
       const d = Math.min(w, h) * 0.18
+      // Front uses primary fill; top + right side share the secondary fill.
       return [
-        { k: 'path', d: `M0 ${d} L${d} 0 H${w} V${h - d} L${w - d} ${h} H0 Z`, ...body },
-        { k: 'path', d: `M0 ${d} H${w - d} V${h}`, fill: 'none', stroke, sw, dash },
-        { k: 'path', d: `M${w - d} ${d} L${w} 0`, fill: 'none', stroke, sw, dash },
+        { k: 'path', d: `M0 ${d} H${w - d} V${h} H0 Z`, fill, stroke, sw, dash },
+        { k: 'path', d: `M0 ${d} L${d} 0 H${w} L${w - d} ${d} Z`, fill: fill2, stroke, sw, dash },
+        {
+          k: 'path',
+          d: `M${w - d} ${d} L${w} 0 V${h - d} L${w - d} ${h} Z`,
+          fill: fill2,
+          stroke,
+          sw,
+          dash,
+        },
       ]
     }
     case 'cylinder': {
@@ -528,12 +633,18 @@ export function nodePrimitives(n: BeeNode): BeePrim[] {
           d:
             `M0 ${ry} A${w / 2} ${ry} 0 0 1 ${w} ${ry} V${h - ry} ` +
             `A${w / 2} ${ry} 0 0 1 0 ${h - ry} Z`,
-          ...body,
+          fill,
+          stroke,
+          sw,
+          dash,
         },
         {
-          k: 'path',
-          d: `M0 ${ry} A${w / 2} ${ry} 0 0 0 ${w} ${ry}`,
-          fill: 'none',
+          k: 'ellipse',
+          cx: w / 2,
+          cy: ry,
+          rx: w / 2,
+          ry,
+          fill: fill2,
           stroke,
           sw,
           dash,
@@ -597,8 +708,18 @@ export function nodePrimitives(n: BeeNode): BeePrim[] {
     }
     case 'container': {
       const header = 28
+      const r = 4
+      // Body (fill2) + header band (fill), then stroke on top so corners stay clean.
       return [
-        { k: 'rect', x: 0, y: 0, w, h, rx: 4, ...body },
+        { k: 'rect', x: 0, y: 0, w, h, rx: r, fill: fill2, stroke: 'none' },
+        {
+          k: 'path',
+          d:
+            `M0 ${header} V${r} Q0 0 ${r} 0 H${w - r} Q${w} 0 ${w} ${r} V${header} Z`,
+          fill,
+          stroke: 'none',
+        },
+        { k: 'rect', x: 0, y: 0, w, h, rx: r, fill: 'none', stroke, sw, dash },
         { k: 'path', d: `M0 ${header} H${w}`, fill: 'none', stroke, sw, dash },
       ]
     }

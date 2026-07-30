@@ -9,10 +9,21 @@ type Props = {
   onFit: () => void
   onActualSize: () => void
   onPickImage: () => void
+  /** Save the selected shapes as a book collection (requires book context). */
+  onSaveAsCollection?: () => void
 }
 
 /** Top action bar — the draw.io toolbar, trimmed to what BeeDocs supports. */
-export function StudioToolbar({ ctrl, zoom, onZoomIn, onZoomOut, onFit, onActualSize, onPickImage }: Props) {
+export function StudioToolbar({
+  ctrl,
+  zoom,
+  onZoomIn,
+  onZoomOut,
+  onFit,
+  onActualSize,
+  onPickImage,
+  onSaveAsCollection,
+}: Props) {
   const nodeIds = ctrl.selection.nodes
   const edgeIds = ctrl.selection.edges
   const hasSelection = nodeIds.length > 0 || edgeIds.length > 0
@@ -74,6 +85,17 @@ export function StudioToolbar({ ctrl, zoom, onZoomIn, onZoomOut, onFit, onActual
         >
           ⧉
         </button>
+        {onSaveAsCollection && (
+          <button
+            type="button"
+            className="studio-tool studio-tool--wide"
+            title="Save selection as a book collection"
+            disabled={nodeIds.length === 0}
+            onClick={onSaveAsCollection}
+          >
+            Save collection
+          </button>
+        )}
         <button
           type="button"
           className="studio-tool"

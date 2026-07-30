@@ -133,7 +133,11 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
                     </div>
                     <div className="import-summary-counts muted sm">
                       {preview.pageCount} page(s) · {preview.chapterCount} folder(s) ·{' '}
-                      {preview.diagramCount} diagram(s) · {preview.assetCount} image(s)
+                      {preview.diagramCount} diagram(s) ·{' '}
+                      {(preview.collectionCount ?? 0) > 0
+                        ? `${preview.collectionCount} collection(s) · `
+                        : ''}
+                      {preview.assetCount} image(s)
                       {preview.source !== 'archive' && ' · from Markdown'}
                     </div>
                     {preview.pageTitles.length > 0 && (

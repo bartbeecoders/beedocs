@@ -27,6 +27,7 @@ public interface IImportService
 public sealed partial class ImportService(
     IDocumentService documents,
     IDiagramService diagrams,
+    IShapeCollectionService collections,
     StorageOptions storage
 ) : IImportService
 {
@@ -318,6 +319,7 @@ public sealed partial class ImportService(
             ChapterCount: parsed.Manifest.Chapters.Count,
             PageCount: parsed.Manifest.Pages.Count,
             DiagramCount: parsed.Manifest.Diagrams.Count,
+            CollectionCount: parsed.Manifest.Collections.Count,
             AssetCount: parsed.Assets.Count,
             PageTitles: [.. parsed.Manifest.Pages.Select(p => p.Title).Take(50)],
             BookTitleExists: exists,
@@ -471,6 +473,18 @@ public sealed partial class ImportService(
                 ct);
         }
 
+        // 7. Book-scoped studio shape collections.
+        var collectionsCreated = 0;
+        foreach (var collection in manifest.Collections)
+        {
+            var source = RewriteAssets(collection.Source, assetMap);
+            await collections.CreateAsync(
+                book.Id,
+                new CreateShapeCollectionRequest(collection.Name, collection.Description, source),
+                ct);
+            collectionsCreated++;
+        }
+
         return new ImportResultDto(
             Kind: manifest.Kind,
             BookId: book.Id,
@@ -479,6 +493,7 @@ public sealed partial class ImportService(
             ChaptersCreated: chaptersCreated,
             PagesCreated: imported.Count,
             DiagramsCreated: diagramsCreated,
+            CollectionsCreated: collectionsCreated,
             AssetsCreated: assetsCreated,
             Warnings: warnings,
             Pages: imported);

@@ -159,6 +159,8 @@ Service Token**.
 Cloudflare shows the **Client ID** and **Client Secret exactly once**. Copy both
 now — the secret cannot be retrieved later, only regenerated.
 
+
+
 ### 3b. Create the application
 
 **Access → Applications → Add an application → Self-hosted**.

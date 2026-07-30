@@ -204,8 +204,20 @@ export function HelpPanel() {
             canvas offers a shape to create.
           </li>
           <li>
+            <strong>Containers</strong> — drag a shape onto a <em>Container</em> (or drop one there
+            from the palette) to put it inside; the container highlights as you hover. Moving,
+            copying or deleting the container takes its contents with it. Drag a shape off the
+            container to take it back out. Containers can nest.
+          </li>
+          <li>
+            <strong>Collections</strong> — select shapes and use <em>Save collection</em> (or
+            right-click) to store a named multi-shape snippet. Choose <em>This book</em> (only this
+            book) or <em>App library</em> (every book). They appear under{' '}
+            <em>Book collections</em> / <em>App collections</em> in the palette.
+          </li>
+          <li>
             <strong>Classic</strong> — the original compact editor, also used for inline{' '}
-            <code>beediagram</code> fences inside pages.
+            <code>beediagram</code> fences inside pages. It ignores container grouping.
           </li>
           <li>Mermaid and C4 diagrams are edited as source with a live preview beside them.</li>
         </ul>

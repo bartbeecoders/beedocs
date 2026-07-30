@@ -257,6 +257,7 @@ export function DiagramCanvas({ onStateChange }: Props) {
       {error && <div className="banner error compact">{error}</div>}
       {kind === 'beediagram' ? (
         <BeeDiagramWorkbench
+          bookId={bookId}
           source={source}
           onChange={(s) => {
             setSource(s)

@@ -49,6 +49,8 @@ export type ImportPreview = {
   chapterCount: number
   pageCount: number
   diagramCount: number
+  /** Studio multi-shape snippets saved on the book */
+  collectionCount: number
   assetCount: number
   pageTitles: string[]
   bookTitleExists: boolean
@@ -64,9 +66,28 @@ export type ImportResult = {
   chaptersCreated: number
   pagesCreated: number
   diagramsCreated: number
+  collectionsCreated: number
   assetsCreated: number
   warnings: string[]
   pages: { id: string; title: string; slug: string }[]
+}
+
+/** Scope when saving a multi-shape snippet from Studio. */
+export type ShapeCollectionScope = 'book' | 'app'
+
+/**
+ * Reusable multi-shape snippet for the studio palette.
+ * `bookId` is set for book-scoped items; null/undefined for the app-wide library.
+ */
+export type ShapeCollection = {
+  id: string
+  bookId?: string | null
+  name: string
+  description?: string | null
+  /** JSON fragment: `{ version, nodes, edges }` */
+  source: string
+  createdAt: string
+  updatedAt: string
 }
 
 export type DiagramKind = 'beediagram' | 'mermaid' | 'plantuml' | 'c4'
@@ -124,7 +145,15 @@ export type BeeTextVAlign = 'top' | 'middle' | 'bottom'
 
 /** Per-shape appearance overrides (studio mode). All optional. */
 export type BeeNodeStyle = {
+  /** Primary fill (whole shape, or the first part of a multi-part shape). */
   fill?: string
+  /**
+   * Secondary fill for multi-part shapes:
+   * container body, cube top/side, note fold, cylinder top, …
+   * When omitted the renderer falls back to a shape-specific default
+   * (usually the same as `fill`, so single-colour docs keep their look).
+   */
+  fill2?: string
   stroke?: string
   strokeWidth?: number
   dashed?: boolean
@@ -156,6 +185,12 @@ export type BeeNode = {
   style?: BeeNodeStyle
   /** Rotation in degrees around the shape centre */
   rotation?: number
+  /**
+   * Id of the `container` shape this node sits in, when it has been dropped
+   * into one. Children keep absolute coordinates — the parent link only drives
+   * grouped moves, grouped delete/copy, and z-order.
+   */
+  parentId?: string
 }
 
 /**

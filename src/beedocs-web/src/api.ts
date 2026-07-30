@@ -9,6 +9,7 @@ import type {
   ImportResult,
   Page,
   PageSummary,
+  ShapeCollection,
 } from './types'
 
 /** Pull the API's `{ error }` message out of a failed response when there is one. */
@@ -106,6 +107,40 @@ export const api = {
     body: { title: string; kind?: string; source?: string; pageId?: string | null },
   ) => request<Diagram>(`/api/diagrams/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteDiagram: (id: string) => request<void>(`/api/diagrams/${id}`, { method: 'DELETE' }),
+
+  /** Book-scoped collections only. */
+  listShapeCollections: (bookId: string) =>
+    request<ShapeCollection[]>(`/api/books/${bookId}/collections`),
+  /** App-wide library (available in every book). */
+  listAppShapeCollections: () => request<ShapeCollection[]>('/api/collections'),
+  getShapeCollection: (id: string) => request<ShapeCollection>(`/api/collections/${id}`),
+  /**
+   * Save a collection. Pass `bookId` for book scope; omit for the app-wide library.
+   */
+  createShapeCollection: (body: {
+    name: string
+    description?: string
+    source: string
+    bookId?: string
+  }) => {
+    const { bookId, ...payload } = body
+    if (bookId) {
+      return request<ShapeCollection>(`/api/books/${bookId}/collections`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+    }
+    return request<ShapeCollection>('/api/collections', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+  updateShapeCollection: (
+    id: string,
+    body: { name: string; description?: string | null; source?: string },
+  ) => request<ShapeCollection>(`/api/collections/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteShapeCollection: (id: string) =>
+    request<void>(`/api/collections/${id}`, { method: 'DELETE' }),
 
   /**
    * Download a book or page in one of the server-rendered formats and save it

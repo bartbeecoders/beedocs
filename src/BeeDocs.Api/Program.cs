@@ -45,8 +45,11 @@ var uploadsRoot = string.IsNullOrWhiteSpace(configuredUploads)
 Directory.CreateDirectory(uploadsRoot);
 
 builder.Services.AddSingleton(new StorageOptions(uploadsRoot));
+builder.Services.Configure<ApiKeyOptions>(builder.Configuration.GetSection(ApiKeyOptions.SectionName));
+builder.Services.AddSingleton<ApiKeyEndpointFilter>();
 builder.Services.AddSingleton<IDocumentService, DocumentService>();
 builder.Services.AddSingleton<IDiagramService, DiagramService>();
+builder.Services.AddSingleton<IShapeCollectionService, ShapeCollectionService>();
 builder.Services.AddSingleton<IExportService, ExportService>();
 builder.Services.AddSingleton<IImportService, ImportService>();
 
@@ -94,6 +97,18 @@ var appVersion = (Assembly.GetExecutingAssembly()
         ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString()
         ?? "0.0.0")
     .Split('+')[0];
+
+var configuredApiKey = app.Configuration["BeeDocs:ApiKey"];
+if (string.IsNullOrWhiteSpace(configuredApiKey))
+{
+    app.Logger.LogWarning(
+        "BeeDocs:ApiKey is not set — /api/v1 is open without authentication. " +
+        "Set BeeDocs__ApiKey (or BeeDocs:ApiKey) before exposing the API to other apps.");
+}
+else
+{
+    app.Logger.LogInformation("BeeDocs:ApiKey is configured — /api/v1 requires Bearer or X-Api-Key.");
+}
 
 api.MapGet("/health", () => Results.Ok(new { status = "ok", service = "BeeDocs.Api", version = appVersion }));
 
@@ -250,6 +265,64 @@ api.MapPut("/diagrams/{id}", async (string id, UpdateDiagramRequest body, IDiagr
 api.MapDelete("/diagrams/{id}", async (string id, IDiagramService diagrams, CancellationToken ct) =>
 {
     var ok = await diagrams.DeleteAsync(id, ct);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
+// --- Shape collections (book-scoped or app-wide studio snippets) ---
+api.MapGet("/books/{bookId}/collections", async (string bookId, IShapeCollectionService collections, CancellationToken ct) =>
+    Results.Ok(await collections.ListByBookAsync(bookId, ct)));
+
+api.MapPost("/books/{bookId}/collections", async (string bookId, CreateShapeCollectionRequest body, IShapeCollectionService collections, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Name))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = ["Name is required."] });
+    if (string.IsNullOrWhiteSpace(body.Source))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["source"] = ["Source is required."] });
+
+    try
+    {
+        var created = await collections.CreateAsync(bookId, body, ct);
+        return Results.Created($"/api/collections/{created.Id}", created);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+
+// App-wide library (available in every book's Studio palette).
+api.MapGet("/collections", async (IShapeCollectionService collections, CancellationToken ct) =>
+    Results.Ok(await collections.ListAppAsync(ct)));
+
+api.MapPost("/collections", async (CreateShapeCollectionRequest body, IShapeCollectionService collections, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Name))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = ["Name is required."] });
+    if (string.IsNullOrWhiteSpace(body.Source))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["source"] = ["Source is required."] });
+
+    var created = await collections.CreateAsync(null, body, ct);
+    return Results.Created($"/api/collections/{created.Id}", created);
+});
+
+api.MapGet("/collections/{id}", async (string id, IShapeCollectionService collections, CancellationToken ct) =>
+{
+    var row = await collections.GetAsync(id, ct);
+    return row is null ? Results.NotFound() : Results.Ok(row);
+});
+
+api.MapPut("/collections/{id}", async (string id, UpdateShapeCollectionRequest body, IShapeCollectionService collections, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Name))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = ["Name is required."] });
+
+    var updated = await collections.UpdateAsync(id, body, ct);
+    return updated is null ? Results.NotFound() : Results.Ok(updated);
+});
+
+api.MapDelete("/collections/{id}", async (string id, IShapeCollectionService collections, CancellationToken ct) =>
+{
+    var ok = await collections.DeleteAsync(id, ct);
     return ok ? Results.NoContent() : Results.NotFound();
 });
 
@@ -424,6 +497,143 @@ api.MapPost("/uploads", async (HttpRequest request, CancellationToken ct) =>
         contentType = string.IsNullOrWhiteSpace(contentType) ? $"image/{ext.TrimStart('.')}" : contentType,
         size = file.Length,
     });
+});
+
+// =============================================================================
+// External REST API (v1) — slug-based books & pages for apps that publish docs.
+// Protected by BeeDocs:ApiKey when configured (Bearer or X-Api-Key).
+// The UI continues to use the id-based /api/* routes above.
+// =============================================================================
+var v1 = api.MapGroup("/v1")
+    .AddEndpointFilter<ApiKeyEndpointFilter>()
+    .WithTags("Publish API v1");
+
+v1.MapGet("/", () => Results.Ok(new
+{
+    service = "BeeDocs.Api",
+    version = appVersion,
+    api = "v1",
+    description = "Slug-based REST API for publishing books and Markdown pages from external apps.",
+    docs = "/api/v1 (see Docs/REST-API.md)",
+    resources = new
+    {
+        books = "/api/v1/books",
+        book = "/api/v1/books/{bookSlug}",
+        pages = "/api/v1/books/{bookSlug}/pages",
+        page = "/api/v1/books/{bookSlug}/pages/{pageSlug}",
+        publish = "PUT /api/v1/publish",
+    },
+}));
+
+// --- Books ---
+v1.MapGet("/books", async (IDocumentService docs, CancellationToken ct) =>
+    Results.Ok(await docs.ListBooksAsync(ct)));
+
+v1.MapGet("/books/{bookSlug}", async (string bookSlug, IDocumentService docs, CancellationToken ct) =>
+{
+    var book = await docs.GetBookBySlugAsync(bookSlug, ct);
+    return book is null ? Results.NotFound(new { error = $"Book '{bookSlug}' not found." }) : Results.Ok(book);
+});
+
+v1.MapPut("/books/{bookSlug}", async (string bookSlug, UpsertBookRequest? body, IDocumentService docs, CancellationToken ct) =>
+{
+    body ??= new UpsertBookRequest(null, null, null);
+    var result = await docs.UpsertBookBySlugAsync(bookSlug, body, ct);
+    return result.Created
+        ? Results.Created($"/api/v1/books/{result.Item.Slug}", result)
+        : Results.Ok(result);
+});
+
+v1.MapDelete("/books/{bookSlug}", async (string bookSlug, IDocumentService docs, CancellationToken ct) =>
+{
+    var book = await docs.GetBookBySlugAsync(bookSlug, ct);
+    if (book is null) return Results.NotFound(new { error = $"Book '{bookSlug}' not found." });
+    await docs.DeleteBookAsync(book.Id, ct);
+    return Results.NoContent();
+});
+
+// --- Pages ---
+v1.MapGet("/books/{bookSlug}/pages", async (string bookSlug, IDocumentService docs, CancellationToken ct) =>
+{
+    var book = await docs.GetBookBySlugAsync(bookSlug, ct);
+    if (book is null) return Results.NotFound(new { error = $"Book '{bookSlug}' not found." });
+    return Results.Ok(await docs.ListPagesAsync(book.Id, ct));
+});
+
+v1.MapGet("/books/{bookSlug}/pages/{pageSlug}", async (string bookSlug, string pageSlug, IDocumentService docs, CancellationToken ct) =>
+{
+    var book = await docs.GetBookBySlugAsync(bookSlug, ct);
+    if (book is null) return Results.NotFound(new { error = $"Book '{bookSlug}' not found." });
+    var page = await docs.GetPageBySlugAsync(book.Id, pageSlug, ct);
+    return page is null
+        ? Results.NotFound(new { error = $"Page '{pageSlug}' not found in book '{bookSlug}'." })
+        : Results.Ok(page);
+});
+
+v1.MapPut("/books/{bookSlug}/pages/{pageSlug}", async (
+    string bookSlug,
+    string pageSlug,
+    UpsertPageRequest body,
+    IDocumentService docs,
+    CancellationToken ct) =>
+{
+    var book = await docs.GetBookBySlugAsync(bookSlug, ct);
+    if (book is null)
+    {
+        // Auto-create the book so publishers can write pages without a prior step.
+        var createdBook = await docs.UpsertBookBySlugAsync(
+            bookSlug,
+            new UpsertBookRequest(Title: bookSlug, Description: null, SortOrder: null),
+            ct);
+        book = createdBook.Item;
+    }
+
+    try
+    {
+        var result = await docs.UpsertPageBySlugAsync(book.Id, pageSlug, body, ct);
+        return result.Created
+            ? Results.Created($"/api/v1/books/{book.Slug}/pages/{result.Item.Slug}", result)
+            : Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["content"] = [ex.Message],
+        });
+    }
+});
+
+v1.MapDelete("/books/{bookSlug}/pages/{pageSlug}", async (string bookSlug, string pageSlug, IDocumentService docs, CancellationToken ct) =>
+{
+    var book = await docs.GetBookBySlugAsync(bookSlug, ct);
+    if (book is null) return Results.NotFound(new { error = $"Book '{bookSlug}' not found." });
+    var page = await docs.GetPageBySlugAsync(book.Id, pageSlug, ct);
+    if (page is null) return Results.NotFound(new { error = $"Page '{pageSlug}' not found in book '{bookSlug}'." });
+    await docs.DeletePageAsync(page.Id, ct);
+    return Results.NoContent();
+});
+
+// --- One-shot publish (book + page) ---
+v1.MapPut("/publish", async (PublishDocumentRequest body, IDocumentService docs, CancellationToken ct) =>
+{
+    if (body.Book is null || string.IsNullOrWhiteSpace(body.Book.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["book.title"] = ["Book title is required."] });
+    if (body.Page is null || string.IsNullOrWhiteSpace(body.Page.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["page.title"] = ["Page title is required."] });
+    if (body.Page.Content is null)
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["page.content"] = ["Page content is required."] });
+
+    try
+    {
+        var result = await docs.PublishDocumentAsync(body, ct);
+        var status = result.BookCreated || result.PageCreated ? StatusCodes.Status201Created : StatusCodes.Status200OK;
+        return Results.Json(result, statusCode: status);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["request"] = [ex.Message] });
+    }
 });
 
 // SPA fallback (production container with wwwroot)

@@ -2,6 +2,7 @@
 
 | Doc | Description |
 |-----|-------------|
+| [REST API](./REST-API.md) | External apps publishing books & Markdown pages (`/api/v1`) |
 | [MCP Server](./MCP-SERVER.md) | Connect AI agents (Cursor, Claude Desktop, Claude Code, VS Code, etc.) to BeeDocs — over HTTP or stdio |
 | [MCP Hosting](./MCP-HOSTING.md) | Running the MCP server on K3S and putting Cloudflare Access in front of it |
 | [MCP Tools reference](./MCP-TOOLS.md) | Full list of tools, resources, and prompts |

@@ -67,3 +67,23 @@ public sealed class Diagram : Record
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
+
+/// <summary>
+/// A reusable multi-shape snippet for the Studio palette.
+/// When <see cref="BookId"/> is null/empty the collection is app-wide;
+/// otherwise it belongs to that book only.
+/// </summary>
+public sealed class ShapeCollection : Record
+{
+    /// <summary>Owning book id, or null/empty for the app-wide library.</summary>
+    public string? BookId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    /// <summary>
+    /// JSON fragment: <c>{"version":1,"nodes":[…],"edges":[…]}</c>
+    /// (BeeDiagram nodes/edges, normalised to origin).
+    /// </summary>
+    public string Source { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}

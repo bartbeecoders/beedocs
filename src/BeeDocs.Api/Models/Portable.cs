@@ -42,6 +42,8 @@ public sealed class ArchiveManifest
     public List<ArchiveChapter> Chapters { get; set; } = [];
     public List<ArchivePage> Pages { get; set; } = [];
     public List<ArchiveDiagram> Diagrams { get; set; } = [];
+    /// <summary>Book-scoped studio shape collections (multi-shape snippets).</summary>
+    public List<ArchiveShapeCollection> Collections { get; set; } = [];
     public List<ArchiveAsset> Assets { get; set; } = [];
 
     public static JsonSerializerOptions JsonOptions { get; } = new()
@@ -92,6 +94,16 @@ public sealed class ArchiveDiagram
     public string Source { get; set; } = string.Empty;
 }
 
+/// <summary>Reusable multi-shape snippet from the studio palette.</summary>
+public sealed class ArchiveShapeCollection
+{
+    public string Ref { get; set; } = string.Empty;
+    public string? OriginalId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string Source { get; set; } = string.Empty;
+}
+
 /// <summary>An uploaded image copied into the archive under <c>assets/</c>.</summary>
 public sealed class ArchiveAsset
 {
@@ -120,6 +132,7 @@ public sealed record ImportPreviewDto(
     int ChapterCount,
     int PageCount,
     int DiagramCount,
+    int CollectionCount,
     int AssetCount,
     IReadOnlyList<string> PageTitles,
     bool BookTitleExists,
@@ -135,6 +148,7 @@ public sealed record ImportResultDto(
     int ChaptersCreated,
     int PagesCreated,
     int DiagramsCreated,
+    int CollectionsCreated,
     int AssetsCreated,
     IReadOnlyList<string> Warnings,
     IReadOnlyList<ImportedPageDto> Pages

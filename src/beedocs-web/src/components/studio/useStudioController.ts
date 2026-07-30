@@ -17,6 +17,19 @@ import {
   sendToBack,
   type AlignMode,
 } from '../../diagram/studioOps'
+import {
+  remapClonedParents,
+  remapParents,
+  restackContainers,
+  withDescendants,
+} from '../../diagram/containers'
+import {
+  instantiateFragment,
+  normalizeFragment,
+  parseFragment,
+  serializeFragment,
+  type CollectionFragment,
+} from '../../diagram/collectionFragment'
 
 export type StudioSelection = { nodes: string[]; edges: string[] }
 
@@ -228,7 +241,8 @@ export function useStudioController({ source, onChange, readOnly }: Options) {
   const addNodes = useCallback(
     (nodes: BeeNode[], opts?: { select?: boolean }) => {
       if (nodes.length === 0) return
-      apply((prev) => ({ ...prev, nodes: [...prev.nodes, ...nodes] }))
+      // restack so a node added into a container renders above it
+      apply((prev) => ({ ...prev, nodes: restackContainers([...prev.nodes, ...nodes]) }))
       if (opts?.select !== false) setSelection({ nodes: nodes.map((n) => n.id), edges: [] })
     },
     [apply, setSelection],
@@ -297,11 +311,12 @@ export function useStudioController({ source, onChange, readOnly }: Options) {
   const deleteSelection = useCallback(() => {
     const { nodes, edges } = selectionRef.current
     if (nodes.length === 0 && edges.length === 0) return
-    const nodeSet = new Set(nodes)
+    // Deleting a container takes its contents with it, like draw.io.
+    const nodeSet = withDescendants(docRef.current.nodes, nodes)
     const edgeSet = new Set(edges)
     apply((prev) => ({
       ...prev,
-      nodes: prev.nodes.filter((n) => !nodeSet.has(n.id)),
+      nodes: remapParents(prev.nodes.filter((n) => !nodeSet.has(n.id))),
       edges: prev.edges.filter(
         (e) => !edgeSet.has(e.id) && !nodeSet.has(e.from) && !nodeSet.has(e.to),
       ),
@@ -311,10 +326,10 @@ export function useStudioController({ source, onChange, readOnly }: Options) {
 
   const deleteNodes = useCallback(
     (ids: string[]) => {
-      const set = new Set(ids)
+      const set = withDescendants(docRef.current.nodes, ids)
       apply((prev) => ({
         ...prev,
-        nodes: prev.nodes.filter((n) => !set.has(n.id)),
+        nodes: remapParents(prev.nodes.filter((n) => !set.has(n.id))),
         edges: prev.edges.filter((e) => !set.has(e.from) && !set.has(e.to)),
       }))
       setSelection({
@@ -343,7 +358,8 @@ export function useStudioController({ source, onChange, readOnly }: Options) {
 
   const collectSelectionPayload = useCallback((): ClipboardPayload | null => {
     const { nodes, edges } = selectionRef.current
-    const nodeSet = new Set(nodes)
+    // Copying a container copies what is inside it.
+    const nodeSet = withDescendants(docRef.current.nodes, nodes)
     const pickedNodes = docRef.current.nodes.filter((n) => nodeSet.has(n.id))
     const pickedEdges = docRef.current.edges.filter(
       (e) => edges.includes(e.id) || (nodeSet.has(e.from) && nodeSet.has(e.to)),
@@ -354,6 +370,46 @@ export function useStudioController({ source, onChange, readOnly }: Options) {
       edges: structuredClone(pickedEdges),
     }
   }, [])
+
+  /** Normalised fragment for saving the selection as a book shape collection. */
+  const selectionAsCollectionSource = useCallback((): string | null => {
+    const payload = collectSelectionPayload()
+    if (!payload || payload.nodes.length === 0) return null
+    return serializeFragment(normalizeFragment(payload.nodes, payload.edges))
+  }, [collectSelectionPayload])
+
+  /** Place a saved collection (or any fragment) with origin at `at` (top-left). */
+  const placeFragment = useCallback(
+    (source: string | CollectionFragment, at?: BeePoint) => {
+      const fragment =
+        typeof source === 'string' ? parseFragment(source) : source
+      if (!fragment || fragment.nodes.length === 0) return
+      let minX = Infinity
+      let minY = Infinity
+      for (const n of fragment.nodes) {
+        minX = Math.min(minX, n.x)
+        minY = Math.min(minY, n.y)
+      }
+      if (!Number.isFinite(minX)) minX = 0
+      if (!Number.isFinite(minY)) minY = 0
+      // `at` is the desired top-left of the bounds; fragments are usually at origin.
+      const origin = at
+        ? { x: at.x - minX, y: at.y - minY }
+        : { x: 24, y: 24 }
+      const { nodes, edges } = instantiateFragment(
+        fragment,
+        origin,
+        docRef.current.nodes.map((n) => n.id),
+      )
+      apply((prev) => ({
+        ...prev,
+        nodes: restackContainers([...prev.nodes, ...nodes]),
+        edges: [...prev.edges, ...edges],
+      }))
+      setSelection({ nodes: nodes.map((n) => n.id), edges: [] })
+    },
+    [apply, setSelection],
+  )
 
   const copySelection = useCallback(() => {
     const payload = collectSelectionPayload()
@@ -398,11 +454,13 @@ export function useStudioController({ source, onChange, readOnly }: Options) {
       }
       const dx = at ? at.x - minX : 20
       const dy = at ? at.y - minY : 20
-      const nodes = payload.nodes.map((n) => {
+      const cloned = payload.nodes.map((n) => {
         const id = uid('n')
         idMap.set(n.id, id)
         return { ...n, id, x: Math.round(n.x + dx), y: Math.round(n.y + dy) }
       })
+      const existingIds = new Set(docRef.current.nodes.map((n) => n.id))
+      const nodes = remapClonedParents(cloned, idMap, existingIds)
       const edges = payload.edges
         .filter((e) => idMap.has(e.from) && idMap.has(e.to))
         .map((e) => ({
@@ -412,7 +470,11 @@ export function useStudioController({ source, onChange, readOnly }: Options) {
           to: idMap.get(e.to)!,
           waypoints: e.waypoints?.map((p) => ({ x: p.x + dx, y: p.y + dy })),
         }))
-      apply((prev) => ({ ...prev, nodes: [...prev.nodes, ...nodes], edges: [...prev.edges, ...edges] }))
+      apply((prev) => ({
+        ...prev,
+        nodes: restackContainers([...prev.nodes, ...nodes]),
+        edges: [...prev.edges, ...edges],
+      }))
       setSelection({ nodes: nodes.map((n) => n.id), edges: [] })
     },
     [apply, readClipboard, setSelection],
@@ -422,11 +484,13 @@ export function useStudioController({ source, onChange, readOnly }: Options) {
     const payload = collectSelectionPayload()
     if (!payload) return
     const idMap = new Map<string, string>()
-    const nodes = payload.nodes.map((n) => {
+    const cloned = payload.nodes.map((n) => {
       const id = uid('n')
       idMap.set(n.id, id)
       return { ...n, id, x: n.x + 24, y: n.y + 24 }
     })
+    const existingIds = new Set(docRef.current.nodes.map((n) => n.id))
+    const nodes = remapClonedParents(cloned, idMap, existingIds)
     const edges = payload.edges
       .filter((e) => idMap.has(e.from) && idMap.has(e.to))
       .map((e) => ({
@@ -436,7 +500,11 @@ export function useStudioController({ source, onChange, readOnly }: Options) {
         to: idMap.get(e.to)!,
         waypoints: e.waypoints?.map((p) => ({ x: p.x + 24, y: p.y + 24 })),
       }))
-    apply((prev) => ({ ...prev, nodes: [...prev.nodes, ...nodes], edges: [...prev.edges, ...edges] }))
+    apply((prev) => ({
+      ...prev,
+      nodes: restackContainers([...prev.nodes, ...nodes]),
+      edges: [...prev.edges, ...edges],
+    }))
     setSelection({ nodes: nodes.map((n) => n.id), edges: [] })
   }, [apply, collectSelectionPayload, setSelection])
 
@@ -448,7 +516,8 @@ export function useStudioController({ source, onChange, readOnly }: Options) {
       if (ids.size === 0) return
       apply((prev) => ({
         ...prev,
-        nodes:
+        // restack afterwards: raising a container must not bury its contents
+        nodes: restackContainers(
           mode === 'front'
             ? bringToFront(prev.nodes, ids)
             : mode === 'back'
@@ -456,6 +525,7 @@ export function useStudioController({ source, onChange, readOnly }: Options) {
               : mode === 'forward'
                 ? bringForward(prev.nodes, ids)
                 : sendBackward(prev.nodes, ids),
+        ),
       }))
     },
     [apply],
@@ -526,6 +596,8 @@ export function useStudioController({ source, onChange, readOnly }: Options) {
     cutSelection,
     pasteClipboard,
     duplicateSelection,
+    selectionAsCollectionSource,
+    placeFragment,
     orderSelection,
     alignSelection,
     distributeSelection,
