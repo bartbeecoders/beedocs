@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import mermaid from 'mermaid'
 import { api } from '../api'
+import { withApiBase } from '../basePath'
 import { replaceFenceBody } from '../markdownFences'
 import { BeeDiagramEditor } from './BeeDiagramEditor'
 import { BeeDiagramView } from './BeeDiagramView'
@@ -373,6 +374,9 @@ export function MarkdownView({ content, editable = false, onContentChange, bookI
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          img({ src, alt, ...props }) {
+            return <img src={src ? withApiBase(src) : src} alt={alt ?? ''} {...props} />
+          },
           code({ className, children, ...props }) {
             const match = /language-(\w[\w-]*)/.exec(className || '')
             const lang = match?.[1]

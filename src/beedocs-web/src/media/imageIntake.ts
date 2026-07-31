@@ -1,4 +1,5 @@
 import { api } from '../api'
+import { withApiBase } from '../basePath'
 
 const IMAGE_MIME = /^image\//i
 const MAX_BYTES = 8 * 1024 * 1024
@@ -159,6 +160,6 @@ export function loadImageSize(url: string): Promise<{ w: number; h: number }> {
       resolve({ w: Math.round(w * scale), h: Math.round(h * scale) })
     }
     img.onerror = () => resolve({ w: 220, h: 160 })
-    img.src = url
+    img.src = withApiBase(url)
   })
 }

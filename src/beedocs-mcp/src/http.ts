@@ -18,6 +18,7 @@
  *   MCP_AUTH_TOKEN   If set, require `Authorization: Bearer <token>` on /mcp.
  *                    Defence in depth behind Cloudflare Access — see
  *                    Docs/MCP-HOSTING.md.
+ *   MCP_PATH_BASE    Optional URL prefix (e.g. /beedocs-mcp) when reverse-proxied.
  *   BEEDOCS_API_URL  Base URL of the BeeDocs API
  */
 
@@ -32,6 +33,11 @@ export interface HttpServerOptions {
   port: number
   host: string
   authToken?: string
+  /**
+   * URL path prefix when reverse-proxied (e.g. "/beedocs-mcp").
+   * Health is at `{pathBase}/healthz`, MCP at `{pathBase}/mcp`.
+   */
+  pathBase?: string
   /** Factory for the configured McpServer — shared with the stdio entrypoint. */
   createServer: (client: BeeDocsClient) => McpServer
 }
@@ -98,19 +104,33 @@ async function handleMcpRequest(
 
 export function startHttpServer(options: HttpServerOptions): void {
   const { port, host, authToken, client } = options
+  const pathBase = normalizePathBase(options.pathBase)
 
   const httpServer = createServer((req, res) => {
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
+    const path = stripPathBase(url.pathname, pathBase)
+    if (path === null) {
+      sendJson(res, 404, {
+        error: pathBase
+          ? `Not found. MCP endpoint is ${pathBase}/mcp.`
+          : 'Not found. MCP endpoint is /mcp.',
+      })
+      return
+    }
 
     // Unauthenticated: kubelet probes hit this, and it must not depend on the
     // BeeDocs API being reachable — this reports the MCP process only.
-    if (url.pathname === '/healthz') {
+    if (path === '/healthz') {
       sendJson(res, 200, { status: 'ok', service: 'beedocs-mcp', api: client.baseUrl })
       return
     }
 
-    if (url.pathname !== '/mcp') {
-      sendJson(res, 404, { error: 'Not found. MCP endpoint is /mcp.' })
+    if (path !== '/mcp') {
+      sendJson(res, 404, {
+        error: pathBase
+          ? `Not found. MCP endpoint is ${pathBase}/mcp.`
+          : 'Not found. MCP endpoint is /mcp.',
+      })
       return
     }
 
@@ -132,7 +152,7 @@ export function startHttpServer(options: HttpServerOptions): void {
 
   httpServer.listen(port, host, () => {
     console.error(
-      `[beedocs-mcp] http transport listening on http://${host}:${port}/mcp ` +
+      `[beedocs-mcp] http transport listening on http://${host}:${port}${pathBase}/mcp ` +
         `(API ${client.baseUrl}, auth ${authToken ? 'enabled' : 'DISABLED'})`,
     )
     if (!authToken) {
@@ -151,4 +171,19 @@ export function startHttpServer(options: HttpServerOptions): void {
   }
   process.on('SIGTERM', () => shutdown('SIGTERM'))
   process.on('SIGINT', () => shutdown('SIGINT'))
+}
+
+function normalizePathBase(value?: string): string {
+  if (!value || value.trim() === '/' || !value.trim()) return ''
+  let path = value.trim()
+  if (!path.startsWith('/')) path = `/${path}`
+  return path.replace(/\/+$/, '')
+}
+
+/** Strip the configured path base; return null if the request is outside it. */
+function stripPathBase(pathname: string, pathBase: string): string | null {
+  if (!pathBase) return pathname
+  if (pathname === pathBase) return '/'
+  if (pathname.startsWith(`${pathBase}/`)) return pathname.slice(pathBase.length) || '/'
+  return null
 }

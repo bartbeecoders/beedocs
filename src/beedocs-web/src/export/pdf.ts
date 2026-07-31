@@ -1,5 +1,6 @@
 import mermaid from 'mermaid'
 import { api } from '../api'
+import { withApiBase } from '../basePath'
 import type { Chapter, Page } from '../types'
 import { beeDiagramToSvg } from './beeDiagramSvg'
 
@@ -383,7 +384,7 @@ function inlineMd(s: string): string {
 
 function absoluteUrl(url: string): string {
   if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url
-  if (url.startsWith('/')) return `${window.location.origin}${url}`
+  if (url.startsWith('/')) return `${window.location.origin}${withApiBase(url)}`
   return url
 }
 

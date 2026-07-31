@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { BeeNode } from '../types'
+import { withApiBase } from '../basePath'
 import {
   nodeLabelLayout,
   nodePrimitives,
@@ -78,7 +79,7 @@ export function ShapePrimitives({ prims }: { prims: BeePrim[] }) {
           return (
             <image
               key={i}
-              href={p.href}
+              href={withApiBase(p.href)}
               x={p.x}
               y={p.y}
               width={p.w}

@@ -11,6 +11,7 @@ import type {
   PageSummary,
   ShapeCollection,
 } from './types'
+import { withApiBase } from './basePath'
 
 /** Pull the API's `{ error }` message out of a failed response when there is one. */
 async function errorText(res: Response): Promise<string> {
@@ -25,7 +26,7 @@ async function errorText(res: Response): Promise<string> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(withApiBase(path), {
     headers: {
       'Content-Type': 'application/json',
       ...(init?.headers ?? {}),
@@ -148,7 +149,7 @@ export const api = {
    * by src/export/pdf.ts, which needs a DOM to render diagrams.
    */
   downloadExport: async (kind: 'books' | 'pages', id: string, format: ExportFormat) => {
-    const res = await fetch(`/api/${kind}/${id}/export?format=${format}`)
+    const res = await fetch(withApiBase(`/api/${kind}/${id}/export?format=${format}`))
     if (!res.ok) {
       const text = await res.text()
       throw new Error(text || `${res.status} ${res.statusText}`)
@@ -175,7 +176,7 @@ export const api = {
   inspectImport: async (file: File): Promise<ImportPreview> => {
     const form = new FormData()
     form.append('file', file, file.name)
-    const res = await fetch('/api/import/inspect', { method: 'POST', body: form })
+    const res = await fetch(withApiBase('/api/import/inspect'), { method: 'POST', body: form })
     if (!res.ok) throw new Error(await errorText(res))
     return res.json() as Promise<ImportPreview>
   },
@@ -189,7 +190,7 @@ export const api = {
     form.append('mode', options.mode)
     if (options.targetBookId) form.append('targetBookId', options.targetBookId)
     if (options.title) form.append('title', options.title)
-    const res = await fetch('/api/import', { method: 'POST', body: form })
+    const res = await fetch(withApiBase('/api/import'), { method: 'POST', body: form })
     if (!res.ok) throw new Error(await errorText(res))
     return res.json() as Promise<ImportResult>
   },
@@ -201,7 +202,7 @@ export const api = {
       fileName ||
       (file instanceof File && file.name ? file.name : `paste-${Date.now()}.png`)
     form.append('file', file, name)
-    const res = await fetch('/api/uploads', { method: 'POST', body: form })
+    const res = await fetch(withApiBase('/api/uploads'), { method: 'POST', body: form })
     if (!res.ok) {
       const text = await res.text()
       throw new Error(text || `${res.status} ${res.statusText}`)

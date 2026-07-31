@@ -10,7 +10,7 @@
  *   MCP_TRANSPORT    'stdio' (default) or 'http'
  *   BEEDOCS_API_URL  Base URL of the BeeDocs API (default http://localhost:5080)
  *
- * HTTP mode reads MCP_HTTP_PORT / MCP_HTTP_HOST / MCP_AUTH_TOKEN — see http.ts.
+ * HTTP mode reads MCP_HTTP_PORT / MCP_HTTP_HOST / MCP_AUTH_TOKEN / MCP_PATH_BASE — see http.ts.
  *
  * In stdio mode, do not write logs to stdout (reserved for MCP JSON-RPC).
  * Use stderr if needed.
@@ -62,6 +62,7 @@ async function main() {
       port: Number(process.env.MCP_HTTP_PORT ?? 5090),
       host: process.env.MCP_HTTP_HOST ?? '0.0.0.0',
       authToken: process.env.MCP_AUTH_TOKEN?.trim() || undefined,
+      pathBase: process.env.MCP_PATH_BASE?.trim() || undefined,
       createServer: createBeeDocsServer,
     })
     return

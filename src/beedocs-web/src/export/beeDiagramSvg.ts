@@ -26,7 +26,14 @@ function attr(name: string, value: string | number | undefined): string {
 
 function absoluteUrl(url: string): string {
   if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url
-  if (url.startsWith('/')) return `${window.location.origin}${url}`
+  if (url.startsWith('/')) {
+    const raw = (import.meta.env.VITE_BEEDOCS_API_PATH_BASE as string | undefined)
+      || (import.meta.env.BASE_URL || '/')
+    const prefix = raw.replace(/\/+$/, '')
+    const base = !prefix || prefix === '/' ? '' : prefix
+    const path = base && (url === base || url.startsWith(`${base}/`)) ? url : `${base}${url}`
+    return `${window.location.origin}${path}`
+  }
   return url
 }
 

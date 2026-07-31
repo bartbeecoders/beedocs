@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
+import { withApiBase } from '../basePath'
 import { useImageIntake, type ImageIntakeContext } from '../hooks/useImageIntake'
 import {
   isVisualFenceLang,
@@ -394,7 +395,7 @@ function RichTextBlock({
         if (p.kind === 'image') {
           return (
             <figure key={`img-${i}-${p.url}`} className="edit-image-preview">
-              <img src={p.url} alt={p.alt || 'image'} loading="lazy" />
+              <img src={withApiBase(p.url)} alt={p.alt || 'image'} loading="lazy" />
               <figcaption>
                 <span className="muted sm" title={p.url}>
                   {p.alt || p.url}
