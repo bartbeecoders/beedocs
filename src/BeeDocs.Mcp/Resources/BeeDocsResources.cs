@@ -1,0 +1,78 @@
+using System.ComponentModel;
+using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
+using BeeDocs.Mcp.Tools;
+
+namespace BeeDocs.Mcp.Resources;
+
+[McpServerResourceType]
+public sealed class BeeDocsResources(BeeDocsApiClient client)
+{
+    [McpServerResource(UriTemplate = "beedocs://library", Name = "beedocs-library", MimeType = "application/json")]
+    [Description("JSON list of all books (id, title, slug, description).")]
+    public async Task<TextResourceContents> Library(CancellationToken ct = default)
+    {
+        var books = await client.ListBooksAsync(ct);
+        return Text("beedocs://library", books);
+    }
+
+    [McpServerResource(UriTemplate = "beedocs://books/{bookId}", Name = "beedocs-book", MimeType = "application/json")]
+    [Description("Single book metadata by id.")]
+    public async Task<TextResourceContents> Book(string bookId, CancellationToken ct = default)
+    {
+        var book = await client.GetBookAsync(bookId, ct);
+        return Text($"beedocs://books/{bookId}", book);
+    }
+
+    [McpServerResource(UriTemplate = "beedocs://books/{bookId}/pages", Name = "beedocs-book-pages", MimeType = "application/json")]
+    [Description("Page summaries for a book.")]
+    public async Task<TextResourceContents> BookPages(string bookId, CancellationToken ct = default)
+    {
+        var pages = await client.ListPagesAsync(bookId, ct);
+        return Text($"beedocs://books/{bookId}/pages", pages);
+    }
+
+    [McpServerResource(UriTemplate = "beedocs://books/{bookId}/chapters", Name = "beedocs-book-chapters", MimeType = "application/json")]
+    [Description("Folder/chapter list for a book.")]
+    public async Task<TextResourceContents> BookChapters(string bookId, CancellationToken ct = default)
+    {
+        var chapters = await client.ListChaptersAsync(bookId, ct);
+        return Text($"beedocs://books/{bookId}/chapters", chapters);
+    }
+
+    [McpServerResource(UriTemplate = "beedocs://books/{bookId}/tree", Name = "beedocs-book-tree", MimeType = "application/json")]
+    [Description("Folders with nested pages, root pages, and diagrams.")]
+    public async Task<TextResourceContents> BookTree(string bookId, CancellationToken ct = default)
+    {
+        var tree = await BookTools.BuildTreeAsync(client, bookId, ct);
+        return new TextResourceContents
+        {
+            Uri = $"beedocs://books/{bookId}/tree",
+            MimeType = "application/json",
+            Text = ToolHelpers.Json(tree),
+        };
+    }
+
+    [McpServerResource(UriTemplate = "beedocs://pages/{pageId}", Name = "beedocs-page", MimeType = "application/json")]
+    [Description("Full page including Markdown content.")]
+    public async Task<TextResourceContents> Page(string pageId, CancellationToken ct = default)
+    {
+        var page = await client.GetPageAsync(pageId, ct);
+        return Text($"beedocs://pages/{pageId}", page);
+    }
+
+    [McpServerResource(UriTemplate = "beedocs://diagrams/{diagramId}", Name = "beedocs-diagram", MimeType = "application/json")]
+    [Description("Full diagram including source payload.")]
+    public async Task<TextResourceContents> Diagram(string diagramId, CancellationToken ct = default)
+    {
+        var diagram = await client.GetDiagramAsync(diagramId, ct);
+        return Text($"beedocs://diagrams/{diagramId}", diagram);
+    }
+
+    private static TextResourceContents Text(string uri, System.Text.Json.JsonElement data) => new()
+    {
+        Uri = uri,
+        MimeType = "application/json",
+        Text = ToolHelpers.Json(data),
+    };
+}

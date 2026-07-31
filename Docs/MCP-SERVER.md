@@ -12,22 +12,22 @@ hosted K3S instance or the one `./scripts/start.sh` starts on `:5090`.
 
 ```
 ┌─────────────┐   Streamable HTTP   ┌──────────────┐  HTTP  ┌─────────────┐
-│ AI client   │ ◄─────────────────► │ beedocs-mcp  │ ─────► │ BeeDocs.Api │
-│ Cursor/etc. │      POST /mcp      │  (Node.js)   │        │             │
+│ AI client   │ ◄─────────────────► │ BeeDocs.Mcp  │ ─────► │ BeeDocs.Api │
+│ Cursor/etc. │      POST /mcp      │  (.NET)      │        │             │
 └─────────────┘                     └──────────────┘        └─────────────┘
                                      hosted, or :5090 locally
 ```
 
 ### 2. stdio — the client spawns it
 
-The classic setup: your client launches `node dist/index.js` as a subprocess and
-talks JSON-RPC over stdin/stdout. Requires a clone, `pnpm install`, and
-`pnpm build` on every machine.
+The classic setup: your client launches `dotnet BeeDocs.Mcp.dll` (or
+`dotnet run` from `src/BeeDocs.Mcp`) as a subprocess and talks JSON-RPC over
+stdin/stdout. Requires a clone and the .NET 10 SDK/runtime on that machine.
 
 ```
 ┌─────────────┐  stdio (JSON-RPC)  ┌──────────────┐  HTTP  ┌─────────────┐
-│ AI client   │ ◄───────────────► │ beedocs-mcp  │ ─────► │ BeeDocs.Api │
-│ Cursor/etc. │                   │  (Node.js)   │        │ :5080       │
+│ AI client   │ ◄───────────────► │ BeeDocs.Mcp  │ ─────► │ BeeDocs.Api │
+│ Cursor/etc. │                   │  (.NET)      │        │ :5080       │
 └─────────────┘                   └──────────────┘        └─────────────┘
 ```
 
@@ -35,7 +35,7 @@ talks JSON-RPC over stdin/stdout. Requires a clone, `pnpm install`, and
 
 | | HTTP | stdio |
 |---|---|---|
-| Install per machine | none | clone + `pnpm install` + `pnpm build` |
+| Install per machine | none | clone + .NET 10 |
 | Shared team instance | ✅ one URL for everyone | ❌ each person runs their own |
 | Works offline | only against a local server | ✅ |
 | Auth | bearer token (+ Cloudflare Access when hosted) | none — inherits your local API |
@@ -60,25 +60,22 @@ Use **HTTP** unless you specifically want the client to manage the process.
 
 **Running it locally?**
 
-1. **Node.js 20+** (22 recommended)
+1. **.NET 10 SDK** (runtime is enough to run a published build)
 2. **BeeDocs API running** (default `http://localhost:5080`)
 
 ```bash
-# from repo root — starts API :5080, web :5173, and MCP over HTTP :5090
+# from repo root — starts API :5080, web :5200, and MCP over HTTP :5090
 ./scripts/start.sh
 # or API only:
 cd src/BeeDocs.Api && dotnet run
 ```
 
-3. **MCP package installed & built** — `start.sh` does this for you on first
-   run. By hand, for stdio clients that spawn the process themselves:
+3. **MCP project** — `start.sh` / `start.ps1` run `dotnet run` in
+   `src/BeeDocs.Mcp`. For stdio clients that spawn the process themselves:
 
 ```bash
-cd src/beedocs-mcp
-# Node 22 if you use nvm:
-# export PATH="$HOME/.nvm/versions/node/v22.22.2/bin:$PATH"
-pnpm install
-pnpm build
+cd src/BeeDocs.Mcp
+dotnet build
 ```
 
 Verify the API, and the MCP server if you expect it running:
@@ -104,24 +101,24 @@ server someone else is running.
 | `MCP_HTTP_PORT` | `5090` | Listen port (http only) |
 | `MCP_HTTP_HOST` | `0.0.0.0` | Bind address (http only) |
 | `MCP_AUTH_TOKEN` | _(unset)_ | Required `Authorization: Bearer` token (http only). Unset = no auth, and the server logs a warning |
+| `MCP_PATH_BASE` | _(unset)_ | Optional URL prefix when reverse-proxied (e.g. `/beedocs-mcp`) |
 
 ## Run manually (debug)
 
 **stdio** — waits on stdin, status on stderr:
 
 ```bash
-cd src/beedocs-mcp
+cd src/BeeDocs.Mcp
 export BEEDOCS_API_URL=http://localhost:5080
-pnpm start
-# [beedocs-mcp] connected (API http://localhost:5080)
+dotnet run
 ```
 
 **HTTP**:
 
 ```bash
-cd src/beedocs-mcp
+cd src/BeeDocs.Mcp
 MCP_TRANSPORT=http MCP_HTTP_PORT=5090 MCP_AUTH_TOKEN=dev-token \
-  BEEDOCS_API_URL=http://localhost:5080 node dist/index.js
+  BEEDOCS_API_URL=http://localhost:5080 dotnet run --no-launch-profile
 # [beedocs-mcp] http transport listening on http://0.0.0.0:5090/mcp (API …, auth enabled)
 ```
 
@@ -259,12 +256,11 @@ using, which confirms the whole chain:
 ## Option B: stdio transport
 
 Use an **absolute path** to this repo (examples below use `REPO` as a placeholder).
-Requires `pnpm install && pnpm build` in `src/beedocs-mcp` first.
+Requires the .NET 10 SDK (`dotnet run`) or a published `BeeDocs.Mcp.dll`.
 
 ```bash
 # resolve once
-export REPO="/run/media/bart/Development/dev/bartbeecoders/BeeDocs"
-export NODE="$(command -v node)"   # prefer Node 22+
+export REPO="/ABSOLUTE/PATH/TO/BeeDocs"
 ```
 
 ### Grok (this CLI / TUI)
@@ -276,9 +272,12 @@ BeeDocs is registered as an MCP server for Grok in two places:
 
 ```toml
 [mcp_servers.beedocs]
-command = "/home/bart/.nvm/versions/node/v22.22.2/bin/node"
+command = "dotnet"
 args = [
-  "/run/media/bart/Development/dev/bartbeecoders/BeeDocs/src/beedocs-mcp/dist/index.js",
+  "run",
+  "--no-build",
+  "--project",
+  "/ABSOLUTE/PATH/TO/BeeDocs/src/BeeDocs.Mcp/BeeDocs.Mcp.csproj",
 ]
 enabled = true
 
@@ -305,31 +304,12 @@ Create or edit **`.cursor/mcp.json`** in the project (or global Cursor MCP setti
 {
   "mcpServers": {
     "beedocs": {
-      "command": "node",
+      "command": "dotnet",
       "args": [
-        "/ABSOLUTE/PATH/TO/BeeDocs/src/beedocs-mcp/dist/index.js"
-      ],
-      "env": {
-        "BEEDOCS_API_URL": "http://localhost:5080"
-      }
-    }
-  }
-}
-```
-
-With `pnpm` + `tsx` (no build step):
-
-```json
-{
-  "mcpServers": {
-    "beedocs": {
-      "command": "pnpm",
-      "args": [
-        "--dir",
-        "/ABSOLUTE/PATH/TO/BeeDocs/src/beedocs-mcp",
-        "exec",
-        "tsx",
-        "src/index.ts"
+        "run",
+        "--no-launch-profile",
+        "--project",
+        "/ABSOLUTE/PATH/TO/BeeDocs/src/BeeDocs.Mcp/BeeDocs.Mcp.csproj"
       ],
       "env": {
         "BEEDOCS_API_URL": "http://localhost:5080"
@@ -353,9 +333,12 @@ Edit the Claude Desktop config file:
 {
   "mcpServers": {
     "beedocs": {
-      "command": "node",
+      "command": "dotnet",
       "args": [
-        "/ABSOLUTE/PATH/TO/BeeDocs/src/beedocs-mcp/dist/index.js"
+        "run",
+        "--no-launch-profile",
+        "--project",
+        "/ABSOLUTE/PATH/TO/BeeDocs/src/BeeDocs.Mcp/BeeDocs.Mcp.csproj"
       ],
       "env": {
         "BEEDOCS_API_URL": "http://localhost:5080"
@@ -373,7 +356,7 @@ Add an MCP server (project or user scope):
 
 ```bash
 claude mcp add beedocs --env BEEDOCS_API_URL=http://localhost:5080 -- \
-  node /ABSOLUTE/PATH/TO/BeeDocs/src/beedocs-mcp/dist/index.js
+  dotnet run --no-launch-profile --project /ABSOLUTE/PATH/TO/BeeDocs/src/BeeDocs.Mcp/BeeDocs.Mcp.csproj
 ```
 
 Or add to `.mcp.json` in the project root:
@@ -382,8 +365,13 @@ Or add to `.mcp.json` in the project root:
 {
   "mcpServers": {
     "beedocs": {
-      "command": "node",
-      "args": ["src/beedocs-mcp/dist/index.js"],
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--no-launch-profile",
+        "--project",
+        "src/BeeDocs.Mcp/BeeDocs.Mcp.csproj"
+      ],
       "env": {
         "BEEDOCS_API_URL": "http://localhost:5080"
       }
@@ -403,9 +391,12 @@ In `.vscode/mcp.json` (or user MCP settings):
   "servers": {
     "beedocs": {
       "type": "stdio",
-      "command": "node",
+      "command": "dotnet",
       "args": [
-        "${workspaceFolder}/src/beedocs-mcp/dist/index.js"
+        "run",
+        "--no-launch-profile",
+        "--project",
+        "${workspaceFolder}/src/BeeDocs.Mcp/BeeDocs.Mcp.csproj"
       ],
       "env": {
         "BEEDOCS_API_URL": "http://localhost:5080"
@@ -420,8 +411,8 @@ In `.vscode/mcp.json` (or user MCP settings):
 Any client that can spawn:
 
 ```text
-command: node
-args:    [<repo>/src/beedocs-mcp/dist/index.js]
+command: dotnet
+args:    [run, --no-launch-profile, --project, <repo>/src/BeeDocs.Mcp/BeeDocs.Mcp.csproj]
 env:     BEEDOCS_API_URL=http://localhost:5080
 ```
 
@@ -469,7 +460,7 @@ See [MCP-TOOLS.md](./MCP-TOOLS.md) for the full catalog.
 
 | Symptom | Fix |
 |---------|-----|
-| `ENOENT` on `dist/index.js` | Run `pnpm build` in `src/beedocs-mcp` |
+| Project / DLL not found | `dotnet build` in `src/BeeDocs.Mcp` (or publish and point at `BeeDocs.Mcp.dll`) |
 | Wrong Node version / pnpm sqlite errors | Use Node 20+ or 22; `export PATH` to nvm Node 22 |
 | Want a remote API | Set `BEEDOCS_API_URL=https://your-host` in the MCP `env` block — or switch to the HTTP transport and drop the local process entirely |
 
@@ -511,7 +502,7 @@ See [MCP-TOOLS.md](./MCP-TOOLS.md) for the full catalog.
 ## Package layout
 
 ```
-src/beedocs-mcp/
+src/BeeDocs.Mcp/
   package.json
   tsconfig.json
   Dockerfile      # image for the hosted (http) deployment

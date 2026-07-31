@@ -49,11 +49,8 @@ public sealed class BeeDocsHostOptions
     /// <summary>Folder containing BeeDocs.Api.dll (relative to the host content root).</summary>
     public string ApiDirectory { get; set; } = "api";
 
-    /// <summary>Folder containing the built MCP server (relative to the host content root).</summary>
+    /// <summary>Folder containing published BeeDocs.Mcp.dll (relative to the host content root).</summary>
     public string McpDirectory { get; set; } = "mcp";
-
-    /// <summary>Node executable name or full path.</summary>
-    public string NodeExecutable { get; set; } = "node";
 
     /// <summary>Persistent data root (SQLite + uploads), relative to the host content root.</summary>
     public string DataDirectory { get; set; } = "data";

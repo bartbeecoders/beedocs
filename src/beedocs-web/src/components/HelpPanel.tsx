@@ -604,8 +604,13 @@ function mcpSnippet(
           {
             mcpServers: {
               beedocs: {
-                command: 'node',
-                args: [`${repoPath}/src/beedocs-mcp/dist/index.js`],
+                command: 'dotnet',
+                args: [
+                  'run',
+                  '--no-launch-profile',
+                  '--project',
+                  `${repoPath}/src/BeeDocs.Mcp/BeeDocs.Mcp.csproj`,
+                ],
                 env: { BEEDOCS_API_URL: 'http://localhost:5080' },
               },
             },
@@ -613,7 +618,7 @@ function mcpSnippet(
           null,
           2,
         ),
-        note: 'Requires a clone plus pnpm install && pnpm build in src/beedocs-mcp. No token — it inherits your local API.',
+        note: 'Requires a clone and the .NET 10 SDK. No token — it inherits your local API.',
       }
   }
 }

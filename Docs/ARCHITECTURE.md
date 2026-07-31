@@ -15,7 +15,7 @@
         │                    │ HTTP
         │                    │
 ┌───────▼────────┐  ┌────────┴─────────────────────────────────┐
-│ Other apps     │  │ beedocs-mcp (Node MCP server)            │
+│ Other apps     │  │ BeeDocs.Mcp (.NET MCP server)            │
 │ PUT /api/v1/…  │  │ Tools / resources / prompts for agents   │
 └────────────────┘  └──────────────────────────────────────────┘
 ```

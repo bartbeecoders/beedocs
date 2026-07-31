@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $ApiDir = Join-Path $Root 'src' 'BeeDocs.Api'
 $WebDir = Join-Path $Root 'src' 'beedocs-web'
-$McpDir = Join-Path $Root 'src' 'beedocs-mcp'
+$McpDir = Join-Path $Root 'src' 'BeeDocs.Mcp'
 $LogDir = Join-Path $PSScriptRoot '.logs'
 
 $ApiPort = if ($env:API_PORT) { $env:API_PORT } else { '5080' }
@@ -143,7 +143,7 @@ function Start-McpHttp {
     $env:MCP_AUTH_TOKEN = $McpAuthToken
     $env:BEEDOCS_API_URL = $ApiUrl
     $log = Join-Path $LogDir 'mcp.log'
-    $cmd = "node dist/index.js > `"$log`" 2>&1"
+    $cmd = "dotnet run --no-launch-profile > `"$log`" 2>&1"
     return Start-Process -FilePath 'cmd' -ArgumentList '/c', $cmd -WorkingDirectory $McpDir -PassThru -WindowStyle Hidden
 }
 
@@ -168,18 +168,6 @@ try {
     if (-not (Test-Path (Join-Path $WebDir 'node_modules') -PathType Container)) {
         Write-Log "Installing web dependencies..."
         Invoke-Pnpm $WebDir @('install')
-    }
-
-    if (-not $SkipMcp) {
-        if (-not (Test-Path (Join-Path $McpDir 'node_modules') -PathType Container)) {
-            Write-Log "Installing MCP dependencies..."
-            Invoke-Pnpm $McpDir @('install')
-        }
-        # tsc output is gitignored, so a fresh clone always needs this once.
-        if (-not (Test-Path (Join-Path $McpDir 'dist' 'index.js') -PathType Leaf)) {
-            Write-Log "Building MCP server..."
-            Invoke-Pnpm $McpDir @('build')
-        }
     }
 
     Write-Log "Starting API on $ApiUrl ..."

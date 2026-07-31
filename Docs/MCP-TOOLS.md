@@ -1,6 +1,6 @@
 # BeeDocs MCP — tools, resources, prompts
 
-Server name: **`beedocs`** · Package: `src/beedocs-mcp`
+Server name: **`beedocs`** · Package: `src/BeeDocs.Mcp` (.NET; legacy Node under `src/beedocs-mcp`)
 
 All tools return JSON text content (or an error message with `isError`).
 
@@ -101,6 +101,6 @@ All tools return JSON text content (or an error message with `isError`).
 ## Rebuild MCP after changes
 
 ```bash
-cd src/beedocs-mcp && npm run build
+cd src/BeeDocs.Mcp && dotnet build
 # restart the MCP process / Grok MCP connection
 ```

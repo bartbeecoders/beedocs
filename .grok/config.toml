@@ -2,12 +2,15 @@
 # https://modelcontextprotocol.io — see Docs/MCP-SERVER.md
 
 [mcp_servers.beedocs]
-command = "/home/bart/.nvm/versions/node/v22.22.2/bin/node"
+command = "dotnet"
 args = [
-    "/run/media/bart/Development/dev/bartbeecoders/BeeDocs/src/beedocs-mcp/dist/index.js",
+    "run",
+    "--no-launch-profile",
+    "--project",
+    "src/BeeDocs.Mcp/BeeDocs.Mcp.csproj",
 ]
 enabled = true
-startup_timeout_sec = 30
+startup_timeout_sec = 60
 tool_timeout_sec = 120
 
 [mcp_servers.beedocs.env]

@@ -2,5 +2,6 @@
   <Folder Name="/src/">
     <Project Path="src/BeeDocs.Api/BeeDocs.Api.csproj" />
     <Project Path="src/BeeDocs.Host/BeeDocs.Host.csproj" />
+    <Project Path="src/BeeDocs.Mcp/BeeDocs.Mcp.csproj" />
   </Folder>
 </Solution>

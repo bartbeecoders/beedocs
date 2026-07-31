@@ -1,16 +1,16 @@
 #Requires -Version 7.0
-# Build a self-contained Windows deployment folder for BeeDocs.Host.
+# Build a Windows deployment folder for BeeDocs.Host.
 #
 # Output layout (dist/windows/ by default):
 #   BeeDocs.Host.exe          supervisor (run this with NSSM or as a Windows service)
 #   appsettings.json          ports, MCP token, paths
 #   api/                      published BeeDocs.Api + wwwroot
-#   mcp/                      built MCP server + production node_modules
+#   mcp/                      published BeeDocs.Mcp (.NET MCP HTTP server)
 #   data/                     created at runtime (SQLite + uploads)
 #   logs/                     child-process logs (api.log, mcp.log)
 #
-# Prerequisites on the build machine: .NET 10 SDK, Node 20+, pnpm (or npx).
-# Prerequisites on the server: .NET 10 runtime, Node 20+ on PATH.
+# Prerequisites on the build machine: .NET 10 SDK, Node 20+, pnpm (or npx) for the web UI.
+# Prerequisites on the server: .NET 10 runtime only (no Node).
 #
 # Usage:
 #   .\scripts\publish-windows.ps1
@@ -54,8 +54,8 @@ $OutRoot = if ($OutputDir) { $OutputDir } else { Join-Path $Root 'dist' 'windows
 $ApiOut = Join-Path $OutRoot 'api'
 $McpOut = Join-Path $OutRoot 'mcp'
 $WebDir = Join-Path $Root 'src' 'beedocs-web'
-$McpDir = Join-Path $Root 'src' 'beedocs-mcp'
 $ApiProj = Join-Path $Root 'src' 'BeeDocs.Api' 'BeeDocs.Api.csproj'
+$McpProj = Join-Path $Root 'src' 'BeeDocs.Mcp' 'BeeDocs.Mcp.csproj'
 $HostProj = Join-Path $Root 'src' 'BeeDocs.Host' 'BeeDocs.Host.csproj'
 $Csproj = $ApiProj
 
@@ -151,7 +151,7 @@ function Invoke-Pnpm($dir, [string[]]$extraArgs) {
     } elseif (Get-Command npx -ErrorAction SilentlyContinue) {
         $pnpm = 'npx --yes pnpm@9.15.9'
     } else {
-        throw 'pnpm (or npx) is required to build the web app and MCP server.'
+        throw 'pnpm (or npx) is required to build the web UI.'
     }
 
     $cmd = "$pnpm $($extraArgs -join ' ')"
@@ -207,11 +207,12 @@ function Invoke-SignExe([string]$exePath) {
 function Invoke-SignPublishOutput {
     $targets = @(
         (Join-Path $OutRoot 'BeeDocs.Host.exe'),
-        (Join-Path $ApiOut 'BeeDocs.Api.exe')
+        (Join-Path $ApiOut 'BeeDocs.Api.exe'),
+        (Join-Path $McpOut 'BeeDocs.Mcp.exe')
     ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
 
     if (-not $targets) {
-        throw "Nothing to sign — expected BeeDocs.Host.exe and/or BeeDocs.Api.exe under $OutRoot"
+        throw "Nothing to sign — expected BeeDocs.Host.exe / BeeDocs.Api.exe / BeeDocs.Mcp.exe under $OutRoot"
     }
 
     foreach ($exe in $targets) {
@@ -266,17 +267,19 @@ $wwwroot = Join-Path $ApiOut 'wwwroot'
 New-Item -ItemType Directory -Force -Path $wwwroot | Out-Null
 Copy-Item -Path (Join-Path $WebDir 'dist' '*') -Destination $wwwroot -Recurse -Force
 
-Write-Step 'Building MCP server'
-if (-not (Test-Path (Join-Path $McpDir 'node_modules'))) {
-    Invoke-Pnpm $McpDir @('install')
+Write-Step 'Publishing MCP server'
+$mcpPublishArgs = @(
+    'publish', $McpProj,
+    '-c', 'Release',
+    '-o', $McpOut,
+    '--runtime', $Runtime
+)
+if ($SelfContained) {
+    $mcpPublishArgs += @('--self-contained', 'true')
+} else {
+    $mcpPublishArgs += @('--self-contained', 'false')
 }
-Invoke-Pnpm $McpDir @('build')
-
-Write-Step 'Packaging MCP runtime'
-Copy-Item -Path (Join-Path $McpDir 'package.json') -Destination $McpOut
-Copy-Item -Path (Join-Path $McpDir 'pnpm-lock.yaml') -Destination $McpOut -ErrorAction SilentlyContinue
-Copy-Item -Path (Join-Path $McpDir 'dist') -Destination (Join-Path $McpOut 'dist') -Recurse -Force
-Invoke-Pnpm $McpOut @('install', '--prod', '--frozen-lockfile')
+& dotnet @mcpPublishArgs
 
 Write-Step 'Publishing host supervisor'
 $hostPublishArgs = @(

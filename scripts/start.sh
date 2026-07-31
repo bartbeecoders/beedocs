@@ -8,7 +8,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_DIR="$ROOT/src/BeeDocs.Api"
 WEB_DIR="$ROOT/src/beedocs-web"
-MCP_DIR="$ROOT/src/beedocs-mcp"
+MCP_DIR="$ROOT/src/BeeDocs.Mcp"
 LOG_DIR="$ROOT/scripts/.logs"
 API_PORT="${API_PORT:-5080}"
 WEB_PORT="${WEB_PORT:-5200}"
@@ -183,18 +183,6 @@ main() {
     (cd "$WEB_DIR" && "${PNPM[@]}" install)
   fi
 
-  if [[ "$SKIP_MCP" != "1" ]]; then
-    if [[ ! -d "$MCP_DIR/node_modules" ]]; then
-      log "Installing MCP dependencies…"
-      (cd "$MCP_DIR" && "${PNPM[@]}" install)
-    fi
-    # tsc output is gitignored, so a fresh clone always needs this once.
-    if [[ ! -f "$MCP_DIR/dist/index.js" ]]; then
-      log "Building MCP server…"
-      (cd "$MCP_DIR" && "${PNPM[@]}" build)
-    fi
-  fi
-
   log "Starting API on $API_URL …"
   (
     cd "$API_DIR"
@@ -236,7 +224,7 @@ main() {
       export MCP_HTTP_PORT="$MCP_PORT"
       export MCP_AUTH_TOKEN="$MCP_AUTH_TOKEN"
       export BEEDOCS_API_URL="$API_URL"
-      exec node dist/index.js
+      exec dotnet run --no-launch-profile
     ) >"$LOG_DIR/mcp.log" 2>&1 &
     MCP_PID=$!
 

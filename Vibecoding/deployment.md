@@ -10,7 +10,7 @@ Host BeeDocs on a Windows server with **`BeeDocs.Host`** — a .NET worker that 
 
 ### Build a deploy folder
 
-On a build machine with .NET 10 SDK, Node 20+, and pnpm:
+On a build machine with .NET 10 SDK, Node 20+, and pnpm (Node/pnpm only for the web UI build):
 
 ```powershell
 .\scripts\publish-windows.ps1
@@ -31,11 +31,11 @@ $env:SIGN_CERT_PASSWORD = '...'
 |------|------|
 | `BeeDocs.Host.exe` | Run this under NSSM or `sc create` |
 | `api/` | Published `BeeDocs.Api` + baked `wwwroot` |
-| `mcp/` | MCP HTTP server (`node dist/index.js`) |
+| `mcp/` | Published `BeeDocs.Mcp` (.NET MCP HTTP server) |
 | `data/` | Created at runtime (SQLite + uploads) |
 | `logs/` | `api.log`, `mcp.log` from child processes |
 
-**Server prerequisites:** .NET 10 runtime, Node 20+ on `PATH`. Edit `appsettings.json` before go-live — especially `BeeDocsHost:McpAuthToken`.
+**Server prerequisites:** .NET 10 runtime only (no Node). Edit `appsettings.json` before go-live — especially `BeeDocsHost:McpAuthToken`.
 
 ### Ports and reverse proxy
 

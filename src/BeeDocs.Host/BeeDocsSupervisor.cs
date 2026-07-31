@@ -24,9 +24,9 @@ public sealed class BeeDocsSupervisor(
         var apiDir = Path.GetFullPath(_options.ApiDirectory, contentRoot);
         var mcpDir = Path.GetFullPath(_options.McpDirectory, contentRoot);
         var apiDll = Path.Combine(apiDir, "BeeDocs.Api.dll");
-        var mcpEntry = Path.Combine(mcpDir, "dist", "index.js");
+        var mcpDll = Path.Combine(mcpDir, "BeeDocs.Mcp.dll");
 
-        ValidateLayout(apiDll, mcpEntry);
+        ValidateLayout(apiDll, mcpDll);
 
         var uiPathBase = BeeDocsHostOptions.NormalizePathBase(_options.UiPathBase);
         var apiPathBase = BeeDocsHostOptions.NormalizePathBase(_options.ApiPathBase);
@@ -67,6 +67,7 @@ public sealed class BeeDocsSupervisor(
         }
 
         _apiProcess = StartDotNet(
+            "API",
             apiDir,
             apiDll,
             Path.Combine(logsRoot, "api.log"),
@@ -78,14 +79,16 @@ public sealed class BeeDocsSupervisor(
                 ["BeeDocs__UploadsPath"] = Path.Combine(dataRoot, "uploads"),
             });
 
-        await WaitForHttpAsync(apiHealthUrl, "API", stoppingToken);
+        await WaitForHttpAsync(apiHealthUrl, "API", _apiProcess, stoppingToken);
 
-        _mcpProcess = StartNode(
+        _mcpProcess = StartDotNet(
+            "MCP",
             mcpDir,
-            mcpEntry,
+            mcpDll,
             Path.Combine(logsRoot, "mcp.log"),
             new Dictionary<string, string?>
             {
+                ["ASPNETCORE_ENVIRONMENT"] = "Production",
                 ["MCP_TRANSPORT"] = "http",
                 ["MCP_HTTP_HOST"] = _options.McpBindHost,
                 ["MCP_HTTP_PORT"] = _options.McpPort.ToString(),
@@ -93,7 +96,7 @@ public sealed class BeeDocsSupervisor(
                 ["BEEDOCS_API_URL"] = apiUrl,
             });
 
-        await WaitForHttpAsync(mcpHealthUrl, "MCP", stoppingToken);
+        await WaitForHttpAsync(mcpHealthUrl, "MCP", _mcpProcess, stoppingToken);
 
         logger.LogInformation("BeeDocs is ready.");
         if (_options.UiPort == _options.ApiPort)
@@ -124,7 +127,7 @@ public sealed class BeeDocsSupervisor(
         await base.StopAsync(cancellationToken);
     }
 
-    private void ValidateLayout(string apiDll, string mcpEntry)
+    private void ValidateLayout(string apiDll, string mcpDll)
     {
         if (!File.Exists(apiDll))
         {
@@ -133,11 +136,11 @@ public sealed class BeeDocsSupervisor(
                 apiDll);
         }
 
-        if (!File.Exists(mcpEntry))
+        if (!File.Exists(mcpDll))
         {
             throw new FileNotFoundException(
-                $"MCP entry not found at '{mcpEntry}'. Run scripts/publish-windows.ps1 to build a deployable folder.",
-                mcpEntry);
+                $"MCP not found at '{mcpDll}'. Run scripts/publish-windows.ps1 to build a deployable folder.",
+                mcpDll);
         }
     }
 
@@ -150,30 +153,16 @@ public sealed class BeeDocsSupervisor(
     }
 
     private Process StartDotNet(
+        string name,
         string workingDirectory,
         string dllPath,
         string logPath,
         IReadOnlyDictionary<string, string?> environment)
     {
-        logger.LogInformation("Starting API ({Dll})", dllPath);
+        logger.LogInformation("Starting {Name} ({Dll})", name, dllPath);
         return StartProcess(
             "dotnet",
             $"\"{dllPath}\"",
-            workingDirectory,
-            logPath,
-            environment);
-    }
-
-    private Process StartNode(
-        string workingDirectory,
-        string scriptPath,
-        string logPath,
-        IReadOnlyDictionary<string, string?> environment)
-    {
-        logger.LogInformation("Starting MCP ({Script})", scriptPath);
-        return StartProcess(
-            _options.NodeExecutable,
-            $"\"{scriptPath}\"",
             workingDirectory,
             logPath,
             environment);
@@ -234,7 +223,11 @@ public sealed class BeeDocsSupervisor(
         logStream.Flush();
     }
 
-    private async Task WaitForHttpAsync(string url, string name, CancellationToken cancellationToken)
+    private async Task WaitForHttpAsync(
+        string url,
+        string name,
+        Process process,
+        CancellationToken cancellationToken)
     {
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
         var deadline = DateTimeOffset.UtcNow.AddSeconds(_options.HealthTimeoutSeconds);
@@ -242,6 +235,14 @@ public sealed class BeeDocsSupervisor(
         while (DateTimeOffset.UtcNow < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (process.HasExited)
+            {
+                throw new InvalidOperationException(
+                    $"{name} exited before becoming ready at {url} (exit code {process.ExitCode}). " +
+                    $"Check logs/{name.ToLowerInvariant()}.log for details.");
+            }
+
             try
             {
                 using var response = await client.GetAsync(url, cancellationToken);

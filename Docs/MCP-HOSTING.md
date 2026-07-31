@@ -290,7 +290,7 @@ or `MCP_PORT` / `MCP_AUTH_TOKEN` to override.
 To run it by hand instead:
 
 ```bash
-cd src/beedocs-mcp && pnpm build
+cd src/BeeDocs.Mcp && dotnet build
 MCP_TRANSPORT=http MCP_HTTP_PORT=5090 MCP_AUTH_TOKEN=dev-token node dist/index.js
 ```
 

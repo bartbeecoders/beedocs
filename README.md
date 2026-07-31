@@ -39,8 +39,10 @@ BeeDocs/
 ├── Vibecoding/Instructions.md
 └── src/
     ├── BeeDocs.Api/          # .NET 10 minimal API + SQLite
+    ├── BeeDocs.Mcp/          # .NET MCP server for AI agents (stdio / HTTP)
+    ├── BeeDocs.Host/         # Windows supervisor (API + MCP)
     ├── beedocs-web/          # React + Vite + pnpm workspace UI
-    └── beedocs-mcp/          # MCP server for AI agents (stdio → API)
+    └── beedocs-mcp/          # Legacy Node MCP (superseded by BeeDocs.Mcp)
 ```
 
 ## REST API (external apps)
@@ -71,7 +73,7 @@ Full reference: **[Docs/REST-API.md](Docs/REST-API.md)**
 Agents can create books, pages, and diagrams via the Model Context Protocol server.
 
 ```bash
-cd src/beedocs-mcp && pnpm install && pnpm build
+cd src/BeeDocs.Mcp && dotnet run
 # API must be running on :5080
 ```
 

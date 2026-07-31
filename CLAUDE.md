@@ -11,8 +11,10 @@ components in one repo, no separate database container (SQLite is embedded):
 
 ```
 src/BeeDocs.Api/    .NET 10 minimal API — REST endpoints, SQLite (file-backed)
+src/BeeDocs.Mcp/    .NET 10 MCP server — exposes the API to AI agents (stdio or HTTP)
+src/BeeDocs.Host/   .NET worker — Windows supervisor for API + MCP
 src/beedocs-web/    React 19 + Vite + TypeScript — the workspace UI
-src/beedocs-mcp/    Node/TypeScript MCP server — exposes the API to AI agents (stdio or HTTP)
+src/beedocs-mcp/    Legacy Node MCP (superseded by BeeDocs.Mcp)
 ```
 
 There is currently no automated test suite in this repo (no test project/folder).
@@ -55,14 +57,14 @@ pnpm build      # tsc -b && vite build
 pnpm lint       # eslint .
 ```
 
-### MCP server (Node/TypeScript)
+### MCP server (.NET)
 
 ```bash
-cd src/beedocs-mcp
-pnpm install
-pnpm build      # tsc -p tsconfig.json -> dist/ (gitignored)
-pnpm dev        # tsx src/index.ts, no build step
-pnpm typecheck  # tsc --noEmit
+cd src/BeeDocs.Mcp
+dotnet run                              # stdio (default)
+# HTTP:
+# MCP_TRANSPORT=http MCP_HTTP_PORT=5090 MCP_AUTH_TOKEN=dev-token \
+#   BEEDOCS_API_URL=http://localhost:5080 dotnet run --no-launch-profile
 ```
 
 Requires the API running (`BEEDOCS_API_URL`, default `http://localhost:5080`).
@@ -83,9 +85,9 @@ podman compose up --build          # or docker compose up --build
 
 ```
 UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microsoft.Data.Sqlite--> SQLite (data/sqlite/beedocs.db)
-                                                     ^
-                                                     | HTTP (client.ts)
-                                        beedocs-mcp (Node, stdio or HTTP :5090)
+ ^
+ | HTTP
+ BeeDocs.Mcp (.NET, stdio or HTTP :5090)
 ```
 
 - **BeeDocs.Api** is a single-file minimal-API (`Program.cs`) mapping `/api/books`,
@@ -123,15 +125,13 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
     used for inline ` ```beediagram ` fences inside Markdown pages.
   Both read/write the same JSON, so a diagram looks identical in either editor,
   in page previews, and in the PDF/HTML export (`export/`).
-- **beedocs-mcp** wraps the whole REST API for AI agents. `createBeeDocsServer()`
-  in `src/index.ts` registers tools (`tools.ts`), resources (`resources.ts`),
-  and prompts (`prompts.ts`) once, and both transports (`http.ts` for
-  Streamable HTTP, stdio built into the SDK) call it — so the two connection
-  modes can't drift apart in what they expose. `client.ts` is the thin HTTP
-  client back to `BeeDocs.Api`. Full tool catalog: `Docs/MCP-TOOLS.md`.
+- **BeeDocs.Mcp** wraps the whole REST API for AI agents (official C# MCP SDK).
+  Tools/resources/prompts live under `Tools/`, `Resources/`, `Prompts/`; both
+  stdio and Streamable HTTP share the same registrations. `BeeDocsApiClient` is
+  the thin HTTP client back to `BeeDocs.Api`. Full tool catalog: `Docs/MCP-TOOLS.md`.
   - stdio: no auth, inherits whatever network access the host process has.
-  - HTTP: stateless (fresh `McpServer` per request, no session pinning),
-    optional `MCP_AUTH_TOKEN` bearer auth — logs a loud warning if unset.
+  - HTTP: stateless Streamable HTTP on `/mcp`, optional `MCP_AUTH_TOKEN` bearer
+    auth — logs a loud warning if unset. `/healthz` is unauthenticated.
   - Hosted (K3S) instance additionally sits behind Cloudflare Access with a
     service token; see `Docs/MCP-HOSTING.md` for the two-hostname setup
     (`docs.<domain>` interactive SSO vs `mcp.<domain>` service auth) and why the

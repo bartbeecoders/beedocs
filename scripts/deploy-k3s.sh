@@ -15,7 +15,7 @@ set -euo pipefail
 #                  NodePort 32095 — Cloudflare Tunnel forwards the public
 #                  hostname here (tunnel config managed outside this repo).
 #
-#   • beedocs-mcp  Node sidecar in the same pod, MCP over Streamable HTTP:
+#   • beedocs-mcp  .NET sidecar in the same pod, MCP over Streamable HTTP:
 #                    /mcp         agent endpoint
 #                    /healthz     probe endpoint
 #                  NodePort 32096 — its own tunnel hostname, because agents
@@ -114,14 +114,6 @@ bump_build_number() {
   APP_VERSION="$next"
 }
 
-# The MCP sidecar versions independently — package.json "version".
-MCP_VERSION=$(grep -m1 '"version"' "$ROOT_DIR/src/beedocs-mcp/package.json" \
-  | sed -E 's/.*"version": *"([^"]+)".*/\1/')
-if [[ -z "$MCP_VERSION" ]]; then
-  echo "could not parse version from src/beedocs-mcp/package.json"
-  exit 1
-fi
-
 ssh_vps() {
   local cmd="$1"
   ssh -o StrictHostKeyChecking=accept-new "$VPS_USER@$VPS_IP" "bash -lc $(printf %q "$cmd")"
@@ -154,13 +146,13 @@ build_image() {
     -f "$ROOT_DIR/Dockerfile" \
     "$ROOT_DIR"
 
-  echo "==> Building $MCP_IMAGE:$MCP_VERSION"
+  echo "==> Building $MCP_IMAGE:$APP_VERSION"
   podman build \
     --pull=newer \
     -t "$MCP_IMAGE:latest" \
-    -t "$MCP_IMAGE:$MCP_VERSION" \
-    -f "$ROOT_DIR/src/beedocs-mcp/Dockerfile" \
-    "$ROOT_DIR/src/beedocs-mcp"
+    -t "$MCP_IMAGE:$APP_VERSION" \
+    -f "$ROOT_DIR/src/BeeDocs.Mcp/Dockerfile" \
+    "$ROOT_DIR"
 }
 
 # -----------------------------------------------------------------------------
@@ -180,7 +172,7 @@ push_image() {
 
   echo "==> Pushing $MCP_IMAGE"
   podman push "$MCP_IMAGE:latest"
-  podman push "$MCP_IMAGE:$MCP_VERSION"
+  podman push "$MCP_IMAGE:$APP_VERSION"
 }
 
 # -----------------------------------------------------------------------------
@@ -222,7 +214,7 @@ deploy_manifests() {
   kubectl_vps "-n $NAMESPACE rollout status deployment beedocs --timeout=300s"
 
   echo ""
-  echo "Deployed BeeDocs v$APP_VERSION (mcp v$MCP_VERSION)"
+  echo "Deployed BeeDocs v$APP_VERSION (mcp v$APP_VERSION)"
   echo "  • Web UI:    http://$VPS_IP:$NODE_PORT/"
   echo "  • Health:    curl -s http://$VPS_IP:$NODE_PORT/api/health"
   echo "  • MCP:       http://$VPS_IP:$MCP_NODE_PORT/mcp"
