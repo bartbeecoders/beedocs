@@ -19,7 +19,7 @@ TestResults/
 *.snupkg
 BenchmarkDotNet.Artifacts/
 
-# --- Runtime data (SurrealDB / uploads) ---
+# --- Runtime data (SQLite / uploads) ---
 data/
 src/BeeDocs.Api/data/
 

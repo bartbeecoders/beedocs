@@ -10,13 +10,9 @@ data:
   ASPNETCORE_URLS: "http://+:8080"
   ASPNETCORE_ENVIRONMENT: "Production"
 
-  # Both paths live on the PVC mounted at /data so the RocksDB store and the
+  # Both paths live on the PVC mounted at /data so the SQLite store and the
   # uploaded images survive pod restarts and image upgrades.
-  BeeDocs__DataPath: "/data/surreal"
+  BeeDocs__DataPath: "/data/sqlite"
   BeeDocs__UploadsPath: "/data/uploads"
-  ConnectionStrings__SurrealDB: "Endpoint=rocksdb:///data/surreal"
-
-  BeeDocs__Namespace: "beedocs"
-  BeeDocs__Database: "main"
   # Optional: protect /api/v1 (external publish API). Prefer a Secret in production.
   # BeeDocs__ApiKey: ""

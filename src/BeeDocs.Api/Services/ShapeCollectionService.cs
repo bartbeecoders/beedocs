@@ -1,6 +1,5 @@
 using BeeDocs.Api.Models;
-using SurrealDb.Net;
-using SurrealDb.Net.Models;
+using Microsoft.Data.Sqlite;
 
 namespace BeeDocs.Api.Services;
 
@@ -29,37 +28,39 @@ public interface IShapeCollectionService
     Task DeleteByBookAsync(string bookId, CancellationToken ct = default);
 }
 
-public sealed class ShapeCollectionService(ISurrealDbClient db) : IShapeCollectionService
+public sealed class ShapeCollectionService(SqliteConnectionFactory db) : IShapeCollectionService
 {
-    private const string Table = "shape_collection";
-    private const string Books = "book";
-
     public async Task<IReadOnlyList<ShapeCollectionDto>> ListByBookAsync(string bookId, CancellationToken ct = default)
     {
-        var rows = await db.Select<ShapeCollection>(Table, ct);
-        var want = NormalizeId(bookId);
-        return rows
-            .Where(c => !IsAppLevel(c) && NormalizeId(c.BookId) == want)
-            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenByDescending(c => c.UpdatedAt)
-            .Select(ToDto)
-            .ToList();
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, book_id, name, description, source, created_at, updated_at
+            FROM shape_collection
+            WHERE book_id IS NOT NULL AND book_id != '' AND book_id = $book_id
+            ORDER BY name COLLATE NOCASE, updated_at DESC
+            """;
+        SqliteHelpers.Add(cmd, "$book_id", bookId);
+        return await ReadAllAsync(cmd, ct);
     }
 
     public async Task<IReadOnlyList<ShapeCollectionDto>> ListAppAsync(CancellationToken ct = default)
     {
-        var rows = await db.Select<ShapeCollection>(Table, ct);
-        return rows
-            .Where(IsAppLevel)
-            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenByDescending(c => c.UpdatedAt)
-            .Select(ToDto)
-            .ToList();
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, book_id, name, description, source, created_at, updated_at
+            FROM shape_collection
+            WHERE book_id IS NULL OR book_id = ''
+            ORDER BY name COLLATE NOCASE, updated_at DESC
+            """;
+        return await ReadAllAsync(cmd, ct);
     }
 
     public async Task<ShapeCollectionDto?> GetAsync(string id, CancellationToken ct = default)
     {
-        var row = await db.Select<ShapeCollection>(ToThing(Table, id), ct);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var row = await SelectAsync(conn, id, ct);
         return row is null ? null : ToDto(row);
     }
 
@@ -68,17 +69,23 @@ public sealed class ShapeCollectionService(ISurrealDbClient db) : IShapeCollecti
         CreateShapeCollectionRequest request,
         CancellationToken ct = default)
     {
+        await using var conn = await db.OpenConnectionAsync(ct);
         string? resolvedBookId = null;
         if (!string.IsNullOrWhiteSpace(bookId))
         {
-            var book = await db.Select<Book>(ToThing(Books, bookId), ct)
-                ?? throw new KeyNotFoundException($"Book '{bookId}' not found.");
-            resolvedBookId = string.IsNullOrEmpty(IdOf(book)) ? NormalizeId(bookId) : IdOf(book);
+            await using var check = conn.CreateCommand();
+            check.CommandText = "SELECT id FROM book WHERE id = $id LIMIT 1";
+            SqliteHelpers.Add(check, "$id", bookId);
+            var found = await check.ExecuteScalarAsync(ct) as string;
+            if (found is null)
+                throw new KeyNotFoundException($"Book '{bookId}' not found.");
+            resolvedBookId = found;
         }
 
         var now = DateTimeOffset.UtcNow;
         var row = new ShapeCollection
         {
+            Id = SqliteHelpers.NewId(),
             BookId = resolvedBookId,
             Name = request.Name.Trim(),
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
@@ -87,9 +94,20 @@ public sealed class ShapeCollectionService(ISurrealDbClient db) : IShapeCollecti
             UpdatedAt = now,
         };
 
-        var created = await db.Create(Table, row, ct)
-            ?? throw new InvalidOperationException("Failed to create shape collection.");
-        return ToDto(created);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO shape_collection (id, book_id, name, description, source, created_at, updated_at)
+            VALUES ($id, $book_id, $name, $description, $source, $created_at, $updated_at)
+            """;
+        SqliteHelpers.Add(cmd, "$id", row.Id);
+        SqliteHelpers.Add(cmd, "$book_id", row.BookId);
+        SqliteHelpers.Add(cmd, "$name", row.Name);
+        SqliteHelpers.Add(cmd, "$description", row.Description);
+        SqliteHelpers.Add(cmd, "$source", row.Source);
+        SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(row.CreatedAt));
+        SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(row.UpdatedAt));
+        await cmd.ExecuteNonQueryAsync(ct);
+        return ToDto(row);
     }
 
     public async Task<ShapeCollectionDto?> UpdateAsync(
@@ -97,7 +115,8 @@ public sealed class ShapeCollectionService(ISurrealDbClient db) : IShapeCollecti
         UpdateShapeCollectionRequest request,
         CancellationToken ct = default)
     {
-        var existing = await db.Select<ShapeCollection>(ToThing(Table, id), ct);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var existing = await SelectAsync(conn, id, ct);
         if (existing is null) return null;
 
         existing.Name = request.Name.Trim();
@@ -106,72 +125,92 @@ public sealed class ShapeCollectionService(ISurrealDbClient db) : IShapeCollecti
             existing.Source = request.Source;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
-        var updated = await db.Upsert<ShapeCollection, ShapeCollection>(ToThing(Table, id), existing, ct);
-        return updated is null ? null : ToDto(updated);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE shape_collection SET name = $name, description = $description, source = $source,
+              updated_at = $updated_at
+            WHERE id = $id
+            """;
+        SqliteHelpers.Add(cmd, "$id", existing.Id);
+        SqliteHelpers.Add(cmd, "$name", existing.Name);
+        SqliteHelpers.Add(cmd, "$description", existing.Description);
+        SqliteHelpers.Add(cmd, "$source", existing.Source);
+        SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
+        await cmd.ExecuteNonQueryAsync(ct);
+        return ToDto(existing);
     }
 
     public async Task<bool> DeleteAsync(string id, CancellationToken ct = default)
     {
-        var existing = await db.Select<ShapeCollection>(ToThing(Table, id), ct);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var existing = await SelectAsync(conn, id, ct);
         if (existing is null) return false;
-        await db.Delete(ToThing(Table, id), ct);
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM shape_collection WHERE id = $id";
+        SqliteHelpers.Add(cmd, "$id", id);
+        await cmd.ExecuteNonQueryAsync(ct);
         return true;
     }
 
     public async Task DeleteByBookAsync(string bookId, CancellationToken ct = default)
     {
-        var want = NormalizeId(bookId);
-        var rows = await db.Select<ShapeCollection>(Table, ct);
-        foreach (var row in rows.Where(c => !IsAppLevel(c) && NormalizeId(c.BookId) == want))
-        {
-            if (row.Id is not null)
-                await db.Delete(row.Id, ct);
-        }
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            DELETE FROM shape_collection
+            WHERE book_id IS NOT NULL AND book_id != '' AND book_id = $book_id
+            """;
+        SqliteHelpers.Add(cmd, "$book_id", bookId);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private static bool IsAppLevel(ShapeCollection c) =>
-        string.IsNullOrWhiteSpace(c.BookId);
-
-    private static string NormalizeId(string? id)
+    private static async Task<ShapeCollection?> SelectAsync(SqliteConnection conn, string id, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(id)) return string.Empty;
-        var s = id.Trim();
-        var idx = s.IndexOf(':');
-        return idx >= 0 ? s[(idx + 1)..] : s;
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, book_id, name, description, source, created_at, updated_at
+            FROM shape_collection WHERE id = $id LIMIT 1
+            """;
+        SqliteHelpers.Add(cmd, "$id", id);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        return ReadEntity(reader);
     }
 
-    private static string IdOf(Record? record)
+    private static async Task<IReadOnlyList<ShapeCollectionDto>> ReadAllAsync(SqliteCommand cmd, CancellationToken ct)
     {
-        if (record?.Id is null) return string.Empty;
-        try
-        {
-            return record.Id.DeserializeId<string>();
-        }
-        catch
-        {
-            if (record.Id is RecordIdOfString typed)
-                return typed.Id;
-            return NormalizeId(record.Id.ToString());
-        }
+        var list = new List<ShapeCollectionDto>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            list.Add(ToDto(ReadEntity(reader)));
+        return list;
     }
 
-    private static RecordId ToThing(string table, string id) =>
-        RecordId.From(table, NormalizeId(id));
+    private static ShapeCollection ReadEntity(SqliteDataReader reader) => new()
+    {
+        Id = reader.GetString(0),
+        BookId = SqliteHelpers.GetNullableString(reader, 1),
+        Name = reader.GetString(2),
+        Description = SqliteHelpers.GetNullableString(reader, 3),
+        Source = reader.GetString(4),
+        CreatedAt = SqliteHelpers.ReadTimestamp(reader, 5),
+        UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 6),
+    };
 
     private static DateTimeOffset Coalesce(DateTimeOffset value) =>
         value == default ? DateTimeOffset.UtcNow : value;
 
     private static ShapeCollectionDto ToDto(ShapeCollection c)
     {
-        var bookId = NormalizeId(c.BookId);
+        var bookId = string.IsNullOrWhiteSpace(c.BookId) ? null : c.BookId;
         return new(
-            Id: IdOf(c),
-            BookId: string.IsNullOrEmpty(bookId) ? null : bookId,
+            Id: c.Id,
+            BookId: bookId,
             Name: c.Name,
             Description: c.Description,
             Source: c.Source ?? string.Empty,
             CreatedAt: Coalesce(c.CreatedAt),
-            UpdatedAt: Coalesce(c.UpdatedAt)
-        );
+            UpdatedAt: Coalesce(c.UpdatedAt));
     }
 }

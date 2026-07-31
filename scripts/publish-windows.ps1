@@ -6,7 +6,7 @@
 #   appsettings.json          ports, MCP token, paths
 #   api/                      published BeeDocs.Api + wwwroot
 #   mcp/                      built MCP server + production node_modules
-#   data/                     created at runtime (SurrealDB + uploads)
+#   data/                     created at runtime (SQLite + uploads)
 #   logs/                     child-process logs (api.log, mcp.log)
 #
 # Prerequisites on the build machine: .NET 10 SDK, Node 20+, pnpm (or npx).

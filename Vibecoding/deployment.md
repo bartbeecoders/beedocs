@@ -32,7 +32,7 @@ $env:SIGN_CERT_PASSWORD = '...'
 | `BeeDocs.Host.exe` | Run this under NSSM or `sc create` |
 | `api/` | Published `BeeDocs.Api` + baked `wwwroot` |
 | `mcp/` | MCP HTTP server (`node dist/index.js`) |
-| `data/` | Created at runtime (SurrealDB + uploads) |
+| `data/` | Created at runtime (SQLite + uploads) |
 | `logs/` | `api.log`, `mcp.log` from child processes |
 
 **Server prerequisites:** .NET 10 runtime, Node 20+ on `PATH`. Edit `appsettings.json` before go-live — especially `BeeDocsHost:McpAuthToken`.

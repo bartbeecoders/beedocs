@@ -5,7 +5,7 @@ Started from `Instructions.md`. Scaffolded and verified.
 ## Done
 
 - Solution layout: `BeeDocs.slnx`, `src/BeeDocs.Api`, `src/beedocs-web`
-- SurrealDB **embedded RocksDB** (`SurrealDb.Embedded.RocksDb`) + schema bootstrap
+- SQLite **file-backed** (`Microsoft.Data.Sqlite`) + schema bootstrap
 - Domain: Book, Chapter, Page, PageRevision, Diagram
 - REST: books / pages / chapters CRUD; page revisions on update
 - React UI: home (books), book pages list, Markdown editor with edit/split/preview

@@ -99,12 +99,12 @@ export function HelpPanel() {
           A single-page workspace for architecture documentation: a library of{' '}
           <strong>books → folders → pages</strong>, Markdown with live Mermaid and C4 diagrams, a
           built-in <strong>BeeDiagram</strong> canvas, image uploads, and PDF/HTML export. Everything
-          is stored in an embedded SurrealDB next to the .NET API — no external services.
+          is stored in an embedded SQLite database next to the .NET API — no external services.
         </p>
         <dl className="help-facts">
           <div>
             <dt>Stack</dt>
-            <dd>.NET 10 minimal API · SurrealDB (RocksDB) · React + Vite</dd>
+            <dd>.NET 10 minimal API · SQLite · React + Vite</dd>
           </div>
           <div>
             <dt>This instance</dt>

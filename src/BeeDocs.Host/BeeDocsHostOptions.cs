@@ -55,7 +55,7 @@ public sealed class BeeDocsHostOptions
     /// <summary>Node executable name or full path.</summary>
     public string NodeExecutable { get; set; } = "node";
 
-    /// <summary>Persistent data root (SurrealDB + uploads), relative to the host content root.</summary>
+    /// <summary>Persistent data root (SQLite + uploads), relative to the host content root.</summary>
     public string DataDirectory { get; set; } = "data";
 
     public string LogsDirectory { get; set; } = "logs";

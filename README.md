@@ -2,7 +2,7 @@
 
 Self-hosted documentation platform for software + hardware systems architecture.
 
-MVP: **Books → Pages**, Markdown editor, **Mermaid** (incl. C4-style) diagrams, embedded **SurrealDB (RocksDB)**, **.NET 10** API + **React/Vite** UI.
+MVP: **Books → Pages**, Markdown editor, **Mermaid** (incl. C4-style) diagrams, embedded **SQLite**, **.NET 10** API + **React/Vite** UI.
 
 ## Architecture (C4-style)
 
@@ -15,12 +15,12 @@ C4Container
     System_Boundary(beedocs, "BeeDocs") {
         Container(web, "beedocs-web", "React + Vite", "Books list, page editor, Markdown + Mermaid preview")
         Container(api, "BeeDocs.Api", "ASP.NET Core 10", "REST API, CRUD, revision snapshots")
-        ContainerDb(db, "SurrealDB", "Embedded RocksDB", "Books, pages, chapters, page_revisions")
+        ContainerDb(db, "SQLite", "File-backed", "Books, pages, chapters, page_revisions")
     }
 
     Rel(writer, web, "Uses")
     Rel(web, api, "JSON /api/*")
-    Rel(api, db, "SurrealDb.Net SDK")
+    Rel(api, db, "Microsoft.Data.Sqlite")
 ```
 
 **Context:** team documentation for systems architecture (C4, networks, hardware inventories — later).
@@ -38,7 +38,7 @@ BeeDocs/
 ├── scripts/deploy-k3s.sh     # build → push → deploy to the K3S server
 ├── Vibecoding/Instructions.md
 └── src/
-    ├── BeeDocs.Api/          # .NET 10 minimal API + SurrealDB
+    ├── BeeDocs.Api/          # .NET 10 minimal API + SQLite
     ├── beedocs-web/          # React + Vite + pnpm workspace UI
     └── beedocs-mcp/          # MCP server for AI agents (stdio → API)
 ```
@@ -160,7 +160,11 @@ pnpm install
 pnpm dev
 ```
 
-Data is stored under `src/BeeDocs.Api/data/surreal` (embedded RocksDB).
+Data is stored under `src/BeeDocs.Api/data/sqlite/beedocs.db` (SQLite).
+
+Existing SurrealDB data is **not** auto-migrated. Export a `.beedocs` archive
+from the old instance (`GET /api/books/{id}/export?format=archive`) and import
+it after upgrading (`POST /api/import`).
 
 ## Docker / Podman
 
@@ -176,7 +180,7 @@ Open http://localhost:8080 (static UI + API; serve static from API after wiring 
 ## Deploy to K3S
 
 BeeDocs runs on the K3S server as a single pod — one ASP.NET Core process serving
-the SPA, the API, and uploaded images. SurrealDB is embedded (RocksDB), so there is
+the SPA, the API, and uploaded images. SQLite is file-backed inside the pod, so there is
 no separate database container.
 
 ```bash
@@ -208,7 +212,7 @@ commit.
 | Version | `<Version>` in `BeeDocs.Api.csproj`, shown as a pill in the app header |
 | **NodePort — web** | **32095** → container `8080` |
 | **NodePort — MCP** | **32096** → container `5090` (`/mcp`) |
-| Storage | one PVC at `/data` — RocksDB in `/data/surreal`, uploads in `/data/uploads` |
+| Storage | one PVC at `/data` — SQLite in `/data/sqlite`, uploads in `/data/uploads` |
 | Health | `GET /api/health` and `GET /healthz` (startup, readiness, and liveness probes) |
 
 Manifests live in [`k8s/beedocs/`](k8s/beedocs/) and are applied by the script.
@@ -222,8 +226,8 @@ rule in lockstep. Access policies and the agent setup are documented in
 must block the NodePorts, or Cloudflare Access can be bypassed entirely.
 
 > The deployment is pinned to `replicas: 1` with a `Recreate` strategy on purpose:
-> RocksDB holds an exclusive lock on its data directory, so a rolling second pod
-> would fail to start.
+> SQLite is a single-writer file store on a ReadWriteOnce volume, so a rolling
+> second pod would contend for the same database file.
 
 ## API (MVP)
 

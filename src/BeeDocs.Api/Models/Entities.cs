@@ -1,10 +1,9 @@
-using SurrealDb.Net.Models;
-
 namespace BeeDocs.Api.Models;
 
 /// <summary>Top-level collection of related chapters/pages (BookStack-style book).</summary>
-public sealed class Book : Record
+public sealed class Book
 {
+    public string Id { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string Slug { get; set; } = string.Empty;
@@ -14,8 +13,9 @@ public sealed class Book : Record
 }
 
 /// <summary>Optional grouping within a book (chapter).</summary>
-public sealed class Chapter : Record
+public sealed class Chapter
 {
+    public string Id { get; set; } = string.Empty;
     public string BookId { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
@@ -25,8 +25,9 @@ public sealed class Chapter : Record
 }
 
 /// <summary>Documentation page with Markdown body and optional Mermaid/C4 content.</summary>
-public sealed class Page : Record
+public sealed class Page
 {
+    public string Id { get; set; } = string.Empty;
     public string BookId { get; set; } = string.Empty;
     public string? ChapterId { get; set; }
     public string Title { get; set; } = string.Empty;
@@ -40,8 +41,9 @@ public sealed class Page : Record
 }
 
 /// <summary>Immutable snapshot of a page for version history (MVP stub).</summary>
-public sealed class PageRevision : Record
+public sealed class PageRevision
 {
+    public string Id { get; set; } = string.Empty;
     public string PageId { get; set; } = string.Empty;
     public int Version { get; set; }
     public string Title { get; set; } = string.Empty;
@@ -50,8 +52,9 @@ public sealed class PageRevision : Record
 }
 
 /// <summary>Custom or text-based architecture diagram (BeeDiagram canvas, Mermaid, …).</summary>
-public sealed class Diagram : Record
+public sealed class Diagram
 {
+    public string Id { get; set; } = string.Empty;
     /// <summary>Owning book (required for library listing).</summary>
     public string BookId { get; set; } = string.Empty;
     /// <summary>Optional page this diagram is primarily attached to.</summary>
@@ -73,8 +76,9 @@ public sealed class Diagram : Record
 /// When <see cref="BookId"/> is null/empty the collection is app-wide;
 /// otherwise it belongs to that book only.
 /// </summary>
-public sealed class ShapeCollection : Record
+public sealed class ShapeCollection
 {
+    public string Id { get; set; } = string.Empty;
     /// <summary>Owning book id, or null/empty for the app-wide library.</summary>
     public string? BookId { get; set; }
     public string Name { get; set; } = string.Empty;

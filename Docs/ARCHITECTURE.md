@@ -10,7 +10,7 @@
 │ BeeDocs.Api (.NET 10)      http://localhost:5080         │
 │  /api/*     UI CRUD (id-based)                           │
 │  /api/v1/*  External publish API (slug-based books/pages)│
-│  SurrealDB embedded (RocksDB under data/surreal)         │
+│  SQLite (file under data/sqlite/beedocs.db)              │
 └───────┬────────────────────▲─────────────────────────────┘
         │                    │ HTTP
         │                    │

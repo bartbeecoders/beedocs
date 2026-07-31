@@ -7,10 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 BeeDocs is a self-hosted documentation platform (BookStack-style) for software +
 hardware systems architecture: Books → Pages, Markdown editor, Mermaid/C4
 diagrams, and a custom draw.io-style diagram editor ("BeeDiagram"). Three
-components in one repo, no separate database container (SurrealDB is embedded):
+components in one repo, no separate database container (SQLite is embedded):
 
 ```
-src/BeeDocs.Api/    .NET 10 minimal API — REST endpoints, SurrealDB (embedded RocksDB)
+src/BeeDocs.Api/    .NET 10 minimal API — REST endpoints, SQLite (file-backed)
 src/beedocs-web/    React 19 + Vite + TypeScript — the workspace UI
 src/beedocs-mcp/    Node/TypeScript MCP server — exposes the API to AI agents (stdio or HTTP)
 ```
@@ -82,7 +82,7 @@ podman compose up --build          # or docker compose up --build
 ## Architecture
 
 ```
-UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --SurrealDb.Net--> SurrealDB (embedded RocksDB, data/surreal)
+UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microsoft.Data.Sqlite--> SQLite (data/sqlite/beedocs.db)
                                                      ^
                                                      | HTTP (client.ts)
                                         beedocs-mcp (Node, stdio or HTTP :5090)
@@ -94,14 +94,13 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Surreal
   `/api/health` and `/api/version`. Business logic lives in `Services/`
   (`DocumentService` for books/chapters/pages, `DiagramService` for diagrams);
   entities are in `Models/Entities.cs` (`Book`, `Chapter`, `Page`,
-  `PageRevision`, `Diagram` — all `SurrealDb.Net` `Record` types). Every page
+  `PageRevision`, `Diagram` — plain POCOs with string ids). Every page
   update writes a `PageRevision` snapshot.
-- **SurrealDB** runs embedded — RocksDB-backed by default
-  (`data/surreal` under the API content root, configurable via
-  `BeeDocs:DataPath`), or `mem://` for in-process testing. There is no separate
-  DB server or connection string to manage in dev.
+- **SQLite** is file-backed by default (`data/sqlite/beedocs.db` under the API
+  content root, directory configurable via `BeeDocs:DataPath`, or a full
+  `ConnectionStrings:Sqlite`). There is no separate DB server.
 - **Uploaded images** are served from `BeeDocs:UploadsPath` (default
-  `data/uploads`) at `/uploads/*`, separate from the RocksDB data dir so
+  `data/uploads`) at `/uploads/*`, separate from the SQLite data dir so
   container deployments can point both at the same persistent volume.
 - **Production hosting**: the Dockerfile builds the web app into the API's
   `wwwroot/`; `Program.cs` serves static files and falls back to `index.html`

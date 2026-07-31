@@ -6,7 +6,7 @@ metadata:
   labels:
     app.kubernetes.io/name: beedocs
 spec:
-  # RocksDB is a single-writer embedded store, so the volume is only ever
+  # SQLite is a single-writer file store, so the volume is only ever
   # mounted by one pod (see the Recreate strategy in deployment.yaml).
   accessModes:
     - ReadWriteOnce

@@ -23,15 +23,15 @@ set -euo pipefail
 #                  the web UI uses interactive SSO. Reaches the API over the
 #                  pod loopback, so BeeDocs itself stays off the cluster net.
 #
-#   SurrealDB runs *embedded* on RocksDB inside the pod — there is no separate
+#   SQLite runs as a file store inside the pod — there is no separate
 #   database container. That is why the deployment is pinned to one replica
-#   with a Recreate strategy: RocksDB takes an exclusive lock on its directory.
+#   with a Recreate strategy: a single writer owns the database file.
 #
 # Namespace: beedocs
 # Registry:  beecodersregistry.azurecr.io  (reuses the existing acr-secret
 #            ImagePullSecret — copied into this namespace on first deploy.)
-# Storage:   one PVC mounted at /data, holding both the RocksDB store
-#            (/data/surreal) and uploaded images (/data/uploads).
+# Storage:   one PVC mounted at /data, holding both the SQLite store
+#            (/data/sqlite/beedocs.db) and uploaded images (/data/uploads).
 #
 # Usage:
 #   ./scripts/deploy-k3s.sh [all|build|push|deploy|status|logs|shell]

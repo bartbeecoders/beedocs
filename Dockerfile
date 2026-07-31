@@ -22,9 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY --from=api-build /app/api ./
 COPY --from=web-build /web/dist ./wwwroot
 ENV ASPNETCORE_URLS=http://+:8080
-ENV BeeDocs__DataPath=/data/surreal
+ENV BeeDocs__DataPath=/data/sqlite
 ENV BeeDocs__UploadsPath=/data/uploads
-ENV ConnectionStrings__SurrealDB=Endpoint=rocksdb:///data/surreal
 EXPOSE 8080
 VOLUME ["/data"]
 ENTRYPOINT ["dotnet", "BeeDocs.Api.dll"]

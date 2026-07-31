@@ -1,6 +1,5 @@
 using BeeDocs.Api.Models;
-using SurrealDb.Net;
-using SurrealDb.Net.Models;
+using Microsoft.Data.Sqlite;
 
 namespace BeeDocs.Api.Services;
 
@@ -37,62 +36,73 @@ public interface IDocumentService
     Task<PublishDocumentResult> PublishDocumentAsync(PublishDocumentRequest request, CancellationToken ct = default);
 }
 
-public sealed class DocumentService(ISurrealDbClient db) : IDocumentService
+public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentService
 {
-    private const string Books = "book";
-    private const string Chapters = "chapter";
-    private const string ShapeCollections = "shape_collection";
-    private const string Pages = "page";
-    private const string Revisions = "page_revision";
-
     public async Task<IReadOnlyList<BookDto>> ListBooksAsync(CancellationToken ct = default)
     {
-        var rows = await db.Select<Book>(Books, ct);
-        return rows
-            .OrderBy(b => b.SortOrder)
-            .ThenBy(b => b.Title)
-            .Select(ToDto)
-            .ToList();
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, title, description, slug, sort_order, created_at, updated_at
+            FROM book
+            ORDER BY sort_order, title COLLATE NOCASE
+            """;
+        var list = new List<BookDto>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            list.Add(ReadBookDto(reader));
+        return list;
     }
 
     public async Task<BookDto?> GetBookAsync(string id, CancellationToken ct = default)
     {
-        var book = await db.Select<Book>(ToThing(Books, id), ct);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var book = await SelectBookAsync(conn, id, ct);
         return book is null ? null : ToDto(book);
     }
 
     public async Task<BookDto?> GetBookBySlugAsync(string slug, CancellationToken ct = default)
     {
         var want = SlugHelper.Slugify(slug);
-        var rows = await db.Select<Book>(Books, ct);
-        var book = rows.FirstOrDefault(b =>
-            string.Equals(b.Slug, want, StringComparison.OrdinalIgnoreCase));
-        return book is null ? null : ToDto(book);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, title, description, slug, sort_order, created_at, updated_at
+            FROM book WHERE lower(slug) = lower($slug) LIMIT 1
+            """;
+        SqliteHelpers.Add(cmd, "$slug", want);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        return ReadBookDto(reader);
     }
 
     public async Task<BookDto> CreateBookAsync(CreateBookRequest request, CancellationToken ct = default)
     {
+        await using var conn = await db.OpenConnectionAsync(ct);
         var now = DateTimeOffset.UtcNow;
+        var slug = string.IsNullOrWhiteSpace(request.Slug)
+            ? await UniqueBookSlugAsync(conn, SlugHelper.Slugify(request.Title), ct)
+            : SlugHelper.Slugify(request.Slug);
+
         var book = new Book
         {
+            Id = SqliteHelpers.NewId(),
             Title = request.Title.Trim(),
             Description = request.Description?.Trim(),
-            Slug = string.IsNullOrWhiteSpace(request.Slug)
-                ? await UniqueBookSlugAsync(SlugHelper.Slugify(request.Title), ct)
-                : SlugHelper.Slugify(request.Slug),
+            Slug = slug,
             SortOrder = 0,
             CreatedAt = now,
-            UpdatedAt = now
+            UpdatedAt = now,
         };
 
-        var created = await db.Create(Books, book, ct)
-            ?? throw new InvalidOperationException("Failed to create book.");
-        return ToDto(created);
+        await InsertBookAsync(conn, book, ct);
+        return ToDto(book);
     }
 
     public async Task<BookDto?> UpdateBookAsync(string id, UpdateBookRequest request, CancellationToken ct = default)
     {
-        var existing = await db.Select<Book>(ToThing(Books, id), ct);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var existing = await SelectBookAsync(conn, id, ct);
         if (existing is null) return null;
 
         existing.Title = request.Title.Trim();
@@ -103,40 +113,40 @@ public sealed class DocumentService(ISurrealDbClient db) : IDocumentService
             existing.SortOrder = order;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
-        var updated = await db.Upsert<Book, Book>(ToThing(Books, id), existing, ct);
-        return updated is null ? null : ToDto(updated);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE book SET title = $title, description = $description, slug = $slug,
+              sort_order = $sort_order, updated_at = $updated_at
+            WHERE id = $id
+            """;
+        SqliteHelpers.Add(cmd, "$id", existing.Id);
+        SqliteHelpers.Add(cmd, "$title", existing.Title);
+        SqliteHelpers.Add(cmd, "$description", existing.Description);
+        SqliteHelpers.Add(cmd, "$slug", existing.Slug);
+        SqliteHelpers.Add(cmd, "$sort_order", existing.SortOrder);
+        SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
+        await cmd.ExecuteNonQueryAsync(ct);
+        return ToDto(existing);
     }
 
     public async Task<bool> DeleteBookAsync(string id, CancellationToken ct = default)
     {
-        var existing = await db.Select<Book>(ToThing(Books, id), ct);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var existing = await SelectBookAsync(conn, id, ct);
         if (existing is null) return false;
 
-        // Cascade pages, chapters and shape collections for this book
-        var allPages = await db.Select<Page>(Pages, ct);
-        foreach (var page in allPages.Where(p => NormalizeId(p.BookId) == NormalizeId(id)))
+        // Cascade pages, chapters and book-scoped shape collections (same as before).
+        await using (var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct))
         {
-            if (page.Id is not null)
-                await db.Delete(page.Id, ct);
+            await ExecAsync(conn, tx, "DELETE FROM page WHERE book_id = $id", ("$id", id), ct);
+            await ExecAsync(conn, tx, "DELETE FROM chapter WHERE book_id = $id", ("$id", id), ct);
+            await ExecAsync(conn, tx,
+                "DELETE FROM shape_collection WHERE book_id IS NOT NULL AND book_id != '' AND book_id = $id",
+                ("$id", id), ct);
+            await ExecAsync(conn, tx, "DELETE FROM book WHERE id = $id", ("$id", id), ct);
+            await tx.CommitAsync(ct);
         }
 
-        var allChapters = await db.Select<Chapter>(Chapters, ct);
-        foreach (var chapter in allChapters.Where(c => NormalizeId(c.BookId) == NormalizeId(id)))
-        {
-            if (chapter.Id is not null)
-                await db.Delete(chapter.Id, ct);
-        }
-
-        // Book-scoped collections only — app-wide library entries keep living.
-        var allCollections = await db.Select<ShapeCollection>(ShapeCollections, ct);
-        foreach (var collection in allCollections.Where(c =>
-                     !string.IsNullOrWhiteSpace(c.BookId) && NormalizeId(c.BookId) == NormalizeId(id)))
-        {
-            if (collection.Id is not null)
-                await db.Delete(collection.Id, ct);
-        }
-
-        await db.Delete(ToThing(Books, id), ct);
         return true;
     }
 
@@ -149,10 +159,7 @@ public sealed class DocumentService(ISurrealDbClient db) : IDocumentService
             ? SlugHelper.Slugify(request.Title ?? "book")
             : SlugHelper.Slugify(slug);
 
-        var rows = await db.Select<Book>(Books, ct);
-        var existing = rows.FirstOrDefault(b =>
-            string.Equals(b.Slug, bookSlug, StringComparison.OrdinalIgnoreCase));
-
+        var existing = await GetBookBySlugAsync(bookSlug, ct);
         if (existing is null)
         {
             var created = await CreateBookAsync(
@@ -164,158 +171,225 @@ public sealed class DocumentService(ISurrealDbClient db) : IDocumentService
             return new UpsertResult<BookDto>(created, Created: true);
         }
 
-        var id = IdOf(existing);
         var updated = await UpdateBookAsync(
-            id,
+            existing.Id,
             new UpdateBookRequest(
                 Title: string.IsNullOrWhiteSpace(request.Title) ? existing.Title : request.Title.Trim(),
                 Description: request.Description ?? existing.Description,
                 Slug: bookSlug,
                 SortOrder: request.SortOrder ?? existing.SortOrder),
-            ct) ?? ToDto(existing);
+            ct) ?? existing;
 
         return new UpsertResult<BookDto>(updated, Created: false);
     }
 
     public async Task<IReadOnlyList<ChapterDto>> ListChaptersAsync(string bookId, CancellationToken ct = default)
     {
-        var rows = await db.Select<Chapter>(Chapters, ct);
-        return rows
-            .Where(c => NormalizeId(c.BookId) == NormalizeId(bookId))
-            .OrderBy(c => c.SortOrder)
-            .ThenBy(c => c.Title)
-            .Select(ToDto)
-            .ToList();
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, book_id, title, slug, sort_order, created_at, updated_at
+            FROM chapter WHERE book_id = $book_id
+            ORDER BY sort_order, title COLLATE NOCASE
+            """;
+        SqliteHelpers.Add(cmd, "$book_id", bookId);
+        var list = new List<ChapterDto>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            list.Add(ReadChapterDto(reader));
+        return list;
     }
 
     public async Task<ChapterDto> CreateChapterAsync(string bookId, CreateChapterRequest request, CancellationToken ct = default)
     {
-        var book = await db.Select<Book>(ToThing(Books, bookId), ct)
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var book = await SelectBookAsync(conn, bookId, ct)
             ?? throw new KeyNotFoundException($"Book '{bookId}' not found.");
 
         var now = DateTimeOffset.UtcNow;
         var chapter = new Chapter
         {
-            BookId = string.IsNullOrEmpty(IdOf(book)) ? NormalizeId(bookId) : IdOf(book),
+            Id = SqliteHelpers.NewId(),
+            BookId = book.Id,
             Title = request.Title.Trim(),
             Slug = string.IsNullOrWhiteSpace(request.Slug)
-                ? await UniqueChapterSlugAsync(bookId, SlugHelper.Slugify(request.Title), ct)
+                ? await UniqueChapterSlugAsync(conn, book.Id, SlugHelper.Slugify(request.Title), ct)
                 : SlugHelper.Slugify(request.Slug),
             SortOrder = request.SortOrder ?? 0,
             CreatedAt = now,
-            UpdatedAt = now
+            UpdatedAt = now,
         };
 
-        var created = await db.Create(Chapters, chapter, ct)
-            ?? throw new InvalidOperationException("Failed to create chapter.");
-        return ToDto(created);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO chapter (id, book_id, title, slug, sort_order, created_at, updated_at)
+            VALUES ($id, $book_id, $title, $slug, $sort_order, $created_at, $updated_at)
+            """;
+        SqliteHelpers.Add(cmd, "$id", chapter.Id);
+        SqliteHelpers.Add(cmd, "$book_id", chapter.BookId);
+        SqliteHelpers.Add(cmd, "$title", chapter.Title);
+        SqliteHelpers.Add(cmd, "$slug", chapter.Slug);
+        SqliteHelpers.Add(cmd, "$sort_order", chapter.SortOrder);
+        SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(chapter.CreatedAt));
+        SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(chapter.UpdatedAt));
+        await cmd.ExecuteNonQueryAsync(ct);
+        return ToDto(chapter);
     }
 
     public async Task<ChapterDto?> UpdateChapterAsync(string id, UpdateChapterRequest request, CancellationToken ct = default)
     {
-        var existing = await db.Select<Chapter>(ToThing(Chapters, id), ct);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var existing = await SelectChapterAsync(conn, id, ct);
         if (existing is null) return null;
 
         existing.Title = request.Title.Trim();
         if (!string.IsNullOrWhiteSpace(request.Slug))
-            existing.Slug = await UniqueChapterSlugAsync(NormalizeId(existing.BookId), SlugHelper.Slugify(request.Slug), ct);
+            existing.Slug = await UniqueChapterSlugAsync(conn, existing.BookId, SlugHelper.Slugify(request.Slug), ct);
         if (request.SortOrder is int order)
             existing.SortOrder = order;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
-        var updated = await db.Upsert<Chapter, Chapter>(ToThing(Chapters, id), existing, ct);
-        return updated is null ? null : ToDto(updated);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE chapter SET title = $title, slug = $slug, sort_order = $sort_order, updated_at = $updated_at
+            WHERE id = $id
+            """;
+        SqliteHelpers.Add(cmd, "$id", existing.Id);
+        SqliteHelpers.Add(cmd, "$title", existing.Title);
+        SqliteHelpers.Add(cmd, "$slug", existing.Slug);
+        SqliteHelpers.Add(cmd, "$sort_order", existing.SortOrder);
+        SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
+        await cmd.ExecuteNonQueryAsync(ct);
+        return ToDto(existing);
     }
 
     public async Task<bool> DeleteChapterAsync(string id, CancellationToken ct = default)
     {
-        var existing = await db.Select<Chapter>(ToThing(Chapters, id), ct);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var existing = await SelectChapterAsync(conn, id, ct);
         if (existing is null) return false;
 
-        var chapterId = NormalizeId(id);
-        // Unlink pages in this folder (keep pages at book root)
-        var allPages = await db.Select<Page>(Pages, ct);
-        foreach (var page in allPages.Where(p => p.ChapterId is not null && NormalizeId(p.ChapterId) == chapterId))
+        await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
+        await using (var unlink = conn.CreateCommand())
         {
-            page.ChapterId = null;
-            page.UpdatedAt = DateTimeOffset.UtcNow;
-            if (page.Id is not null)
-                await db.Upsert<Page, Page>(page.Id, page, ct);
+            unlink.Transaction = tx;
+            unlink.CommandText = """
+                UPDATE page SET chapter_id = NULL, updated_at = $updated_at
+                WHERE chapter_id = $id
+                """;
+            SqliteHelpers.Add(unlink, "$id", id);
+            SqliteHelpers.Add(unlink, "$updated_at", SqliteHelpers.FormatTimestamp(DateTimeOffset.UtcNow));
+            await unlink.ExecuteNonQueryAsync(ct);
         }
 
-        await db.Delete(ToThing(Chapters, id), ct);
+        await ExecAsync(conn, tx, "DELETE FROM chapter WHERE id = $id", ("$id", id), ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 
     public async Task<IReadOnlyList<PageSummaryDto>> ListPagesAsync(string bookId, CancellationToken ct = default)
     {
-        var rows = await db.Select<Page>(Pages, ct);
-        return rows
-            .Where(p => NormalizeId(p.BookId) == NormalizeId(bookId))
-            .OrderBy(p => p.SortOrder)
-            .ThenBy(p => p.Title)
-            .Select(ToSummaryDto)
-            .ToList();
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, book_id, chapter_id, title, slug, sort_order, version, updated_at
+            FROM page WHERE book_id = $book_id
+            ORDER BY sort_order, title COLLATE NOCASE
+            """;
+        SqliteHelpers.Add(cmd, "$book_id", bookId);
+        var list = new List<PageSummaryDto>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            list.Add(new PageSummaryDto(
+                Id: reader.GetString(0),
+                BookId: reader.GetString(1),
+                ChapterId: SqliteHelpers.GetNullableString(reader, 2),
+                Title: reader.GetString(3),
+                Slug: reader.GetString(4),
+                SortOrder: reader.GetInt32(5),
+                Version: reader.GetInt32(6),
+                UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 7))));
+        }
+
+        return list;
     }
 
     public async Task<PageDto?> GetPageAsync(string id, CancellationToken ct = default)
     {
-        var page = await db.Select<Page>(ToThing(Pages, id), ct);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var page = await SelectPageAsync(conn, id, ct);
         return page is null ? null : ToDto(page);
     }
 
     public async Task<PageDto?> GetPageBySlugAsync(string bookId, string pageSlug, CancellationToken ct = default)
     {
-        var wantBook = NormalizeId(bookId);
         var wantSlug = SlugHelper.Slugify(pageSlug);
-        var rows = await db.Select<Page>(Pages, ct);
-        var page = rows.FirstOrDefault(p =>
-            NormalizeId(p.BookId) == wantBook
-            && string.Equals(p.Slug, wantSlug, StringComparison.OrdinalIgnoreCase));
-        return page is null ? null : ToDto(page);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, book_id, chapter_id, title, slug, content, sort_order, version, created_at, updated_at
+            FROM page
+            WHERE book_id = $book_id AND lower(slug) = lower($slug)
+            LIMIT 1
+            """;
+        SqliteHelpers.Add(cmd, "$book_id", bookId);
+        SqliteHelpers.Add(cmd, "$slug", wantSlug);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        return ToDto(ReadPage(reader));
     }
 
     public async Task<PageDto> CreatePageAsync(string bookId, CreatePageRequest request, CancellationToken ct = default)
     {
-        var book = await db.Select<Book>(ToThing(Books, bookId), ct)
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var book = await SelectBookAsync(conn, bookId, ct)
             ?? throw new KeyNotFoundException($"Book '{bookId}' not found.");
 
         var now = DateTimeOffset.UtcNow;
         var page = new Page
         {
-            BookId = string.IsNullOrEmpty(IdOf(book)) ? NormalizeId(bookId) : IdOf(book),
-            ChapterId = string.IsNullOrWhiteSpace(request.ChapterId) ? null : NormalizeId(request.ChapterId),
+            Id = SqliteHelpers.NewId(),
+            BookId = book.Id,
+            ChapterId = string.IsNullOrWhiteSpace(request.ChapterId) ? null : request.ChapterId.Trim(),
             Title = request.Title.Trim(),
             Slug = string.IsNullOrWhiteSpace(request.Slug)
-                ? await UniquePageSlugAsync(bookId, SlugHelper.Slugify(request.Title), ct)
+                ? await UniquePageSlugAsync(conn, book.Id, SlugHelper.Slugify(request.Title), ct)
                 : SlugHelper.Slugify(request.Slug),
             Content = request.Content ?? string.Empty,
             SortOrder = request.SortOrder ?? 0,
             Version = 1,
             CreatedAt = now,
-            UpdatedAt = now
+            UpdatedAt = now,
         };
 
-        var created = await db.Create(Pages, page, ct)
-            ?? throw new InvalidOperationException("Failed to create page.");
-        return ToDto(created);
+        await InsertPageAsync(conn, page, ct);
+        return ToDto(page);
     }
 
     public async Task<PageDto?> UpdatePageAsync(string id, UpdatePageRequest request, CancellationToken ct = default)
     {
-        var existing = await db.Select<Page>(ToThing(Pages, id), ct);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var existing = await SelectPageAsync(conn, id, ct);
         if (existing is null) return null;
 
-        // Store revision before overwrite
-        var revision = new PageRevision
+        await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
+
+        await using (var rev = conn.CreateCommand())
         {
-            PageId = NormalizeId(id),
-            Version = existing.Version,
-            Title = existing.Title,
-            Content = existing.Content,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-        await db.Create(Revisions, revision, ct);
+            rev.Transaction = tx;
+            rev.CommandText = """
+                INSERT INTO page_revision (id, page_id, version, title, content, created_at)
+                VALUES ($id, $page_id, $version, $title, $content, $created_at)
+                """;
+            SqliteHelpers.Add(rev, "$id", SqliteHelpers.NewId());
+            SqliteHelpers.Add(rev, "$page_id", existing.Id);
+            SqliteHelpers.Add(rev, "$version", existing.Version);
+            SqliteHelpers.Add(rev, "$title", existing.Title);
+            SqliteHelpers.Add(rev, "$content", existing.Content);
+            SqliteHelpers.Add(rev, "$created_at", SqliteHelpers.FormatTimestamp(DateTimeOffset.UtcNow));
+            await rev.ExecuteNonQueryAsync(ct);
+        }
 
         existing.Title = request.Title.Trim();
         if (!string.IsNullOrWhiteSpace(request.Slug))
@@ -323,21 +397,41 @@ public sealed class DocumentService(ISurrealDbClient db) : IDocumentService
         if (request.Content is not null)
             existing.Content = request.Content;
         if (request.ChapterId is not null)
-            existing.ChapterId = string.IsNullOrWhiteSpace(request.ChapterId) ? null : NormalizeId(request.ChapterId);
+            existing.ChapterId = string.IsNullOrWhiteSpace(request.ChapterId) ? null : request.ChapterId.Trim();
         if (request.SortOrder is int order)
             existing.SortOrder = order;
         existing.Version += 1;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
-        var updated = await db.Upsert<Page, Page>(ToThing(Pages, id), existing, ct);
-        return updated is null ? null : ToDto(updated);
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = """
+                UPDATE page SET title = $title, slug = $slug, content = $content, chapter_id = $chapter_id,
+                  sort_order = $sort_order, version = $version, updated_at = $updated_at
+                WHERE id = $id
+                """;
+            SqliteHelpers.Add(cmd, "$id", existing.Id);
+            SqliteHelpers.Add(cmd, "$title", existing.Title);
+            SqliteHelpers.Add(cmd, "$slug", existing.Slug);
+            SqliteHelpers.Add(cmd, "$content", existing.Content);
+            SqliteHelpers.Add(cmd, "$chapter_id", existing.ChapterId);
+            SqliteHelpers.Add(cmd, "$sort_order", existing.SortOrder);
+            SqliteHelpers.Add(cmd, "$version", existing.Version);
+            SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+        return ToDto(existing);
     }
 
     public async Task<bool> DeletePageAsync(string id, CancellationToken ct = default)
     {
-        var existing = await db.Select<Page>(ToThing(Pages, id), ct);
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var existing = await SelectPageAsync(conn, id, ct);
         if (existing is null) return false;
-        await db.Delete(ToThing(Pages, id), ct);
+        await ExecAsync(conn, null, "DELETE FROM page WHERE id = $id", ("$id", id), ct);
         return true;
     }
 
@@ -425,27 +519,148 @@ public sealed class DocumentService(ISurrealDbClient db) : IDocumentService
             PageCreated: pageResult.Created);
     }
 
-    private async Task<string> UniqueBookSlugAsync(string baseSlug, CancellationToken ct)
+    private static async Task InsertBookAsync(SqliteConnection conn, Book book, CancellationToken ct)
     {
-        var books = await db.Select<Book>(Books, ct);
-        return UniqueSlug(baseSlug, books.Select(b => b.Slug));
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO book (id, title, description, slug, sort_order, created_at, updated_at)
+            VALUES ($id, $title, $description, $slug, $sort_order, $created_at, $updated_at)
+            """;
+        SqliteHelpers.Add(cmd, "$id", book.Id);
+        SqliteHelpers.Add(cmd, "$title", book.Title);
+        SqliteHelpers.Add(cmd, "$description", book.Description);
+        SqliteHelpers.Add(cmd, "$slug", book.Slug);
+        SqliteHelpers.Add(cmd, "$sort_order", book.SortOrder);
+        SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(book.CreatedAt));
+        SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(book.UpdatedAt));
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private async Task<string> UniqueChapterSlugAsync(string bookId, string baseSlug, CancellationToken ct)
+    private static async Task InsertPageAsync(SqliteConnection conn, Page page, CancellationToken ct)
     {
-        var chapters = await db.Select<Chapter>(Chapters, ct);
-        var existing = chapters
-            .Where(c => NormalizeId(c.BookId) == NormalizeId(bookId))
-            .Select(c => c.Slug);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO page (id, book_id, chapter_id, title, slug, content, sort_order, version, created_at, updated_at)
+            VALUES ($id, $book_id, $chapter_id, $title, $slug, $content, $sort_order, $version, $created_at, $updated_at)
+            """;
+        SqliteHelpers.Add(cmd, "$id", page.Id);
+        SqliteHelpers.Add(cmd, "$book_id", page.BookId);
+        SqliteHelpers.Add(cmd, "$chapter_id", page.ChapterId);
+        SqliteHelpers.Add(cmd, "$title", page.Title);
+        SqliteHelpers.Add(cmd, "$slug", page.Slug);
+        SqliteHelpers.Add(cmd, "$content", page.Content);
+        SqliteHelpers.Add(cmd, "$sort_order", page.SortOrder);
+        SqliteHelpers.Add(cmd, "$version", page.Version);
+        SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(page.CreatedAt));
+        SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(page.UpdatedAt));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task<Book?> SelectBookAsync(SqliteConnection conn, string id, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, title, description, slug, sort_order, created_at, updated_at
+            FROM book WHERE id = $id LIMIT 1
+            """;
+        SqliteHelpers.Add(cmd, "$id", id);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        return new Book
+        {
+            Id = reader.GetString(0),
+            Title = reader.GetString(1),
+            Description = SqliteHelpers.GetNullableString(reader, 2),
+            Slug = reader.GetString(3),
+            SortOrder = reader.GetInt32(4),
+            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 5),
+            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 6),
+        };
+    }
+
+    private static async Task<Chapter?> SelectChapterAsync(SqliteConnection conn, string id, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, book_id, title, slug, sort_order, created_at, updated_at
+            FROM chapter WHERE id = $id LIMIT 1
+            """;
+        SqliteHelpers.Add(cmd, "$id", id);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        return new Chapter
+        {
+            Id = reader.GetString(0),
+            BookId = reader.GetString(1),
+            Title = reader.GetString(2),
+            Slug = reader.GetString(3),
+            SortOrder = reader.GetInt32(4),
+            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 5),
+            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 6),
+        };
+    }
+
+    private static async Task<Page?> SelectPageAsync(SqliteConnection conn, string id, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, book_id, chapter_id, title, slug, content, sort_order, version, created_at, updated_at
+            FROM page WHERE id = $id LIMIT 1
+            """;
+        SqliteHelpers.Add(cmd, "$id", id);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        return ReadPage(reader);
+    }
+
+    private static Page ReadPage(SqliteDataReader reader) => new()
+    {
+        Id = reader.GetString(0),
+        BookId = reader.GetString(1),
+        ChapterId = SqliteHelpers.GetNullableString(reader, 2),
+        Title = reader.GetString(3),
+        Slug = reader.GetString(4),
+        Content = reader.GetString(5),
+        SortOrder = reader.GetInt32(6),
+        Version = reader.GetInt32(7),
+        CreatedAt = SqliteHelpers.ReadTimestamp(reader, 8),
+        UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 9),
+    };
+
+    private static async Task<string> UniqueBookSlugAsync(SqliteConnection conn, string baseSlug, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT slug FROM book";
+        var existing = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            existing.Add(reader.GetString(0));
         return UniqueSlug(baseSlug, existing);
     }
 
-    private async Task<string> UniquePageSlugAsync(string bookId, string baseSlug, CancellationToken ct)
+    private static async Task<string> UniqueChapterSlugAsync(
+        SqliteConnection conn, string bookId, string baseSlug, CancellationToken ct)
     {
-        var pages = await db.Select<Page>(Pages, ct);
-        var existing = pages
-            .Where(p => NormalizeId(p.BookId) == NormalizeId(bookId))
-            .Select(p => p.Slug);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT slug FROM chapter WHERE book_id = $book_id";
+        SqliteHelpers.Add(cmd, "$book_id", bookId);
+        var existing = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            existing.Add(reader.GetString(0));
+        return UniqueSlug(baseSlug, existing);
+    }
+
+    private static async Task<string> UniquePageSlugAsync(
+        SqliteConnection conn, string bookId, string baseSlug, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT slug FROM page WHERE book_id = $book_id";
+        SqliteHelpers.Add(cmd, "$book_id", bookId);
+        var existing = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            existing.Add(reader.GetString(0));
         return UniqueSlug(baseSlug, existing);
     }
 
@@ -458,83 +673,72 @@ public sealed class DocumentService(ISurrealDbClient db) : IDocumentService
             var candidate = $"{baseSlug}-{i}";
             if (!set.Contains(candidate)) return candidate;
         }
+
         return $"{baseSlug}-{Guid.NewGuid():N}"[..24];
     }
 
-    private static string NormalizeId(string? id)
+    private static async Task ExecAsync(
+        SqliteConnection conn,
+        SqliteTransaction? tx,
+        string sql,
+        (string Name, object? Value) param,
+        CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(id)) return string.Empty;
-        var s = id.Trim();
-        var idx = s.IndexOf(':');
-        return idx >= 0 ? s[(idx + 1)..] : s;
-    }
-
-    /// <summary>RecordId.ToString() returns the type name — extract the real id part.</summary>
-    private static string IdOf(Record? record)
-    {
-        if (record?.Id is null) return string.Empty;
-        try
-        {
-            return record.Id.DeserializeId<string>();
-        }
-        catch
-        {
-            if (record.Id is RecordIdOfString typed)
-                return typed.Id;
-            return NormalizeId(record.Id.ToString());
-        }
-    }
-
-    private static RecordId ToThing(string table, string id)
-    {
-        var raw = NormalizeId(id);
-        return RecordId.From(table, raw);
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = sql;
+        SqliteHelpers.Add(cmd, param.Name, param.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static DateTimeOffset Coalesce(DateTimeOffset value) =>
         value == default ? DateTimeOffset.UtcNow : value;
 
+    private static BookDto ReadBookDto(SqliteDataReader reader) => new(
+        Id: reader.GetString(0),
+        Title: reader.GetString(1),
+        Description: SqliteHelpers.GetNullableString(reader, 2),
+        Slug: reader.GetString(3),
+        SortOrder: reader.GetInt32(4),
+        CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 5)),
+        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 6)));
+
+    private static ChapterDto ReadChapterDto(SqliteDataReader reader) => new(
+        Id: reader.GetString(0),
+        BookId: reader.GetString(1),
+        Title: reader.GetString(2),
+        Slug: reader.GetString(3),
+        SortOrder: reader.GetInt32(4),
+        CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 5)),
+        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 6)));
+
     private static BookDto ToDto(Book b) => new(
-        Id: IdOf(b),
+        Id: b.Id,
         Title: b.Title,
         Description: b.Description,
         Slug: b.Slug,
         SortOrder: b.SortOrder,
         CreatedAt: Coalesce(b.CreatedAt),
-        UpdatedAt: Coalesce(b.UpdatedAt)
-    );
+        UpdatedAt: Coalesce(b.UpdatedAt));
 
     private static ChapterDto ToDto(Chapter c) => new(
-        Id: IdOf(c),
-        BookId: NormalizeId(c.BookId),
+        Id: c.Id,
+        BookId: c.BookId,
         Title: c.Title,
         Slug: c.Slug,
         SortOrder: c.SortOrder,
         CreatedAt: Coalesce(c.CreatedAt),
-        UpdatedAt: Coalesce(c.UpdatedAt)
-    );
-
-    private static PageSummaryDto ToSummaryDto(Page p) => new(
-        Id: IdOf(p),
-        BookId: NormalizeId(p.BookId),
-        ChapterId: p.ChapterId is null ? null : NormalizeId(p.ChapterId),
-        Title: p.Title,
-        Slug: p.Slug,
-        SortOrder: p.SortOrder,
-        Version: p.Version,
-        UpdatedAt: Coalesce(p.UpdatedAt)
-    );
+        UpdatedAt: Coalesce(c.UpdatedAt));
 
     private static PageDto ToDto(Page p) => new(
-        Id: IdOf(p),
-        BookId: NormalizeId(p.BookId),
-        ChapterId: p.ChapterId is null ? null : NormalizeId(p.ChapterId),
+        Id: p.Id,
+        BookId: p.BookId,
+        ChapterId: p.ChapterId,
         Title: p.Title,
         Slug: p.Slug,
         Content: p.Content,
         SortOrder: p.SortOrder,
         Version: p.Version,
         CreatedAt: Coalesce(p.CreatedAt),
-        UpdatedAt: Coalesce(p.UpdatedAt)
-    );
+        UpdatedAt: Coalesce(p.UpdatedAt));
 }

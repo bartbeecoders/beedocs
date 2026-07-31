@@ -17,7 +17,7 @@ public sealed class BeeDocsSupervisor(
         var contentRoot = environment.ContentRootPath;
         var dataRoot = Path.GetFullPath(_options.DataDirectory, contentRoot);
         var logsRoot = Path.GetFullPath(_options.LogsDirectory, contentRoot);
-        Directory.CreateDirectory(Path.Combine(dataRoot, "surreal"));
+        Directory.CreateDirectory(Path.Combine(dataRoot, "sqlite"));
         Directory.CreateDirectory(Path.Combine(dataRoot, "uploads"));
         Directory.CreateDirectory(logsRoot);
 
@@ -74,9 +74,8 @@ public sealed class BeeDocsSupervisor(
             {
                 ["ASPNETCORE_ENVIRONMENT"] = "Production",
                 ["ASPNETCORE_URLS"] = _options.BuildAspNetCoreUrls(),
-                ["BeeDocs__DataPath"] = Path.Combine(dataRoot, "surreal"),
+                ["BeeDocs__DataPath"] = Path.Combine(dataRoot, "sqlite"),
                 ["BeeDocs__UploadsPath"] = Path.Combine(dataRoot, "uploads"),
-                ["ConnectionStrings__SurrealDB"] = $"Endpoint=rocksdb://{Path.Combine(dataRoot, "surreal")}",
             });
 
         await WaitForHttpAsync(apiHealthUrl, "API", stoppingToken);

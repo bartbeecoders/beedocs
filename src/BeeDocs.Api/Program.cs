@@ -2,7 +2,6 @@ using System.Reflection;
 using BeeDocs.Api.Models;
 using BeeDocs.Api.Services;
 using Microsoft.Extensions.FileProviders;
-using SurrealDb.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,25 +13,8 @@ builder.Services.AddCors(options =>
             .AllowAnyOrigin());
 });
 
-// SurrealDB: embedded RocksDB by default (file under data/), mem:// for tests
-var dataDir = builder.Configuration["BeeDocs:DataPath"]
-    ?? Path.Combine(builder.Environment.ContentRootPath, "data", "surreal");
-Directory.CreateDirectory(dataDir);
-
-var surrealEndpoint = builder.Configuration.GetConnectionString("SurrealDB")
-    ?? $"Endpoint=rocksdb://{dataDir}";
-
-var surrealBuilder = builder.Services.AddSurreal(surrealEndpoint, ServiceLifetime.Singleton);
-
-if (surrealEndpoint.Contains("mem://", StringComparison.OrdinalIgnoreCase)
-    || surrealEndpoint.Contains("Endpoint=mem", StringComparison.OrdinalIgnoreCase))
-{
-    surrealBuilder.AddInMemoryProvider();
-}
-else
-{
-    surrealBuilder.AddRocksDbProvider();
-}
+// SQLite: file under BeeDocs:DataPath (default data/sqlite/beedocs.db)
+builder.Services.AddSingleton<SqliteConnectionFactory>();
 
 // Uploaded images (drag/drop & paste) live here. Resolved before the container
 // is built so export/import can read and write the same directory the static
@@ -76,14 +58,11 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/uploads",
 });
 
-// Ensure NS/DB selected + schema for embedded engine
+// Ensure SQLite schema (CREATE TABLE IF NOT EXISTS + WAL)
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<ISurrealDbClient>();
-    var ns = builder.Configuration["BeeDocs:Namespace"] ?? "beedocs";
-    var database = builder.Configuration["BeeDocs:Database"] ?? "main";
-    await db.Use(ns, database);
-    await DatabaseInitializer.EnsureSchemaAsync(db);
+    var factory = scope.ServiceProvider.GetRequiredService<SqliteConnectionFactory>();
+    await DatabaseInitializer.EnsureSchemaAsync(factory);
 }
 
 var api = app.MapGroup("/api");

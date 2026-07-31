@@ -18,7 +18,7 @@ Build (or iteratively vibe-code) a **simple, self-hosted documentation platform*
   - Dark mode, responsive, mobile-friendly.  
 - **Tech stack preferences** (keep it lightweight and open-source friendly):  
   - Backend: dotnet 10 c#.  
-  - DB: SurrealDB (embedded version)
+  - DB: SQLite (file-backed)
   - Frontend: React/Vite 
   - Container: Docker/podman-ready.  
   - pnpm as package manager
