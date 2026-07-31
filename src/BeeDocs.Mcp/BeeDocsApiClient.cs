@@ -123,6 +123,31 @@ public sealed class BeeDocsApiClient(HttpClient http)
         return clean;
     }
 
+    public Task<JsonElement> SearchAsync(
+        string query,
+        int? limit = null,
+        int? offset = null,
+        string? bookId = null,
+        string? kinds = null,
+        CancellationToken ct = default)
+    {
+        var q = new List<string> { $"q={Uri.EscapeDataString(query)}" };
+        if (limit is not null) q.Add($"limit={limit}");
+        if (offset is not null) q.Add($"offset={offset}");
+        if (!string.IsNullOrWhiteSpace(bookId)) q.Add($"bookId={Uri.EscapeDataString(bookId)}");
+        if (!string.IsNullOrWhiteSpace(kinds)) q.Add($"kinds={Uri.EscapeDataString(kinds)}");
+        // Agents search with whole words, not keystrokes — a trailing prefix match
+        // would only widen results without helping.
+        q.Add("prefix=false");
+        return GetAsync("/api/search?" + string.Join('&', q), ct);
+    }
+
+    public Task<JsonElement> SearchStatusAsync(CancellationToken ct = default)
+        => GetAsync("/api/search/status", ct);
+
+    public Task<JsonElement> ReindexAsync(CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Post, "/api/search/reindex", new { }, ct);
+
     private Task<JsonElement> GetAsync(string path, CancellationToken ct)
         => SendAsync(HttpMethod.Get, path, null, ct);
 

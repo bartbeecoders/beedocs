@@ -91,6 +91,10 @@ export function SettingsPanel({ onResetPanes }: Props) {
           />
           <span>Open pages in split (edit + preview) by default</span>
         </label>
+        <p className="muted sm settings-hint">
+          Applies only until you pick a view for a page — each page remembers edit / source / split /
+          preview.
+        </p>
         <label className="check-row">
           <input
             type="checkbox"

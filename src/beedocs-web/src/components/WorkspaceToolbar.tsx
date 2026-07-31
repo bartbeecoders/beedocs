@@ -1,0 +1,588 @@
+import { Children, useMemo, useState, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useWorkspace } from '../workspace/WorkspaceContext'
+import type { TreeSelection } from '../workspace/selection'
+import { ExportMenu } from './ExportMenu'
+import { ImportDialog } from './ImportDialog'
+import type { PageEditorState } from './PageCanvas'
+import type { DiagramEditorState } from './DiagramCanvas'
+
+export type WorkspaceView = 'welcome' | 'book' | 'page' | 'diagram' | 'settings' | 'help'
+
+type Props = {
+  view: WorkspaceView
+  bookId?: string
+  pageId?: string
+  diagramId?: string
+  pageState?: PageEditorState | null
+  diagramState?: DiagramEditorState | null
+}
+
+function Sep() {
+  return <span className="ws-toolbar-sep" aria-hidden />
+}
+
+/** Skip empty groups so separators don't stack when actions are conditional. */
+function Group({ children }: { children: ReactNode }) {
+  // Children.toArray already drops null/undefined/booleans
+  const items = Children.toArray(children)
+  if (items.length === 0) return null
+  return <div className="ws-toolbar-group">{items}</div>
+}
+
+
+function Icon({ children }: { children: ReactNode }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+      {children}
+    </svg>
+  )
+}
+
+const ICONS = {
+  library: (
+    <Icon>
+      <path
+        d="M3 2.5h3.2A1.3 1.3 0 0 1 7.5 3.8v9.2L5 11.5 2.5 13V3.8A1.3 1.3 0 0 1 3.8 2.5H3Z"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.5 2.5H12a1.3 1.3 0 0 1 1.3 1.3v9.2L11 11.5 8.5 13V2.5Z"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+    </Icon>
+  ),
+  book: (
+    <Icon>
+      <path
+        d="M3.5 2.5h7.2A1.8 1.8 0 0 1 12.5 4.3v9.2H5.2A1.7 1.7 0 0 0 3.5 13.2V2.5Z"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+      <path d="M3.5 12.2h9" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+      <path d="M6 5.2h4.2M6 7.6h3" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    </Icon>
+  ),
+  folder: (
+    <Icon>
+      <path
+        d="M2.5 5.2V4.2A1.2 1.2 0 0 1 3.7 3h2.1l1.2 1.4h5.3A1.2 1.2 0 0 1 13.5 5.6v6.2A1.2 1.2 0 0 1 12.3 13H3.7A1.2 1.2 0 0 1 2.5 11.8V5.2Z"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+    </Icon>
+  ),
+  page: (
+    <Icon>
+      <path
+        d="M4.2 2.5h5.1L11.8 5v8.5A1 1 0 0 1 10.8 14.5H4.2A1 1 0 0 1 3.2 13.5v-10A1 1 0 0 1 4.2 2.5Z"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+      <path d="M9.2 2.6V5.2h2.5" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+      <path d="M5.5 8h5M5.5 10.4h3.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    </Icon>
+  ),
+  diagram: (
+    <Icon>
+      <circle cx="4.2" cy="4.2" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="11.8" cy="4.8" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="8" cy="11.6" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M5.5 5.1 10.2 5.6M5.2 5.6 7.2 10.2M11 6.2 9 10.2" stroke="currentColor" strokeWidth="1.25" />
+    </Icon>
+  ),
+  settings: (
+    <Icon>
+      <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.35" />
+      <path
+        d="M8 2.4v1.3M8 12.3v1.3M2.4 8h1.3M12.3 8h1.3M3.9 3.9l.9.9M11.2 11.2l.9.9M12.1 3.9l-.9.9M4.8 11.2l-.9.9"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </Icon>
+  ),
+  help: (
+    <Icon>
+      <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.35" />
+      <path
+        d="M6.3 6.2a1.8 1.8 0 1 1 2.4 2.1c-.5.3-.9.7-.9 1.3"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+      />
+      <circle cx="8" cy="11.4" r="0.7" fill="currentColor" />
+    </Icon>
+  ),
+} as const
+
+/**
+ * Context-dependent action bar under the workspace header.
+ * Mirrors NavTree context menus; create/rename use prompt for speed.
+ */
+export function WorkspaceToolbar({
+  view,
+  bookId,
+  pageId,
+  diagramId,
+  pageState,
+  diagramState,
+}: Props) {
+  const {
+    books,
+    selection,
+    setSelection,
+    createBook,
+    createPage,
+    createFolder,
+    createDiagram,
+    deleteBook,
+    deletePage,
+    deleteFolder,
+    deleteDiagram,
+    renameFolder,
+    movePage,
+    refreshTree,
+  } = useWorkspace()
+  const navigate = useNavigate()
+  const [importOpen, setImportOpen] = useState<{ targetBookId?: string } | null>(null)
+
+  const context = useMemo(
+    () => resolveToolbarContext(view, selection, books, bookId, pageId, diagramId),
+    [view, selection, books, bookId, pageId, diagramId],
+  )
+
+  if (view === 'settings' || view === 'help') {
+    const metaKind = view === 'settings' ? 'settings' : 'help'
+    return (
+      <div className="ws-toolbar" role="toolbar" aria-label="Workspace actions">
+        <div className={`ws-toolbar-context ws-toolbar-context--${metaKind}`}>
+          <span className="ws-toolbar-context-icon" aria-hidden>
+            {view === 'settings' ? ICONS.settings : ICONS.help}
+          </span>
+          <span className="ws-toolbar-context-label">
+            {view === 'settings' ? 'Settings' : 'About & Help'}
+          </span>
+        </div>
+        <Sep />
+        <Group>
+          <Link to="/" className="btn ghost sm">
+            ← Back to library
+          </Link>
+        </Group>
+      </div>
+    )
+  }
+
+  return (
+    <div className="ws-toolbar" role="toolbar" aria-label="Workspace actions">
+      <div
+        className={`ws-toolbar-context ws-toolbar-context--${context.kind}`}
+        title={context.title}
+      >
+        <span className="ws-toolbar-context-icon" aria-hidden>
+          {context.icon}
+        </span>
+        <span className="ws-toolbar-context-label">{context.title}</span>
+        {context.dirtyHint && (
+          <span className="ws-toolbar-dirty" title="Unsaved changes" aria-label="Unsaved changes" />
+        )}
+      </div>
+
+      <Sep />
+
+      {context.kind === 'library' && (
+        <>
+          <Group>
+            <button
+              type="button"
+              className="btn primary sm"
+              onClick={() => {
+                const title = window.prompt('Book title')
+                if (!title?.trim()) return
+                void createBook(title.trim()).then((book) => {
+                  setSelection({ kind: 'book', bookId: book.id })
+                  void navigate(`/books/${book.id}`)
+                })
+              }}
+            >
+              New book
+            </button>
+            <button type="button" className="btn ghost sm" onClick={() => setImportOpen({})}>
+              Import
+            </button>
+          </Group>
+          <Sep />
+          <Group>
+            <button
+              type="button"
+              className="btn ghost sm"
+              onClick={() => void refreshTree()}
+              title="Refresh library"
+            >
+              Refresh library
+            </button>
+          </Group>
+        </>
+      )}
+
+      {context.kind === 'book' && (
+        <>
+          <Group>
+            <button
+              type="button"
+              className="btn primary sm"
+              onClick={() => {
+                const title = window.prompt('Page title')
+                if (!title?.trim()) return
+                void createPage(context.bookId, title.trim()).then((p) =>
+                  navigate(`/books/${context.bookId}/pages/${p.id}`),
+                )
+              }}
+            >
+              New page
+            </button>
+            <button
+              type="button"
+              className="btn ghost sm"
+              onClick={() => {
+                const title = window.prompt('Folder name')
+                if (!title?.trim()) return
+                void createFolder(context.bookId, title.trim())
+              }}
+            >
+              New folder
+            </button>
+            <button
+              type="button"
+              className="btn ghost sm"
+              onClick={() => {
+                const title = window.prompt('Diagram title')
+                if (!title?.trim()) return
+                void createDiagram(context.bookId, title.trim()).then((d) =>
+                  navigate(`/books/${context.bookId}/diagrams/${d.id}`),
+                )
+              }}
+            >
+              New diagram
+            </button>
+          </Group>
+          <Sep />
+          <Group>
+            <ExportMenu scope="book" id={context.bookId} title={context.title} />
+            <button
+              type="button"
+              className="btn ghost sm"
+              onClick={() => setImportOpen({ targetBookId: context.bookId })}
+            >
+              Import…
+            </button>
+            {(view !== 'book' || bookId !== context.bookId) && (
+              <button
+                type="button"
+                className="btn ghost sm"
+                onClick={() => void navigate(`/books/${context.bookId}`)}
+              >
+                Open book
+              </button>
+            )}
+          </Group>
+          <span className="ws-toolbar-spacer" />
+          <Group>
+            <button
+              type="button"
+              className="btn ghost danger sm"
+              onClick={() => {
+                if (!confirm(`Delete book “${context.title}”?`)) return
+                void deleteBook(context.bookId).then(() => {
+                  setSelection({ kind: 'none' })
+                  if (bookId === context.bookId) void navigate('/')
+                })
+              }}
+            >
+              Delete book
+            </button>
+          </Group>
+        </>
+      )}
+
+      {context.kind === 'folder' && (
+        <>
+          <Group>
+            <button
+              type="button"
+              className="btn primary sm"
+              onClick={() => {
+                const title = window.prompt('Page title')
+                if (!title?.trim()) return
+                void createPage(context.bookId, title.trim(), context.chapterId).then((p) =>
+                  navigate(`/books/${context.bookId}/pages/${p.id}`),
+                )
+              }}
+            >
+              New page in folder
+            </button>
+            <button
+              type="button"
+              className="btn ghost sm"
+              onClick={() => {
+                const t = window.prompt('Folder name', context.title)?.trim()
+                if (t) void renameFolder(context.chapterId, context.bookId, t)
+              }}
+            >
+              Rename folder
+            </button>
+          </Group>
+          <span className="ws-toolbar-spacer" />
+          <Group>
+            <button
+              type="button"
+              className="btn ghost danger sm"
+              onClick={() => {
+                if (
+                  !confirm(
+                    `Delete folder “${context.title}”? Pages inside move to the book root.`,
+                  )
+                ) {
+                  return
+                }
+                void deleteFolder(context.chapterId, context.bookId).then(() => {
+                  setSelection({ kind: 'book', bookId: context.bookId })
+                })
+              }}
+            >
+              Delete folder
+            </button>
+          </Group>
+        </>
+      )}
+
+      {context.kind === 'page' && (
+        <>
+          <Group>
+            {(view !== 'page' || pageId !== context.pageId) && (
+              <button
+                type="button"
+                className="btn primary sm"
+                onClick={() =>
+                  void navigate(`/books/${context.bookId}/pages/${context.pageId}`)
+                }
+              >
+                Open
+              </button>
+            )}
+            {context.chapterId != null && (
+              <button
+                type="button"
+                className="btn ghost sm"
+                title="Move this page to the book root"
+                onClick={() => {
+                  void movePage({
+                    pageId: context.pageId,
+                    bookId: context.bookId,
+                    chapterId: null,
+                  })
+                }}
+              >
+                Move to root
+              </button>
+            )}
+          </Group>
+          <Sep />
+          <Group>
+            <ExportMenu scope="page" id={context.pageId} title={context.title} />
+          </Group>
+          {pageState?.dirty && (
+            <>
+              <Sep />
+              <span className="ws-toolbar-status muted sm">Unsaved changes</span>
+            </>
+          )}
+          <span className="ws-toolbar-spacer" />
+          <Group>
+            <button
+              type="button"
+              className="btn ghost danger sm"
+              onClick={() => {
+                if (!confirm(`Delete page “${context.title}”?`)) return
+                void deletePage(context.pageId, context.bookId).then(() => {
+                  setSelection({ kind: 'book', bookId: context.bookId })
+                  if (pageId === context.pageId) void navigate(`/books/${context.bookId}`)
+                })
+              }}
+            >
+              Delete page
+            </button>
+          </Group>
+        </>
+      )}
+
+      {context.kind === 'diagram' && (
+        <>
+          <Group>
+            {(view !== 'diagram' || diagramId !== context.diagramId) && (
+              <button
+                type="button"
+                className="btn primary sm"
+                onClick={() =>
+                  void navigate(`/books/${context.bookId}/diagrams/${context.diagramId}`)
+                }
+              >
+                Open
+              </button>
+            )}
+            {view === 'diagram' && diagramId === context.diagramId && (
+              <span className="ws-toolbar-status muted sm">Editing diagram</span>
+            )}
+          </Group>
+          {diagramState?.dirty && (
+            <>
+              <Sep />
+              <span className="ws-toolbar-status muted sm">Unsaved changes</span>
+            </>
+          )}
+          <span className="ws-toolbar-spacer" />
+          <Group>
+            <button
+              type="button"
+              className="btn ghost danger sm"
+              onClick={() => {
+                if (!confirm(`Delete diagram “${context.title}”?`)) return
+                void deleteDiagram(context.diagramId, context.bookId).then(() => {
+                  setSelection({ kind: 'book', bookId: context.bookId })
+                  if (diagramId === context.diagramId)
+                    void navigate(`/books/${context.bookId}`)
+                })
+              }}
+            >
+              Delete diagram
+            </button>
+          </Group>
+        </>
+      )}
+
+      {importOpen && (
+        <ImportDialog
+          defaultTargetBookId={importOpen.targetBookId}
+          onClose={() => setImportOpen(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+type BookLike = {
+  id: string
+  title: string
+  pages: { id: string; title: string; chapterId?: string | null }[]
+  diagrams: { id: string; title: string }[]
+  chapters: { id: string; title: string }[]
+}
+
+type ToolbarContext =
+  | { kind: 'library'; icon: ReactNode; title: string; dirtyHint?: string }
+  | {
+      kind: 'book'
+      icon: ReactNode
+      title: string
+      bookId: string
+      dirtyHint?: string
+    }
+  | {
+      kind: 'folder'
+      icon: ReactNode
+      title: string
+      bookId: string
+      chapterId: string
+      dirtyHint?: string
+    }
+  | {
+      kind: 'page'
+      icon: ReactNode
+      title: string
+      bookId: string
+      pageId: string
+      chapterId: string | null
+      dirtyHint?: string
+    }
+  | {
+      kind: 'diagram'
+      icon: ReactNode
+      title: string
+      bookId: string
+      diagramId: string
+      dirtyHint?: string
+    }
+
+/**
+ * Prefer explicit tree selection (esp. folders); fall back to route params.
+ */
+function resolveToolbarContext(
+  view: WorkspaceView,
+  selection: TreeSelection,
+  books: BookLike[],
+  bookId?: string,
+  pageId?: string,
+  diagramId?: string,
+): ToolbarContext {
+  if (selection.kind === 'folder') {
+    const book = books.find((b) => b.id === selection.bookId)
+    const folder = book?.chapters.find((c) => c.id === selection.chapterId)
+    return {
+      kind: 'folder',
+      icon: ICONS.folder,
+      title: folder?.title ?? 'Folder',
+      bookId: selection.bookId,
+      chapterId: selection.chapterId,
+    }
+  }
+
+  if (selection.kind === 'page' || (view === 'page' && bookId && pageId)) {
+    const bId = selection.kind === 'page' ? selection.bookId : bookId!
+    const pId = selection.kind === 'page' ? selection.pageId : pageId!
+    const book = books.find((b) => b.id === bId)
+    const page = book?.pages.find((p) => p.id === pId)
+    return {
+      kind: 'page',
+      icon: ICONS.page,
+      title: page?.title ?? 'Page',
+      bookId: bId,
+      pageId: pId,
+      chapterId: page?.chapterId ?? null,
+    }
+  }
+
+  if (selection.kind === 'diagram' || (view === 'diagram' && bookId && diagramId)) {
+    const bId = selection.kind === 'diagram' ? selection.bookId : bookId!
+    const dId = selection.kind === 'diagram' ? selection.diagramId : diagramId!
+    const book = books.find((b) => b.id === bId)
+    const diagram = book?.diagrams.find((d) => d.id === dId)
+    return {
+      kind: 'diagram',
+      icon: ICONS.diagram,
+      title: diagram?.title ?? 'Diagram',
+      bookId: bId,
+      diagramId: dId,
+    }
+  }
+
+  if (selection.kind === 'book' || (view === 'book' && bookId)) {
+    const bId = selection.kind === 'book' ? selection.bookId : bookId!
+    const book = books.find((b) => b.id === bId)
+    return {
+      kind: 'book',
+      icon: ICONS.book,
+      title: book?.title ?? 'Book',
+      bookId: bId,
+    }
+  }
+
+  return { kind: 'library', icon: ICONS.library, title: 'Library' }
+}

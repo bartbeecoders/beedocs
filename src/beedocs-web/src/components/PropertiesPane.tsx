@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
+import { SyncedInput } from './SyncedText'
 
 type Props = {
   pageState: PageEditorState | null
@@ -58,10 +59,7 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
       <div className="props-pane">
         <h3>Page</h3>
         <Field label="Title">
-          <input
-            value={pageState.title}
-            onChange={(e) => pageState.setTitle(e.target.value)}
-          />
+          <SyncedInput value={pageState.title} onValueChange={pageState.setTitle} />
         </Field>
         <Field label="Slug">
           <code className="mono-block">{p?.slug ?? '—'}</code>
@@ -114,10 +112,7 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
       <div className="props-pane">
         <h3>Diagram</h3>
         <Field label="Title">
-          <input
-            value={diagramState.title}
-            onChange={(e) => diagramState.setTitle(e.target.value)}
-          />
+          <SyncedInput value={diagramState.title} onValueChange={diagramState.setTitle} />
         </Field>
         <Field label="Kind">
           <select

@@ -5,6 +5,7 @@ import { exportBookToPdf, exportPageToPdf } from '../export/pdf'
 import { ImportDialog } from './ImportDialog'
 import type { ExportFormat } from '../types'
 import { useWorkspace, type TreeBook } from '../workspace/WorkspaceContext'
+import type { TreeSelection } from '../workspace/selection'
 import type { Chapter, DiagramSummary, PageSummary } from '../types'
 
 type CtxMenu =
@@ -55,6 +56,8 @@ export function NavTree() {
     books,
     loading,
     error,
+    selection,
+    setSelection,
     toggleBook,
     createBook,
     createPage,
@@ -286,6 +289,8 @@ export function NavTree() {
             key={book.id}
             book={book}
             params={params}
+            selection={selection}
+            setSelection={setSelection}
             dragOver={dragOver}
             setDragOver={setDragOver}
             creatingIn={creatingIn}
@@ -543,6 +548,8 @@ function MenuItem({
 function BookNode({
   book,
   params,
+  selection,
+  setSelection,
   dragOver,
   setDragOver,
   creatingIn,
@@ -559,6 +566,8 @@ function BookNode({
 }: {
   book: TreeBook
   params: Readonly<Partial<Record<string, string>>>
+  selection: TreeSelection
+  setSelection: (next: TreeSelection) => void
   dragOver: string | null
   setDragOver: (v: string | null) => void
   creatingIn: Creating | null
@@ -578,7 +587,9 @@ function BookNode({
     e: React.DragEvent,
   ) => Promise<void>
 }) {
-  const bookActive = params.bookId === book.id && !params.pageId && !params.diagramId
+  const bookActive =
+    (params.bookId === book.id && !params.pageId && !params.diagramId) ||
+    (selection.kind === 'book' && selection.bookId === book.id)
   const rootPages = book.pages
     .filter((p) => !p.chapterId)
     .sort((a, c) => a.sortOrder - c.sortOrder || a.title.localeCompare(c.title))
@@ -609,7 +620,11 @@ function BookNode({
         >
           {book.expanded ? '▾' : '▸'}
         </button>
-        <NavLink to={`/books/${book.id}`} className="tree-label book">
+        <NavLink
+          to={`/books/${book.id}`}
+          className="tree-label book"
+          onClick={() => setSelection({ kind: 'book', bookId: book.id })}
+        >
           <span className="tree-icon">📘</span>
           <span className="tree-text">{book.title}</span>
         </NavLink>
@@ -653,6 +668,8 @@ function BookNode({
                 .sort((a, c) => a.sortOrder - c.sortOrder || a.title.localeCompare(c.title))}
               expanded={book.expandedFolders.has(folder.id)}
               params={params}
+              selection={selection}
+              setSelection={setSelection}
               dragOver={dragOver}
               setDragOver={setDragOver}
               creatingIn={creatingIn}
@@ -670,12 +687,13 @@ function BookNode({
               key={p.id}
               bookId={book.id}
               page={p}
-              active={params.pageId === p.id}
+              active={params.pageId === p.id || (selection.kind === 'page' && selection.pageId === p.id)}
               dragOver={dragOver}
               setDragOver={setDragOver}
               openMenu={openMenu}
               onDragStart={onDragStart}
               dropReorderPage={dropReorderPage}
+              onSelect={() => setSelection({ kind: 'page', bookId: book.id, pageId: p.id })}
             />
           ))}
 
@@ -685,8 +703,14 @@ function BookNode({
               key={d.id}
               bookId={book.id}
               diagram={d}
-              active={params.diagramId === d.id}
+              active={
+                params.diagramId === d.id ||
+                (selection.kind === 'diagram' && selection.diagramId === d.id)
+              }
               openMenu={openMenu}
+              onSelect={() =>
+                setSelection({ kind: 'diagram', bookId: book.id, diagramId: d.id })
+              }
             />
           ))}
 
@@ -711,6 +735,8 @@ function FolderNode({
   pages,
   expanded,
   params,
+  selection,
+  setSelection,
   dragOver,
   setDragOver,
   creatingIn,
@@ -725,6 +751,8 @@ function FolderNode({
   pages: PageSummary[]
   expanded: boolean
   params: Readonly<Partial<Record<string, string>>>
+  selection: TreeSelection
+  setSelection: (next: TreeSelection) => void
   dragOver: string | null
   setDragOver: (v: string | null) => void
   creatingIn: Creating | null
@@ -740,10 +768,16 @@ function FolderNode({
   ) => Promise<void>
 }) {
   const dropId = `folder:${folder.id}`
+  const folderSelected =
+    selection.kind === 'folder' && selection.chapterId === folder.id
+  const selectFolder = () => {
+    setSelection({ kind: 'folder', bookId: book.id, chapterId: folder.id })
+    if (!expanded) toggleFolder(book.id, folder.id)
+  }
   return (
     <li className="tree-folder">
       <div
-        className={`tree-row child folder-row${dragOver === dropId ? ' drag-over' : ''}`}
+        className={`tree-row child folder-row${folderSelected ? ' active' : ''}${dragOver === dropId ? ' drag-over' : ''}`}
         draggable
         onDragStart={(e) =>
           onDragStart(e, { type: 'folder', chapterId: folder.id, bookId: book.id })
@@ -774,7 +808,18 @@ function FolderNode({
         >
           {expanded ? '▾' : '▸'}
         </button>
-        <span className="tree-label" onClick={() => toggleFolder(book.id, folder.id)}>
+        <span
+          className="tree-label"
+          onClick={selectFolder}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              selectFolder()
+            }
+          }}
+        >
           <span className="tree-icon">📁</span>
           <span className="tree-text">{folder.title}</span>
           <span className="muted sm">({pages.length})</span>
@@ -792,12 +837,16 @@ function FolderNode({
               key={p.id}
               bookId={book.id}
               page={p}
-              active={params.pageId === p.id}
+              active={
+                params.pageId === p.id ||
+                (selection.kind === 'page' && selection.pageId === p.id)
+              }
               dragOver={dragOver}
               setDragOver={setDragOver}
               openMenu={openMenu}
               onDragStart={onDragStart}
               dropReorderPage={dropReorderPage}
+              onSelect={() => setSelection({ kind: 'page', bookId: book.id, pageId: p.id })}
             />
           ))}
           {pages.length === 0 && (
@@ -818,6 +867,7 @@ function PageRow({
   openMenu,
   onDragStart,
   dropReorderPage,
+  onSelect,
 }: {
   bookId: string
   page: PageSummary
@@ -832,6 +882,7 @@ function PageRow({
     place: 'before' | 'after',
     e: React.DragEvent,
   ) => Promise<void>
+  onSelect: () => void
 }) {
   const beforeId = `page-before:${page.id}`
   const afterId = `page-after:${page.id}`
@@ -870,7 +921,11 @@ function PageRow({
           })
         }
       >
-        <NavLink to={`/books/${bookId}/pages/${page.id}`} className="tree-label">
+        <NavLink
+          to={`/books/${bookId}/pages/${page.id}`}
+          className="tree-label"
+          onClick={onSelect}
+        >
           <span className="tree-icon">📄</span>
           <span className="tree-text">{page.title}</span>
         </NavLink>
@@ -894,11 +949,13 @@ function DiagramRow({
   diagram,
   active,
   openMenu,
+  onSelect,
 }: {
   bookId: string
   diagram: DiagramSummary
   active: boolean
   openMenu: (e: React.MouseEvent, next: CtxMenu) => void
+  onSelect: () => void
 }) {
   return (
     <li>
@@ -915,7 +972,11 @@ function DiagramRow({
           })
         }
       >
-        <NavLink to={`/books/${bookId}/diagrams/${diagram.id}`} className="tree-label">
+        <NavLink
+          to={`/books/${bookId}/diagrams/${diagram.id}`}
+          className="tree-label"
+          onClick={onSelect}
+        >
           <span className="tree-icon">⬡</span>
           <span className="tree-text">{diagram.title}</span>
         </NavLink>

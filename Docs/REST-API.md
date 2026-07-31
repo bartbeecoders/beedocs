@@ -172,6 +172,61 @@ All fields optional. On create, missing `title` defaults to the path slug.
 
 See [Quick start](#quick-start--one-shot-publish).
 
+### Search
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/search?q=` | Full-text search across books, folders, pages and diagrams |
+
+| Query param | Default | Description |
+|-------------|---------|-------------|
+| `q` | *(required)* | Search terms. `"quoted runs"` match as a phrase. |
+| `limit` | `20` | Hits to return, capped at 100. |
+| `offset` | `0` | Paging offset. |
+| `bookSlug` | *(all books)* | Restrict to one book. 404 if the slug is unknown. |
+| `kinds` | *(all)* | Comma-separated: `page`, `diagram`, `book`, `folder`. |
+| `prefix` | `true` | Match the final term as a prefix, for as-you-type search. |
+
+```http
+GET /api/v1/search?q=payment%20gateway&kinds=page&limit=5
+```
+
+```json
+{
+  "query": "payment gateway",
+  "total": 2,
+  "limit": 5,
+  "offset": 0,
+  "engine": "fts5",
+  "hits": [
+    {
+      "kind": "page",
+      "id": "8f2c…",
+      "title": "Payment Gateway",
+      "snippet": "The checkout service talks to the payment gateway over gRPC…",
+      "bookId": "cace…",
+      "bookTitle": "Platform Architecture",
+      "chapterId": null,
+      "url": "/books/cace…/pages/8f2c…",
+      "score": -1.87,
+      "updatedAt": "2026-07-31T16:41:50Z"
+    }
+  ]
+}
+```
+
+Matched terms in `snippet` are wrapped in `U+E000` / `U+E001` rather than HTML,
+so the excerpt stays plain text and cannot inject markup into your renderer.
+`score` is a bm25 rank — lower is a better match, and hits arrive sorted.
+
+Query text is never interpreted as an expression, so user input can be passed
+through verbatim. Terms are ANDed and diacritics fold (`cafe` finds `café`).
+
+The index maintains itself: it is rebuilt from database triggers, so pages you
+publish through this API are searchable on the next query with no extra call.
+`GET /api/search/status` and `POST /api/search/reindex` (on the internal
+surface) report and repair it.
+
 ---
 
 ## Slugs

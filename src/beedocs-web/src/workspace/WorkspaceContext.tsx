@@ -4,11 +4,20 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
 import { api } from '../api'
 import type { Book, Chapter, DiagramSummary, PageSummary } from '../types'
+import {
+  selectionEquals,
+  selectionFromRoute,
+  type RouteSelectionParams,
+  type TreeSelection,
+} from './selection'
+
+export type { TreeSelection } from './selection'
 
 export type TreeBook = Book & {
   pages: PageSummary[]
@@ -24,6 +33,11 @@ type WorkspaceCtx = {
   books: TreeBook[]
   loading: boolean
   error: string | null
+  /** Current library selection (route-synced + folder tree clicks) */
+  selection: TreeSelection
+  setSelection: (next: TreeSelection) => void
+  /** Keep selection in sync with route params / view */
+  syncSelectionFromRoute: (params: RouteSelectionParams) => void
   refreshTree: () => Promise<void>
   toggleBook: (bookId: string) => Promise<void>
   expandBook: (bookId: string) => Promise<void>
@@ -55,6 +69,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [books, setBooks] = useState<TreeBook[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selection, setSelectionState] = useState<TreeSelection>({ kind: 'none' })
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem('beedocs-expanded-books')
@@ -79,6 +94,22 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('beedocs-expanded-folders', JSON.stringify([...expandedFolders]))
   }, [expandedFolders])
+
+  /** Last route key applied by sync — folder clicks only stick until the route changes. */
+  const lastRouteKeyRef = useRef<string | null>(null)
+
+  const setSelection = useCallback((next: TreeSelection) => {
+    setSelectionState((prev) => (selectionEquals(prev, next) ? prev : next))
+  }, [])
+
+  const syncSelectionFromRoute = useCallback((params: RouteSelectionParams) => {
+    const key = `${params.view ?? ''}|${params.bookId ?? ''}|${params.pageId ?? ''}|${params.diagramId ?? ''}`
+    // Same route: keep tree-only selections (folders) that have no route of their own.
+    if (lastRouteKeyRef.current === key) return
+    lastRouteKeyRef.current = key
+    const next = selectionFromRoute(params)
+    setSelectionState((prev) => (selectionEquals(prev, next) ? prev : next))
+  }, [])
 
   const loadChildren = async (bookId: string) => {
     const [pages, diagrams, chapters] = await Promise.all([
@@ -447,6 +478,9 @@ graph LR
       books,
       loading,
       error,
+      selection,
+      setSelection,
+      syncSelectionFromRoute,
       refreshTree,
       toggleBook,
       expandBook,
@@ -468,6 +502,9 @@ graph LR
       books,
       loading,
       error,
+      selection,
+      setSelection,
+      syncSelectionFromRoute,
       refreshTree,
       toggleBook,
       expandBook,

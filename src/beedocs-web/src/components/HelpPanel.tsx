@@ -128,6 +128,13 @@ export function HelpPanel() {
             folders.
           </li>
           <li>
+            <strong>Search</strong> — <kbd>Ctrl</kbd>+<kbd>K</kbd> (or the header button) searches
+            every book by content, not just by title. Results are grouped by kind with a matching
+            excerpt; arrow keys move, <kbd>Enter</kbd> opens. Wrap words in{' '}
+            <code>"double quotes"</code> to match a phrase, and note that accents fold — searching{' '}
+            <code>cafe</code> finds <code>café</code>. Diagrams match on their shape labels.
+          </li>
+          <li>
             <strong>Center</strong> — the editor for the selected page or diagram.
           </li>
           <li>
@@ -148,7 +155,9 @@ export function HelpPanel() {
         <h2>Writing pages</h2>
         <p className="muted">
           Pages are Markdown (GFM: tables, task lists, footnotes) with fenced blocks that render
-          live. Drop or paste an image anywhere in the editor to upload it and insert the link.
+          live. Drop or paste an image anywhere in the editor to upload it and insert the link. PDFs
+          and 3D models (GLB/GLTF/OBJ) can be embedded the same way — use the <strong>Add</strong>{' '}
+          toolbar (Image / PDF / 3D) or drop a file onto the page.
         </p>
         <table className="help-table">
           <thead>
@@ -382,6 +391,12 @@ export function HelpPanel() {
             <h3 className="help-sub">Everywhere</h3>
             <table className="help-table">
               <tbody>
+                <tr>
+                  <td>
+                    <kbd>Ctrl</kbd>+<kbd>K</kbd>
+                  </td>
+                  <td>Search the whole library</td>
+                </tr>
                 <tr>
                   <td>
                     <kbd>Ctrl</kbd>+<kbd>S</kbd>

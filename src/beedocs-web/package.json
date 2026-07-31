@@ -16,13 +16,15 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.1",
     "rehype-raw": "^7.0.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
     "@types/node": "^26.1.1",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
+    "@types/three": "^0.185.1",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",

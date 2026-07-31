@@ -204,3 +204,43 @@ public sealed record UpdateShapeCollectionRequest(
     string? Description,
     string? Source
 );
+
+/// <param name="Kind">book, folder, page or diagram.</param>
+/// <param name="Snippet">Matching excerpt. Matched terms are wrapped in U+E000/U+E001.</param>
+/// <param name="Url">Workspace route for the hit.</param>
+/// <param name="Score">bm25 rank — lower is a better match.</param>
+public sealed record SearchHitDto(
+    string Kind,
+    string Id,
+    string Title,
+    string? Snippet,
+    string? BookId,
+    string? BookTitle,
+    string? ChapterId,
+    string Url,
+    double Score,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="Total">Matches across the whole library, not just this page of hits.</param>
+/// <param name="Engine">fts5, or like where the SQLite build has no FTS5.</param>
+public sealed record SearchResponseDto(
+    string Query,
+    int Total,
+    int Limit,
+    int Offset,
+    string Engine,
+    IReadOnlyList<SearchHitDto> Hits
+);
+
+/// <param name="Pending">Changes queued but not yet indexed. Drained on the next search.</param>
+public sealed record SearchStatusDto(
+    string Engine,
+    int Documents,
+    int Pending,
+    int Pages,
+    int Diagrams,
+    int Books,
+    int Folders,
+    DateTimeOffset? LastIndexedAt
+);

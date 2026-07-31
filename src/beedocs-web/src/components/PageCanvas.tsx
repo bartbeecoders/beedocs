@@ -3,11 +3,17 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { useTheme } from '../theme'
+import {
+  loadPageViewMode,
+  savePageViewMode,
+  type PageViewMode,
+} from '../workspace/pageViewPrefs'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { Page } from '../types'
 import { HybridPageEditor } from './HybridPageEditor'
 import { MarkdownView } from './MarkdownView'
 import { ExportMenu } from './ExportMenu'
+import { SyncedInput, SyncedTextarea } from './SyncedText'
 
 export type PageEditorState = {
   page: Page | null
@@ -16,10 +22,10 @@ export type PageEditorState = {
   dirty: boolean
   saving: boolean
   error: string | null
-  mode: 'edit' | 'source' | 'preview' | 'split'
+  mode: PageViewMode
   setTitle: (v: string) => void
   setContent: (v: string) => void
-  setMode: (m: 'edit' | 'source' | 'preview' | 'split') => void
+  setMode: (m: PageViewMode) => void
   save: () => Promise<void>
   deletePage: () => Promise<void>
 }
@@ -36,7 +42,9 @@ export function PageCanvas({ onStateChange }: Props) {
   const [page, setPage] = useState<Page | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
-  const [mode, setMode] = useState<'edit' | 'source' | 'preview' | 'split'>('edit')
+  const [mode, setModeState] = useState<PageViewMode>(() =>
+    loadPageViewMode(pageId) ?? (showPreviewDefault ? 'split' : 'edit'),
+  )
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -53,10 +61,17 @@ export function PageCanvas({ onStateChange }: Props) {
   dirtyRef.current = dirty
   pageIdRef.current = pageId
 
+  const setMode = useCallback(
+    (next: PageViewMode) => {
+      setModeState(next)
+      if (pageId) savePageViewMode(pageId, next)
+    },
+    [pageId],
+  )
+
   useEffect(() => {
-    // Always open in visual edit (hybrid) so diagrams are editable on the page.
-    // showPreviewDefault still used as a soft preference for split vs edit.
-    setMode(showPreviewDefault ? 'split' : 'edit')
+    // Restore the last view for this page; fall back to the settings default.
+    setModeState(loadPageViewMode(pageId) ?? (showPreviewDefault ? 'split' : 'edit'))
   }, [pageId, showPreviewDefault])
 
   // Flush unsaved edits when navigating to another page (cleanups run before the next load).
@@ -199,11 +214,11 @@ export function PageCanvas({ onStateChange }: Props) {
   return (
     <div className="page-canvas">
       <div className="canvas-toolbar">
-        <input
+        <SyncedInput
           className="canvas-title"
           value={title}
-          onChange={(e) => {
-            setTitle(e.target.value)
+          onValueChange={(next) => {
+            setTitle(next)
             setDirty(true)
           }}
           placeholder="Page title"
@@ -276,11 +291,11 @@ export function PageCanvas({ onStateChange }: Props) {
           </div>
         )}
         {mode === 'source' && (
-          <textarea
+          <SyncedTextarea
             className="editor-textarea"
             value={content}
-            onChange={(e) => {
-              setContent(e.target.value)
+            onValueChange={(next) => {
+              setContent(next)
               setDirty(true)
             }}
             spellCheck={false}

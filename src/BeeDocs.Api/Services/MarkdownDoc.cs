@@ -286,6 +286,17 @@ public static partial class MarkdownDoc
             if (c == '*' || c == '_')
             {
                 var doubled = i + 1 < text.Length && text[i + 1] == c;
+
+                // CommonMark treats `_` between two word characters as literal, so
+                // identifiers survive: page_revision stays page_revision instead of
+                // collapsing to pagerevision. (`*` may be intraword emphasis.)
+                if (c == '_' && IsIntraword(text, i, doubled ? 2 : 1))
+                {
+                    buffer.Append(c, doubled ? 2 : 1);
+                    i += doubled ? 2 : 1;
+                    continue;
+                }
+
                 if (doubled)
                 {
                     Flush();
@@ -313,6 +324,15 @@ public static partial class MarkdownDoc
 
         Flush();
         return result;
+    }
+
+    /// <summary>True when a delimiter run at <paramref name="index"/> sits between two word characters.</summary>
+    private static bool IsIntraword(string text, int index, int runLength)
+    {
+        var before = index > 0 ? text[index - 1] : '\0';
+        var afterIndex = index + runLength;
+        var after = afterIndex < text.Length ? text[afterIndex] : '\0';
+        return char.IsLetterOrDigit(before) && char.IsLetterOrDigit(after);
     }
 
     /// <summary>

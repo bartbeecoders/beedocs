@@ -92,8 +92,8 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
 
 - **BeeDocs.Api** is a single-file minimal-API (`Program.cs`) mapping `/api/books`,
   `/api/books/{id}/chapters`, `/api/books/{id}/pages`, `/api/pages/{id}`,
-  `/api/books/{id}/diagrams`, `/api/diagrams/{id}`, `/api/uploads`, plus
-  `/api/health` and `/api/version`. Business logic lives in `Services/`
+  `/api/books/{id}/diagrams`, `/api/diagrams/{id}`, `/api/uploads`, `/api/search`,
+  plus `/api/health` and `/api/version`. Business logic lives in `Services/`
   (`DocumentService` for books/chapters/pages, `DiagramService` for diagrams);
   entities are in `Models/Entities.cs` (`Book`, `Chapter`, `Page`,
   `PageRevision`, `Diagram` — plain POCOs with string ids). Every page
@@ -101,6 +101,14 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
 - **SQLite** is file-backed by default (`data/sqlite/beedocs.db` under the API
   content root, directory configurable via `BeeDocs:DataPath`, or a full
   `ConnectionStrings:Sqlite`). There is no separate DB server.
+- **Search** is SQLite FTS5 over a `search_doc` projection built by
+  `SearchIndexService`, which is also where Markdown is reduced to indexable text
+  (diagram JSON contributes only its shape labels). Nothing calls the indexer to
+  register a write: triggers on `page`/`diagram`/`book`/`chapter` record changes
+  in `search_queue`, and the queue is drained at startup and before each search,
+  so the index stays correct whoever wrote the row — UI, MCP, import, or direct
+  SQL. Exposed at `/api/search`, `/api/v1/search`, and the `beedocs_search` MCP
+  tool; the UI opens it with Ctrl+K (`SearchPalette.tsx`).
 - **Uploaded images** are served from `BeeDocs:UploadsPath` (default
   `data/uploads`) at `/uploads/*`, separate from the SQLite data dir so
   container deployments can point both at the same persistent volume.

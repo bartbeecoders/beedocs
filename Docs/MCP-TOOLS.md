@@ -15,6 +15,26 @@ All tools return JSON text content (or an error message with `isError`).
 | `beedocs_health` | Ping API `/api/health` |
 | `beedocs_get_api_info` | Base URL, entity model, embeds, capabilities, suggested workflow |
 
+### Search
+
+Start here when looking for content. Full-text search beats listing books and
+reading pages one at a time, and it is the only way to find a page by what it
+says rather than what it is called.
+
+| Tool | Args | Description |
+|------|------|-------------|
+| `beedocs_search` | `query`, `limit?`, `offset?`, `bookId?`, `kinds?` | Search books, folders, pages and diagram labels |
+| `beedocs_search_status` | — | Engine, document counts by kind, queued changes |
+| `beedocs_reindex` | — | Rebuild the index from stored documents (recovery only) |
+
+Each hit carries `kind`, `id`, `title`, `bookId`/`bookTitle`, a `snippet` with
+matched terms wrapped in `U+E000`/`U+E001`, and the workspace `url`. Follow a
+page hit with `beedocs_get_page` to read the whole document.
+
+Query syntax: terms are ANDed, `"quoted runs"` match as a phrase, and diacritics
+fold (`cafe` finds `café`). Operators are not interpreted — any input is safe to
+pass through verbatim.
+
 ### Books
 
 | Tool | Args | Description |

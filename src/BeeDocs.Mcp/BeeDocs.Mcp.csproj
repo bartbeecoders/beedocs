@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <RootNamespace>BeeDocs.Mcp</RootNamespace>
     <AssemblyName>BeeDocs.Mcp</AssemblyName>
     <Description>BeeDocs MCP server — exposes books, pages, chapters, and diagrams to AI agents</Description>

@@ -37,6 +37,49 @@ export type Page = PageSummary & {
 /** Server-rendered export formats. PDF is produced in the browser instead. */
 export type ExportFormat = 'archive' | 'markdown' | 'docx'
 
+export type SearchKind = 'page' | 'diagram' | 'book' | 'folder'
+
+/** Sentinels the API wraps matched terms in. Never present in stored content. */
+export const HIGHLIGHT_OPEN = '\ue000'
+export const HIGHLIGHT_CLOSE = '\ue001'
+
+export type SearchHit = {
+  kind: SearchKind
+  id: string
+  title: string
+  /** Matching excerpt, with matched terms wrapped in HIGHLIGHT_OPEN/CLOSE. */
+  snippet: string | null
+  bookId: string | null
+  bookTitle: string | null
+  chapterId: string | null
+  /** Workspace route for this hit. */
+  url: string
+  /** bm25 rank — lower is a better match. */
+  score: number
+  updatedAt: string
+}
+
+export type SearchResponse = {
+  query: string
+  /** Matches across the library, not just the returned page of hits. */
+  total: number
+  limit: number
+  offset: number
+  engine: 'fts5' | 'like'
+  hits: SearchHit[]
+}
+
+export type SearchStatus = {
+  engine: 'fts5' | 'like'
+  documents: number
+  pending: number
+  pages: number
+  diagrams: number
+  books: number
+  folders: number
+  lastIndexedAt: string | null
+}
+
 /** What to do when an imported title already exists. */
 export type ImportNameMode = 'rename' | 'keep'
 

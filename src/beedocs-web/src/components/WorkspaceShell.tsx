@@ -12,16 +12,32 @@ import { PropertiesPane } from './PropertiesPane'
 import { SettingsPanel } from './SettingsPanel'
 import { HelpPanel } from './HelpPanel'
 import { ExportMenu } from './ExportMenu'
+import { WorkspaceToolbar } from './WorkspaceToolbar'
+import { SearchPalette } from './SearchPalette'
 
 export function WorkspaceShell() {
   const location = useLocation()
   const params = useParams()
   const { themeDef } = useTheme()
-  const { books, expandBook } = useWorkspace()
+  const { books, expandBook, syncSelectionFromRoute } = useWorkspace()
   const [layout, setLayout] = useState<PaneLayout>(() => loadPaneLayout())
   const [pageState, setPageState] = useState<PageEditorState | null>(null)
   const [diagramState, setDiagramState] = useState<DiagramEditorState | null>(null)
   const [version, setVersion] = useState<string | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  // Ctrl/Cmd+K from anywhere, including while typing in the editor — search is
+  // navigation, not text entry, so it outranks whatever has focus.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // Which build is live. Fetched once; failure is non-fatal — the pill just
   // stays hidden rather than blocking the shell.
@@ -46,6 +62,16 @@ export function WorkspaceShell() {
     if (params.bookId) return 'book' as const
     return 'welcome' as const
   }, [location.pathname, params.bookId, params.pageId, params.diagramId])
+
+  // Keep toolbar selection aligned with the route (folders stick until route changes).
+  useEffect(() => {
+    syncSelectionFromRoute({
+      view,
+      bookId: params.bookId,
+      pageId: params.pageId,
+      diagramId: params.diagramId,
+    })
+  }, [view, params.bookId, params.pageId, params.diagramId, syncSelectionFromRoute])
 
   // Expand book when navigating into it
   useEffect(() => {
@@ -103,6 +129,16 @@ export function WorkspaceShell() {
           </nav>
         </div>
         <div className="ws-header-right">
+          <button
+            type="button"
+            className="ws-search-trigger"
+            onClick={() => setSearchOpen(true)}
+            title="Search the library (Ctrl+K)"
+          >
+            <span aria-hidden="true">{'⌕'}</span>
+            <span className="ws-search-trigger-text">Search</span>
+            <kbd>Ctrl K</kbd>
+          </button>
           <span className="ws-theme-pill" title="Active theme">
             {themeDef.label}
           </span>
@@ -117,6 +153,15 @@ export function WorkspaceShell() {
           </Link>
         </div>
       </header>
+
+      <WorkspaceToolbar
+        view={view}
+        bookId={params.bookId}
+        pageId={params.pageId}
+        diagramId={params.diagramId}
+        pageState={pageState}
+        diagramState={diagramState}
+      />
 
       <div className="ws-body">
         <ResizablePane
@@ -163,6 +208,8 @@ export function WorkspaceShell() {
           <PropertiesPane pageState={pageState} diagramState={diagramState} view={view} />
         </ResizablePane>
       </div>
+
+      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   )
 }
@@ -174,7 +221,7 @@ function WelcomeCanvas() {
         <h1>Architecture documentation workspace</h1>
         <p className="muted">
           Select a book in the library, or create one. Edit pages in the center canvas with live
-          Markdown, Mermaid, and BeeDiagram embeds.
+          Markdown, Mermaid, BeeDiagram, images, PDFs, and 3D model embeds.
         </p>
         <ul className="welcome-steps">
           <li>

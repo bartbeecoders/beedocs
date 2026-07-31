@@ -35,8 +35,11 @@ export type FenceSegment = {
 
 export type ContentSegment = TextSegment | FenceSegment
 
-/** Languages rendered as interactive blocks in the hybrid page editor */
+/** Languages rendered as interactive diagram blocks in the hybrid page editor */
 export const VISUAL_FENCE_LANGS = new Set(['beediagram', 'beediagram-ref'])
+
+/** PDF / 3D model fence languages — hybrid editor shows MediaEmbed, not source-only */
+export const MEDIA_FENCE_LANGS = new Set(['pdf', 'glb', 'gltf', 'obj', 'model'])
 
 /**
  * Split Markdown into text + fenced code segments (any fence language).
@@ -68,16 +71,38 @@ export function splitMarkdownSegments(markdown: string): ContentSegment[] {
   return segments
 }
 
+/**
+ * Rejoin segments into Markdown.
+ *
+ * Both fence markers have to own their line, so a text segment whose trailing
+ * (or leading) newline was edited away can't be allowed to run into the fence
+ * next to it — that turns ```` ```mermaid ```` into ordinary prose and silently
+ * destroys the block on the next save.
+ */
 export function joinMarkdownSegments(segments: ContentSegment[]): string {
-  return segments
-    .map((s) => {
-      if (s.type === 'text') return s.text
-      const body = s.body.replace(/\n$/, '')
-      return '```' + s.lang + '\n' + body + (body ? '\n' : '') + '```'
-    })
-    .join('')
+  let out = ''
+  let afterFence = false
+  for (const s of segments) {
+    if (s.type === 'text') {
+      // Keep the previous fence's closing ``` alone on its line.
+      if (afterFence && s.text && !s.text.startsWith('\n')) out += '\n\n'
+      out += s.text
+      afterFence = false
+      continue
+    }
+    // Start the opening ``` on a line of its own.
+    if (out && !out.endsWith('\n')) out += '\n\n'
+    const body = s.body.replace(/\n$/, '')
+    out += '```' + s.lang + '\n' + body + (body ? '\n' : '') + '```'
+    afterFence = true
+  }
+  return out
 }
 
 export function isVisualFenceLang(lang: string): boolean {
   return VISUAL_FENCE_LANGS.has(lang.toLowerCase())
+}
+
+export function isMediaFenceLang(lang: string): boolean {
+  return MEDIA_FENCE_LANGS.has(lang.toLowerCase())
 }

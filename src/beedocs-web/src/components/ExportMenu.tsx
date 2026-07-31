@@ -107,7 +107,7 @@ export function ExportMenu({ scope, id, title, className = '', variant = 'button
       ) : (
         <button
           type="button"
-          className="btn sm"
+          className="btn ghost sm"
           disabled={busy !== null}
           aria-haspopup="menu"
           aria-expanded={open}

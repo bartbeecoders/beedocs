@@ -8,6 +8,7 @@ import { withApiBase } from '../basePath'
 import { replaceFenceBody } from '../markdownFences'
 import { BeeDiagramEditor } from './BeeDiagramEditor'
 import { BeeDiagramView } from './BeeDiagramView'
+import { MediaEmbed } from './media/MediaEmbed'
 
 mermaid.initialize({
   startOnLoad: false,
@@ -438,6 +439,16 @@ export function MarkdownView({ content, editable = false, onContentChange, bookI
                   onDraftChange={(next) => setBeeDraft(key, next)}
                 />
               )
+            }
+
+            if (
+              lang === 'pdf' ||
+              lang === 'glb' ||
+              lang === 'gltf' ||
+              lang === 'obj' ||
+              lang === 'model'
+            ) {
+              return <MediaEmbed lang={lang} body={code} />
             }
 
             const isBlock = Boolean(match) || code.includes('\n')

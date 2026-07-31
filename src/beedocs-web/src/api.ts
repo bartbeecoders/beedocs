@@ -9,6 +9,9 @@ import type {
   ImportResult,
   Page,
   PageSummary,
+  SearchKind,
+  SearchResponse,
+  SearchStatus,
   ShapeCollection,
 } from './types'
 import { withApiBase } from './basePath'
@@ -23,6 +26,27 @@ async function errorText(res: Response): Promise<string> {
   } catch {
     return text
   }
+}
+
+/** Multipart upload → { id, fileName, url, contentType, size } */
+async function uploadFile(file: File | Blob, fileName?: string) {
+  const form = new FormData()
+  const name =
+    fileName ||
+    (file instanceof File && file.name ? file.name : `paste-${Date.now()}.png`)
+  form.append('file', file, name)
+  const res = await fetch(withApiBase('/api/uploads'), { method: 'POST', body: form })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || `${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<{
+    id: string
+    fileName: string
+    url: string
+    contentType: string
+    size: number
+  }>
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -44,6 +68,33 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   getVersion: () => request<{ version: string }>('/api/version'),
   getHealth: () => request<{ status: string; service?: string; version?: string }>('/api/health'),
+
+  /**
+   * Full-text search over books, folders, pages and diagrams. `signal` lets the
+   * caller drop the response for a query the user has already typed past.
+   */
+  search: (
+    query: string,
+    options: {
+      limit?: number
+      offset?: number
+      bookId?: string
+      kinds?: SearchKind[]
+      /** Match the final term as a prefix. On for as-you-type, off for a submitted query. */
+      prefix?: boolean
+      signal?: AbortSignal
+    } = {},
+  ) => {
+    const params = new URLSearchParams({ q: query })
+    if (options.limit != null) params.set('limit', String(options.limit))
+    if (options.offset != null) params.set('offset', String(options.offset))
+    if (options.bookId) params.set('bookId', options.bookId)
+    if (options.kinds?.length) params.set('kinds', options.kinds.join(','))
+    if (options.prefix === false) params.set('prefix', 'false')
+    return request<SearchResponse>(`/api/search?${params}`, { signal: options.signal })
+  },
+  getSearchStatus: () => request<SearchStatus>('/api/search/status'),
+  reindexSearch: () => request<SearchStatus>('/api/search/reindex', { method: 'POST' }),
 
   listBooks: () => request<Book[]>('/api/books'),
   getBook: (id: string) => request<Book>(`/api/books/${id}`),
@@ -195,24 +246,12 @@ export const api = {
     return res.json() as Promise<ImportResult>
   },
 
-  /** Multipart image upload → { url: "/uploads/…", fileName, … } */
-  uploadImage: async (file: File | Blob, fileName?: string) => {
-    const form = new FormData()
-    const name =
-      fileName ||
-      (file instanceof File && file.name ? file.name : `paste-${Date.now()}.png`)
-    form.append('file', file, name)
-    const res = await fetch(withApiBase('/api/uploads'), { method: 'POST', body: form })
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(text || `${res.status} ${res.statusText}`)
-    }
-    return res.json() as Promise<{
-      id: string
-      fileName: string
-      url: string
-      contentType: string
-      size: number
-    }>
-  },
+  /**
+   * Multipart file upload (images, PDF, 3D models) →
+   * { id, fileName, url: "/uploads/…", contentType, size }
+   */
+  uploadFile: uploadFile,
+
+  /** Alias of uploadFile — kept for existing image paste/drop call sites. */
+  uploadImage: uploadFile,
 }

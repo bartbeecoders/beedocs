@@ -135,11 +135,14 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         var existing = await SelectBookAsync(conn, id, ct);
         if (existing is null) return false;
 
-        // Cascade pages, chapters and book-scoped shape collections (same as before).
+        // Cascade pages, chapters, diagrams and book-scoped shape collections.
         await using (var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct))
         {
             await ExecAsync(conn, tx, "DELETE FROM page WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx, "DELETE FROM chapter WHERE book_id = $id", ("$id", id), ct);
+            // Diagrams were missed here, so deleting a book used to strand them: no
+            // longer reachable through any book, but still in the table.
+            await ExecAsync(conn, tx, "DELETE FROM diagram WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx,
                 "DELETE FROM shape_collection WHERE book_id IS NOT NULL AND book_id != '' AND book_id = $id",
                 ("$id", id), ct);

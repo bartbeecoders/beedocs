@@ -4,6 +4,7 @@ import { api } from '../api'
 import { withApiBase } from '../basePath'
 import { useImageIntake, type ImageIntakeContext } from '../hooks/useImageIntake'
 import {
+  isMediaFenceLang,
   isVisualFenceLang,
   joinMarkdownSegments,
   splitMarkdownSegments,
@@ -12,14 +13,50 @@ import {
 } from '../markdownFences'
 import {
   insertMarkdownAt,
+  isImageFile,
   markdownImageSnippet,
   splitTextWithImages,
   textOffsetFromPointer,
   type UploadedImage,
 } from '../media/imageIntake'
+import {
+  extensionFromPath,
+  modelFormatFromExtension,
+} from '../media/mediaKinds'
 import { segmentsForInsert, segmentsForLinkedDiagram, type InsertKind } from '../pageBlocks'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { BeeDiagramEditor } from './BeeDiagramEditor'
+import { MediaEmbed, parseMediaFenceBody } from './media/MediaEmbed'
+import { SyncedTextarea } from './SyncedText'
+
+/** Build markdown segments for an uploaded PDF / 3D model fence. */
+function mediaFenceFromUpload(url: string, fileName: string, lang: string): ContentSegment[] {
+  return [
+    { type: 'text', text: '\n\n' },
+    { type: 'fence', lang, body: `title: ${fileName}\n${url}` },
+    { type: 'text', text: '\n\n' },
+  ]
+}
+
+/** Resolve fence language from a media file name/type. */
+function fenceLangFromMediaFile(file: File): string | null {
+  const name = file.name.toLowerCase()
+  const type = (file.type || '').toLowerCase()
+  if (name.endsWith('.pdf') || type === 'application/pdf') return 'pdf'
+  if (name.endsWith('.glb') || type === 'model/gltf-binary') return 'glb'
+  if (name.endsWith('.gltf') || type === 'model/gltf+json') return 'gltf'
+  if (name.endsWith('.obj') || type === 'model/obj') return 'obj'
+  return null
+}
+
+function isMediaFile(file: File): boolean {
+  return fenceLangFromMediaFile(file) != null
+}
+
+function collectMediaFilesFromDataTransfer(dt: DataTransfer | null): File[] {
+  if (!dt?.files?.length) return []
+  return Array.from(dt.files).filter(isMediaFile)
+}
 
 type Props = {
   content: string
@@ -61,15 +98,24 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
     [onChange],
   )
 
-  const updateSegment = useCallback(
-    (index: number, patch: ContentSegment) => {
-      emit(segments.map((s, i) => (i === index ? patch : s)))
-    },
-    [emit, segments],
-  )
-
   const segmentsRef = useRef(segments)
   segmentsRef.current = segments
+
+  const updateSegment = useCallback(
+    (index: number, patch: ContentSegment) => {
+      // Read through the ref: a handler created in an earlier render must not
+      // rebuild the document from that render's (now stale) segment list.
+      emit(segmentsRef.current.map((s, i) => (i === index ? patch : s)))
+    },
+    [emit],
+  )
+
+  const removeSegment = useCallback(
+    (index: number) => {
+      emit(segmentsRef.current.filter((_, i) => i !== index))
+    },
+    [emit],
+  )
 
   const updateFenceBody = useCallback(
     (index: number, body: string) => {
@@ -228,6 +274,74 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
     onError: (msg) => setInsertError(msg),
   })
 
+  const pickMedia = useCallback(
+    (kind: 'pdf' | 'model', at: InsertAt = 'end') => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      if (kind === 'pdf') {
+        input.accept = '.pdf,application/pdf'
+      } else {
+        input.accept = '.glb,.gltf,.obj,model/*'
+      }
+      input.onchange = () => {
+        const file = input.files?.[0]
+        if (!file) return
+        void (async () => {
+          setBusy(true)
+          setInsertError(null)
+          try {
+            const result = await api.uploadFile(file)
+            const lang = fenceLangFromMediaFile(file) || (kind === 'pdf' ? 'pdf' : 'model')
+            insertAt(at, mediaFenceFromUpload(result.url, result.fileName || file.name, lang))
+          } catch (e) {
+            setInsertError(e instanceof Error ? e.message : String(e))
+          } finally {
+            setBusy(false)
+          }
+        })()
+      }
+      input.click()
+    },
+    [insertAt],
+  )
+
+  /** Drop PDF / 3D models (image drops stay with useImageIntake). */
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+
+    const onDrop = (e: DragEvent) => {
+      const mediaFiles = collectMediaFilesFromDataTransfer(e.dataTransfer)
+      if (!mediaFiles.length) return
+      // Prefer image intake when the drop also contains images
+      const files = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : []
+      if (files.some((f) => isImageFile(f))) return
+
+      e.preventDefault()
+      e.stopPropagation()
+      void (async () => {
+        setBusy(true)
+        setInsertError(null)
+        setDropHint(null)
+        try {
+          for (const file of mediaFiles) {
+            const result = await api.uploadFile(file)
+            const lang = fenceLangFromMediaFile(file)
+            if (!lang) continue
+            insertAt('end', mediaFenceFromUpload(result.url, result.fileName || file.name, lang))
+          }
+        } catch (err) {
+          setInsertError(err instanceof Error ? err.message : String(err))
+        } finally {
+          setBusy(false)
+        }
+      })()
+    }
+
+    el.addEventListener('drop', onDrop)
+    return () => el.removeEventListener('drop', onDrop)
+  }, [insertAt])
+
   const removeImageFromSegment = useCallback(
     (segmentIndex: number, raw: string) => {
       const list = segmentsRef.current
@@ -248,7 +362,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         const slot = (e.target as Element).closest?.('[data-drop-slot]')
         if (slot) {
           const label = slot.getAttribute('data-drop-label')
-          setDropHint(label || 'Drop image here')
+          setDropHint(label || 'Drop image or media here')
         }
       }}
       onDragLeave={() => setDropHint(null)}
@@ -267,11 +381,14 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         busy={busy || uploading}
         onInsert={(k) => void handleInsert(k, 'end')}
         onPickImage={() => pickFiles()}
+        onPickPdf={() => pickMedia('pdf')}
+        onPickModel={() => pickMedia('model')}
       />
       {insertError && <div className="banner error compact">{insertError}</div>}
       <p className="hybrid-hint muted sm">
-        Drop or paste images <strong>where you want them</strong> — they preview in edit mode. Use Add for sections
-        and diagrams.
+        Drop or paste images <strong>where you want them</strong> — they preview in edit mode. Use Add for
+        sections, diagrams, <strong>PDF</strong>, and <strong>3D models</strong> (or drop <code>.pdf</code> /{' '}
+        <code>.glb</code> / <code>.obj</code> files).
       </p>
 
       <InsertGap
@@ -294,18 +411,24 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
               onChange={(text) => updateSegment(index, { type: 'text', text })}
               onRemoveImage={(raw) => removeImageFromSegment(index, raw)}
             />
+          ) : isMediaFenceLang(seg.lang) ? (
+            <MediaFenceBlock
+              segment={seg}
+              onChange={(next) => updateSegment(index, next)}
+              onRemove={() => removeSegment(index)}
+            />
           ) : isVisualFenceLang(seg.lang) ? (
             <VisualFenceBlock
               segment={seg}
               bookId={bookId}
               onBodyChange={(body) => updateFenceBody(index, body)}
-              onRemove={() => emit(segments.filter((_, i) => i !== index))}
+              onRemove={() => removeSegment(index)}
             />
           ) : (
             <SourceFenceBlock
               segment={seg}
               onChange={(next) => updateSegment(index, next)}
-              onRemove={() => emit(segments.filter((_, i) => i !== index))}
+              onRemove={() => removeSegment(index)}
             />
           )}
           <InsertGap
@@ -355,13 +478,22 @@ function RichTextBlock({
 }) {
   const pieces = splitTextWithImages(value)
 
+  // Latest text this block knows about — edits compose off this rather than off
+  // `value`, which is still catching up while the user types.
+  const textRef = useRef(value)
+  useEffect(() => {
+    textRef.current = value
+  }, [value])
+
   // Rebuild full text when a piece changes
   const updatePieceText = (pieceIndex: number, nextText: string) => {
-    const next = pieces.map((p, i) => {
+    const next = splitTextWithImages(textRef.current).map((p, i) => {
       if (i !== pieceIndex) return p
       return { kind: 'text' as const, text: nextText }
     })
-    onChange(next.map((p) => (p.kind === 'text' ? p.text : p.raw)).join(''))
+    const joined = next.map((p) => (p.kind === 'text' ? p.text : p.raw)).join('')
+    textRef.current = joined
+    onChange(joined)
   }
 
   // If no images, single full textarea (simpler)
@@ -372,12 +504,12 @@ function RichTextBlock({
         data-drop-slot={`segment:${segmentIndex}`}
         data-drop-label="Insert image in this section"
       >
-        <textarea
+        <SyncedTextarea
           className="hybrid-text-block"
           data-segment-index={segmentIndex}
           value={value}
           rows={Math.min(28, Math.max(3, value.split('\n').length + 1))}
-          onChange={(e) => onChange(e.target.value)}
+          onValueChange={onChange}
           spellCheck={false}
           placeholder={placeholder ?? 'Write Markdown…'}
         />
@@ -414,13 +546,13 @@ function RichTextBlock({
         if (!p.text && i > 0 && i < pieces.length - 1) return null
         const rows = Math.min(20, Math.max(2, p.text.split('\n').length + 1))
         return (
-          <textarea
+          <SyncedTextarea
             key={`t-${i}`}
             className="hybrid-text-block hybrid-text-piece"
             data-segment-index={segmentIndex}
             value={p.text}
             rows={rows}
-            onChange={(e) => updatePieceText(i, e.target.value)}
+            onValueChange={(next) => updatePieceText(i, next)}
             spellCheck={false}
             placeholder={i === 0 ? placeholder : '…'}
           />
@@ -434,10 +566,14 @@ function InsertToolbar({
   busy,
   onInsert,
   onPickImage,
+  onPickPdf,
+  onPickModel,
 }: {
   busy: boolean
   onInsert: (kind: InsertKind | 'beediagram-linked') => void
   onPickImage?: () => void
+  onPickPdf?: () => void
+  onPickModel?: () => void
 }) {
   return (
     <div className="insert-toolbar" role="toolbar" aria-label="Insert content">
@@ -461,6 +597,9 @@ function InsertToolbar({
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('callout')}>
           Callout
         </button>
+      </div>
+      <div className="insert-toolbar-divider" aria-hidden />
+      <div className="insert-toolbar-group insert-toolbar-group--media" aria-label="Media">
         <button
           type="button"
           className="btn sm"
@@ -469,6 +608,24 @@ function InsertToolbar({
           title="Upload image file(s) — or drag/drop / paste where you want them"
         >
           Image
+        </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
+          onClick={() => onPickPdf?.()}
+          title="Upload a PDF document embed"
+        >
+          PDF
+        </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
+          onClick={() => onPickModel?.()}
+          title="Upload a 3D model (.glb / .gltf / .obj)"
+        >
+          3D model
         </button>
       </div>
       <div className="insert-toolbar-divider" aria-hidden />
@@ -589,13 +746,117 @@ function SourceFenceBlock({
           Remove
         </button>
       </div>
-      <textarea
+      <SyncedTextarea
         className="hybrid-text-block hybrid-fence-body"
         value={segment.body}
         rows={rows}
         spellCheck={false}
-        onChange={(e) => onChange({ ...segment, body: e.target.value })}
+        onValueChange={(body) => onChange({ ...segment, body })}
       />
+    </div>
+  )
+}
+
+function mediaBadge(lang: string): string {
+  if (lang === 'pdf') return 'PDF'
+  if (lang === 'glb' || lang === 'gltf' || lang === 'obj' || lang === 'model') return '3D'
+  return lang
+}
+
+function MediaFenceBlock({
+  segment,
+  onChange,
+  onRemove,
+}: {
+  segment: FenceSegment
+  onChange: (s: FenceSegment) => void
+  onRemove: () => void
+}) {
+  const [replacing, setReplacing] = useState(false)
+  const [showSource, setShowSource] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const parsed = parseMediaFenceBody(segment.body)
+  const rows = Math.min(12, Math.max(3, segment.body.split('\n').length + 1))
+
+  const replaceFile = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    if (segment.lang === 'pdf') {
+      input.accept = '.pdf,application/pdf'
+    } else {
+      input.accept = '.glb,.gltf,.obj,model/*'
+    }
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (!file) return
+      void (async () => {
+        setReplacing(true)
+        setError(null)
+        try {
+          const result = await api.uploadFile(file)
+          const lang = fenceLangFromMediaFile(file) || segment.lang
+          const title = parsed.title || result.fileName || file.name
+          const format = modelFormatFromExtension(extensionFromPath(result.url || file.name))
+          const lines = [`title: ${title}`]
+          if (lang === 'model' && format) lines.push(`format: ${format}`)
+          lines.push(result.url)
+          onChange({ type: 'fence', lang, body: lines.join('\n') })
+        } catch (e) {
+          setError(e instanceof Error ? e.message : String(e))
+        } finally {
+          setReplacing(false)
+        }
+      })()
+    }
+    input.click()
+  }
+
+  return (
+    <div className="hybrid-media-block">
+      <div className="hybrid-fence-chrome">
+        <div className="hybrid-fence-labels">
+          <span className="inline-diagram-badge">{mediaBadge(segment.lang)}</span>
+          <span className="hybrid-fence-title">{parsed.title || segment.lang}</span>
+          <span className="muted sm">{segment.lang}</span>
+        </div>
+        <div className="hybrid-fence-actions">
+          <button
+            type="button"
+            className="btn sm"
+            onClick={() => setShowSource((v) => !v)}
+            title={showSource ? 'Show embedded preview' : 'Edit fence source'}
+          >
+            {showSource ? 'Preview' : 'Source'}
+          </button>
+          <button
+            type="button"
+            className="btn sm"
+            disabled={replacing}
+            onClick={replaceFile}
+            title="Upload a different file for this embed"
+          >
+            {replacing ? 'Uploading…' : 'Replace file'}
+          </button>
+          <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+            Remove
+          </button>
+        </div>
+      </div>
+      {error && <div className="banner error compact">{error}</div>}
+      {showSource ? (
+        <SyncedTextarea
+          className="hybrid-text-block hybrid-fence-body"
+          value={segment.body}
+          rows={rows}
+          spellCheck={false}
+          onValueChange={(body) => onChange({ ...segment, body })}
+          aria-label={`${segment.lang} fence source`}
+        />
+      ) : (
+        <div className="hybrid-media-body">
+          <MediaEmbed lang={segment.lang} body={segment.body} />
+        </div>
+      )}
     </div>
   )
 }

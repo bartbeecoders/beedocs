@@ -34,10 +34,11 @@ builder.Services.AddSingleton<IDiagramService, DiagramService>();
 builder.Services.AddSingleton<IShapeCollectionService, ShapeCollectionService>();
 builder.Services.AddSingleton<IExportService, ExportService>();
 builder.Services.AddSingleton<IImportService, ImportService>();
+builder.Services.AddSingleton<ISearchIndexService, SearchIndexService>();
 
 // Imported archives carry their images, so the 30 MB Kestrel default is too
-// tight for a book of screenshots. Individual uploads stay capped at 8 MB by
-// the /api/uploads handler below.
+// tight for a book of screenshots. Individual uploads are capped by type in
+// the /api/uploads handler (8 MB images, 50 MB PDF/3D).
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 256L * 1024 * 1024);
 
 var app = builder.Build();
@@ -52,10 +53,16 @@ if (Directory.Exists(wwwroot))
 }
 
 // Serve the uploads directory resolved above.
+// Map 3D formats that the default content-type provider omits (otherwise 404).
+var uploadContentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+uploadContentTypes.Mappings[".glb"] = "model/gltf-binary";
+uploadContentTypes.Mappings[".gltf"] = "model/gltf+json";
+uploadContentTypes.Mappings[".obj"] = "model/obj";
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(uploadsRoot),
     RequestPath = "/uploads",
+    ContentTypeProvider = uploadContentTypes,
 });
 
 // Ensure SQLite schema (CREATE TABLE IF NOT EXISTS + WAL)
@@ -63,6 +70,18 @@ using (var scope = app.Services.CreateScope())
 {
     var factory = scope.ServiceProvider.GetRequiredService<SqliteConnectionFactory>();
     await DatabaseInitializer.EnsureSchemaAsync(factory);
+
+    // Builds the full-text index on first run after upgrading, and repairs any
+    // drift on later starts. Search must not take the process down with it.
+    var search = scope.ServiceProvider.GetRequiredService<ISearchIndexService>();
+    try
+    {
+        await search.InitializeAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Search index could not be initialized — search may return nothing until POST /api/search/reindex.");
+    }
 }
 
 var api = app.MapGroup("/api");
@@ -92,6 +111,44 @@ else
 api.MapGet("/health", () => Results.Ok(new { status = "ok", service = "BeeDocs.Api", version = appVersion }));
 
 api.MapGet("/version", () => Results.Ok(new { version = appVersion }));
+
+// --- Search ---
+// Full-text over book, folder, page and diagram text. `kinds` is a comma-separated
+// filter; `prefix=false` turns off as-you-type matching on the final term.
+api.MapGet("/search", async (
+    string? q,
+    int? limit,
+    int? offset,
+    string? bookId,
+    string? kinds,
+    bool? prefix,
+    ISearchIndexService search,
+    CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(q))
+        return Results.BadRequest(new { error = "Query parameter 'q' is required." });
+
+    var query = new SearchQuery(
+        Text: q,
+        Limit: limit ?? 20,
+        Offset: offset ?? 0,
+        BookId: string.IsNullOrWhiteSpace(bookId) ? null : bookId,
+        Kinds: ParseKinds(kinds),
+        Prefix: prefix ?? true);
+
+    return Results.Ok(await search.SearchAsync(query, ct));
+});
+
+api.MapGet("/search/status", async (ISearchIndexService search, CancellationToken ct) =>
+    Results.Ok(await search.StatusAsync(ct)));
+
+api.MapPost("/search/reindex", async (ISearchIndexService search, CancellationToken ct) =>
+    Results.Ok(await search.RebuildAsync(ct)));
+
+static string[]? ParseKinds(string? raw) =>
+    string.IsNullOrWhiteSpace(raw)
+        ? null
+        : raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
 // --- Books ---
 api.MapGet("/books", async (IDocumentService docs, CancellationToken ct) =>
@@ -406,12 +463,59 @@ api.MapPost("/import", async (HttpRequest request, IImportService import, Cancel
     }
 });
 
-// --- Uploads (images) ---
-const long MaxUploadBytes = 8 * 1024 * 1024;
+// --- Uploads (images, PDF, 3D models) ---
+const long MaxImageUploadBytes = 8 * 1024 * 1024;
+const long MaxDocumentUploadBytes = 50 * 1024 * 1024;
 var allowedImageExt = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
 };
+var allowedDocumentExt = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+{
+    ".pdf", ".glb", ".gltf", ".obj",
+};
+var allowedUploadExt = new HashSet<string>(allowedImageExt, StringComparer.OrdinalIgnoreCase);
+foreach (var e in allowedDocumentExt) allowedUploadExt.Add(e);
+
+static bool IsAllowedUploadContentType(string contentType) =>
+    contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+    || contentType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase)
+    || contentType.Equals("model/gltf-binary", StringComparison.OrdinalIgnoreCase)
+    || contentType.Equals("model/gltf+json", StringComparison.OrdinalIgnoreCase)
+    || contentType.Equals("model/obj", StringComparison.OrdinalIgnoreCase)
+    // Browsers often label .obj as text/plain; extension check still gates the type.
+    || contentType.Equals("text/plain", StringComparison.OrdinalIgnoreCase)
+    || contentType is "application/octet-stream" or "";
+
+static string InferExtFromContentType(string contentType) =>
+    contentType.ToLowerInvariant() switch
+    {
+        "image/png" => ".png",
+        "image/jpeg" or "image/jpg" => ".jpg",
+        "image/gif" => ".gif",
+        "image/webp" => ".webp",
+        "image/svg+xml" => ".svg",
+        "application/pdf" => ".pdf",
+        "model/gltf-binary" => ".glb",
+        "model/gltf+json" => ".gltf",
+        "model/obj" => ".obj",
+        _ => "",
+    };
+
+static string DefaultContentTypeForExt(string ext) =>
+    ext.ToLowerInvariant() switch
+    {
+        ".png" => "image/png",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".gif" => "image/gif",
+        ".webp" => "image/webp",
+        ".svg" => "image/svg+xml",
+        ".pdf" => "application/pdf",
+        ".glb" => "model/gltf-binary",
+        ".gltf" => "model/gltf+json",
+        ".obj" => "model/obj",
+        _ => "application/octet-stream",
+    };
 
 api.MapPost("/uploads", async (HttpRequest request, CancellationToken ct) =>
 {
@@ -423,49 +527,48 @@ api.MapPost("/uploads", async (HttpRequest request, CancellationToken ct) =>
     if (file is null || file.Length == 0)
         return Results.BadRequest(new { error = "No file uploaded." });
 
-    if (file.Length > MaxUploadBytes)
-        return Results.ValidationProblem(new Dictionary<string, string[]>
-        {
-            ["file"] = [$"File exceeds maximum size of {MaxUploadBytes / (1024 * 1024)} MB."],
-        });
-
     var contentType = file.ContentType ?? "";
-    if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
-        && contentType is not ("application/octet-stream" or ""))
+    if (!IsAllowedUploadContentType(contentType))
     {
         return Results.ValidationProblem(new Dictionary<string, string[]>
         {
-            ["file"] = ["Only image files are allowed."],
+            ["file"] = ["Only image, PDF, and 3D model files are allowed."],
         });
     }
 
     var ext = Path.GetExtension(file.FileName);
-    if (string.IsNullOrWhiteSpace(ext) || !allowedImageExt.Contains(ext))
-    {
-        ext = contentType.ToLowerInvariant() switch
-        {
-            "image/png" => ".png",
-            "image/jpeg" or "image/jpg" => ".jpg",
-            "image/gif" => ".gif",
-            "image/webp" => ".webp",
-            "image/svg+xml" => ".svg",
-            _ => "",
-        };
-    }
+    if (string.IsNullOrWhiteSpace(ext) || !allowedUploadExt.Contains(ext))
+        ext = InferExtFromContentType(contentType);
 
-    if (string.IsNullOrEmpty(ext) || !allowedImageExt.Contains(ext))
+    if (string.IsNullOrEmpty(ext) || !allowedUploadExt.Contains(ext))
         return Results.ValidationProblem(new Dictionary<string, string[]>
         {
-            ["file"] = ["Unsupported image type. Use PNG, JPEG, GIF, WebP, or SVG."],
+            ["file"] = ["Unsupported file type. Use PNG, JPEG, GIF, WebP, SVG, PDF, GLB, GLTF, or OBJ."],
+        });
+
+    ext = ext.ToLowerInvariant();
+    var isImage = allowedImageExt.Contains(ext);
+    var maxBytes = isImage ? MaxImageUploadBytes : MaxDocumentUploadBytes;
+    if (file.Length > maxBytes)
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["file"] = [$"File exceeds maximum size of {maxBytes / (1024 * 1024)} MB."],
         });
 
     var id = Guid.NewGuid().ToString("N")[..16];
-    var storedName = id + ext.ToLowerInvariant();
+    var storedName = id + ext;
     var path = Path.Combine(uploadsRoot, storedName);
     await using (var stream = System.IO.File.Create(path))
     {
         await file.CopyToAsync(stream, ct);
     }
+
+    // Prefer a real media type over browser placeholders (empty / octet-stream / text/plain).
+    var resolvedContentType = string.IsNullOrWhiteSpace(contentType)
+        || contentType.Equals("application/octet-stream", StringComparison.OrdinalIgnoreCase)
+        || contentType.Equals("text/plain", StringComparison.OrdinalIgnoreCase)
+        ? DefaultContentTypeForExt(ext)
+        : contentType;
 
     var url = $"/uploads/{storedName}";
     return Results.Created(url, new
@@ -473,7 +576,7 @@ api.MapPost("/uploads", async (HttpRequest request, CancellationToken ct) =>
         id,
         fileName = Path.GetFileName(file.FileName),
         url,
-        contentType = string.IsNullOrWhiteSpace(contentType) ? $"image/{ext.TrimStart('.')}" : contentType,
+        contentType = resolvedContentType,
         size = file.Length,
     });
 });
@@ -501,8 +604,46 @@ v1.MapGet("/", () => Results.Ok(new
         pages = "/api/v1/books/{bookSlug}/pages",
         page = "/api/v1/books/{bookSlug}/pages/{pageSlug}",
         publish = "PUT /api/v1/publish",
+        search = "/api/v1/search?q=",
     },
 }));
+
+// --- Search ---
+// Same index as /api/search, but scoped by book slug rather than id so callers
+// that publish by slug can query back without holding onto ids.
+v1.MapGet("/search", async (
+    string? q,
+    int? limit,
+    int? offset,
+    string? bookSlug,
+    string? kinds,
+    bool? prefix,
+    IDocumentService docs,
+    ISearchIndexService search,
+    CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(q))
+        return Results.BadRequest(new { error = "Query parameter 'q' is required." });
+
+    string? bookId = null;
+    if (!string.IsNullOrWhiteSpace(bookSlug))
+    {
+        var book = await docs.GetBookBySlugAsync(bookSlug, ct);
+        if (book is null)
+            return Results.NotFound(new { error = $"Book '{bookSlug}' not found." });
+        bookId = book.Id;
+    }
+
+    var query = new SearchQuery(
+        Text: q,
+        Limit: limit ?? 20,
+        Offset: offset ?? 0,
+        BookId: bookId,
+        Kinds: ParseKinds(kinds),
+        Prefix: prefix ?? true);
+
+    return Results.Ok(await search.SearchAsync(query, ct));
+});
 
 // --- Books ---
 v1.MapGet("/books", async (IDocumentService docs, CancellationToken ct) =>
