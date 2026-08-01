@@ -133,6 +133,18 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
     used for inline ` ```beediagram ` fences inside Markdown pages.
   Both read/write the same JSON, so a diagram looks identical in either editor,
   in page previews, and in the PDF/HTML export (`export/`).
+- **LLM writing help** (`/api/llm`, `Services/LlmProviderService.cs` +
+  `LlmClient.cs`, `components/AiAssist.tsx` + `hooks/useLlmAssist.ts`) — inline
+  autocomplete and selection actions (rewrite / grammar / format / summarize) in
+  the page editor. OpenRouter, xAI, OpenAI and LM Studio all speak the OpenAI
+  chat-completions API, so one client covers them; providers are rows in
+  `llm_provider` and the key column is read only by `ResolveAsync`, never put in
+  a DTO. Every call is proxied by the API so no key reaches the browser.
+  `/api/llm` is behind the same `ApiKeyEndpointFilter` as `/api/v1`, which is
+  inert unless `BeeDocs:ApiKey` is set — an open port with a stored key is a
+  bill waiting to happen, and setting the key also switches the feature off in
+  the UI (the browser has nowhere to keep the secret). See
+  `Docs/LLM-PROVIDERS.md`.
 - **BeeDocs.Mcp** wraps the whole REST API for AI agents (official C# MCP SDK).
   Tools/resources/prompts live under `Tools/`, `Resources/`, `Prompts/`; both
   stdio and Streamable HTTP share the same registrations. `BeeDocsApiClient` is
@@ -161,4 +173,5 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/MCP-HOSTING.md` — running the MCP server on K3S behind Cloudflare Access.
 - `Docs/MCP-TOOLS.md` — full MCP tool/resource/prompt catalog.
 - `Docs/DIAGRAM-STUDIO.md` — BeeDiagram Studio editor interactions and JSON format.
+- `Docs/LLM-PROVIDERS.md` — LLM providers, key storage, and the `/api/llm` security trade-off.
 - `Vibecoding/Instructions.md` — product goals/vision behind the MVP.

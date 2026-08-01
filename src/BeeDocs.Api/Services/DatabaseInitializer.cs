@@ -79,6 +79,21 @@ public static class DatabaseInitializer
               updated_at TEXT NOT NULL
             );
 
+            -- LLM providers. api_key is write-only: it is read here to sign an
+            -- upstream call and never leaves LlmProviderService any other way.
+            CREATE TABLE IF NOT EXISTS llm_provider (
+              id TEXT PRIMARY KEY NOT NULL,
+              kind TEXT NOT NULL,
+              name TEXT NOT NULL,
+              base_url TEXT NOT NULL,
+              api_key TEXT,
+              model TEXT NOT NULL DEFAULT '',
+              enabled INTEGER NOT NULL DEFAULT 1,
+              sort_order INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_page_book ON page(book_id);
             CREATE INDEX IF NOT EXISTS idx_chapter_book ON chapter(book_id);
             CREATE INDEX IF NOT EXISTS idx_diagram_book ON diagram(book_id);

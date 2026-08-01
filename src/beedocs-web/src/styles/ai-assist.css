@@ -1,0 +1,500 @@
+/* AI writing help inside the page editor: ghost text, selection menu, proposals. */
+
+.ai-assist-field {
+  position: relative;
+  min-width: 0;
+}
+
+/* Kills the inline-block descender gap, so the overlay's offsets stay whole. */
+.ai-assist-field > textarea {
+  display: block;
+}
+
+/* ===== Ghost continuation =====
+   Font, padding, wrapping, height and scroll position are copied off the field in
+   JS — nothing here may set them, or the two texts drift apart.
+
+   Always clipped. Letting the overlay spill past the field looked like more room
+   but was never reachable: the mirror follows the textarea's scrollTop, and the
+   textarea knows nothing about the overlay, so no wheel, drag or key gesture ever
+   revealed the rest. What does not fit is shown in the panel below instead. */
+.ai-assist-field .ai-ghost {
+  position: absolute;
+  z-index: 1;
+  margin: 0;
+  border: 0;
+  background: none;
+  box-sizing: border-box;
+  overflow: hidden;
+  pointer-events: none;
+  color: transparent;
+}
+
+/* Stands in for the text already in the field, purely to push the suggestion
+   to where the caret is. */
+.ai-ghost-shadow {
+  color: transparent;
+}
+
+/* "Not yours yet" carried by italics, a dashed outline and a tinted band, so the
+   signal does not depend on colour alone — and no underline: it would be the
+   only squiggle in an editor with spellcheck off, which reads as a misspelling.
+
+   The outline replaces the "›" marker that used to carry the shape half of this.
+   That marker was drawn at width:0 and left:-0.65ch — behind the span's own
+   origin, on top of the user's last character and outside the band, i.e. not
+   visible at all. Anything with advance width is impossible here: the overlay
+   must wrap character-for-character with the textarea underneath it, and 1.15
+   characters of marker moved the wrap a word early. An outline costs no layout.
+
+   Full text weight with no alpha: this is the one string on the page the user has
+   to read and judge before committing it, and dimming it into the background was
+   the opposite of what that needs. */
+.ai-ghost-text {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg-elevated));
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  border-radius: 3px;
+  outline: 1px dashed color-mix(in srgb, var(--accent-strong) 70%, transparent);
+  outline-offset: -1px;
+  font-style: italic;
+}
+
+/* The theme for people who need legibility most must not get the least of it:
+   the text keeps full contrast (18.4:1 against the pane, against 11:1 for
+   --muted on --bg-soft) and the outline alone carries the distinction. */
+html[data-theme='high-contrast'] .ai-ghost-text {
+  color: var(--text);
+  background: var(--bg-soft);
+  outline: 1px dashed var(--border-strong);
+}
+
+/* ===== Ghost panel: the keys, and whatever did not fit =====
+   In the flow, directly under the field, displacing what follows.
+
+   It used to float: absolutely positioned at the field's bottom edge and
+   pointer-events:none, which covered 85% of the next block while letting the
+   user click into it and type text they could not see. Nothing here is
+   positioned, so there is also nothing to flip, clamp or re-measure when the
+   block is resized, a webfont lands, or the editor pane scrolls. */
+.ai-assist-hud {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  max-width: 100%;
+  margin-top: 0.3rem;
+  padding: 0.28rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, var(--border-strong));
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  user-select: none;
+}
+
+.ai-assist-hud.is-busy {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+  border-left-color: var(--accent);
+}
+
+/* The part of the suggestion the field had no room for — the whole of it, and
+   never anything the field already shows, so accepting is a decision rather than
+   a guess and no line is printed twice at two different sizes.
+
+   No max-height: the old 7.5rem cut the "whole suggestion" a second time, with
+   no marker and nothing to scroll it with. In the flow the panel can simply be
+   as tall as the text; it pushes the page down instead of hiding it. */
+.ai-assist-hud-text {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-style: italic;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ai-assist-hud-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
+.ai-assist-hud kbd {
+  padding: 0 0.22rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+}
+
+.ai-assist-spark {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: ai-assist-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes ai-assist-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.75);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-assist-spark {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
+/* ===== Selection menu ===== */
+.ai-assist-menu {
+  position: absolute;
+  z-index: 8;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: calc(100% - 0.5rem);
+  padding: 0.3rem 0.35rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+/* aria-disabled, not disabled — the button keeps focus so Escape, Tab order and
+   the changed label survive the click that started the request. */
+.ai-assist-menu .btn[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.ai-assist-badge {
+  padding: 0.08rem 0.35rem;
+  border-radius: 5px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ===== Proposed replacement ===== */
+.ai-assist-proposal {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-elevated));
+}
+
+/* It takes focus when the button that opened it unmounts, so it needs a ring. */
+.ai-assist-proposal:focus-visible {
+  outline: 2px solid var(--focus, var(--accent));
+  outline-offset: 2px;
+}
+
+.ai-assist-proposal-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.ai-assist-proposal-body {
+  display: grid;
+  gap: 0.5rem;
+  /* Collapses on a narrow editor pane without knowing the viewport width. */
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.ai-assist-proposal-col {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.ai-assist-col-label {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ai-assist-text {
+  margin: 0;
+  max-height: 14rem;
+  overflow: auto;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-pane);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ai-assist-text.is-original {
+  color: var(--muted);
+}
+
+.ai-assist-text.is-proposed {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elevated));
+}
+
+.ai-assist-note {
+  margin: 0;
+  color: var(--danger);
+}
+
+.ai-assist-proposal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+/* ===== The browser refused the insertion =====
+   The whole of the replacement for the undo shim that used to sit behind a
+   `setRangeText` fallback: nothing is written, the text is selected so the
+   keystroke in the message works, and there is a button for people who would
+   rather click. */
+.ai-assist-fallback {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-elevated));
+}
+
+.ai-assist-fallback-msg {
+  margin: 0;
+  color: var(--danger);
+}
+
+.ai-assist-fallback pre:focus-visible {
+  outline: 2px solid var(--focus, var(--accent));
+  outline-offset: 2px;
+}
+
+/* ===== Failures the user asked for ===== */
+.ai-assist-error {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg-elevated));
+  color: var(--danger);
+  font-size: 0.8rem;
+}
+
+.ai-assist-error-text {
+  min-width: 0;
+  white-space: pre-wrap;
+}
+
+/* ===== Editor control ===== */
+.ai-assist-bar {
+  position: relative;
+  align-self: flex-start;
+}
+
+/* A control, not a caption. Under the "Add" toolbar with no border, no box and no
+   chevron it read as a status label, so the switch, the keyboard help and the
+   provider link inside it were undiscoverable. */
+.ai-assist-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.ai-assist-bar-btn:hover,
+.ai-assist-bar-btn[aria-expanded='true'] {
+  border-color: var(--border-strong);
+  background: var(--bg-soft);
+}
+
+.ai-assist-bar-btn:focus-visible {
+  outline: 2px solid var(--focus, var(--accent));
+  outline-offset: 2px;
+}
+
+.ai-assist-chevron {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+/* Which of the four states is running, in a glyph as well as a colour. */
+.ai-assist-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.ai-assist-pill.is-inline {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--accent-strong);
+}
+
+.ai-assist-pill.is-paused {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  color: var(--danger);
+}
+
+.ai-assist-pill.is-snoozed {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.ai-assist-popover {
+  position: absolute;
+  z-index: 9;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  display: grid;
+  justify-items: start;
+  gap: 0.45rem;
+  /* Fixed width: the help text used to change length with the setting and shove
+     everything beside it sideways. */
+  width: min(22rem, 80vw);
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+.ai-assist-popover-hint,
+.ai-assist-popover-state,
+.ai-assist-popover-note {
+  margin: 0;
+}
+
+/* What the current state means for the user's prose, in plain words — the state
+   name on the button is a label, not an explanation. */
+.ai-assist-popover-state {
+  color: var(--text);
+}
+
+.ai-assist-popover-note {
+  color: var(--danger);
+}
+
+/* ===== Inline-suggestion switch ===== */
+.ai-assist-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ai-assist-switch input {
+  appearance: none;
+  position: relative;
+  width: 2.1rem;
+  height: 1.1rem;
+  flex: none;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-soft);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.ai-assist-switch input::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0.12rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: var(--muted);
+  transition: left 0.12s ease, background 0.12s ease;
+}
+
+.ai-assist-switch input:checked {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 35%, var(--bg-soft));
+}
+
+.ai-assist-switch input:checked::after {
+  left: calc(100% - 0.92rem);
+  background: var(--accent-strong);
+}
+
+.ai-assist-switch input:focus-visible {
+  outline: 2px solid var(--focus, var(--accent));
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-assist-switch input,
+  .ai-assist-switch input::after {
+    transition: none;
+  }
+}
+
+.ai-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

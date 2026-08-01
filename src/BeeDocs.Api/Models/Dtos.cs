@@ -244,3 +244,95 @@ public sealed record SearchStatusDto(
     int Folders,
     DateTimeOffset? LastIndexedAt
 );
+
+// --- LLM providers & completion ---
+
+/// <summary>
+/// A provider as the client sees it. There is deliberately no key field: the key
+/// is write-only, and <paramref name="KeyHint"/> is all a UI needs to tell two
+/// keys apart.
+/// </summary>
+/// <param name="Kind">openrouter | xai | openai | lmstudio.</param>
+/// <param name="Model">Preferred model id. Empty = whatever the provider lists first.</param>
+/// <param name="KeyHint">Last four characters of the stored key, or null when none is stored.</param>
+public sealed record LlmProviderDto(
+    string Id,
+    string Kind,
+    string Name,
+    string BaseUrl,
+    string Model,
+    bool Enabled,
+    bool HasKey,
+    string? KeyHint,
+    /// <summary>False for LM Studio, which is usually unauthenticated.</summary>
+    bool RequiresKey,
+    int SortOrder,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="BaseUrl">Omit to take the default for <paramref name="Kind"/>.</param>
+public sealed record CreateLlmProviderRequest(
+    [property: Required, MinLength(1)] string Kind,
+    string? Name,
+    string? BaseUrl,
+    string? ApiKey,
+    string? Model,
+    bool? Enabled,
+    int? SortOrder
+);
+
+/// <param name="ApiKey">null = leave the stored key untouched; "" = delete it; anything else = replace it.</param>
+public sealed record UpdateLlmProviderRequest(
+    string? Name,
+    string? BaseUrl,
+    string? ApiKey,
+    string? Model,
+    bool? Enabled,
+    int? SortOrder
+);
+
+/// <param name="ContextLength">Tokens, when the provider reports it.</param>
+public sealed record LlmModelDto(
+    string Id,
+    string? Name,
+    int? ContextLength
+);
+
+/// <param name="Task">continue | rewrite | grammar | format | summarize.</param>
+/// <param name="Prompt">For continue: the text immediately before the caret. Otherwise an optional extra instruction.</param>
+/// <param name="Context">Surrounding document text. Sent for grounding only, never echoed back.</param>
+/// <param name="Selection">The text the selection actions operate on.</param>
+/// <param name="ProviderId">Omit to use the first enabled provider.</param>
+/// <param name="Model">Omit to use the provider's configured model.</param>
+public sealed record LlmCompleteRequest(
+    [property: Required, MinLength(1)] string Task,
+    string? Prompt,
+    string? Context,
+    string? Selection,
+    string? ProviderId,
+    string? Model,
+    int? MaxTokens,
+    double? Temperature
+);
+
+/// <param name="Text">The answer, already stripped of preamble and wrapping code fences.</param>
+public sealed record LlmCompleteResponse(
+    string Text,
+    string ProviderId,
+    string ProviderName,
+    string Kind,
+    string Model,
+    int? PromptTokens,
+    int? CompletionTokens,
+    int ElapsedMs
+);
+
+/// <param name="Message">Human-readable either way — show it verbatim.</param>
+public sealed record LlmTestResultDto(
+    bool Ok,
+    string Message,
+    /// <summary>Model count the provider reported, when the call got that far.</summary>
+    int? ModelCount,
+    int ElapsedMs
+);

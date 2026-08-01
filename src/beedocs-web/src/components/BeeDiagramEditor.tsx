@@ -611,7 +611,7 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
     setLinkDrag(null)
     setDrag(null)
 
-    let nodeId = opts.nodeId ?? null
+    const nodeId = opts.nodeId ?? null
     let edgeId = opts.edgeId ?? null
 
     // Right-click empty canvas: hit-test edge under cursor first

@@ -55,6 +55,8 @@ export function PageCanvas({ onStateChange }: Props) {
   const dirtyRef = useRef(dirty)
   const pageIdRef = useRef(pageId)
   const savingRef = useRef(false)
+  /** Title the library tree is currently showing, so a save only refreshes it when it moved. */
+  const treeTitleRef = useRef('')
 
   titleRef.current = title
   contentRef.current = content
@@ -99,6 +101,7 @@ export function PageCanvas({ onStateChange }: Props) {
         setPage(p)
         setTitle(p.title)
         setContent(p.content)
+        treeTitleRef.current = p.title
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       }
@@ -125,7 +128,13 @@ export function PageCanvas({ onStateChange }: Props) {
       if (titleRef.current === payload.title && contentRef.current === payload.content) {
         setDirty(false)
       }
-      await renameInTree()
+      // The tree only shows the title, so refetching the whole library after every
+      // autosave just churned state — and every workspace re-render it caused was
+      // one more rebuild of the preview's diagrams.
+      if (updated.title !== treeTitleRef.current) {
+        treeTitleRef.current = updated.title
+        await renameInTree()
+      }
     } catch (err) {
       if (pageIdRef.current === id) {
         setError(err instanceof Error ? err.message : String(err))
@@ -279,6 +288,11 @@ export function PageCanvas({ onStateChange }: Props) {
         {(mode === 'edit' || mode === 'split') && (
           <div className="editor-hybrid">
             <HybridPageEditor
+              // Per-page. Without it the editor's blocks — and the textarea DOM
+              // nodes inside them — are reused when you open a different page,
+              // carrying that page's manually dragged heights and per-field
+              // editor state onto the new one.
+              key={pageId}
               content={content}
               bookId={bookId}
               pageId={pageId}

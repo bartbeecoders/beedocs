@@ -1,0 +1,892 @@
+/* AI provider settings. Every colour comes from the theme tokens so the seven
+   themes stay in step; nothing here may be a literal colour. */
+
+/* Everything in this section is inside .llm-providers — the model list is an
+   ordinary in-flow panel now, not a portalled popup, so there is no second root
+   to keep in step with this one. */
+.llm-providers {
+  /* One spacing scale for the whole section — the ad-hoc 0.7/0.85/0.9/0.95rem
+     insets left the card's left edge ragged between header and body. */
+  --llm-1: 0.25rem;
+  --llm-2: 0.5rem;
+  --llm-3: 0.75rem;
+  --llm-4: 1rem;
+  --llm-5: 1.5rem;
+  --llm-r: var(--radius);
+  --llm-r-sm: 8px;
+  /* The disclosure chevron's column: the header title starts after it, so the
+     body has to be indented by the same amount for the two to line up. */
+  --llm-chevron: 0.85rem;
+  --llm-gutter: calc(var(--llm-chevron) + var(--llm-2));
+
+  /* --border and --border-strong sit at 1.5–2.3:1 against --bg, so a card drawn
+     with either is not a perceivable surface (WCAG 1.4.11 wants 3:1). This lands
+     at 3.5:1 or better in all seven themes. */
+  --llm-line: color-mix(in srgb, var(--muted) 70%, var(--border));
+}
+
+.llm-providers {
+  display: grid;
+  gap: var(--llm-3);
+}
+
+.llm-intro {
+  margin: -0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  max-width: 78ch;
+  line-height: 1.5;
+}
+
+.llm-notice {
+  margin: 0;
+  padding: var(--llm-2) var(--llm-3);
+  border-radius: var(--llm-r-sm);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--llm-line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.llm-list {
+  display: grid;
+  gap: var(--llm-2);
+}
+
+/* The banner carries the only way back from a failed load, so it has to hold a
+   button without the message shoving it off the line. */
+.llm-load-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--llm-2) var(--llm-3);
+}
+
+.llm-load-error > span {
+  min-width: 0;
+}
+
+/* ===== Provider card ===== */
+/* Nothing escapes the card any more — the model list is an in-flow panel inside
+   the body — but the children still round their own outer corners rather than
+   relying on a clip, so a future popup cannot be silently cut off. */
+.llm-card {
+  border: 1px solid var(--llm-line);
+  border-radius: var(--llm-r);
+  background: var(--bg-elevated);
+}
+
+/* --accent-strong, not --accent: --accent only reaches 2.4:1 on honey-light. */
+.llm-card.is-open {
+  border-color: var(--accent-strong);
+  box-shadow: var(--shadow);
+}
+
+.llm-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--llm-2);
+  padding-right: var(--llm-3);
+}
+
+.llm-card-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--llm-2);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: var(--llm-2) var(--llm-1) var(--llm-2) var(--llm-3);
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.12s ease;
+  /* Inner radius (border box minus the 1px border) so the hover fill follows the
+     card's corners now that the card no longer clips it. */
+  border-radius: calc(var(--llm-r) - 1px) 0 0 calc(var(--llm-r) - 1px);
+}
+
+/* Anything below the header — the body, or a row error on a closed card — owns
+   the bottom corner instead. */
+.llm-card-head:not(:last-child) .llm-card-open {
+  border-bottom-left-radius: 0;
+}
+
+/* Disabled only while the whole list is being renumbered, and only to stop a
+   card opening onto a record that is mid-move. Not an error state: leave the
+   text at full strength and just drop the affordance. */
+.llm-card-open:disabled {
+  cursor: default;
+}
+
+.llm-card-open:disabled:hover {
+  background: transparent;
+}
+
+.llm-card-open:disabled:hover .llm-chevron {
+  color: var(--muted);
+}
+
+/* The disclosure row is the main control on the card; without a hover state the
+   Add buttons below read as the only interactive thing on the page. */
+.llm-card-open:hover {
+  background: var(--tree-active);
+}
+
+.llm-card-open:hover .llm-chevron {
+  color: var(--accent-strong);
+}
+
+.llm-card-open:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.llm-chevron {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1;
+  /* Fixed column so the title's left edge does not move between rows, and so
+     the body below can be indented by exactly this much. */
+  width: var(--llm-chevron);
+  flex: none;
+  text-align: center;
+  transform: rotate(-90deg);
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+
+.llm-card.is-open .llm-chevron {
+  transform: none;
+  color: var(--accent-strong);
+}
+
+.llm-card-title {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.llm-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--llm-2);
+  min-width: 0;
+}
+
+.llm-name {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llm-card-sub {
+  color: var(--muted);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A disabled provider is still configured — recede it, do not hide it.
+   :not(.is-open) because a provider is created switched off and its card opens
+   immediately: the focused, editable card was being painted as a ghost.
+
+   Two changes from the version that failed review, both about contrast:
+   - the fill was var(--bg), which is the page colour itself (#12110f in
+     honey-dark — literally indistinguishable). Dropping it leaves the card on
+     --bg-elevated like every other card; the dashed border and the muted name
+     are the recede signal, and neither depends on a surface difference.
+   - opacity 0.6 / 0.55 took --muted to ~3.4:1 at 12.5px and the "Key needed"
+     badge — the one thing that has to be legible — to ~3:1 at 10.9px uppercase.
+     A token colour replaces both: --muted passes on its own in all seven
+     themes, and the badges keep the colours they were checked at. */
+.llm-card.is-off:not(.is-open) {
+  border-style: dashed;
+}
+
+.llm-card.is-off:not(.is-open) .llm-name {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.llm-card-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--llm-2);
+  flex: none;
+}
+
+.llm-badge {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.16rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--llm-line);
+  color: var(--muted);
+  white-space: nowrap;
+  flex: none;
+}
+
+/* Solid, not a tint: the tinted version was 3.75:1 at 10.9px uppercase, and in
+   high-contrast a 12% accent mix over near-black disappeared entirely. Every
+   theme pairs --accent-fg with --accent-strong at 4.55:1 or better. */
+.llm-badge.is-default {
+  color: var(--accent-fg);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.llm-badge.is-warn {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-elevated));
+}
+
+.llm-badge.is-dirty {
+  color: var(--accent-strong);
+  border-color: var(--accent-strong);
+  background: transparent;
+}
+
+/* ===== Enable switch ===== */
+.llm-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.llm-switch input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 32px;
+  height: 18px;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--llm-line);
+  background: var(--bg-soft);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.llm-switch input::after {
+  content: '';
+  position: absolute;
+  inset: 2px auto auto 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.14s ease, background 0.14s ease;
+}
+
+/* Solid accent, not a mix with the card fill: mixing turned the track muted
+   olive in high-contrast, the one theme whose whole point is not being muted. */
+.llm-switch input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.llm-switch input:checked::after {
+  transform: translateX(14px);
+  background: var(--accent-fg);
+}
+
+.llm-switch input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Two different reasons to be disabled, two cursors: this row's own request is
+   in flight (progress), or the whole list is being renumbered by another row and
+   this one is simply out of bounds (not-allowed). One "progress" for both made
+   every switch on the page look like it was mid-request. */
+.llm-switch input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.llm-switch.is-working input:disabled {
+  cursor: progress;
+}
+
+.llm-switch-text {
+  font-size: 0.75rem;
+  color: var(--muted);
+  width: 1.6rem;
+}
+
+/* ===== Per-row error ===== */
+.llm-row-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--llm-2);
+  margin: 0;
+  /* Left inset matches the card title, not the card edge. */
+  padding: var(--llm-2) var(--llm-3) var(--llm-2) calc(var(--llm-3) + var(--llm-gutter));
+  border-top: 1px solid color-mix(in srgb, var(--danger) 40%, var(--llm-line));
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-elevated));
+  color: var(--danger);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+/* On a closed card the error bar is the card's own bottom edge. */
+.llm-row-error:last-child {
+  border-radius: 0 0 calc(var(--llm-r) - 1px) calc(var(--llm-r) - 1px);
+}
+
+.llm-row-error > span {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Without a way out, one failed toggle pins a red bar under the row for the
+   rest of the session. */
+.llm-row-error-x {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+  border-radius: 6px;
+}
+
+.llm-row-error-x:hover {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+.llm-row-error-x:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* ===== Card body ===== */
+.llm-card-body {
+  display: grid;
+  gap: var(--llm-3);
+  /* Indented by the chevron's column so the first label lines up with the card
+     title above it — the header's own inset is where the chevron sits, so
+     matching that number left the title 1.35rem to the right of the body. */
+  padding: var(--llm-3) var(--llm-3) var(--llm-3) calc(var(--llm-3) + var(--llm-gutter));
+  border-top: 1px solid var(--llm-line);
+  /* --bg-soft, not --bg-pane: in honey-dark --bg-pane is #171510 against a
+     #12110f page and a #1c1a16 card head — three surfaces inside five levels of
+     luminance, so the open body did not read as part of anything. --bg-soft is
+     the theme's "inset panel" step and sits clear of both in every theme. */
+  background: var(--bg-soft);
+  /* The card does not clip any more, so the body rounds its own bottom. */
+  border-radius: 0 0 calc(var(--llm-r) - 1px) calc(var(--llm-r) - 1px);
+}
+
+.llm-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: var(--llm-3);
+}
+
+@media (max-width: 720px) {
+  .llm-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.llm-field {
+  display: grid;
+  gap: var(--llm-1);
+  min-width: 0;
+}
+
+.llm-field > label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.llm-mono {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+}
+
+/* Chrome paints its password-manager glyph inside the box whatever the
+   autocomplete value; leave it somewhere to sit that is not on top of the key. */
+.llm-key {
+  padding-right: 2.2rem;
+}
+
+.llm-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--llm-2);
+  min-width: 0;
+}
+
+.llm-inline > .btn {
+  flex: none;
+}
+
+.llm-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.llm-hint.is-warn {
+  color: var(--danger);
+}
+
+/* ===== Model browse panel =====
+   In normal flow inside the card body, deliberately. The three popup versions of
+   this control were each defeated by geometry: clipped by the card, then
+   portalled and unable to follow a pane-resizer drag or a pane collapse (neither
+   fires window resize), painted over the sticky header on scroll, and floored at
+   96px in gaps smaller than that. A panel that pushes the card taller has no
+   placement to compute, nothing to re-measure and nothing to clamp. */
+.llm-browse {
+  display: grid;
+  gap: var(--llm-2);
+  padding: var(--llm-2);
+  border: 1px solid var(--llm-line);
+  border-radius: var(--llm-r-sm);
+  background: var(--bg-elevated);
+}
+
+.llm-browse-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* Its own scroller, so 300 OpenRouter models do not push Save off the page. */
+  max-height: 15rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.llm-browse-row {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: var(--llm-2);
+  text-align: left;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  padding: var(--llm-1) var(--llm-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.llm-browse-row:hover:not(:disabled) {
+  background: var(--tree-active);
+}
+
+.llm-browse-row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.llm-browse-row:disabled {
+  cursor: not-allowed;
+}
+
+.llm-browse-row.is-chosen .llm-browse-id {
+  font-weight: 650;
+  color: var(--accent-strong);
+}
+
+.llm-browse-id {
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llm-browse-note {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A readonly field is inert but still focusable — that is the point, `disabled`
+   threw focus to <body> on every save. Give it a surface that says so. */
+.llm-providers input[readonly] {
+  /* The card body's own colour, so the field merges into the panel instead of
+     standing out from it — the same "inert" read as a disabled control without
+     taking the field out of the tab order. */
+  background: var(--bg-soft);
+  cursor: default;
+}
+
+/* ===== Test result ===== */
+.llm-result {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--llm-2);
+  margin: 0;
+  padding: var(--llm-2) var(--llm-3);
+  border-radius: var(--llm-r-sm);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  border: 1px solid var(--llm-line);
+  background: var(--bg-elevated);
+}
+
+.llm-result.is-ok {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--llm-line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+}
+
+.llm-result.is-fail {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--llm-line));
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-elevated));
+  color: var(--danger);
+}
+
+.llm-result-mark {
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.llm-result.is-ok .llm-result-mark {
+  color: var(--accent-strong);
+}
+
+.llm-result-meta {
+  color: var(--muted);
+}
+
+/* ===== Actions ===== */
+/* The card's footer, not one more field row. At the shared --llm-3 field gap
+   with only --llm-1 of padding it read as another labelled row; a rule plus a
+   full step of space above it is what makes the fields end. */
+.llm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--llm-2) var(--llm-3);
+  margin-top: var(--llm-1);
+  padding-top: var(--llm-3);
+  border-top: 1px solid var(--llm-line);
+}
+
+.llm-actions-main,
+.llm-actions-side {
+  display: flex;
+  align-items: center;
+  gap: var(--llm-2);
+}
+
+/* Keep the two groups apart when the row wraps: without a floor on the main
+   group Delete drops straight underneath Save changes in a narrow centre pane. */
+.llm-actions-main {
+  flex: 1 1 auto;
+  min-width: 16rem;
+}
+
+.llm-actions-side {
+  margin-left: auto;
+}
+
+/* Disabled primary. The rule, decided once rather than tuned again:
+   a disabled Save keeps the accent *identity* (it is still the primary slot) and
+   loses the accent *emphasis* (it is dead). Three properties carry that and
+   opacity is not one of them — three rounds of tuning the alpha produced, in
+   order, a button louder than the enabled one beside it and then a button byte-
+   identical to it.
+
+   - fill: a 18% accent wash over --bg-soft. Still visibly the accent-tinted
+     button in the row; nowhere near the enabled solid accent gradient.
+   - border: 30% accent over --border. Quieter than --llm-line, which is a
+     *stronger* rule than the enabled Test button's border.
+   - text: --muted at weight 400. .btn.primary sets 650 and never reset it, so
+     the dead control kept the row's emphasis. --muted over the wash measures
+     4.0:1 in honey-dark and 4.8:1 in honey-light — WCAG exempts disabled
+     controls from 1.4.3, and this is the property that makes it read inactive
+     next to the enabled Test button's full-strength --text.
+
+   opacity:1 cancels the global .btn:disabled 0.5, which would otherwise wash the
+   wash out to nothing. cursor:not-allowed still comes from the global rule. */
+.llm-providers .btn.primary:disabled {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  color: var(--muted);
+  font-weight: 400;
+  opacity: 1;
+}
+
+/* High contrast has no half-strength anything: the wash is invisible over near
+   black, so identity comes from the border alone. */
+html[data-theme='high-contrast'] .llm-providers .btn.primary:disabled {
+  background: var(--bg-soft);
+  border-color: var(--accent);
+  color: var(--muted);
+}
+
+.llm-flash {
+  font-size: 0.78rem;
+  color: var(--accent-strong);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.llm-flash.is-on {
+  opacity: 1;
+}
+
+.llm-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--llm-2);
+  padding: var(--llm-2) var(--llm-3);
+  border-radius: var(--llm-r-sm);
+  font-size: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 55%, var(--llm-line));
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-elevated));
+}
+
+.llm-confirm-actions {
+  display: flex;
+  gap: var(--llm-2);
+}
+
+/* ===== Empty and loading states ===== */
+.llm-empty {
+  border: 1px dashed var(--llm-line);
+  border-radius: var(--llm-r);
+  background: var(--bg-soft);
+  padding: var(--llm-4);
+}
+
+.llm-empty h3 {
+  margin: 0 0 var(--llm-1);
+  font-size: 0.9rem;
+}
+
+.llm-empty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  max-width: 78ch;
+}
+
+.llm-empty code {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.llm-skeleton {
+  height: 52px;
+  border: 1px solid var(--llm-line);
+  border-radius: var(--llm-r);
+  background: linear-gradient(
+    90deg,
+    var(--bg-elevated),
+    var(--bg-soft) 40%,
+    var(--bg-elevated) 80%
+  );
+  background-size: 250% 100%;
+  animation: llm-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes llm-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -40% 0;
+  }
+}
+
+.llm-spinner {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-top-color: var(--accent);
+  animation: llm-spin 0.7s linear infinite;
+}
+
+@keyframes llm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .llm-skeleton,
+  .llm-spinner,
+  .llm-chevron,
+  .llm-card-open,
+  .llm-switch input,
+  .llm-switch input::after {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ===== Add a provider ===== */
+.llm-add {
+  display: grid;
+  gap: var(--llm-2);
+  /* The grid used to sit closer to the last card than the cards sat to each
+     other, so it read as that card's footer. */
+  margin-top: var(--llm-3);
+  padding-top: var(--llm-4);
+  /* --llm-line, not --border: a rule nobody can see does not separate anything,
+     which is the reason this file defines --llm-line in the first place. */
+  border-top: 1px solid var(--llm-line);
+}
+
+/* A section heading, not a field label. At 0.76rem uppercase muted it was set
+   identically to NAME and BASE URL above it, so the boundary between "the
+   providers you have" and "providers you can add" read as one more label — and
+   the rule above it is invisible at that weight. */
+.llm-add-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--text);
+}
+
+.llm-add-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--llm-2);
+}
+
+/* Subgrid so name / hint / URL line up across the row even when one card's hint
+   wraps to two lines. */
+.llm-kind-btn {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  gap: 0.15rem;
+  align-content: start;
+  text-align: left;
+  border: 1px solid var(--llm-line);
+  border-radius: var(--llm-r);
+  background: var(--bg-elevated);
+  color: inherit;
+  padding: var(--llm-2) var(--llm-3);
+  cursor: pointer;
+  font: inherit;
+}
+
+.llm-kind-btn:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+  background: var(--tree-active);
+}
+
+.llm-kind-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.llm-kind-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.llm-kind-name {
+  display: flex;
+  align-items: center;
+  gap: var(--llm-2);
+  font-weight: 600;
+}
+
+.llm-kind-count {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--llm-line);
+  border-radius: 999px;
+  padding: 0.05rem 0.35rem;
+}
+
+.llm-kind-hint {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.llm-kind-url {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* High contrast keeps solid fills: a 8–12% tint over near-black is invisible,
+   and the theme exists precisely so nothing is half-strength. */
+html[data-theme='high-contrast'] .llm-notice,
+html[data-theme='high-contrast'] .llm-result.is-ok,
+html[data-theme='high-contrast'] .llm-result.is-fail,
+html[data-theme='high-contrast'] .llm-row-error,
+html[data-theme='high-contrast'] .llm-confirm,
+html[data-theme='high-contrast'] .llm-badge.is-warn {
+  background: var(--bg-soft);
+}
+
+html[data-theme='high-contrast'] .llm-notice,
+html[data-theme='high-contrast'] .llm-result.is-ok {
+  border-color: var(--accent);
+}
+
+html[data-theme='high-contrast'] .llm-result.is-fail,
+html[data-theme='high-contrast'] .llm-row-error,
+html[data-theme='high-contrast'] .llm-confirm {
+  border-color: var(--danger);
+}
+
+/* The one-time inline-suggestions offer. Sits with the notices, but carries
+   actions, so it needs the vertical rhythm of a card rather than a sentence. */
+.llm-offer {
+  display: grid;
+  gap: var(--llm-2);
+}
+
+.llm-offer p {
+  margin: 0;
+}
+
+.llm-offer-actions {
+  display: flex;
+  gap: var(--llm-2);
+  flex-wrap: wrap;
+}

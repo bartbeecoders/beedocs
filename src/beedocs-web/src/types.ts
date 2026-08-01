@@ -307,3 +307,98 @@ export type BeeDiagramDoc = {
   edges: BeeEdge[]
   viewport: BeeViewport
 }
+
+/** All four speak the OpenAI chat-completions API; only base URL and auth differ. */
+export type LlmKind = 'openrouter' | 'xai' | 'openai' | 'lmstudio'
+
+/** Canonical task names. The API also accepts aliases, but send these. */
+export type LlmTask = 'continue' | 'rewrite' | 'grammar' | 'format' | 'summarize'
+
+/**
+ * A configured provider. The API key stays server-side and is never returned —
+ * only {@link LlmProvider.hasKey} and the last four characters.
+ */
+export type LlmProvider = {
+  id: string
+  kind: LlmKind
+  name: string
+  baseUrl: string
+  /** "" means "use the provider's first listed model" — normal for LM Studio. */
+  model: string
+  enabled: boolean
+  hasKey: boolean
+  /** Last 4 characters of the stored key; null when there is none. */
+  keyHint: string | null
+  /** false for lmstudio, which is unauthenticated. */
+  requiresKey: boolean
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** Only `kind` is required — name, baseUrl and a starter model are filled server-side. */
+export type CreateLlmProviderRequest = {
+  kind: LlmKind
+  name?: string
+  baseUrl?: string
+  apiKey?: string
+  model?: string
+  enabled?: boolean
+  sortOrder?: number
+}
+
+export type UpdateLlmProviderRequest = {
+  name?: string
+  baseUrl?: string
+  /** Omit or null leaves the stored key alone; "" clears it. */
+  apiKey?: string | null
+  model?: string
+  enabled?: boolean
+  sortOrder?: number
+}
+
+export type LlmModel = {
+  id: string
+  /** Often null on LM Studio and OpenAI. */
+  name: string | null
+  contextLength: number | null
+}
+
+/** Never fails with an error status — a broken provider comes back as ok:false. */
+export type LlmTestResult = {
+  ok: boolean
+  message: string
+  modelCount: number | null
+  elapsedMs: number
+}
+
+export type LlmCompleteRequest = {
+  task: LlmTask
+  /** continue: the text before the caret. Other tasks: an extra instruction. */
+  prompt?: string
+  /** Surrounding document, for grounding only. Server keeps the tail. */
+  context?: string
+  /** The text the action applies to (rewrite/grammar/format/summarize). */
+  selection?: string
+  /** Omit to use the first enabled provider by sortOrder. */
+  providerId?: string
+  /** Omit to use the provider's configured model. */
+  model?: string
+  maxTokens?: number
+  temperature?: number
+}
+
+export type LlmCompleteResponse = {
+  /**
+   * Insert verbatim. For `continue` a leading space is deliberate and
+   * load-bearing — trimming it glues the suggestion onto the previous word.
+   */
+  text: string
+  providerId: string
+  providerName: string
+  kind: LlmKind
+  model: string
+  promptTokens: number | null
+  completionTokens: number | null
+  elapsedMs: number
+}

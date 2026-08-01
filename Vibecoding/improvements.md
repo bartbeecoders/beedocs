@@ -13,6 +13,20 @@ Fan out sub-agents and have sub-agents tackle each one individually so that the 
 Don't stop until each sub-agent is utterly wowed with the quality when compared with professional web sites . It should literally compare them side by side blind and say which one looks better. Do this in ThreeJS. /loop until it's utterly perfect. Fan out sub-agents and ultracode.
 
 
+## page editing
+Allow for drag and drop of sections on a page in order to be able to move them
+
+## json/xml formating
+allow for drag and drop of json or xml files on a page
 
 ## doc index and search
 Add a document indexing function and fast search functionality.
+
+
+## LLM assisted auto complete
+Implement a connection to LLM providers and models to help the user with writing and formatting text.
+Kind of LLM/AI assisted auto complete.
+
+Add full LLM provider management: open router, xAI, openAI, LM studio
+
+Fan out sub-agents and have sub-agents tackle each one individually so that the web app is utterly perfect. You should /loop on each item and have a separate sub-agent check it visually to ensure it looks triple A. That separate sub-agent should be a really harsh critic, and if it doesn't look triple A, it should keep going.

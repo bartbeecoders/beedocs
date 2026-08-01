@@ -1,4 +1,16 @@
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from 'react'
 import { Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -6,6 +18,8 @@ import mermaid from 'mermaid'
 import { api } from '../api'
 import { withApiBase } from '../basePath'
 import { replaceFenceBody } from '../markdownFences'
+import { highlightCode, resolveLanguage } from '../syntaxHighlight'
+import { DataTree } from './DataTree'
 import { BeeDiagramEditor } from './BeeDiagramEditor'
 import { BeeDiagramView } from './BeeDiagramView'
 import { MediaEmbed } from './media/MediaEmbed'
@@ -16,6 +30,30 @@ mermaid.initialize({
   securityLevel: 'loose',
   fontFamily: 'ui-sans-serif, system-ui, sans-serif',
 })
+
+/** Module scope: a fresh array each render would defeat react-markdown's own memoization. */
+const REMARK_PLUGINS = [remarkGfm]
+
+/** Fence labels that get the collapsible tree instead of a flat code block. */
+function dataTreeLang(lang: string | undefined): 'json' | 'xml' | null {
+  const resolved = resolveLanguage(lang)
+  if (resolved === 'json') return 'json'
+  // `resolveLanguage` folds html/svg/xsd/… onto the xml grammar; only offer the
+  // tree for labels that really mean a structured document.
+  if (resolved === 'xml' && lang && /^(xml|xsd|xsl|xslt|rss|atom|plist|wsdl)$/i.test(lang.trim())) {
+    return 'xml'
+  }
+  return null
+}
+
+/**
+ * Whether the `code` renderer is inside a fence.
+ *
+ * react-markdown no longer passes an `inline` flag, and the text alone cannot
+ * settle it — a single-line fence and inline code look identical by the time
+ * they arrive. The `pre` renderer marks its subtree instead.
+ */
+const InsideFence = createContext(false)
 
 function MermaidBlock({ chart }: { chart: string }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -327,6 +365,43 @@ function InlineBeeDiagramRefEditor({
   )
 }
 
+/**
+ * A fenced code block, coloured when its language is one we have a grammar for.
+ *
+ * The highlighted markup comes from highlight.js, which escapes every character
+ * of the document and emits only its own class-bearing spans — so this stays the
+ * one place raw HTML is injected, and none of it originates from the page.
+ * Unlabelled or unsupported fences render as plain text rather than being
+ * guessed at.
+ */
+function CodeBlock({
+  code,
+  lang,
+  className,
+  ...props
+}: {
+  code: string
+  lang: string | undefined
+  className?: string
+} & ComponentProps<'code'>) {
+  const highlighted = useMemo(() => highlightCode(code, lang), [code, lang])
+  const language = resolveLanguage(lang)
+
+  return (
+    <pre className={className} data-language={language ?? undefined}>
+      {highlighted ? (
+        <code
+          {...props}
+          className="hljs"
+          dangerouslySetInnerHTML={{ __html: highlighted }}
+        />
+      ) : (
+        <code {...props}>{code}</code>
+      )}
+    </pre>
+  )
+}
+
 export type MarkdownViewProps = {
   content: string
   /** Enable Edit controls on embedded diagrams / fences */
@@ -337,7 +412,12 @@ export type MarkdownViewProps = {
   bookId?: string
 }
 
-export function MarkdownView({ content, editable = false, onContentChange, bookId }: MarkdownViewProps) {
+export const MarkdownView = memo(function MarkdownView({
+  content,
+  editable = false,
+  onContentChange,
+  bookId,
+}: MarkdownViewProps) {
   const contentRef = useRef(content)
   contentRef.current = content
 
@@ -361,114 +441,153 @@ export function MarkdownView({ content, editable = false, onContentChange, bookI
     [onContentChange],
   )
 
-  // Occurrence counters reset every render so fence indices stay stable vs content string.
-  const counters: Record<string, number> = {}
+  // Occurrence counters reset every render so fence indices stay stable vs content
+  // string. Held in a ref because the renderers below are memoized and so cannot
+  // close over a value recreated per render.
+  const countersRef = useRef<Record<string, number>>({})
+  countersRef.current = {}
 
-  const nextIndex = (lang: string) => {
-    const i = counters[lang] ?? 0
-    counters[lang] = i + 1
+  const nextIndex = useCallback((lang: string) => {
+    const i = countersRef.current[lang] ?? 0
+    countersRef.current[lang] = i + 1
     return i
-  }
+  }, [])
+
+  /**
+   * Memoized so the renderer functions keep their identity between renders.
+   *
+   * Passing a fresh object here makes every entry a brand new component *type*,
+   * which React can only reconcile by unmounting and remounting the whole subtree
+   * — so each save used to rebuild every diagram, PDF and 3D embed on the page.
+   * Mermaid renders asynchronously into an empty div, which is what the resulting
+   * flicker actually was.
+   *
+   * The state in the deps (open editors, diagram drafts) only changes on a
+   * deliberate click, not while typing, so those remounts stay rare.
+   */
+  const components = useMemo(
+    () => ({
+      img({ src, alt, ...props }: ComponentProps<'img'>) {
+        return <img src={src ? withApiBase(src) : src} alt={alt ?? ''} {...props} />
+      },
+      // The `code` renderer below emits its own <pre> (or a diagram, or an
+      // embed), so react-markdown's wrapper would double the box, the padding
+      // and the border around every fence. Pass its children straight through.
+      pre({ children }: ComponentProps<'pre'>) {
+        return <InsideFence.Provider value={true}>{children}</InsideFence.Provider>
+      },
+      code({ className, children, ...props }: ComponentProps<'code'>) {
+        // eslint-disable-next-line react-hooks/rules-of-hooks -- rendered as a component by react-markdown
+        const insideFence = useContext(InsideFence)
+        const match = /language-(\w[\w-]*)/.exec(className || '')
+        const lang = match?.[1]
+        const code = String(children).replace(/\n$/, '')
+
+        if (lang === 'mermaid' || lang === 'c4' || lang === 'plantuml') {
+          const idx = nextIndex(lang)
+          if (editable && onContentChange) {
+            const key = `${lang}:${idx}`
+            return (
+              <EditableMermaidFence
+                chart={code}
+                fenceLang={lang}
+                fenceIndex={idx}
+                editing={Boolean(openKeys[key])}
+                onToggleEdit={() => toggleKey(key)}
+                contentRef={contentRef}
+                onContentChange={handleContentChange}
+              />
+            )
+          }
+          if (lang === 'plantuml') {
+            return <pre className="inline-diagram-readonly-source">{code}</pre>
+          }
+          return <MermaidBlock chart={code} />
+        }
+
+        if (lang === 'beediagram') {
+          const idx = nextIndex('beediagram')
+          if (editable && onContentChange) {
+            const key = `beediagram:${idx}`
+            return (
+              <InlineBeeDiagramEditor
+                source={code}
+                fenceIndex={idx}
+                contentRef={contentRef}
+                onContentChange={handleContentChange}
+                draft={beeDrafts[key]}
+                onDraftChange={(next) => setBeeDraft(key, next)}
+              />
+            )
+          }
+          return (
+            <figure className="bee-embed">
+              <BeeDiagramView source={code} />
+            </figure>
+          )
+        }
+
+        if (lang === 'beediagram-ref') {
+          const id = code.trim().split(/\s+/)[0] ?? ''
+          const key = `beediagram-ref:${id}`
+          return (
+            <InlineBeeDiagramRefEditor
+              diagramId={code}
+              allowEdit={editable}
+              bookId={bookId}
+              draft={beeDrafts[key]}
+              onDraftChange={(next) => setBeeDraft(key, next)}
+            />
+          )
+        }
+
+        if (
+          lang === 'pdf' ||
+          lang === 'glb' ||
+          lang === 'gltf' ||
+          lang === 'obj' ||
+          lang === 'model'
+        ) {
+          return <MediaEmbed lang={lang} body={code} />
+        }
+
+        const isBlock = insideFence || Boolean(match) || code.includes('\n')
+        if (isBlock) {
+          const block = <CodeBlock code={code} lang={lang} className={className} {...props} />
+          const dataLang = dataTreeLang(lang)
+          // Structured formats get a collapsible tree, falling back to the plain
+          // block when the document does not parse or is too big to be useful.
+          return dataLang ? (
+            <DataTree code={code} lang={dataLang} fallback={block} />
+          ) : (
+            block
+          )
+        }
+        return (
+          <code className={className} {...props}>
+            {children}
+          </code>
+        )
+      },
+    }),
+    [
+      beeDrafts,
+      bookId,
+      editable,
+      handleContentChange,
+      nextIndex,
+      onContentChange,
+      openKeys,
+      setBeeDraft,
+      toggleKey,
+    ],
+  )
 
   return (
     <div className={`markdown-body${editable ? ' markdown-body--editable' : ''}`}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          img({ src, alt, ...props }) {
-            return <img src={src ? withApiBase(src) : src} alt={alt ?? ''} {...props} />
-          },
-          code({ className, children, ...props }) {
-            const match = /language-(\w[\w-]*)/.exec(className || '')
-            const lang = match?.[1]
-            const code = String(children).replace(/\n$/, '')
-
-            if (lang === 'mermaid' || lang === 'c4' || lang === 'plantuml') {
-              const idx = nextIndex(lang)
-              if (editable && onContentChange) {
-                const key = `${lang}:${idx}`
-                return (
-                  <EditableMermaidFence
-                    chart={code}
-                    fenceLang={lang}
-                    fenceIndex={idx}
-                    editing={Boolean(openKeys[key])}
-                    onToggleEdit={() => toggleKey(key)}
-                    contentRef={contentRef}
-                    onContentChange={handleContentChange}
-                  />
-                )
-              }
-              if (lang === 'plantuml') {
-                return <pre className="inline-diagram-readonly-source">{code}</pre>
-              }
-              return <MermaidBlock chart={code} />
-            }
-
-            if (lang === 'beediagram') {
-              const idx = nextIndex('beediagram')
-              if (editable && onContentChange) {
-                const key = `beediagram:${idx}`
-                return (
-                  <InlineBeeDiagramEditor
-                    source={code}
-                    fenceIndex={idx}
-                    contentRef={contentRef}
-                    onContentChange={handleContentChange}
-                    draft={beeDrafts[key]}
-                    onDraftChange={(next) => setBeeDraft(key, next)}
-                  />
-                )
-              }
-              return (
-                <figure className="bee-embed">
-                  <BeeDiagramView source={code} />
-                </figure>
-              )
-            }
-
-            if (lang === 'beediagram-ref') {
-              const id = code.trim().split(/\s+/)[0] ?? ''
-              const key = `beediagram-ref:${id}`
-              return (
-                <InlineBeeDiagramRefEditor
-                  diagramId={code}
-                  allowEdit={editable}
-                  bookId={bookId}
-                  draft={beeDrafts[key]}
-                  onDraftChange={(next) => setBeeDraft(key, next)}
-                />
-              )
-            }
-
-            if (
-              lang === 'pdf' ||
-              lang === 'glb' ||
-              lang === 'gltf' ||
-              lang === 'obj' ||
-              lang === 'model'
-            ) {
-              return <MediaEmbed lang={lang} body={code} />
-            }
-
-            const isBlock = Boolean(match) || code.includes('\n')
-            if (isBlock) {
-              return (
-                <pre className={className}>
-                  <code {...props}>{code}</code>
-                </pre>
-              )
-            }
-            return (
-              <code className={className} {...props}>
-                {children}
-              </code>
-            )
-          },
-        }}
-      >
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={components}>
         {content}
       </ReactMarkdown>
     </div>
   )
-}
+})

@@ -2,12 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { withApiBase } from '../basePath'
+import { useBlockReorder } from '../hooks/useBlockReorder'
 import { useImageIntake, type ImageIntakeContext } from '../hooks/useImageIntake'
 import {
   isMediaFenceLang,
   isVisualFenceLang,
   joinMarkdownSegments,
   splitMarkdownSegments,
+  splitTextAtHeadings,
+  startsWithHeading,
   type ContentSegment,
   type FenceSegment,
 } from '../markdownFences'
@@ -20,11 +23,20 @@ import {
   type UploadedImage,
 } from '../media/imageIntake'
 import {
+  collectDataFilesFromDataTransfer,
+  dataFenceLangForFile,
+  formatJson,
+  formatXml,
+  readDataFile,
+  type DataFenceLang,
+} from '../media/dataFiles'
+import {
   extensionFromPath,
   modelFormatFromExtension,
 } from '../media/mediaKinds'
 import { segmentsForInsert, segmentsForLinkedDiagram, type InsertKind } from '../pageBlocks'
 import { useWorkspace } from '../workspace/WorkspaceContext'
+import { AiAssistBar, AiAssistField } from './AiAssist'
 import { BeeDiagramEditor } from './BeeDiagramEditor'
 import { MediaEmbed, parseMediaFenceBody } from './media/MediaEmbed'
 import { SyncedTextarea } from './SyncedText'
@@ -34,6 +46,15 @@ function mediaFenceFromUpload(url: string, fileName: string, lang: string): Cont
   return [
     { type: 'text', text: '\n\n' },
     { type: 'fence', lang, body: `title: ${fileName}\n${url}` },
+    { type: 'text', text: '\n\n' },
+  ]
+}
+
+/** Fence segments for a dropped JSON/XML file: a labelled block, kept verbatim. */
+function dataFenceFromFile(lang: DataFenceLang, body: string): ContentSegment[] {
+  return [
+    { type: 'text', text: '\n\n' },
+    { type: 'fence', lang, body: body.replace(/\r\n/g, '\n').replace(/\s+$/, '') },
     { type: 'text', text: '\n\n' },
   ]
 }
@@ -58,6 +79,36 @@ function collectMediaFilesFromDataTransfer(dt: DataTransfer | null): File[] {
   return Array.from(dt.files).filter(isMediaFile)
 }
 
+/**
+ * A stable React key per block, so a wrapper is never reused for a different one.
+ *
+ * Blocks used to be keyed by position. Reordering therefore handed a block's
+ * whole DOM subtree — including the height dragged onto it with the resize grip,
+ * and every piece of per-field state the AI helpers keep — to whatever block
+ * moved into that slot. Identity travels with the segment object instead:
+ * editing a block carries its id onto the replacement object, while re-cutting,
+ * merging or loading a different document produces genuinely new blocks and
+ * genuinely new keys.
+ */
+const blockIds = new WeakMap<object, string>()
+let blockIdSeq = 0
+
+function blockId(seg: ContentSegment): string {
+  let id = blockIds.get(seg)
+  if (id == null) {
+    blockIdSeq += 1
+    id = `b${blockIdSeq}`
+    blockIds.set(seg, id)
+  }
+  return id
+}
+
+/** Same block, new object: an edit, not a different block. */
+function keepBlockId(from: ContentSegment, to: ContentSegment): ContentSegment {
+  blockIds.set(to, blockId(from))
+  return to
+}
+
 type Props = {
   content: string
   onChange: (next: string) => void
@@ -67,6 +118,12 @@ type Props = {
 }
 
 type InsertAt = 'end' | number // number = insert before segment index
+
+type ReorderGapProps = {
+  onDragOver: (e: React.DragEvent) => void
+  onDragLeave: () => void
+  onDrop: (e: React.DragEvent) => void
+}
 
 /**
  * Page editor that keeps prose as Markdown textareas but renders BeeDiagram
@@ -105,24 +162,69 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
     (index: number, patch: ContentSegment) => {
       // Read through the ref: a handler created in an earlier render must not
       // rebuild the document from that render's (now stale) segment list.
-      emit(segmentsRef.current.map((s, i) => (i === index ? patch : s)))
+      emit(segmentsRef.current.map((s, i) => (i === index ? keepBlockId(s, patch) : s)))
     },
     [emit],
   )
 
   const removeSegment = useCallback(
     (index: number) => {
-      emit(segmentsRef.current.filter((_, i) => i !== index))
+      emit(mergeAdjacentText(segmentsRef.current.filter((_, i) => i !== index)))
     },
     [emit],
   )
+
+  /**
+   * Move a block to sit before position `to` in the current list.
+   *
+   * `to` is a gap index, so dropping into the gap directly after the dragged
+   * block is a no-op rather than an off-by-one shuffle.
+   */
+  const moveSegment = useCallback(
+    (from: number, to: number) => {
+      const list = segmentsRef.current
+      if (from < 0 || from >= list.length) return
+      if (to === from || to === from + 1) return
+
+      const next = [...list]
+      const [moved] = next.splice(from, 1)
+      if (!moved) return
+      next.splice(to > from ? to - 1 : to, 0, moved)
+      emit(mergeAdjacentText(next))
+    },
+    [emit],
+  )
+
+  /**
+   * Re-cut the blocks once a text block is done being edited.
+   *
+   * Splitting while someone types would tear the textarea out from under the
+   * cursor, so a heading typed into an existing block only becomes its own
+   * block — and so only becomes draggable — when focus leaves.
+   */
+  const normalizeBlocks = useCallback(() => {
+    const list = segmentsRef.current
+    const next = mergeAdjacentText(list)
+    const unchanged =
+      next.length === list.length &&
+      next.every((s, i) => {
+        const prev = list[i]
+        return s.type === 'text' && prev.type === 'text'
+          ? s.text === prev.text
+          : s.type === 'fence' && prev.type === 'fence' && s.lang === prev.lang && s.body === prev.body
+      })
+    if (unchanged) return
+    emit(next)
+  }, [emit])
+
+  const reorder = useBlockReorder({ onMove: moveSegment })
 
   const updateFenceBody = useCallback(
     (index: number, body: string) => {
       const list = segmentsRef.current
       const seg = list[index]
       if (!seg || seg.type !== 'fence') return
-      emit(list.map((s, i) => (i === index ? { ...s, body } : s)))
+      emit(list.map((s, i) => (i === index ? keepBlockId(s, { ...seg, body }) : s)))
     },
     [emit],
   )
@@ -201,7 +303,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         text = insertMarkdownAt(text, off, snip)
         off += snip.length + 4 // rough advance past padding
       }
-      emit(list.map((s, i) => (i === segmentIndex ? { type: 'text', text } : s)))
+      emit(list.map((s, i) => (i === segmentIndex ? keepBlockId(s, { type: 'text', text }) : s)))
     },
     [emit, insertAt],
   )
@@ -342,13 +444,61 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
     return () => el.removeEventListener('drop', onDrop)
   }, [insertAt])
 
+  /** Drop JSON / XML — inlined as a fenced block rather than uploaded. */
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+
+    const onDrop = (e: DragEvent) => {
+      const dataFilesDropped = collectDataFilesFromDataTransfer(e.dataTransfer)
+      if (!dataFilesDropped.length) return
+      // Anything the other handlers own takes precedence.
+      const all = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : []
+      if (all.some((f) => isImageFile(f) || isMediaFile(f))) return
+
+      e.preventDefault()
+      e.stopPropagation()
+
+      // Land where it was dropped when the pointer is over a slot, as images do.
+      const slot = (e.target as Element | null)?.closest?.('[data-drop-slot]')
+      const raw = slot?.getAttribute('data-drop-slot') ?? ''
+      const at: InsertAt = raw.startsWith('before:') ? Number(raw.slice(7)) : 'end'
+      const target: InsertAt = typeof at === 'number' && Number.isFinite(at) ? at : 'end'
+
+      void (async () => {
+        setBusy(true)
+        setInsertError(null)
+        setDropHint(null)
+        try {
+          const problems: string[] = []
+          for (const file of dataFilesDropped) {
+            const lang = dataFenceLangForFile(file)
+            if (!lang) continue
+            const read = await readDataFile(file)
+            if ('error' in read) {
+              problems.push(read.error)
+              continue
+            }
+            insertAt(target, dataFenceFromFile(lang, read.text))
+          }
+          if (problems.length) setInsertError(problems.join(' '))
+        } finally {
+          setBusy(false)
+        }
+      })()
+    }
+
+    el.addEventListener('drop', onDrop)
+    return () => el.removeEventListener('drop', onDrop)
+  }, [insertAt])
+
   const removeImageFromSegment = useCallback(
     (segmentIndex: number, raw: string) => {
       const list = segmentsRef.current
       const seg = list[segmentIndex]
       if (!seg || seg.type !== 'text') return
       const text = seg.text.replace(raw, '').replace(/\n{3,}/g, '\n\n')
-      emit(list.map((s, i) => (i === segmentIndex ? { type: 'text', text } : s)))
+      emit(list.map((s, i) => (i === segmentIndex ? keepBlockId(s, { type: 'text', text }) : s)))
     },
     [emit],
   )
@@ -385,10 +535,12 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         onPickModel={() => pickMedia('model')}
       />
       {insertError && <div className="banner error compact">{insertError}</div>}
+      <AiAssistBar />
       <p className="hybrid-hint muted sm">
         Drop or paste images <strong>where you want them</strong> — they preview in edit mode. Use Add for
         sections, diagrams, <strong>PDF</strong>, and <strong>3D models</strong> (or drop <code>.pdf</code> /{' '}
-        <code>.glb</code> / <code>.obj</code> files).
+        <code>.glb</code> / <code>.obj</code> files). Dropping <code>.json</code> / <code>.xml</code> inlines
+        the file as a code block you can reformat.
       </p>
 
       <InsertGap
@@ -398,17 +550,32 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         dropSlot="before:0"
         dropLabel="Insert image at top of page"
         dragging={dragging}
+        reorderProps={reorder.gapProps(0)}
+        reorderActive={reorder.overGap === 0}
       />
 
       {segments.map((seg, index) => (
-        <div key={`wrap-${index}`} className="hybrid-block-wrap">
+        <div
+          key={blockId(seg)}
+          className={`hybrid-block-wrap${reorder.dragIndex === index ? ' is-dragging' : ''}`}
+        >
+          <BlockHandle
+            index={index}
+            total={segments.length}
+            label={blockLabel(seg)}
+            onDragStart={(e) => reorder.start(index, e)}
+            onDragEnd={reorder.end}
+            onMove={(to) => moveSegment(index, to)}
+          />
           {seg.type === 'text' ? (
             <RichTextBlock
               segmentIndex={index}
               value={seg.text}
+              pageContext={content}
               placeholder={index === 0 ? placeholder : 'Continue Markdown…'}
               dragging={dragging}
               onChange={(text) => updateSegment(index, { type: 'text', text })}
+              onBlur={normalizeBlocks}
               onRemoveImage={(raw) => removeImageFromSegment(index, raw)}
             />
           ) : isMediaFenceLang(seg.lang) ? (
@@ -437,6 +604,8 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             dropSlot={`before:${index + 1}`}
             dropLabel="Insert image here"
             dragging={dragging}
+            reorderProps={reorder.gapProps(index + 1)}
+            reorderActive={reorder.overGap === index + 1}
           />
         </div>
       ))}
@@ -444,17 +613,146 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
   )
 }
 
+/** Short description of a block, for the drag handle's accessible name. */
+function blockLabel(seg: ContentSegment): string {
+  if (seg.type === 'fence') return `${seg.lang} block`
+  const heading = seg.text.split('\n').find((l) => /^#{1,6}\s+\S/.test(l))
+  if (heading) return heading.replace(/^#+\s+/, '')
+  const firstWords = seg.text.trim().split(/\s+/).slice(0, 6).join(' ')
+  return firstWords || 'Empty block'
+}
+
+/**
+ * Grip for reordering a block: drag it, or move the block with the keyboard.
+ *
+ * Reordering hangs off a handle rather than the block itself so that dragging
+ * inside a textarea still selects text, which is what anyone editing prose
+ * expects a drag to do.
+ */
+function BlockHandle({
+  index,
+  total,
+  label,
+  onDragStart,
+  onDragEnd,
+  onMove,
+}: {
+  index: number
+  total: number
+  label: string
+  onDragStart: (e: React.DragEvent) => void
+  onDragEnd: () => void
+  /** Target gap index. */
+  onMove: (to: number) => void
+}) {
+  const canMoveUp = index > 0
+  const canMoveDown = index < total - 1
+
+  return (
+    <button
+      type="button"
+      className="block-handle"
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      // Keyboard equivalent — a drag gesture is not reachable without a pointer.
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowUp' && canMoveUp) {
+          e.preventDefault()
+          onMove(index - 1)
+        } else if (e.key === 'ArrowDown' && canMoveDown) {
+          e.preventDefault()
+          onMove(index + 2)
+        }
+      }}
+      aria-label={`Move block: ${label}. Drag, or use arrow up and down.`}
+      title="Drag to reorder · ↑ / ↓ to move"
+    >
+      <span aria-hidden="true">{'⠿'}</span>
+    </button>
+  )
+}
+
+/**
+ * Concatenate two text runs, capping the blank lines where they meet.
+ *
+ * Both runs keep the blank lines that separated them from the block that used to
+ * sit between them, so pulling that block out would otherwise leave a growing
+ * pile of empty lines behind every move. Only the seam is touched.
+ */
+function joinTextRuns(a: string, b: string): string {
+  const trailing = /\n*$/.exec(a)?.[0].length ?? 0
+  const leading = /^\n*/.exec(b)?.[0].length ?? 0
+
+  // A block opening with a heading has to keep its own line. Without this, a
+  // block whose trailing newline was edited away swallows the next section's
+  // `##` mid-line — which destroys the heading and cannot be recovered by
+  // re-splitting, because the marker is no longer at the start of a line.
+  if (trailing + leading === 0 && a !== '' && startsWithHeading(b)) return a + '\n\n' + b
+
+  if (trailing + leading <= 2) return a + b
+  return a.slice(0, a.length - trailing) + '\n\n' + b.slice(leading)
+}
+
+/**
+ * Normalize the block list after a structural change: glue adjacent text runs
+ * back together, then cut them at headings again.
+ *
+ * The round trip matters because inserting or moving a block can leave two text
+ * runs side by side — merging and re-splitting turns those back into exactly one
+ * block per section, so the same page always shows the same blocks however it
+ * was assembled.
+ */
 function mergeAdjacentText(segments: ContentSegment[]): ContentSegment[] {
-  const out: ContentSegment[] = []
+  const merged: ContentSegment[] = []
   for (const s of segments) {
-    const prev = out[out.length - 1]
+    const prev = merged[merged.length - 1]
     if (s.type === 'text' && prev?.type === 'text') {
-      out[out.length - 1] = { type: 'text', text: prev.text + s.text }
+      // The merged run keeps the first run's identity: React keys off it, and a
+      // new object here would remount every text block on the page.
+      merged[merged.length - 1] = keepBlockId(prev, {
+        type: 'text',
+        text: joinTextRuns(prev.text, s.text),
+      })
     } else {
-      out.push(s)
+      merged.push(s)
     }
   }
-  return out
+
+  const out: ContentSegment[] = []
+  for (const s of merged) {
+    if (s.type !== 'text') {
+      out.push(s)
+      continue
+    }
+    const pieces = splitTextAtHeadings(s.text)
+    // Untouched runs must come through as the *same* object. Reordering rebuilds
+    // this list on every move, and a fresh object per run would discard each
+    // block's manual height and drop focus from the drag handle mid-keypress.
+    if (pieces.length === 1 && pieces[0] === s.text) {
+      out.push(s)
+      continue
+    }
+    // A run that genuinely splits hands its identity to the first piece, so the
+    // block the caret is in survives the recut.
+    pieces.forEach((piece, i) => {
+      const next: ContentSegment = { type: 'text', text: piece }
+      out.push(i === 0 ? keepBlockId(s, next) : next)
+    })
+  }
+
+  // Reordering glues two runs together and immediately cuts them apart again, so
+  // the pieces above are new objects even though the text is untouched. Re-adopt
+  // an input run's identity wherever the text came out the same, matching each
+  // one only once so duplicate paragraphs cannot both claim it.
+  const spare = segments.filter((s): s is Extract<ContentSegment, { type: 'text' }> => s.type === 'text')
+  return out.map((s) => {
+    if (s.type !== 'text' || blockIds.has(s)) return s
+    const i = spare.findIndex((c) => c.text === s.text)
+    if (i === -1) return s
+    const [claimed] = spare.splice(i, 1)
+    return claimed ? keepBlockId(claimed, s) : s
+  })
 }
 
 /**
@@ -464,14 +762,20 @@ function mergeAdjacentText(segments: ContentSegment[]): ContentSegment[] {
 function RichTextBlock({
   segmentIndex,
   value,
+  pageContext,
   onChange,
+  onBlur,
   onRemoveImage,
   placeholder,
   dragging,
 }: {
   segmentIndex: number
   value: string
+  /** Whole page, handed to the AI helpers as grounding for this block. */
+  pageContext: string
   onChange: (v: string) => void
+  /** Editing finished — the editor re-cuts blocks at any newly typed heading. */
+  onBlur?: () => void
   onRemoveImage: (raw: string) => void
   placeholder?: string
   dragging: boolean
@@ -504,15 +808,18 @@ function RichTextBlock({
         data-drop-slot={`segment:${segmentIndex}`}
         data-drop-label="Insert image in this section"
       >
-        <SyncedTextarea
-          className="hybrid-text-block"
-          data-segment-index={segmentIndex}
-          value={value}
-          rows={Math.min(28, Math.max(3, value.split('\n').length + 1))}
-          onValueChange={onChange}
-          spellCheck={false}
-          placeholder={placeholder ?? 'Write Markdown…'}
-        />
+        <AiAssistField context={pageContext}>
+          <SyncedTextarea
+            className="hybrid-text-block"
+            data-segment-index={segmentIndex}
+            value={value}
+            rows={Math.min(28, Math.max(3, value.split('\n').length + 1))}
+            onValueChange={onChange}
+            onBlur={onBlur}
+            spellCheck={false}
+            placeholder={placeholder ?? 'Write Markdown…'}
+          />
+        </AiAssistField>
       </div>
     )
   }
@@ -546,16 +853,18 @@ function RichTextBlock({
         if (!p.text && i > 0 && i < pieces.length - 1) return null
         const rows = Math.min(20, Math.max(2, p.text.split('\n').length + 1))
         return (
-          <SyncedTextarea
-            key={`t-${i}`}
-            className="hybrid-text-block hybrid-text-piece"
-            data-segment-index={segmentIndex}
-            value={p.text}
-            rows={rows}
-            onValueChange={(next) => updatePieceText(i, next)}
-            spellCheck={false}
-            placeholder={i === 0 ? placeholder : '…'}
-          />
+          <AiAssistField key={`t-${i}`} context={pageContext}>
+            <SyncedTextarea
+              className="hybrid-text-block hybrid-text-piece"
+              data-segment-index={segmentIndex}
+              value={p.text}
+              rows={rows}
+              onValueChange={(next) => updatePieceText(i, next)}
+              onBlur={onBlur}
+              spellCheck={false}
+              placeholder={i === 0 ? placeholder : '…'}
+            />
+          </AiAssistField>
         )
       })}
     </div>
@@ -669,20 +978,32 @@ function InsertGap({
   dropSlot,
   dropLabel,
   dragging,
+  reorderProps,
+  reorderActive,
 }: {
   busy: boolean
   onInsert: (kind: InsertKind | 'beediagram-linked') => void
   label?: string
   dropSlot?: string
   dropLabel?: string
+  /** An image file is being dragged over the editor. */
   dragging?: boolean
+  /** Drop handlers when a block can land here; null when this gap is not a valid target. */
+  reorderProps?: ReorderGapProps | null
+  /** The dragged block is currently hovering this gap. */
+  reorderActive?: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const canAcceptBlock = Boolean(reorderProps)
   return (
     <div
-      className={`insert-gap${open ? ' is-open' : ''}${dragging ? ' drop-ready' : ''}`}
+      className={
+        `insert-gap${open ? ' is-open' : ''}${dragging ? ' drop-ready' : ''}` +
+        `${canAcceptBlock ? ' block-target' : ''}${reorderActive ? ' block-target-active' : ''}`
+      }
       data-drop-slot={dropSlot}
       data-drop-label={dropLabel}
+      {...reorderProps}
     >
       <button
         type="button"
@@ -695,6 +1016,7 @@ function InsertGap({
         +
       </button>
       {dragging && <span className="insert-gap-drop-label muted sm">Drop image</span>}
+      {reorderActive && <span className="insert-gap-drop-label muted sm">Move here</span>}
       {open && (
         <div className="insert-gap-menu">
           {(
@@ -737,15 +1059,44 @@ function SourceFenceBlock({
   onRemove: () => void
 }) {
   const rows = Math.min(20, Math.max(4, segment.body.split('\n').length + 1))
+  const [formatError, setFormatError] = useState<string | null>(null)
+
+  const lang = segment.lang.toLowerCase()
+  const formatter = lang === 'json' ? formatJson : lang === 'xml' ? formatXml : null
+
+  // Reformatting is an explicit action: a drop keeps the file's own text, since
+  // re-serializing can reorder keys, round numbers, or move significant whitespace.
+  const reformat = () => {
+    if (!formatter) return
+    const result = formatter(segment.body)
+    if (!result.ok) {
+      setFormatError(result.reason)
+      return
+    }
+    setFormatError(null)
+    if (result.changed) onChange({ ...segment, body: result.text })
+  }
+
   return (
     <div className="hybrid-fence-source">
       <div className="hybrid-fence-chrome">
         <span className="inline-diagram-badge">{segment.lang}</span>
         <span className="muted sm">source</span>
+        {formatter && (
+          <button
+            type="button"
+            className="btn sm"
+            onClick={reformat}
+            title={`Re-indent this ${lang.toUpperCase()} block`}
+          >
+            Format
+          </button>
+        )}
         <button type="button" className="btn ghost sm danger" onClick={onRemove}>
           Remove
         </button>
       </div>
+      {formatError && <div className="banner error compact">{formatError}</div>}
       <SyncedTextarea
         className="hybrid-text-block hybrid-fence-body"
         value={segment.body}

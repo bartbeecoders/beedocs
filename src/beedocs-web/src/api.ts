@@ -7,6 +7,13 @@ import type {
   ImportNameMode,
   ImportPreview,
   ImportResult,
+  CreateLlmProviderRequest,
+  LlmCompleteRequest,
+  LlmCompleteResponse,
+  LlmModel,
+  LlmProvider,
+  LlmTestResult,
+  UpdateLlmProviderRequest,
   Page,
   PageSummary,
   SearchKind,
@@ -16,13 +23,28 @@ import type {
 } from './types'
 import { withApiBase } from './basePath'
 
-/** Pull the API's `{ error }` message out of a failed response when there is one. */
+/**
+ * Pull the API's message out of a failed response when there is one.
+ *
+ * `Results.ValidationProblem` — what every input check in Program.cs returns —
+ * puts the sentence worth reading in `errors.<field>[0]` and the boilerplate
+ * "One or more validation errors occurred." in `title`, so `errors` has to be
+ * read first or every rejected field reports the same useless line.
+ */
 async function errorText(res: Response): Promise<string> {
   const text = await res.text()
   if (!text) return `${res.status} ${res.statusText}`
   try {
-    const parsed = JSON.parse(text) as { error?: string; title?: string }
-    return parsed.error ?? parsed.title ?? text
+    const parsed = JSON.parse(text) as {
+      error?: string
+      message?: string
+      title?: string
+      errors?: Record<string, string[]>
+    }
+    const detail = Object.values(parsed.errors ?? {})
+      .flat()
+      .find((v) => typeof v === 'string' && v.trim() !== '')
+    return parsed.error ?? parsed.message ?? detail ?? parsed.title ?? text
   } catch {
     return text
   }
@@ -49,18 +71,43 @@ async function uploadFile(file: File | Blob, fileName?: string) {
   }>
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(withApiBase(path), {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || `${res.status} ${res.statusText}`)
+/**
+ * No call may hang forever. Without a deadline a stalled API leaves the UI
+ * spinning with no way out but a page reload, so every request gets one and the
+ * few genuinely long endpoints raise their own.
+ */
+const DEFAULT_TIMEOUT_MS = 30_000
+
+type RequestInitWithTimeout = RequestInit & { timeoutMs?: number }
+
+async function request<T>(path: string, init?: RequestInitWithTimeout): Promise<T> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...rest } = init ?? {}
+  const deadline = AbortSignal.timeout(timeoutMs)
+
+  let res: Response
+  try {
+    res = await fetch(withApiBase(path), {
+      ...rest,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(rest.headers ?? {}),
+      },
+      signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
+    })
+  } catch (e) {
+    // A caller's own abort has to stay an AbortError — call sites rely on that
+    // to drop a superseded request silently. Only our deadline is rewritten
+    // into something worth showing a user.
+    if (deadline.aborted && signal?.aborted !== true) {
+      throw new Error(`The server did not respond within ${Math.round(timeoutMs / 1000)} seconds.`)
+    }
+    throw e
   }
+
+  // errorText, not res.text(): every caller that wanted a readable message was
+  // re-implementing the same ValidationProblem unwrap on the thrown string, and
+  // a 404 with an empty body still arrived as "" and rendered as nothing.
+  if (!res.ok) throw new Error(await errorText(res))
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }
@@ -245,6 +292,53 @@ export const api = {
     if (!res.ok) throw new Error(await errorText(res))
     return res.json() as Promise<ImportResult>
   },
+
+  /**
+   * LLM provider config. Keys are write-only — the API returns hasKey/keyHint
+   * instead, so an unchanged form must omit `apiKey` rather than echo a hint back.
+   */
+  listLlmProviders: () => request<LlmProvider[]>('/api/llm/providers'),
+  createLlmProvider: (body: CreateLlmProviderRequest) =>
+    request<LlmProvider>('/api/llm/providers', { method: 'POST', body: JSON.stringify(body) }),
+  updateLlmProvider: (id: string, body: UpdateLlmProviderRequest) =>
+    request<LlmProvider>(`/api/llm/providers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteLlmProvider: (id: string) =>
+    request<void>(`/api/llm/providers/${id}`, { method: 'DELETE' }),
+
+  /**
+   * Move a provider to the front of the sort order and enable it. One atomic
+   * server-side move: "default" is the first enabled provider by sortOrder, and
+   * renumbering the list from the client took one PUT per row.
+   */
+  makeLlmProviderDefault: (id: string) =>
+    request<LlmProvider>(`/api/llm/providers/${id}/default`, { method: 'POST' }),
+
+  /** Reachability + credential check. Failures come back as ok:false, not a thrown error. */
+  testLlmProvider: (id: string, signal?: AbortSignal) =>
+    request<LlmTestResult>(`/api/llm/providers/${id}/test`, { method: 'POST', signal }),
+
+  /**
+   * Sorted by id, and several hundred entries on OpenRouter — filter before
+   * showing. `signal` drops a listing for a card the user has already left.
+   */
+  listLlmModels: (id: string, signal?: AbortSignal) =>
+    request<LlmModel[]>(`/api/llm/providers/${id}/models`, { signal }),
+
+  /**
+   * One round trip, no streaming — up to 90s. `signal` is how a suggestion in
+   * flight is dropped when the user keeps typing.
+   */
+  llmComplete: (body: LlmCompleteRequest, signal?: AbortSignal) =>
+    request<LlmCompleteResponse>('/api/llm/complete', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      signal,
+      // The server's own budget is 90s; cut off just past it, not at the shared default.
+      timeoutMs: 95_000,
+    }),
 
   /**
    * Multipart file upload (images, PDF, 3D models) →

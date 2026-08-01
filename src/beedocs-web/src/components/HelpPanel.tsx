@@ -23,6 +23,7 @@ const SECTIONS = [
   { id: 'pages', label: 'Writing pages' },
   { id: 'diagrams', label: 'Diagrams' },
   { id: 'export', label: 'Export & import' },
+  { id: 'ai', label: 'Writing help (AI)' },
   { id: 'mcp', label: 'Connect an AI agent (MCP)' },
   { id: 'shortcuts', label: 'Keyboard shortcuts' },
   { id: 'troubleshooting', label: 'Troubleshooting' },
@@ -159,6 +160,39 @@ export function HelpPanel() {
           and 3D models (GLB/GLTF/OBJ) can be embedded the same way — use the <strong>Add</strong>{' '}
           toolbar (Image / PDF / 3D) or drop a file onto the page.
         </p>
+        <p className="muted">
+          Fenced code blocks are syntax highlighted in the preview and in exports when the fence
+          names a language BeeDocs has a grammar for — <code>bash</code>, <code>csharp</code>,{' '}
+          <code>css</code>, <code>diff</code>, <code>dockerfile</code>, <code>go</code>,{' '}
+          <code>ini</code>/<code>toml</code>, <code>java</code>, <code>javascript</code>,{' '}
+          <code>json</code>, <code>markdown</code>, <code>python</code>, <code>rust</code>,{' '}
+          <code>shell</code>, <code>sql</code>, <code>typescript</code>, <code>xml</code>/
+          <code>html</code> and <code>yaml</code>, plus the usual short forms (<code>ts</code>,{' '}
+          <code>py</code>, <code>yml</code>, <code>sh</code>…). Colours follow the active theme. An
+          unlabelled fence is left as plain text rather than guessed at.
+        </p>
+        <p className="muted">
+          <code>json</code> and <code>xml</code> blocks render as a collapsible tree in the preview:
+          click any node to fold it, or use <strong>Collapse all</strong> / <strong>Expand all</strong>.
+          Folds are keyboard operable and survive editing. <strong>Raw</strong> switches to the
+          highlighted source for copying, and a document that does not parse — or is very large —
+          stays a plain code block.
+        </p>
+        <p className="muted">
+          Dropping a <code>.json</code> or <code>.xml</code> file inlines its text as a fenced code
+          block instead of uploading it, so config and schemas are versioned with the page and turn
+          up in search. The text is kept exactly as the file had it; the block's{' '}
+          <strong>Format</strong> button re-indents it on request, and declines when reformatting
+          would alter the data — oversized numbers, numeric object keys, or XML whose whitespace is
+          part of the content. Files above 0.5 MB are refused rather than wedged into the page.
+        </p>
+        <p className="muted">
+          In <strong>edit</strong> mode the page is split into blocks: one per heading, plus one for
+          each diagram or embed. Hover a block to reveal its <code>⠿</code> handle on the left and
+          drag it to a new position — a line shows where it will land. The handle also takes{' '}
+          <kbd>↑</kbd> and <kbd>↓</kbd> once focused, so blocks can be moved without a mouse. A
+          heading you type inside an existing block becomes its own block when you click away.
+        </p>
         <table className="help-table">
           <thead>
             <tr>
@@ -262,6 +296,85 @@ export function HelpPanel() {
             pages.
           </li>
         </ul>
+      </section>
+
+      <section className="settings-section" id="help-ai">
+        <h2>Writing help (AI)</h2>
+        <p className="muted">
+          The page editor can ask a language model for a continuation as you type, and can act on
+          text you select. It stays out of sight until a provider is configured — no provider, no AI
+          controls anywhere.
+        </p>
+
+        <h3 className="help-sub">Configure a provider</h3>
+        <p className="muted">
+          <strong>Settings → AI providers</strong>. Pick where the model runs —{' '}
+          <strong>OpenRouter</strong>, <strong>xAI</strong>, <strong>OpenAI</strong> or{' '}
+          <strong>LM Studio</strong> on this machine — and the name and base URL are filled in for
+          you. Paste the key (LM Studio needs none), then <strong>Test connection</strong>, which
+          lists the provider's models and proves the key without spending anything. Pick a model
+          from that list, or leave it blank for whichever the provider lists first.
+        </p>
+        <p className="muted sm">
+          Keys are stored on the server and never sent back to the browser — a saved provider shows
+          only the last four characters, and every call to the provider goes through the API.
+          “Default” just means first in the list: <strong>Make default</strong> moves a provider to
+          the top, and that is the one the editor uses.
+        </p>
+
+        <h3 className="help-sub">Inline autocomplete</h3>
+        <p className="muted">
+          Stop typing for a moment and a greyed-out continuation appears after the caret.{' '}
+          <kbd>Tab</kbd> accepts it, <kbd>Esc</kbd> dismisses it, and typing anything else throws it
+          away. It only offers a continuation when the caret sits at the <em>end</em> of the block
+          you are editing — mid-paragraph suggestions read as corrupted text. Turn it off with{' '}
+          <strong>Inline suggestions</strong> in the AI bar above the editor; the switch is
+          remembered per browser.
+        </p>
+
+        <h3 className="help-sub">Selection actions</h3>
+        <p className="muted">
+          Select text inside a block and a small toolbar appears under it.
+        </p>
+        <table className="help-table">
+          <thead>
+            <tr>
+              <th>Action</th>
+              <th>Does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Rewrite</td>
+              <td>Clearer and tighter, same facts, same Markdown structure</td>
+            </tr>
+            <tr>
+              <td>Fix grammar</td>
+              <td>Spelling, grammar and punctuation only — no rewording</td>
+            </tr>
+            <tr>
+              <td>Format as Markdown</td>
+              <td>Turns loose prose into headings, lists and tables</td>
+            </tr>
+            <tr>
+              <td>Summarize</td>
+              <td>A short summary of the selection</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="muted sm">
+          The answer arrives beside the original rather than replacing it —{' '}
+          <strong>Replace selection</strong> applies it, <strong>Discard</strong> drops it. Edit the
+          block while one is generating and the proposal is held back, because the range it was
+          written for has moved.
+        </p>
+        <p className="muted sm">
+          The rest of the page is sent along as context so the model matches the surrounding voice.
+          Nothing is stored by BeeDocs; where the text goes is whatever your provider does with it.
+          A deployment that requires an API key on <code>/api/*</code> cannot use this from the
+          browser — the settings section says so. Details:{' '}
+          <code>Docs/LLM-PROVIDERS.md</code> in the repository.
+        </p>
       </section>
 
       <section className="settings-section" id="help-mcp">
@@ -511,6 +624,11 @@ export function HelpPanel() {
             <strong>401 from MCP</strong> — the bearer token doesn't match{' '}
             <code>MCP_AUTH_TOKEN</code>. Hosted instances behind Cloudflare Access also need the{' '}
             <code>CF-Access-Client-Id</code> / <code>CF-Access-Client-Secret</code> headers.
+          </li>
+          <li>
+            <strong>No AI controls in the editor</strong> — no provider is enabled, or the one that
+            is cannot be reached. Check it in <strong>Settings → AI providers</strong> with{' '}
+            <strong>Test connection</strong>.
           </li>
           <li>
             <strong>Images don't appear</strong> — uploads are served from <code>/uploads</code> by

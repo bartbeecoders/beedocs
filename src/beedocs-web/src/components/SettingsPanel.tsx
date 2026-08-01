@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
 import { THEMES, useTheme, type ThemeId } from '../theme'
 import { loadPaneLayout, savePaneLayout } from '../workspace/layoutPrefs'
+import { LlmProviders } from './LlmProviders'
+import '../styles/llm-providers.css'
 
 type Props = {
   onResetPanes?: () => void
@@ -106,6 +108,11 @@ export function SettingsPanel({ onResetPanes }: Props) {
         <p className="muted sm settings-hint">
           When enabled, saves about 1.5s after you stop typing. Manual Save and Ctrl/Cmd+S still work.
         </p>
+      </section>
+
+      <section className="settings-section">
+        <h2>AI providers</h2>
+        <LlmProviders />
       </section>
 
       <section className="settings-section">

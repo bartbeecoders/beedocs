@@ -2131,8 +2131,6 @@ select:focus {
   pointer-events: none;
   user-select: none;
 }
-  user-select: none;
-}
 
 .bee-props.card {
   background: var(--bg-elevated);
@@ -4027,5 +4025,369 @@ html[data-density='compact'] .media-embed-title {
 @media (prefers-reduced-motion: reduce) {
   .ws-search-trigger {
     transition: none;
+  }
+}
+
+/* ==========================================================================
+   Page block reordering — drag handle + drop targets
+   ========================================================================== */
+
+/* Blocks get a gutter so the handle has somewhere to live that is neither on top
+   of the text nor outside the scroll container. */
+.hybrid-block-wrap,
+.hybrid-page-editor > .insert-gap {
+  position: relative;
+  padding-left: 1.7rem;
+}
+
+.block-handle {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.1rem;
+  width: 1.35rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+/* Revealed on hover, and always once focused so keyboard users can find it. */
+.hybrid-block-wrap:hover > .block-handle,
+.block-handle:focus-visible {
+  opacity: 1;
+}
+
+.block-handle:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg-soft);
+}
+
+.block-handle:active {
+  cursor: grabbing;
+}
+
+.hybrid-block-wrap.is-dragging {
+  opacity: 0.4;
+}
+
+/* Every gap the block may land in stays visible for the length of the drag. */
+.insert-gap.block-target {
+  opacity: 1;
+  min-height: 1.6rem;
+}
+
+.insert-gap.block-target::before {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  opacity: 0.5;
+}
+
+.insert-gap.block-target-active::before {
+  background: var(--accent);
+  opacity: 1;
+  height: 3px;
+}
+
+.insert-gap.block-target .insert-gap-btn {
+  display: none;
+}
+
+/* ==========================================================================
+   Syntax highlighting (highlight.js token classes)
+
+   Rather than importing one of the shipped hljs themes — which would fight all
+   seven BeeDocs palettes — the token roles are mapped onto a small set of
+   variables, defined once for light backgrounds and overridden per dark theme.
+   ========================================================================== */
+
+:root {
+  --code-keyword: #9c2f7a;
+  --code-string: #2c6e33;
+  --code-number: #9a5b06;
+  --code-comment: #7b7264;
+  --code-name: #1d4ea8;
+  --code-attr: #8a5a00;
+  --code-meta: #5f584c;
+  --code-deleted: #b42318;
+  --code-added: #2c6e33;
+}
+
+html[data-theme='honey-dark'],
+html[data-theme='slate'],
+html[data-theme='ocean'],
+html[data-theme='violet'],
+html[data-theme='high-contrast'] {
+  --code-keyword: #e39bd0;
+  --code-string: #96d68a;
+  --code-number: #f0b866;
+  --code-comment: #8e8676;
+  --code-name: #86bdf5;
+  --code-attr: #e8c477;
+  --code-meta: #a69e8e;
+  --code-deleted: #f08a80;
+  --code-added: #96d68a;
+}
+
+.markdown-body pre code.hljs {
+  display: block;
+  color: inherit;
+  background: none;
+  padding: 0;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag,
+.hljs-type,
+.hljs-name,
+.hljs-strong {
+  color: var(--code-keyword);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+  color: var(--code-string);
+}
+
+.hljs-number,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-template-variable,
+.hljs-variable {
+  color: var(--code-number);
+}
+
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_,
+.hljs-section,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: var(--code-name);
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-params {
+  color: var(--code-attr);
+}
+
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-tag,
+.hljs-punctuation {
+  color: var(--code-meta);
+}
+
+.hljs-deletion {
+  color: var(--code-deleted);
+}
+
+.hljs-addition {
+  color: var(--code-added);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}
+
+/* A quiet language tag in the corner of every highlighted block. */
+.markdown-body pre[data-language] {
+  position: relative;
+}
+
+.markdown-body pre[data-language]::after {
+  content: attr(data-language);
+  position: absolute;
+  top: 0.35rem;
+  right: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Collapsible JSON / XML viewer
+
+   Token colours reuse the --code-* variables the syntax highlighter defines,
+   so a folded tree matches the code blocks around it in every theme.
+   ========================================================================== */
+
+.data-tree {
+  margin: 0.9rem 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-soft);
+  overflow: hidden;
+}
+
+.data-tree-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.45rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+}
+
+.data-tree-lang {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.data-tree-body {
+  padding: 0.6rem 0.75rem;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  white-space: nowrap;
+}
+
+/* Raw view keeps the code block's own frame from doubling up. */
+.data-tree-raw > pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.dtree-row,
+.dtree-summary {
+  padding-left: 1.05rem;
+}
+
+.dtree-children {
+  padding-left: 1.05rem;
+  border-left: 1px solid var(--border);
+  margin-left: 0.35rem;
+}
+
+.dtree-node > summary {
+  list-style: none;
+  cursor: pointer;
+  position: relative;
+  border-radius: 4px;
+}
+
+.dtree-node > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Own triangle, so the marker sits where the indent guide expects it. */
+.dtree-node > summary::before {
+  content: '▾';
+  position: absolute;
+  left: 0.15rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.8;
+}
+
+.dtree-node:not([open]) > summary::before {
+  content: '▸';
+}
+
+.dtree-node > summary:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.dtree-node > summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* The trailing `… 3 keys }` only belongs on a folded node. */
+.dtree-node[open] > summary .dtree-folded {
+  display: none;
+}
+
+.dtree-count {
+  color: var(--muted);
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.tok-key {
+  color: var(--code-name);
+}
+
+.tok-string,
+.tok-text {
+  color: var(--code-string);
+}
+
+.tok-number {
+  color: var(--code-number);
+}
+
+.tok-boolean,
+.tok-null {
+  color: var(--code-keyword);
+}
+
+.tok-punc {
+  color: var(--code-meta);
+}
+
+.tok-tag {
+  color: var(--code-keyword);
+}
+
+.tok-attr {
+  color: var(--code-attr);
+}
+
+.tok-comment {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+/* Folded content must not disappear from a printed page. */
+@media print {
+  .data-tree-bar {
+    display: none;
+  }
+
+  .dtree-node > summary::before {
+    display: none;
   }
 }

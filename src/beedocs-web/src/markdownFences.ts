@@ -41,9 +41,46 @@ export const VISUAL_FENCE_LANGS = new Set(['beediagram', 'beediagram-ref'])
 /** PDF / 3D model fence languages — hybrid editor shows MediaEmbed, not source-only */
 export const MEDIA_FENCE_LANGS = new Set(['pdf', 'glb', 'gltf', 'obj', 'model'])
 
+/** ATX heading at the start of a line: `# Title` … `###### Title`. */
+const HEADING_LINE = /^(#{1,6})\s+\S/
+
+/** True when a text segment opens with a heading, so it must start its own line. */
+export function startsWithHeading(text: string): boolean {
+  return HEADING_LINE.test(text.replace(/^\n+/, ''))
+}
+
+/**
+ * Break a run of Markdown into one piece per heading, so each section is its own
+ * editable, reorderable block. Any prose before the first heading stays as the
+ * leading piece. Pieces concatenate back to the input exactly.
+ */
+export function splitTextAtHeadings(text: string): string[] {
+  if (!text) return [text]
+
+  const lines = text.split('\n')
+  const pieces: string[] = []
+  let current: string[] = []
+
+  for (const line of lines) {
+    if (HEADING_LINE.test(line) && current.some((l) => l.trim().length > 0)) {
+      pieces.push(current.join('\n'))
+      current = [line]
+      continue
+    }
+    current.push(line)
+  }
+  pieces.push(current.join('\n'))
+
+  // Re-attach the newline each split consumed, so joining is lossless.
+  return pieces.map((piece, i) => (i < pieces.length - 1 ? piece + '\n' : piece)).filter((p) => p !== '')
+}
+
 /**
  * Split Markdown into text + fenced code segments (any fence language).
  * Closing fence is ``` alone on a line (optional trailing spaces).
+ *
+ * Text runs are further split at headings — the editor renders one block per
+ * segment, and a section is what a reader thinks of as a movable unit.
  */
 export function splitMarkdownSegments(markdown: string): ContentSegment[] {
   const src = markdown.replace(/\r\n/g, '\n')
@@ -52,9 +89,13 @@ export function splitMarkdownSegments(markdown: string): ContentSegment[] {
   const re = /^```([^\n`]*)\n([\s\S]*?)^```[ \t]*$/gm
   let last = 0
   let m: RegExpExecArray | null
+  const pushText = (text: string) => {
+    for (const piece of splitTextAtHeadings(text)) segments.push({ type: 'text', text: piece })
+  }
+
   while ((m = re.exec(src)) !== null) {
     if (m.index > last) {
-      segments.push({ type: 'text', text: src.slice(last, m.index) })
+      pushText(src.slice(last, m.index))
     }
     const info = (m[1] ?? '').trim()
     const lang = (info.split(/\s+/)[0] || 'text').toLowerCase()
@@ -63,7 +104,7 @@ export function splitMarkdownSegments(markdown: string): ContentSegment[] {
     last = m.index + m[0].length
   }
   if (last < src.length) {
-    segments.push({ type: 'text', text: src.slice(last) })
+    pushText(src.slice(last))
   }
   if (segments.length === 0) {
     segments.push({ type: 'text', text: src })
@@ -84,8 +125,16 @@ export function joinMarkdownSegments(segments: ContentSegment[]): string {
   let afterFence = false
   for (const s of segments) {
     if (s.type === 'text') {
-      // Keep the previous fence's closing ``` alone on its line.
-      if (afterFence && s.text && !s.text.startsWith('\n')) out += '\n\n'
+      // Keep the previous fence's closing ``` alone on its line, and — now that
+      // blocks can be reordered — make sure a section heading landing after some
+      // other block still begins on a line of its own. Text that already opens
+      // with a newline carries its own break, so adding one would rewrite the
+      // document on load.
+      const needsBreak =
+        s.text !== '' &&
+        !s.text.startsWith('\n') &&
+        (afterFence || (out !== '' && !out.endsWith('\n') && startsWithHeading(s.text)))
+      if (needsBreak) out += '\n\n'
       out += s.text
       afterFence = false
       continue

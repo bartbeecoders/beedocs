@@ -48,6 +48,8 @@ export function DiagramCanvas({ onStateChange }: Props) {
   const dirtyRef = useRef(dirty)
   const diagramIdRef = useRef(diagramId)
   const savingRef = useRef(false)
+  /** Title the library tree is currently showing, so a save only refreshes it when it moved. */
+  const treeTitleRef = useRef('')
 
   titleRef.current = title
   sourceRef.current = source
@@ -85,6 +87,7 @@ export function DiagramCanvas({ onStateChange }: Props) {
         setTitle(d.title)
         setSource(d.source)
         setKind(d.kind)
+        treeTitleRef.current = d.title
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       }
@@ -118,7 +121,12 @@ export function DiagramCanvas({ onStateChange }: Props) {
       ) {
         setDirty(false)
       }
-      await renameInTree()
+      // Same reason as PageCanvas: the tree only shows the title, so refetching the
+      // whole library on every autosave was pure re-render churn.
+      if (updated.title !== treeTitleRef.current) {
+        treeTitleRef.current = updated.title
+        await renameInTree()
+      }
     } catch (err) {
       if (diagramIdRef.current === id) {
         setError(err instanceof Error ? err.message : String(err))

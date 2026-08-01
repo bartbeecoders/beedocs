@@ -72,6 +72,31 @@ public sealed class Diagram
 }
 
 /// <summary>
+/// A configured OpenAI-compatible chat endpoint. Every supported provider speaks
+/// the same wire format, so only the base URL and the auth differ.
+/// </summary>
+public sealed class LlmProvider
+{
+    public string Id { get; set; } = string.Empty;
+    /// <summary>openrouter | xai | openai | lmstudio</summary>
+    public string Kind { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    /// <summary>Root of the OpenAI-compatible API, without a trailing slash.</summary>
+    public string BaseUrl { get; set; } = string.Empty;
+    /// <summary>
+    /// Never serialized to a client. <see cref="Models.LlmProviderDto"/> exposes
+    /// only whether a key is set and its last four characters.
+    /// </summary>
+    public string? ApiKey { get; set; }
+    /// <summary>Preferred model id. Empty means "use the first one the provider lists".</summary>
+    public string Model { get; set; } = string.Empty;
+    public bool Enabled { get; set; } = true;
+    public int SortOrder { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
 /// A reusable multi-shape snippet for the Studio palette.
 /// When <see cref="BookId"/> is null/empty the collection is app-wide;
 /// otherwise it belongs to that book only.

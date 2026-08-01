@@ -154,8 +154,8 @@ export function loadImageSize(url: string): Promise<{ w: number; h: number }> {
     img.onload = () => {
       const maxW = 360
       const maxH = 280
-      let w = img.naturalWidth || 220
-      let h = img.naturalHeight || 160
+      const w = img.naturalWidth || 220
+      const h = img.naturalHeight || 160
       const scale = Math.min(1, maxW / w, maxH / h)
       resolve({ w: Math.round(w * scale), h: Math.round(h * scale) })
     }

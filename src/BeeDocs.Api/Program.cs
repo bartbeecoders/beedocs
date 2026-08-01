@@ -35,6 +35,12 @@ builder.Services.AddSingleton<IShapeCollectionService, ShapeCollectionService>()
 builder.Services.AddSingleton<IExportService, ExportService>();
 builder.Services.AddSingleton<IImportService, ImportService>();
 builder.Services.AddSingleton<ISearchIndexService, SearchIndexService>();
+builder.Services.AddSingleton<ILlmProviderService, LlmProviderService>();
+builder.Services.AddSingleton<ILlmClient, LlmClient>();
+
+// Backstop only — LlmClient gives each call its own budget with a linked token.
+builder.Services.AddHttpClient(LlmClient.HttpClientName,
+    client => client.Timeout = TimeSpan.FromMinutes(2));
 
 // Imported archives carry their images, so the 30 MB Kestrel default is too
 // tight for a book of screenshots. Individual uploads are capped by type in
@@ -106,6 +112,16 @@ if (string.IsNullOrWhiteSpace(configuredApiKey))
 else
 {
     app.Logger.LogInformation("BeeDocs:ApiKey is configured — /api/v1 requires Bearer or X-Api-Key.");
+}
+
+// A stored provider key turns /api/llm into something that spends real money.
+// Without BeeDocs:ApiKey, anyone who can reach this port can spend it.
+if (string.IsNullOrWhiteSpace(configuredApiKey)
+    && await app.Services.GetRequiredService<ILlmProviderService>().AnyKeyStoredAsync())
+{
+    app.Logger.LogWarning(
+        "An LLM provider has a stored API key but BeeDocs:ApiKey is not set — /api/llm is unauthenticated, " +
+        "so anyone who can reach this port can spend that key. Set BeeDocs__ApiKey (or BeeDocs:ApiKey).");
 }
 
 api.MapGet("/health", () => Results.Ok(new { status = "ok", service = "BeeDocs.Api", version = appVersion }));
@@ -360,6 +376,117 @@ api.MapDelete("/collections/{id}", async (string id, IShapeCollectionService col
 {
     var ok = await collections.DeleteAsync(id, ct);
     return ok ? Results.NoContent() : Results.NotFound();
+});
+
+// --- LLM providers & completion ---
+// Behind the same key as /api/v1, and not optional: a completion spends the user's
+// money, so an unauthenticated /api/llm on a reachable port is a bill waiting to
+// happen. Provider keys are stored server-side and never returned.
+var llm = api.MapGroup("/llm")
+    .AddEndpointFilter<ApiKeyEndpointFilter>()
+    .WithTags("LLM");
+
+static IResult LlmFailure(LlmException ex) =>
+    Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status502BadGateway);
+
+llm.MapGet("/providers", async (ILlmProviderService providers, CancellationToken ct) =>
+    Results.Ok(await providers.ListAsync(ct)));
+
+llm.MapPost("/providers", async (CreateLlmProviderRequest body, ILlmProviderService providers, CancellationToken ct) =>
+{
+    try
+    {
+        var created = await providers.CreateAsync(body, ct);
+        return Results.Created($"/api/llm/providers/{created.Id}", created);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["provider"] = [ex.Message] });
+    }
+});
+
+llm.MapGet("/providers/{id}", async (string id, ILlmProviderService providers, CancellationToken ct) =>
+{
+    var provider = await providers.GetAsync(id, ct);
+    return provider is null ? Results.NotFound() : Results.Ok(provider);
+});
+
+llm.MapPut("/providers/{id}", async (string id, UpdateLlmProviderRequest body, ILlmProviderService providers, CancellationToken ct) =>
+{
+    try
+    {
+        var updated = await providers.UpdateAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["provider"] = [ex.Message] });
+    }
+});
+
+llm.MapDelete("/providers/{id}", async (string id, ILlmProviderService providers, CancellationToken ct) =>
+{
+    var ok = await providers.DeleteAsync(id, ct);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
+// Promote to default: first in sort order, and enabled, in one transaction.
+// Doing it client-side meant one PUT per provider with no way to undo a failure
+// halfway through the renumber.
+llm.MapPost("/providers/{id}/default", async (string id, ILlmProviderService providers, CancellationToken ct) =>
+{
+    var promoted = await providers.MakeDefaultAsync(id, ct);
+    return promoted is null ? Results.NotFound() : Results.Ok(promoted);
+});
+
+// Reachability + credentials. Reports failure in the payload rather than as an
+// error status, because the settings UI shows the message either way.
+llm.MapPost("/providers/{id}/test", async (string id, ILlmClient client, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await client.TestAsync(id, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+
+llm.MapGet("/providers/{id}/models", async (string id, ILlmClient client, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await client.ListModelsAsync(id, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (LlmException ex)
+    {
+        return LlmFailure(ex);
+    }
+});
+
+llm.MapPost("/complete", async (LlmCompleteRequest body, ILlmClient client, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await client.CompleteAsync(body, ct));
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["task"] = [ex.Message] });
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { error = ex.Message });
+    }
+    catch (LlmException ex)
+    {
+        return LlmFailure(ex);
+    }
 });
 
 // --- Export ---
