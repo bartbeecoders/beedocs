@@ -4122,7 +4122,10 @@ html[data-density='compact'] .media-embed-title {
 /* Every gap the block may land in stays visible for the length of the drag. */
 .insert-gap.block-target {
   opacity: 1;
-  min-height: 1.6rem;
+  min-height: 1.85rem;
+  /* Larger hit area while reordering — pointer often sits over a block body. */
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
 }
 
 .insert-gap.block-target::before {
@@ -4133,16 +4136,23 @@ html[data-density='compact'] .media-embed-title {
   border-radius: 2px;
   background: var(--border-strong);
   opacity: 0.5;
+  transition: height 0.08s ease, background 0.08s ease, opacity 0.08s ease, box-shadow 0.08s ease;
 }
 
 .insert-gap.block-target-active::before {
   background: var(--accent);
   opacity: 1;
-  height: 3px;
+  height: 4px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .insert-gap.block-target .insert-gap-btn {
   display: none;
+}
+
+/* While a block drag is live, dim the ghost slightly less so position is clearer. */
+.hybrid-page-editor:has(.hybrid-block-wrap.is-dragging) .hybrid-block-wrap:not(.is-dragging) {
+  transition: opacity 0.12s ease;
 }
 
 /* ==========================================================================

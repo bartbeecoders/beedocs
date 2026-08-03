@@ -217,7 +217,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
     emit(next)
   }, [emit])
 
-  const reorder = useBlockReorder({ onMove: moveSegment })
+  const reorder = useBlockReorder({ onMove: moveSegment, containerRef: rootRef })
 
   const updateFenceBody = useCallback(
     (index: number, body: string) => {
@@ -550,6 +550,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         dropSlot="before:0"
         dropLabel="Insert image at top of page"
         dragging={dragging}
+        gapIndex={0}
         reorderProps={reorder.gapProps(0)}
         reorderActive={reorder.overGap === 0}
       />
@@ -558,6 +559,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         <div
           key={blockId(seg)}
           className={`hybrid-block-wrap${reorder.dragIndex === index ? ' is-dragging' : ''}`}
+          data-block-index={index}
         >
           <BlockHandle
             index={index}
@@ -604,6 +606,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             dropSlot={`before:${index + 1}`}
             dropLabel="Insert image here"
             dragging={dragging}
+            gapIndex={index + 1}
             reorderProps={reorder.gapProps(index + 1)}
             reorderActive={reorder.overGap === index + 1}
           />
@@ -980,6 +983,7 @@ function InsertGap({
   dragging,
   reorderProps,
   reorderActive,
+  gapIndex,
 }: {
   busy: boolean
   onInsert: (kind: InsertKind | 'beediagram-linked') => void
@@ -992,6 +996,8 @@ function InsertGap({
   reorderProps?: ReorderGapProps | null
   /** The dragged block is currently hovering this gap. */
   reorderActive?: boolean
+  /** Gap index (0 = before first block) — used for hit-testing attributes. */
+  gapIndex?: number
 }) {
   const [open, setOpen] = useState(false)
   const canAcceptBlock = Boolean(reorderProps)
@@ -1003,6 +1009,7 @@ function InsertGap({
       }
       data-drop-slot={dropSlot}
       data-drop-label={dropLabel}
+      data-block-gap={gapIndex != null ? String(gapIndex) : undefined}
       {...reorderProps}
     >
       <button

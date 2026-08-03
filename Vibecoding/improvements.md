@@ -36,3 +36,7 @@ Diagram improvements:
 when a shape is selected, and the user start typing, go directly into text edit mode.
 allow for the ability to add a beediagram in studio mode directly on a page
 allow for the ability to resize multiple objects/shapes at once
+
+
+improve the drag and drop of the sections in a page.
+It is now not possible to drag beyond the screen top or bottom
