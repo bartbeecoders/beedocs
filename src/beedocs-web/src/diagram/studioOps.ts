@@ -196,6 +196,69 @@ export function resizeNodeRect(
   }
 }
 
+/**
+ * Resize an axis-aligned selection bounds by dragging `handle` to `world`.
+ * Used for multi-shape resize (no per-shape rotation).
+ */
+export function resizeBoundsRect(
+  bounds: Rect,
+  handle: ResizeHandle,
+  world: BeePoint,
+  opts: ResizeOptions = {},
+): Rect {
+  const fake: BeeNode = {
+    id: '_bounds',
+    type: 'box',
+    label: '',
+    x: bounds.x,
+    y: bounds.y,
+    w: bounds.w,
+    h: bounds.h,
+  }
+  return resizeNodeRect(fake, handle, world, opts)
+}
+
+export type NodeGeom = { x: number; y: number; w: number; h: number }
+
+/**
+ * Map each selected node's origin geometry into a new selection bounds by
+ * uniform scaling from the original bounds (draw.io multi-resize).
+ */
+export function mapGeomsToNewBounds(
+  origins: Map<string, NodeGeom>,
+  startBounds: Rect,
+  newBounds: Rect,
+): Map<string, NodeGeom> {
+  const sx = startBounds.w > 0 ? newBounds.w / startBounds.w : 1
+  const sy = startBounds.h > 0 ? newBounds.h / startBounds.h : 1
+  const out = new Map<string, NodeGeom>()
+  for (const [id, o] of origins) {
+    const w = Math.max(MIN_NODE_SIZE, Math.round(o.w * sx))
+    const h = Math.max(MIN_NODE_SIZE, Math.round(o.h * sy))
+    out.set(id, {
+      x: Math.round(newBounds.x + (o.x - startBounds.x) * sx),
+      y: Math.round(newBounds.y + (o.y - startBounds.y) * sy),
+      w,
+      h,
+    })
+  }
+  return out
+}
+
+/** Scale edge waypoints with the same bounds transform as multi-resize. */
+export function mapWaypointsToNewBounds(
+  waypoints: BeePoint[],
+  startBounds: Rect,
+  newBounds: Rect,
+): BeePoint[] {
+  const sx = startBounds.w > 0 ? newBounds.w / startBounds.w : 1
+  const sy = startBounds.h > 0 ? newBounds.h / startBounds.h : 1
+  return waypoints.map((p) => ({
+    x: Math.round(newBounds.x + (p.x - startBounds.x) * sx),
+    y: Math.round(newBounds.y + (p.y - startBounds.y) * sy),
+  }))
+}
+
 // ── Alignment guides (draw.io-style snap lines) ───────────────────────────────
 
 export type Guide = {

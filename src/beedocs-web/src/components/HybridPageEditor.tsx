@@ -37,7 +37,7 @@ import {
 import { segmentsForInsert, segmentsForLinkedDiagram, type InsertKind } from '../pageBlocks'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { AiAssistBar, AiAssistField } from './AiAssist'
-import { BeeDiagramEditor } from './BeeDiagramEditor'
+import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
 import { MediaEmbed, parseMediaFenceBody } from './media/MediaEmbed'
 import { SyncedTextarea } from './SyncedText'
 
@@ -944,7 +944,7 @@ function InsertToolbar({
           className="btn sm primary"
           disabled={busy}
           onClick={() => onInsert('beediagram')}
-          title="Inline visual diagram stored in this page"
+          title="Insert an inline BeeDiagram (Studio by default) stored on this page"
         >
           {busy ? '…' : 'BeeDiagram'}
         </button>
@@ -953,7 +953,7 @@ function InsertToolbar({
           className="btn sm"
           disabled={busy}
           onClick={() => onInsert('beediagram-linked')}
-          title="Create a diagram entity and embed it (reusable, tree-visible)"
+          title="Create a reusable diagram entity and embed it (Studio by default, tree-visible)"
         >
           Linked diagram
         </button>
@@ -1231,13 +1231,13 @@ function VisualFenceBlock({
     <div className="hybrid-visual-diagram">
       <div className="hybrid-fence-chrome">
         <span className="inline-diagram-badge">BeeDiagram</span>
-        <span className="hybrid-fence-title">Visual editor · stored on this page</span>
+        <span className="hybrid-fence-title">Studio · stored on this page</span>
         <button type="button" className="btn ghost sm danger" onClick={onRemove}>
           Remove
         </button>
       </div>
-      <div className="hybrid-visual-body">
-        <BeeDiagramEditor source={segment.body} onChange={onBodyChange} />
+      <div className="hybrid-visual-body hybrid-visual-body--studio">
+        <BeeDiagramWorkbench source={segment.body} onChange={onBodyChange} bookId={bookId} />
       </div>
     </div>
   )
@@ -1371,8 +1371,8 @@ function RefDiagramBlock({
         </div>
       </div>
       {error && <div className="banner error compact">{error}</div>}
-      <div className="hybrid-visual-body">
-        <BeeDiagramEditor source={source} onChange={onEditorChange} />
+      <div className="hybrid-visual-body hybrid-visual-body--studio">
+        <BeeDiagramWorkbench source={source} onChange={onEditorChange} bookId={bookId} />
       </div>
     </div>
   )

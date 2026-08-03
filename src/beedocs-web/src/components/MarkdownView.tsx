@@ -20,7 +20,7 @@ import { withApiBase } from '../basePath'
 import { replaceFenceBody } from '../markdownFences'
 import { highlightCode, resolveLanguage } from '../syntaxHighlight'
 import { DataTree } from './DataTree'
-import { BeeDiagramEditor } from './BeeDiagramEditor'
+import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
 import { BeeDiagramView } from './BeeDiagramView'
 import { MediaEmbed } from './media/MediaEmbed'
 
@@ -225,12 +225,12 @@ function InlineBeeDiagramEditor({
       <div className="inline-diagram-chrome">
         <div className="inline-diagram-labels">
           <span className="inline-diagram-badge">BeeDiagram</span>
-          <figcaption className="inline-diagram-title">Visual editor</figcaption>
+          <figcaption className="inline-diagram-title">Studio editor</figcaption>
         </div>
-        <span className="muted sm">Drag nodes · toolbar tools · properties panel</span>
+        <span className="muted sm">Studio or Classic · palette · connections · format</span>
       </div>
       <div className="inline-diagram-body inline-diagram-body--visual">
-        <BeeDiagramEditor source={live} onChange={commitSource} />
+        <BeeDiagramWorkbench source={live} onChange={commitSource} />
       </div>
     </figure>
   )
@@ -359,7 +359,7 @@ function InlineBeeDiagramRefEditor({
       </div>
       {error && <div className="banner error compact">{error}</div>}
       <div className="inline-diagram-body inline-diagram-body--visual">
-        <BeeDiagramEditor source={live} onChange={onEditorChange} />
+        <BeeDiagramWorkbench source={live} onChange={onEditorChange} bookId={bookId} />
       </div>
     </figure>
   )

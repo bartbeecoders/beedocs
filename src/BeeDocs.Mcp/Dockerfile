@@ -10,7 +10,8 @@ WORKDIR /src
 COPY src/BeeDocs.Mcp/BeeDocs.Mcp.csproj src/BeeDocs.Mcp/
 RUN dotnet restore src/BeeDocs.Mcp/BeeDocs.Mcp.csproj
 COPY src/BeeDocs.Mcp/ src/BeeDocs.Mcp/
-RUN dotnet publish src/BeeDocs.Mcp/BeeDocs.Mcp.csproj -c Release -o /app/publish --no-restore
+# Restore again after COPY so publish never relies on host bin/obj assets.
+RUN dotnet publish src/BeeDocs.Mcp/BeeDocs.Mcp.csproj -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app

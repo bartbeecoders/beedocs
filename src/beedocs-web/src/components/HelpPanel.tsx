@@ -237,7 +237,9 @@ export function HelpPanel() {
           <li>
             <strong>Studio</strong> — a diagrams.net-style workspace: searchable shape palette (drag
             or click to place), infinite pan/zoom canvas with grid and snapping, alignment guides,
-            resize/rotate handles, undo/redo, clipboard and a Style / Text / Arrange format panel.
+            resize/rotate handles (including multi-select group resize), undo/redo, clipboard and a
+            Style / Text / Arrange format panel. With a shape selected, start typing to edit its
+            label.
           </li>
           <li>
             <strong>Connecting</strong> — hover a shape: drag a <em>blue arrow</em> to another shape
@@ -259,8 +261,12 @@ export function HelpPanel() {
             <em>Book collections</em> / <em>App collections</em> in the palette.
           </li>
           <li>
-            <strong>Classic</strong> — the original compact editor, also used for inline{' '}
-            <code>beediagram</code> fences inside pages. It ignores container grouping.
+            <strong>On a page</strong> — the insert toolbar <em>BeeDiagram</em> /{' '}
+            <em>Linked diagram</em> embeds open in Studio by default (switch to Classic any time).
+            Same JSON document either way.
+          </li>
+          <li>
+            <strong>Classic</strong> — the original compact editor. It ignores container grouping.
           </li>
           <li>Mermaid and C4 diagrams are edited as source with a live preview beside them.</li>
         </ul>
@@ -541,9 +547,9 @@ export function HelpPanel() {
                 </tr>
                 <tr>
                   <td>
-                    <kbd>F2</kbd> / <kbd>Enter</kbd>
+                    <kbd>F2</kbd> / <kbd>Enter</kbd> / type
                   </td>
-                  <td>Edit label · double-click does the same</td>
+                  <td>Edit label · double-click, or just start typing when a shape is selected</td>
                 </tr>
                 <tr>
                   <td>

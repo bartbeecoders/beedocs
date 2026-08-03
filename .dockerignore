@@ -1,0 +1,15 @@
+# Keep Docker build context small and avoid host bin/obj polluting
+# container restores (causes NETSDK1064 with --no-restore).
+**/.git
+**/.vs
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/dist-ssr
+**/.vite
+**/data
+**/scripts/.logs
+**/*.user
+**/*.DotSettings.user
+**/TestResults

@@ -1238,6 +1238,24 @@ select:focus {
   min-height: 420px;
 }
 
+/* Inline Studio (workbench) on a page needs room for palette + canvas + format */
+.hybrid-visual-body--studio {
+  min-height: 32rem;
+  padding: 0.4rem 0.45rem 0.55rem;
+}
+
+.hybrid-visual-body--studio .bee-workbench {
+  min-height: 30rem;
+}
+
+.hybrid-visual-body--studio .bee-studio {
+  min-height: 28rem;
+}
+
+.hybrid-visual-body--studio .studio-canvas-wrap {
+  min-height: 22rem;
+}
+
 .hybrid-media-block {
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
   border-radius: var(--radius);
@@ -1415,6 +1433,18 @@ select:focus {
 .inline-diagram-body--visual .bee-canvas {
   min-height: 420px;
   max-height: 520px;
+}
+
+.inline-diagram-body--visual .bee-workbench {
+  min-height: 30rem;
+}
+
+.inline-diagram-body--visual .bee-studio {
+  min-height: 28rem;
+}
+
+.inline-diagram-body--visual .studio-canvas-wrap {
+  min-height: 22rem;
 }
 
 .inline-diagram-status-inline {
@@ -3228,6 +3258,7 @@ select:focus {
   right: 0;
   z-index: 1200;
   min-width: 240px;
+  width: 260px;
   padding: 0.35rem;
   border-radius: 10px;
   border: 1px solid var(--border-strong);
@@ -3236,6 +3267,13 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 0.12rem;
+}
+
+/* Portaled menu: escapes toolbar overflow-y:hidden so the dropdown is visible. */
+.export-menu-pop--portal {
+  position: fixed;
+  right: auto;
+  z-index: 5000;
 }
 
 .export-menu-heading {
