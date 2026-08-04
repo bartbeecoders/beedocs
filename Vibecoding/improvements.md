@@ -47,3 +47,5 @@ Add a fully functioning free draw canvas as a page section
 
 
 Add a small page navigation overview pane to the page that the user can use to quickly navigate to a spot on the page.
+
+On the Diagram (studio), make the shapes in the shape selection pane smaller, so you can show 3 rows

@@ -14,6 +14,7 @@ import { HelpPanel } from './HelpPanel'
 import { ExportMenu } from './ExportMenu'
 import { WorkspaceToolbar } from './WorkspaceToolbar'
 import { SearchPalette } from './SearchPalette'
+import { NamePromptDialog } from './NamePromptDialog'
 
 export function WorkspaceShell() {
   const location = useLocation()
@@ -247,6 +248,7 @@ function BookOverview({ bookId }: { bookId: string }) {
   const navigate = useNavigate()
   const { books, createPage, createDiagram } = useWorkspace()
   const book = books.find((b) => b.id === bookId)
+  const [prompt, setPrompt] = useState<'page' | 'diagram' | null>(null)
 
   if (!book) {
     return <div className="canvas-message muted">Loading book…</div>
@@ -274,35 +276,38 @@ function BookOverview({ bookId }: { bookId: string }) {
         right.
       </p>
       <div className="row" style={{ gap: '0.5rem', marginTop: '1rem' }}>
-        <button
-          type="button"
-          className="btn primary sm"
-          onClick={() => {
-            const title = prompt('Page title')
-            if (title?.trim()) {
-              void createPage(bookId, title.trim()).then((p) =>
-                navigate(`/books/${bookId}/pages/${p.id}`),
-              )
-            }
-          }}
-        >
+        <button type="button" className="btn primary sm" onClick={() => setPrompt('page')}>
           New page
         </button>
-        <button
-          type="button"
-          className="btn sm"
-          onClick={() => {
-            const title = prompt('Diagram title')
-            if (title?.trim()) {
-              void createDiagram(bookId, title.trim()).then((d) =>
-                navigate(`/books/${bookId}/diagrams/${d.id}`),
-              )
-            }
-          }}
-        >
+        <button type="button" className="btn sm" onClick={() => setPrompt('diagram')}>
           New diagram
         </button>
       </div>
+
+      <NamePromptDialog
+        open={prompt === 'page'}
+        title="New page"
+        label="Page title"
+        placeholder="e.g. System Context"
+        confirmLabel="Create page"
+        onSubmit={async (title) => {
+          const p = await createPage(bookId, title)
+          void navigate(`/books/${bookId}/pages/${p.id}`)
+        }}
+        onClose={() => setPrompt(null)}
+      />
+      <NamePromptDialog
+        open={prompt === 'diagram'}
+        title="New diagram"
+        label="Diagram title"
+        placeholder="e.g. Network overview"
+        confirmLabel="Create diagram"
+        onSubmit={async (title) => {
+          const d = await createDiagram(bookId, title)
+          void navigate(`/books/${bookId}/diagrams/${d.id}`)
+        }}
+        onClose={() => setPrompt(null)}
+      />
     </div>
   )
 }

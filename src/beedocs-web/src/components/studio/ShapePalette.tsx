@@ -50,7 +50,10 @@ export function ShapePalette({
   disabled,
 }: Props) {
   const [query, setQuery] = useState('')
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
+    'app-collections': true,
+    'book-collections': true,
+  })
   const [bookCollections, setBookCollections] = useState<ShapeCollection[]>([])
   const [appCollections, setAppCollections] = useState<ShapeCollection[]>([])
   const [collectionsError, setCollectionsError] = useState<string | null>(null)
@@ -230,7 +233,7 @@ export function ShapePalette({
                           onClick={() => !disabled && onPlace(item)}
                           disabled={disabled}
                         >
-                          <ShapeThumb itemId={item.id} />
+                          <ShapeThumb itemId={item.id} size={22} />
                           <span className="studio-palette-label">{item.label}</span>
                         </button>
                       ))}

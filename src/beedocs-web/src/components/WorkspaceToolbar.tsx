@@ -4,6 +4,7 @@ import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
 import { ExportMenu } from './ExportMenu'
 import { ImportDialog } from './ImportDialog'
+import { NamePromptDialog } from './NamePromptDialog'
 import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
 
@@ -16,6 +17,15 @@ type Props = {
   diagramId?: string
   pageState?: PageEditorState | null
   diagramState?: DiagramEditorState | null
+}
+
+type NamePrompt = {
+  title: string
+  label: string
+  placeholder?: string
+  defaultValue?: string
+  confirmLabel: string
+  run: (value: string) => Promise<void>
 }
 
 function Sep() {
@@ -153,6 +163,7 @@ export function WorkspaceToolbar({
   } = useWorkspace()
   const navigate = useNavigate()
   const [importOpen, setImportOpen] = useState<{ targetBookId?: string } | null>(null)
+  const [namePrompt, setNamePrompt] = useState<NamePrompt | null>(null)
 
   const context = useMemo(
     () => resolveToolbarContext(view, selection, books, bookId, pageId, diagramId),
@@ -204,14 +215,19 @@ export function WorkspaceToolbar({
             <button
               type="button"
               className="btn primary sm"
-              onClick={() => {
-                const title = window.prompt('Book title')
-                if (!title?.trim()) return
-                void createBook(title.trim()).then((book) => {
-                  setSelection({ kind: 'book', bookId: book.id })
-                  void navigate(`/books/${book.id}`)
+              onClick={() =>
+                setNamePrompt({
+                  title: 'New book',
+                  label: 'Book title',
+                  placeholder: 'e.g. Platform architecture',
+                  confirmLabel: 'Create book',
+                  run: async (title) => {
+                    const book = await createBook(title)
+                    setSelection({ kind: 'book', bookId: book.id })
+                    void navigate(`/books/${book.id}`)
+                  },
                 })
-              }}
+              }
             >
               New book
             </button>
@@ -239,37 +255,53 @@ export function WorkspaceToolbar({
             <button
               type="button"
               className="btn primary sm"
-              onClick={() => {
-                const title = window.prompt('Page title')
-                if (!title?.trim()) return
-                void createPage(context.bookId, title.trim()).then((p) =>
-                  navigate(`/books/${context.bookId}/pages/${p.id}`),
-                )
-              }}
+              onClick={() =>
+                setNamePrompt({
+                  title: 'New page',
+                  label: 'Page title',
+                  placeholder: 'e.g. System Context',
+                  confirmLabel: 'Create page',
+                  run: async (title) => {
+                    const p = await createPage(context.bookId, title)
+                    void navigate(`/books/${context.bookId}/pages/${p.id}`)
+                  },
+                })
+              }
             >
               New page
             </button>
             <button
               type="button"
               className="btn ghost sm"
-              onClick={() => {
-                const title = window.prompt('Folder name')
-                if (!title?.trim()) return
-                void createFolder(context.bookId, title.trim())
-              }}
+              onClick={() =>
+                setNamePrompt({
+                  title: 'New folder',
+                  label: 'Folder name',
+                  placeholder: 'e.g. Design',
+                  confirmLabel: 'Create folder',
+                  run: async (title) => {
+                    await createFolder(context.bookId, title)
+                  },
+                })
+              }
             >
               New folder
             </button>
             <button
               type="button"
               className="btn ghost sm"
-              onClick={() => {
-                const title = window.prompt('Diagram title')
-                if (!title?.trim()) return
-                void createDiagram(context.bookId, title.trim()).then((d) =>
-                  navigate(`/books/${context.bookId}/diagrams/${d.id}`),
-                )
-              }}
+              onClick={() =>
+                setNamePrompt({
+                  title: 'New diagram',
+                  label: 'Diagram title',
+                  placeholder: 'e.g. Network overview',
+                  confirmLabel: 'Create diagram',
+                  run: async (title) => {
+                    const d = await createDiagram(context.bookId, title)
+                    void navigate(`/books/${context.bookId}/diagrams/${d.id}`)
+                  },
+                })
+              }
             >
               New diagram
             </button>
@@ -319,23 +351,35 @@ export function WorkspaceToolbar({
             <button
               type="button"
               className="btn primary sm"
-              onClick={() => {
-                const title = window.prompt('Page title')
-                if (!title?.trim()) return
-                void createPage(context.bookId, title.trim(), context.chapterId).then((p) =>
-                  navigate(`/books/${context.bookId}/pages/${p.id}`),
-                )
-              }}
+              onClick={() =>
+                setNamePrompt({
+                  title: 'New page',
+                  label: 'Page title',
+                  placeholder: 'e.g. System Context',
+                  confirmLabel: 'Create page',
+                  run: async (title) => {
+                    const p = await createPage(context.bookId, title, context.chapterId)
+                    void navigate(`/books/${context.bookId}/pages/${p.id}`)
+                  },
+                })
+              }
             >
               New page in folder
             </button>
             <button
               type="button"
               className="btn ghost sm"
-              onClick={() => {
-                const t = window.prompt('Folder name', context.title)?.trim()
-                if (t) void renameFolder(context.chapterId, context.bookId, t)
-              }}
+              onClick={() =>
+                setNamePrompt({
+                  title: 'Rename folder',
+                  label: 'Folder name',
+                  defaultValue: context.title,
+                  confirmLabel: 'Rename',
+                  run: async (t) => {
+                    await renameFolder(context.chapterId, context.bookId, t)
+                  },
+                })
+              }
             >
               Rename folder
             </button>
@@ -474,6 +518,19 @@ export function WorkspaceToolbar({
           onClose={() => setImportOpen(null)}
         />
       )}
+      <NamePromptDialog
+        open={Boolean(namePrompt)}
+        title={namePrompt?.title ?? ''}
+        label={namePrompt?.label}
+        placeholder={namePrompt?.placeholder}
+        defaultValue={namePrompt?.defaultValue}
+        confirmLabel={namePrompt?.confirmLabel}
+        onSubmit={async (value) => {
+          if (!namePrompt) return
+          await namePrompt.run(value)
+        }}
+        onClose={() => setNamePrompt(null)}
+      />
     </div>
   )
 }
