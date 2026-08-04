@@ -5,6 +5,7 @@ import { withApiBase } from '../basePath'
 import { useBlockReorder } from '../hooks/useBlockReorder'
 import { useImageIntake, type ImageIntakeContext } from '../hooks/useImageIntake'
 import {
+  isFreedrawFenceLang,
   isMediaFenceLang,
   isVisualFenceLang,
   joinMarkdownSegments,
@@ -35,9 +36,11 @@ import {
   modelFormatFromExtension,
 } from '../media/mediaKinds'
 import { segmentsForInsert, segmentsForLinkedDiagram, type InsertKind } from '../pageBlocks'
+import { outlineId } from '../pageOutline'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { AiAssistBar, AiAssistField } from './AiAssist'
-import { BeeDiagramEditor } from './BeeDiagramEditor'
+import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
+import { FreeDrawCanvas } from './FreeDrawCanvas'
 import { MediaEmbed, parseMediaFenceBody } from './media/MediaEmbed'
 import { SyncedTextarea } from './SyncedText'
 
@@ -217,7 +220,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
     emit(next)
   }, [emit])
 
-  const reorder = useBlockReorder({ onMove: moveSegment })
+  const reorder = useBlockReorder({ onMove: moveSegment, containerRef: rootRef })
 
   const updateFenceBody = useCallback(
     (index: number, body: string) => {
@@ -550,6 +553,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         dropSlot="before:0"
         dropLabel="Insert image at top of page"
         dragging={dragging}
+        gapIndex={0}
         reorderProps={reorder.gapProps(0)}
         reorderActive={reorder.overGap === 0}
       />
@@ -557,7 +561,10 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       {segments.map((seg, index) => (
         <div
           key={blockId(seg)}
+          id={outlineId(index)}
           className={`hybrid-block-wrap${reorder.dragIndex === index ? ' is-dragging' : ''}`}
+          data-block-index={index}
+          data-outline-id={outlineId(index)}
         >
           <BlockHandle
             index={index}
@@ -584,6 +591,12 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
               onChange={(next) => updateSegment(index, next)}
               onRemove={() => removeSegment(index)}
             />
+          ) : isFreedrawFenceLang(seg.lang) ? (
+            <FreeDrawFenceBlock
+              segment={seg}
+              onBodyChange={(body) => updateFenceBody(index, body)}
+              onRemove={() => removeSegment(index)}
+            />
           ) : isVisualFenceLang(seg.lang) ? (
             <VisualFenceBlock
               segment={seg}
@@ -604,6 +617,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             dropSlot={`before:${index + 1}`}
             dropLabel="Insert image here"
             dragging={dragging}
+            gapIndex={index + 1}
             reorderProps={reorder.gapProps(index + 1)}
             reorderActive={reorder.overGap === index + 1}
           />
@@ -944,7 +958,7 @@ function InsertToolbar({
           className="btn sm primary"
           disabled={busy}
           onClick={() => onInsert('beediagram')}
-          title="Inline visual diagram stored in this page"
+          title="Insert an inline BeeDiagram (Studio by default) stored on this page"
         >
           {busy ? '…' : 'BeeDiagram'}
         </button>
@@ -953,7 +967,7 @@ function InsertToolbar({
           className="btn sm"
           disabled={busy}
           onClick={() => onInsert('beediagram-linked')}
-          title="Create a diagram entity and embed it (reusable, tree-visible)"
+          title="Create a reusable diagram entity and embed it (Studio by default, tree-visible)"
         >
           Linked diagram
         </button>
@@ -965,6 +979,15 @@ function InsertToolbar({
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('mermaid-er')}>
           ER diagram
+        </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
+          onClick={() => onInsert('freedraw')}
+          title="Insert a free-draw sketch pad stored on this page"
+        >
+          Free draw
         </button>
       </div>
     </div>
@@ -980,6 +1003,7 @@ function InsertGap({
   dragging,
   reorderProps,
   reorderActive,
+  gapIndex,
 }: {
   busy: boolean
   onInsert: (kind: InsertKind | 'beediagram-linked') => void
@@ -992,6 +1016,8 @@ function InsertGap({
   reorderProps?: ReorderGapProps | null
   /** The dragged block is currently hovering this gap. */
   reorderActive?: boolean
+  /** Gap index (0 = before first block) — used for hit-testing attributes. */
+  gapIndex?: number
 }) {
   const [open, setOpen] = useState(false)
   const canAcceptBlock = Boolean(reorderProps)
@@ -1003,6 +1029,7 @@ function InsertGap({
       }
       data-drop-slot={dropSlot}
       data-drop-label={dropLabel}
+      data-block-gap={gapIndex != null ? String(gapIndex) : undefined}
       {...reorderProps}
     >
       <button
@@ -1025,6 +1052,7 @@ function InsertGap({
               ['subsection', 'Subsection'],
               ['beediagram', 'BeeDiagram'],
               ['beediagram-linked', 'Linked diagram'],
+              ['freedraw', 'Free draw'],
               ['mermaid-flow', 'Flowchart'],
               ['mermaid-sequence', 'Sequence'],
               ['table', 'Table'],
@@ -1212,6 +1240,31 @@ function MediaFenceBlock({
   )
 }
 
+function FreeDrawFenceBlock({
+  segment,
+  onBodyChange,
+  onRemove,
+}: {
+  segment: FenceSegment
+  onBodyChange: (body: string) => void
+  onRemove: () => void
+}) {
+  return (
+    <div className="hybrid-visual-diagram hybrid-freedraw-block">
+      <div className="hybrid-fence-chrome">
+        <span className="inline-diagram-badge">Free draw</span>
+        <span className="hybrid-fence-title">Sketch pad · stored on this page</span>
+        <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+          Remove
+        </button>
+      </div>
+      <div className="hybrid-visual-body hybrid-visual-body--freedraw">
+        <FreeDrawCanvas source={segment.body} onChange={onBodyChange} compact />
+      </div>
+    </div>
+  )
+}
+
 function VisualFenceBlock({
   segment,
   bookId,
@@ -1231,13 +1284,13 @@ function VisualFenceBlock({
     <div className="hybrid-visual-diagram">
       <div className="hybrid-fence-chrome">
         <span className="inline-diagram-badge">BeeDiagram</span>
-        <span className="hybrid-fence-title">Visual editor · stored on this page</span>
+        <span className="hybrid-fence-title">Studio · stored on this page</span>
         <button type="button" className="btn ghost sm danger" onClick={onRemove}>
           Remove
         </button>
       </div>
-      <div className="hybrid-visual-body">
-        <BeeDiagramEditor source={segment.body} onChange={onBodyChange} />
+      <div className="hybrid-visual-body hybrid-visual-body--studio">
+        <BeeDiagramWorkbench source={segment.body} onChange={onBodyChange} bookId={bookId} />
       </div>
     </div>
   )
@@ -1371,8 +1424,8 @@ function RefDiagramBlock({
         </div>
       </div>
       {error && <div className="banner error compact">{error}</div>}
-      <div className="hybrid-visual-body">
-        <BeeDiagramEditor source={source} onChange={onEditorChange} />
+      <div className="hybrid-visual-body hybrid-visual-body--studio">
+        <BeeDiagramWorkbench source={source} onChange={onEditorChange} bookId={bookId} />
       </div>
     </div>
   )

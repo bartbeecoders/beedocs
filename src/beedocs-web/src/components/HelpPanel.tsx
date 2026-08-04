@@ -161,6 +161,11 @@ export function HelpPanel() {
           toolbar (Image / PDF / 3D) or drop a file onto the page.
         </p>
         <p className="muted">
+          The small <strong>On this page</strong> pane (right of the editor) lists headings and major
+          embeds so you can jump around long pages. Hide it with its toggle; the choice is remembered
+          in this browser.
+        </p>
+        <p className="muted">
           Fenced code blocks are syntax highlighted in the preview and in exports when the fence
           names a language BeeDocs has a grammar for — <code>bash</code>, <code>csharp</code>,{' '}
           <code>css</code>, <code>diff</code>, <code>dockerfile</code>, <code>go</code>,{' '}
@@ -219,6 +224,14 @@ export function HelpPanel() {
               </td>
               <td>Embed of a stored diagram — the body is the diagram id</td>
             </tr>
+            <tr>
+              <td>
+                <code>```freedraw</code>
+              </td>
+              <td>
+                Free-draw sketch pad (pen, eraser, undo) — insert via <strong>Add → Free draw</strong>
+              </td>
+            </tr>
           </tbody>
         </table>
         <p className="muted sm">
@@ -237,7 +250,9 @@ export function HelpPanel() {
           <li>
             <strong>Studio</strong> — a diagrams.net-style workspace: searchable shape palette (drag
             or click to place), infinite pan/zoom canvas with grid and snapping, alignment guides,
-            resize/rotate handles, undo/redo, clipboard and a Style / Text / Arrange format panel.
+            resize/rotate handles (including multi-select group resize), undo/redo, clipboard and a
+            Style / Text / Arrange format panel. With a shape selected, start typing to edit its
+            label.
           </li>
           <li>
             <strong>Connecting</strong> — hover a shape: drag a <em>blue arrow</em> to another shape
@@ -259,8 +274,12 @@ export function HelpPanel() {
             <em>Book collections</em> / <em>App collections</em> in the palette.
           </li>
           <li>
-            <strong>Classic</strong> — the original compact editor, also used for inline{' '}
-            <code>beediagram</code> fences inside pages. It ignores container grouping.
+            <strong>On a page</strong> — the insert toolbar <em>BeeDiagram</em> /{' '}
+            <em>Linked diagram</em> embeds open in Studio by default (switch to Classic any time).
+            Same JSON document either way.
+          </li>
+          <li>
+            <strong>Classic</strong> — the original compact editor. It ignores container grouping.
           </li>
           <li>Mermaid and C4 diagrams are edited as source with a live preview beside them.</li>
         </ul>
@@ -541,9 +560,9 @@ export function HelpPanel() {
                 </tr>
                 <tr>
                   <td>
-                    <kbd>F2</kbd> / <kbd>Enter</kbd>
+                    <kbd>F2</kbd> / <kbd>Enter</kbd> / type
                   </td>
-                  <td>Edit label · double-click does the same</td>
+                  <td>Edit label · double-click, or just start typing when a shape is selected</td>
                 </tr>
                 <tr>
                   <td>

@@ -293,10 +293,10 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
       if (e.key === 'F2' || (e.key === 'Enter' && !mod)) {
         const nodeId = ctrl.selectionRef.current.nodes[0]
         const edgeId = ctrl.selectionRef.current.edges[0]
-        if (nodeId) {
+        if (nodeId && ctrl.selectionRef.current.nodes.length === 1) {
           e.preventDefault()
           canvasRef.current?.editLabel('node', nodeId)
-        } else if (edgeId) {
+        } else if (edgeId && ctrl.selectionRef.current.nodes.length === 0) {
           e.preventDefault()
           canvasRef.current?.editLabel('edge', edgeId)
         }
@@ -309,6 +309,30 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
         else if (e.key === 'ArrowRight') nudge(step, 0)
         else if (e.key === 'ArrowUp') nudge(0, -step)
         else if (e.key === 'ArrowDown') nudge(0, step)
+        return
+      }
+
+      // Type-to-edit: with a single shape (or edge) selected, start label edit
+      // immediately with the first typed character (draw.io-style).
+      if (
+        !mod &&
+        !e.altKey &&
+        e.key.length === 1 &&
+        e.key !== ' ' &&
+        !e.nativeEvent.isComposing
+      ) {
+        const nodes = ctrl.selectionRef.current.nodes
+        const edges = ctrl.selectionRef.current.edges
+        if (nodes.length === 1) {
+          e.preventDefault()
+          canvasRef.current?.editLabel('node', nodes[0], { text: e.key, selectAll: false })
+          return
+        }
+        if (nodes.length === 0 && edges.length === 1) {
+          e.preventDefault()
+          canvasRef.current?.editLabel('edge', edges[0], { text: e.key, selectAll: false })
+          return
+        }
       }
     },
     [ctrl, nudge, readOnly, saveDialog],
@@ -320,6 +344,7 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
     <div
       ref={rootRef}
       className={`bee-studio${dragging ? ' is-drop-target' : ''}`}
+      tabIndex={0}
       onKeyDown={onKeyDown}
     >
       {(dragging || uploading) && !readOnly && (

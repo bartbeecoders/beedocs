@@ -1,4 +1,5 @@
 import { serializeBeeDoc, EMPTY_BEE_DOC, createNode } from './diagram/beeModel'
+import { serializeFreeDrawDoc, EMPTY_FREE_DRAW_DOC } from './freedraw/model'
 import type { ContentSegment } from './markdownFences'
 
 export type InsertKind =
@@ -10,6 +11,7 @@ export type InsertKind =
   | 'table'
   | 'callout'
   | 'beediagram'
+  | 'freedraw'
   | 'mermaid-flow'
   | 'mermaid-sequence'
   | 'mermaid-er'
@@ -73,6 +75,16 @@ export function segmentsForInsert(kind: InsertKind, opts?: { diagramId?: string;
       return [
         { type: 'text', text: `\n\n### Architecture\n\n` },
         { type: 'fence', lang: 'beediagram', body: starterBeeSource() },
+        { type: 'text', text: `\n\n` },
+      ]
+    case 'freedraw':
+      return [
+        { type: 'text', text: `\n\n### Sketch\n\n` },
+        {
+          type: 'fence',
+          lang: 'freedraw',
+          body: serializeFreeDrawDoc(structuredClone(EMPTY_FREE_DRAW_DOC)),
+        },
         { type: 'text', text: `\n\n` },
       ]
     case 'mermaid-flow':

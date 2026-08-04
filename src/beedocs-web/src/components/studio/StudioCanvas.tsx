@@ -49,9 +49,12 @@ import {
   contentBounds,
   handleWorldPoint,
   insertWaypoint,
+  mapGeomsToNewBounds,
+  mapWaypointsToNewBounds,
   nodeRect,
   nodesBounds,
   rectIntersects,
+  resizeBoundsRect,
   resizeNodeRect,
   type Guide,
   type Rect,
@@ -77,6 +80,13 @@ const QUARTER_ANCHOR_MIN_PX = 72
 
 export type Viewport = { x: number; y: number; zoom: number }
 
+export type EditLabelOptions = {
+  /** Replace the current label with this text (e.g. first typed character). */
+  text?: string
+  /** Select all text on open (default true). Set false when type-to-edit. */
+  selectAll?: boolean
+}
+
 export type StudioCanvasHandle = {
   zoomIn: () => void
   zoomOut: () => void
@@ -87,7 +97,7 @@ export type StudioCanvasHandle = {
   clientToWorld: (clientX: number, clientY: number) => BeePoint
   worldCenter: () => BeePoint
   focus: () => void
-  editLabel: (kind: 'node' | 'edge', id: string) => void
+  editLabel: (kind: 'node' | 'edge', id: string, opts?: EditLabelOptions) => void
 }
 
 type ContextMenuState = {
@@ -106,7 +116,14 @@ type ShapePickerState = {
   pending: { fromId: string; fromAnchor?: BeeAnchor } | null
 }
 
-type LabelEdit = { kind: 'node' | 'edge'; id: string; text: string }
+type LabelEdit = {
+  kind: 'node' | 'edge'
+  id: string
+  text: string
+  selectAll: boolean
+  /** Bumps on every edit session so focus re-runs when re-editing the same shape. */
+  session: number
+}
 
 type ConnectDrag = {
   fromId: string
@@ -134,6 +151,13 @@ type Interaction =
       startClient: BeePoint
     }
   | { kind: 'resize'; nodeId: string; handle: ResizeHandle }
+  | {
+      kind: 'multi-resize'
+      handle: ResizeHandle
+      startBounds: Rect
+      nodeOrigin: Map<string, { x: number; y: number; w: number; h: number }>
+      edgeOrigin: Map<string, BeePoint[]>
+    }
   | { kind: 'rotate'; nodeId: string; startAngle: number; startRotation: number }
   | { kind: 'connect'; drag: ConnectDrag }
   | { kind: 'bend'; edgeId: string; index: number }
@@ -193,6 +217,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
   const [labelEdit, setLabelEdit] = useState<LabelEdit | null>(null)
   const labelEditRef = useRef<LabelEdit | null>(null)
   labelEditRef.current = labelEdit
+  const labelEditSession = useRef(0)
   const [spaceDown, setSpaceDown] = useState(false)
   const labelInputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -356,14 +381,25 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
   }, [ctrl])
 
   const startLabelEdit = useCallback(
-    (kind: 'node' | 'edge', id: string) => {
+    (kind: 'node' | 'edge', id: string, opts?: EditLabelOptions) => {
       if (readOnly) return
-      const text =
+      const existing =
         kind === 'node'
           ? (ctrl.docRef.current.nodes.find((n) => n.id === id)?.label ?? '')
           : (ctrl.docRef.current.edges.find((e) => e.id === id)?.label ?? '')
-      labelEditRef.current = { kind, id, text }
-      setLabelEdit({ kind, id, text })
+      const text = opts?.text !== undefined ? opts.text : existing
+      // F2/double-click: select all. Type-to-edit: caret after the first character.
+      const shouldSelectAll = opts?.selectAll ?? opts?.text === undefined
+      labelEditSession.current += 1
+      const next: LabelEdit = {
+        kind,
+        id,
+        text,
+        selectAll: shouldSelectAll,
+        session: labelEditSession.current,
+      }
+      labelEditRef.current = next
+      setLabelEdit(next)
       if (kind === 'node') ctrl.setSelection({ nodes: [id], edges: [] })
       else ctrl.setSelection({ nodes: [], edges: [id] })
     },
@@ -372,12 +408,21 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
 
   useEffect(() => {
     if (!labelEdit) return
+    const selectAll = labelEdit.selectAll
     const t = window.setTimeout(() => {
-      labelInputRef.current?.focus()
-      labelInputRef.current?.select()
+      const el = labelInputRef.current
+      if (!el) return
+      el.focus()
+      if (selectAll) el.select()
+      else {
+        const len = el.value.length
+        el.setSelectionRange(len, len)
+      }
     }, 0)
     return () => window.clearTimeout(t)
-  }, [labelEdit?.id, labelEdit?.kind])
+    // session changes every time edit starts; ignore text keystrokes (same session).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [labelEdit?.session])
 
   useImperativeHandle(
     ref,
@@ -664,6 +709,33 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
         ctrl.updateNodes(
           [it.nodeId],
           { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.w), h: Math.round(rect.h) },
+          { history: false },
+        )
+        return
+      }
+      case 'multi-resize': {
+        const newBounds = resizeBoundsRect(it.startBounds, it.handle, world, {
+          snap: prefs.snap && !e.altKey,
+          grid: STUDIO_GRID,
+          keepRatio: e.shiftKey,
+        })
+        const mapped = mapGeomsToNewBounds(it.nodeOrigin, it.startBounds, newBounds)
+        ctrl.apply(
+          (prev) => ({
+            ...prev,
+            nodes: prev.nodes.map((n) => {
+              const g = mapped.get(n.id)
+              return g ? { ...n, ...g } : n
+            }),
+            edges: prev.edges.map((edge) => {
+              const wps = it.edgeOrigin.get(edge.id)
+              if (!wps) return edge
+              return {
+                ...edge,
+                waypoints: mapWaypointsToNewBounds(wps, it.startBounds, newBounds),
+              }
+            }),
+          }),
           { history: false },
         )
         return
@@ -1291,6 +1363,43 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
             />
           )}
 
+          {/* Multi-select: resize the group bounding box (scales all selected shapes) */}
+          {!readOnly && selectionBounds && !labelEdit && (
+            <GroupSelectionHandles
+              bounds={selectionBounds}
+              inv={inv}
+              onResizeStart={(e, handle) => {
+                e.stopPropagation()
+                capture(e)
+                const nodes = doc.nodes.filter((n) => selectedNodeIds.has(n.id))
+                const startBounds = nodesBounds(nodes)
+                if (!startBounds || startBounds.w < 1 || startBounds.h < 1) return
+                const nodeOrigin = new Map(
+                  nodes.map((n) => [n.id, { x: n.x, y: n.y, w: n.w, h: n.h }]),
+                )
+                // Scale waypoints only for edges whose both ends are selected.
+                const edgeOrigin = new Map<string, BeePoint[]>()
+                for (const edge of doc.edges) {
+                  if (!selectedNodeIds.has(edge.from) || !selectedNodeIds.has(edge.to)) continue
+                  if (edge.waypoints && edge.waypoints.length > 0) {
+                    edgeOrigin.set(
+                      edge.id,
+                      edge.waypoints.map((p) => ({ x: p.x, y: p.y })),
+                    )
+                  }
+                }
+                ctrl.beginGesture()
+                setInteraction({
+                  kind: 'multi-resize',
+                  handle,
+                  startBounds,
+                  nodeOrigin,
+                  edgeOrigin,
+                })
+              }}
+            />
+          )}
+
           {/* Connection target highlight */}
           {interaction?.kind === 'connect' && interaction.drag.hover && (
             <ConnectHighlight
@@ -1542,6 +1651,52 @@ function SelectionHandles({
         return (
           <g key={h} style={{ cursor: HANDLE_CURSOR[h] }} onPointerDown={(e) => onResizeStart(e, h)}>
             {/* Generous invisible grab area so the handle always wins */}
+            <rect x={p.x - grab / 2} y={p.y - grab / 2} width={grab} height={grab} fill="transparent" />
+            <rect
+              x={p.x - size / 2}
+              y={p.y - size / 2}
+              width={size}
+              height={size}
+              fill="#ffffff"
+              stroke="#2f7be5"
+              strokeWidth={1.5 * inv}
+            />
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
+/** Resize handles on the multi-selection bounding box (no rotate). */
+function GroupSelectionHandles({
+  bounds,
+  inv,
+  onResizeStart,
+}: {
+  bounds: Rect
+  inv: number
+  onResizeStart: (e: ReactPointerEvent, handle: ResizeHandle) => void
+}) {
+  const size = 8 * inv
+  const grab = 16 * inv
+  const points: Record<ResizeHandle, BeePoint> = {
+    nw: { x: bounds.x, y: bounds.y },
+    n: { x: bounds.x + bounds.w / 2, y: bounds.y },
+    ne: { x: bounds.x + bounds.w, y: bounds.y },
+    e: { x: bounds.x + bounds.w, y: bounds.y + bounds.h / 2 },
+    se: { x: bounds.x + bounds.w, y: bounds.y + bounds.h },
+    s: { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h },
+    sw: { x: bounds.x, y: bounds.y + bounds.h },
+    w: { x: bounds.x, y: bounds.y + bounds.h / 2 },
+  }
+  return (
+    <g className="studio-handles studio-handles--group">
+      {RESIZE_HANDLES.map((h) => {
+        const p = points[h]
+        return (
+          <g key={h} style={{ cursor: HANDLE_CURSOR[h] }} onPointerDown={(e) => onResizeStart(e, h)}>
+            <title>Resize selection (Shift keeps ratio)</title>
             <rect x={p.x - grab / 2} y={p.y - grab / 2} width={grab} height={grab} fill="transparent" />
             <rect
               x={p.x - size / 2}

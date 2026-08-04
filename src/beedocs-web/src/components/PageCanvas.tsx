@@ -13,6 +13,7 @@ import type { Page } from '../types'
 import { HybridPageEditor } from './HybridPageEditor'
 import { MarkdownView } from './MarkdownView'
 import { ExportMenu } from './ExportMenu'
+import { PageOutlineNav } from './PageOutlineNav'
 import { SyncedInput, SyncedTextarea } from './SyncedText'
 
 export type PageEditorState = {
@@ -57,6 +58,8 @@ export function PageCanvas({ onStateChange }: Props) {
   const savingRef = useRef(false)
   /** Title the library tree is currently showing, so a save only refreshes it when it moved. */
   const treeTitleRef = useRef('')
+  /** Root of the page canvas — used by the outline pane for scroll targeting. */
+  const pageRootRef = useRef<HTMLDivElement>(null)
 
   titleRef.current = title
   contentRef.current = content
@@ -220,8 +223,10 @@ export function PageCanvas({ onStateChange }: Props) {
         ? `Saved · ${savedAt}`
         : null
 
+  const showOutline = mode !== 'source'
+
   return (
-    <div className="page-canvas">
+    <div className="page-canvas" ref={pageRootRef}>
       <div className="canvas-toolbar">
         <SyncedInput
           className="canvas-title"
@@ -284,43 +289,46 @@ export function PageCanvas({ onStateChange }: Props) {
         </span>
       </div>
       {error && <div className="banner error compact">{error}</div>}
-      <div className={`editor-panes mode-${mode === 'source' ? 'edit' : mode}`}>
-        {(mode === 'edit' || mode === 'split') && (
-          <div className="editor-hybrid">
-            <HybridPageEditor
-              // Per-page. Without it the editor's blocks — and the textarea DOM
-              // nodes inside them — are reused when you open a different page,
-              // carrying that page's manually dragged heights and per-field
-              // editor state onto the new one.
-              key={pageId}
-              content={content}
-              bookId={bookId}
-              pageId={pageId}
-              placeholder="Write Markdown… or use Add to insert sections and diagrams."
-              onChange={(next) => {
+      <div className={`page-body${showOutline ? ' has-outline' : ''}`}>
+        <div className={`editor-panes mode-${mode === 'source' ? 'edit' : mode}`}>
+          {(mode === 'edit' || mode === 'split') && (
+            <div className="editor-hybrid">
+              <HybridPageEditor
+                // Per-page. Without it the editor's blocks — and the textarea DOM
+                // nodes inside them — are reused when you open a different page,
+                // carrying that page's manually dragged heights and per-field
+                // editor state onto the new one.
+                key={pageId}
+                content={content}
+                bookId={bookId}
+                pageId={pageId}
+                placeholder="Write Markdown… or use Add to insert sections and diagrams."
+                onChange={(next) => {
+                  setContent(next)
+                  setDirty(true)
+                }}
+              />
+            </div>
+          )}
+          {mode === 'source' && (
+            <SyncedTextarea
+              className="editor-textarea"
+              value={content}
+              onValueChange={(next) => {
                 setContent(next)
                 setDirty(true)
               }}
+              spellCheck={false}
+              placeholder="Raw Markdown source…"
             />
-          </div>
-        )}
-        {mode === 'source' && (
-          <SyncedTextarea
-            className="editor-textarea"
-            value={content}
-            onValueChange={(next) => {
-              setContent(next)
-              setDirty(true)
-            }}
-            spellCheck={false}
-            placeholder="Raw Markdown source…"
-          />
-        )}
-        {(mode === 'preview' || mode === 'split') && (
-          <div className="editor-preview">
-            <MarkdownView content={content} bookId={bookId} />
-          </div>
-        )}
+          )}
+          {(mode === 'preview' || mode === 'split') && (
+            <div className="editor-preview">
+              <MarkdownView content={content} bookId={bookId} />
+            </div>
+          )}
+        </div>
+        {showOutline && <PageOutlineNav content={content} rootRef={pageRootRef} />}
       </div>
     </div>
   )

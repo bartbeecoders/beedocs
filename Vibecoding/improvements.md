@@ -30,3 +30,20 @@ Kind of LLM/AI assisted auto complete.
 Add full LLM provider management: open router, xAI, openAI, LM studio
 
 Fan out sub-agents and have sub-agents tackle each one individually so that the web app is utterly perfect. You should /loop on each item and have a separate sub-agent check it visually to ensure it looks triple A. That separate sub-agent should be a really harsh critic, and if it doesn't look triple A, it should keep going.
+
+
+Diagram improvements:
+when a shape is selected, and the user start typing, go directly into text edit mode.
+allow for the ability to add a beediagram in studio mode directly on a page
+allow for the ability to resize multiple objects/shapes at once
+
+
+improve the drag and drop of the sections in a page.
+It is now not possible to drag beyond the screen top or bottom
+
+
+Free draw canvas
+Add a fully functioning free draw canvas as a page section
+
+
+Add a small page navigation overview pane to the page that the user can use to quickly navigate to a spot on the page.
