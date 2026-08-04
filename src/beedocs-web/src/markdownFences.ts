@@ -38,6 +38,9 @@ export type ContentSegment = TextSegment | FenceSegment
 /** Languages rendered as interactive diagram blocks in the hybrid page editor */
 export const VISUAL_FENCE_LANGS = new Set(['beediagram', 'beediagram-ref'])
 
+/** Free-draw sketch pad (JSON stroke document) */
+export const FREEDRAW_FENCE_LANGS = new Set(['freedraw', 'sketch'])
+
 /** PDF / 3D model fence languages — hybrid editor shows MediaEmbed, not source-only */
 export const MEDIA_FENCE_LANGS = new Set(['pdf', 'glb', 'gltf', 'obj', 'model'])
 
@@ -150,6 +153,10 @@ export function joinMarkdownSegments(segments: ContentSegment[]): string {
 
 export function isVisualFenceLang(lang: string): boolean {
   return VISUAL_FENCE_LANGS.has(lang.toLowerCase())
+}
+
+export function isFreedrawFenceLang(lang: string): boolean {
+  return FREEDRAW_FENCE_LANGS.has(lang.toLowerCase())
 }
 
 export function isMediaFenceLang(lang: string): boolean {

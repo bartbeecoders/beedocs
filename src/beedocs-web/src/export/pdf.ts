@@ -1,6 +1,7 @@
 import mermaid from 'mermaid'
 import { api } from '../api'
 import { withApiBase } from '../basePath'
+import { freeDrawToSvg } from '../freedraw/model'
 import type { Chapter, Page } from '../types'
 import { beeDiagramToSvg } from './beeDiagramSvg'
 
@@ -216,6 +217,9 @@ async function renderFence(
       return `<div class="export-error">Missing diagram ${esc(id)}</div>`
     }
     return beeDiagramToSvg(d.source, d.title)
+  }
+  if (lang === 'freedraw' || lang === 'sketch') {
+    return freeDrawToSvg(body)
   }
   if (lang === 'plantuml') {
     return `<pre class="export-code"><code>${esc(body)}</code></pre>`

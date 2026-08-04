@@ -17,11 +17,14 @@ import remarkGfm from 'remark-gfm'
 import mermaid from 'mermaid'
 import { api } from '../api'
 import { withApiBase } from '../basePath'
-import { replaceFenceBody } from '../markdownFences'
+import { replaceFenceBody, splitMarkdownSegments } from '../markdownFences'
+import { outlineId } from '../pageOutline'
 import { highlightCode, resolveLanguage } from '../syntaxHighlight'
 import { DataTree } from './DataTree'
 import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
 import { BeeDiagramView } from './BeeDiagramView'
+import { FreeDrawCanvas } from './FreeDrawCanvas'
+import { FreeDrawView } from './FreeDrawView'
 import { MediaEmbed } from './media/MediaEmbed'
 
 mermaid.initialize({
@@ -181,6 +184,60 @@ function EditableMermaidFence({
         <MermaidBlock chart={chart} />
       )}
     </InlineShell>
+  )
+}
+
+/** Always-on free-draw editor for inline ```freedraw fences. */
+function InlineFreeDrawEditor({
+  source,
+  fenceLang,
+  fenceIndex,
+  contentRef,
+  onContentChange,
+  draft,
+  onDraftChange,
+}: {
+  source: string
+  fenceLang: string
+  fenceIndex: number
+  contentRef: React.MutableRefObject<string>
+  onContentChange: (next: string) => void
+  draft: string | undefined
+  onDraftChange: (next: string) => void
+}) {
+  const live = draft ?? source
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  const commitSource = useCallback(
+    (next: string) => {
+      onDraftChange(next)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => {
+        onContentChange(replaceFenceBody(contentRef.current, fenceLang, fenceIndex, next))
+      }, 450)
+    },
+    [contentRef, fenceIndex, fenceLang, onContentChange, onDraftChange],
+  )
+
+  return (
+    <figure className="inline-diagram is-editing inline-diagram--freedraw">
+      <div className="inline-diagram-chrome">
+        <div className="inline-diagram-labels">
+          <span className="inline-diagram-badge">Free draw</span>
+          <figcaption className="inline-diagram-title">Sketch pad</figcaption>
+        </div>
+        <span className="muted sm">Pen · eraser · undo</span>
+      </div>
+      <div className="inline-diagram-body inline-diagram-body--freedraw">
+        <FreeDrawCanvas source={live} onChange={commitSource} compact />
+      </div>
+    </figure>
   )
 }
 
@@ -453,6 +510,42 @@ export const MarkdownView = memo(function MarkdownView({
     return i
   }, [])
 
+  /** Map fence occurrence keys (`lang:n`) and ordered heading ids to outline targets. */
+  const outlineTargets = useMemo(() => {
+    const fenceKeyToId = new Map<string, string>()
+    const headingIds: string[] = []
+    const fenceCounts: Record<string, number> = {}
+    splitMarkdownSegments(content).forEach((seg, blockIndex) => {
+      if (seg.type === 'text') {
+        if (/^(#{1,6})\s+\S/m.test(seg.text.trimStart())) {
+          headingIds.push(outlineId(blockIndex))
+        }
+        return
+      }
+      const lang = seg.lang.toLowerCase()
+      const n = fenceCounts[lang] ?? 0
+      fenceCounts[lang] = n + 1
+      fenceKeyToId.set(`${lang}:${n}`, outlineId(blockIndex))
+    })
+    return { fenceKeyToId, headingIds }
+  }, [content])
+
+  const headingCursor = useRef(0)
+  headingCursor.current = 0
+
+  const wrapOutline = useCallback(
+    (lang: string, occurrence: number, node: ReactNode) => {
+      const id = outlineTargets.fenceKeyToId.get(`${lang}:${occurrence}`)
+      if (!id) return node
+      return (
+        <div id={id} data-outline-id={id} className="outline-anchor">
+          {node}
+        </div>
+      )
+    },
+    [outlineTargets],
+  )
+
   /**
    * Memoized so the renderer functions keep their identity between renders.
    *
@@ -466,10 +559,28 @@ export const MarkdownView = memo(function MarkdownView({
    * deliberate click, not while typing, so those remounts stay rare.
    */
   const components = useMemo(
-    () => ({
+    () => {
+      const heading =
+        (Tag: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6') =>
+        ({ children, ...props }: ComponentProps<'h1'>) => {
+          const id = outlineTargets.headingIds[headingCursor.current++]
+          return (
+            <Tag id={id} data-outline-id={id} className="outline-heading" {...props}>
+              {children}
+            </Tag>
+          )
+        }
+
+      return {
       img({ src, alt, ...props }: ComponentProps<'img'>) {
         return <img src={src ? withApiBase(src) : src} alt={alt ?? ''} {...props} />
       },
+      h1: heading('h1'),
+      h2: heading('h2'),
+      h3: heading('h3'),
+      h4: heading('h4'),
+      h5: heading('h5'),
+      h6: heading('h6'),
       // The `code` renderer below emits its own <pre> (or a diagram, or an
       // embed), so react-markdown's wrapper would double the box, the padding
       // and the border around every fence. Pass its children straight through.
@@ -487,7 +598,9 @@ export const MarkdownView = memo(function MarkdownView({
           const idx = nextIndex(lang)
           if (editable && onContentChange) {
             const key = `${lang}:${idx}`
-            return (
+            return wrapOutline(
+              lang,
+              idx,
               <EditableMermaidFence
                 chart={code}
                 fenceLang={lang}
@@ -496,20 +609,26 @@ export const MarkdownView = memo(function MarkdownView({
                 onToggleEdit={() => toggleKey(key)}
                 contentRef={contentRef}
                 onContentChange={handleContentChange}
-              />
+              />,
             )
           }
           if (lang === 'plantuml') {
-            return <pre className="inline-diagram-readonly-source">{code}</pre>
+            return wrapOutline(
+              lang,
+              idx,
+              <pre className="inline-diagram-readonly-source">{code}</pre>,
+            )
           }
-          return <MermaidBlock chart={code} />
+          return wrapOutline(lang, idx, <MermaidBlock chart={code} />)
         }
 
         if (lang === 'beediagram') {
           const idx = nextIndex('beediagram')
           if (editable && onContentChange) {
             const key = `beediagram:${idx}`
-            return (
+            return wrapOutline(
+              'beediagram',
+              idx,
               <InlineBeeDiagramEditor
                 source={code}
                 fenceIndex={idx}
@@ -517,27 +636,59 @@ export const MarkdownView = memo(function MarkdownView({
                 onContentChange={handleContentChange}
                 draft={beeDrafts[key]}
                 onDraftChange={(next) => setBeeDraft(key, next)}
-              />
+              />,
             )
           }
-          return (
+          return wrapOutline(
+            'beediagram',
+            idx,
             <figure className="bee-embed">
               <BeeDiagramView source={code} />
-            </figure>
+            </figure>,
+          )
+        }
+
+        if (lang === 'freedraw' || lang === 'sketch') {
+          const idx = nextIndex(lang)
+          if (editable && onContentChange) {
+            const key = `freedraw:${idx}`
+            return wrapOutline(
+              lang,
+              idx,
+              <InlineFreeDrawEditor
+                source={code}
+                fenceLang={lang}
+                fenceIndex={idx}
+                contentRef={contentRef}
+                onContentChange={handleContentChange}
+                draft={beeDrafts[key]}
+                onDraftChange={(next) => setBeeDraft(key, next)}
+              />,
+            )
+          }
+          return wrapOutline(
+            lang,
+            idx,
+            <figure className="freedraw-embed">
+              <FreeDrawView source={code} />
+            </figure>,
           )
         }
 
         if (lang === 'beediagram-ref') {
           const id = code.trim().split(/\s+/)[0] ?? ''
           const key = `beediagram-ref:${id}`
-          return (
+          const idx = nextIndex('beediagram-ref')
+          return wrapOutline(
+            'beediagram-ref',
+            idx,
             <InlineBeeDiagramRefEditor
               diagramId={code}
               allowEdit={editable}
               bookId={bookId}
               draft={beeDrafts[key]}
               onDraftChange={(next) => setBeeDraft(key, next)}
-            />
+            />,
           )
         }
 
@@ -548,7 +699,8 @@ export const MarkdownView = memo(function MarkdownView({
           lang === 'obj' ||
           lang === 'model'
         ) {
-          return <MediaEmbed lang={lang} body={code} />
+          const idx = nextIndex(lang)
+          return wrapOutline(lang, idx, <MediaEmbed lang={lang} body={code} />)
         }
 
         const isBlock = insideFence || Boolean(match) || code.includes('\n')
@@ -569,7 +721,8 @@ export const MarkdownView = memo(function MarkdownView({
           </code>
         )
       },
-    }),
+    }
+    },
     [
       beeDrafts,
       bookId,
@@ -578,8 +731,10 @@ export const MarkdownView = memo(function MarkdownView({
       nextIndex,
       onContentChange,
       openKeys,
+      outlineTargets,
       setBeeDraft,
       toggleKey,
+      wrapOutline,
     ],
   )
 

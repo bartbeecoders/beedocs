@@ -161,6 +161,11 @@ export function HelpPanel() {
           toolbar (Image / PDF / 3D) or drop a file onto the page.
         </p>
         <p className="muted">
+          The small <strong>On this page</strong> pane (right of the editor) lists headings and major
+          embeds so you can jump around long pages. Hide it with its toggle; the choice is remembered
+          in this browser.
+        </p>
+        <p className="muted">
           Fenced code blocks are syntax highlighted in the preview and in exports when the fence
           names a language BeeDocs has a grammar for — <code>bash</code>, <code>csharp</code>,{' '}
           <code>css</code>, <code>diff</code>, <code>dockerfile</code>, <code>go</code>,{' '}
@@ -218,6 +223,14 @@ export function HelpPanel() {
                 <code>```beediagram-ref</code>
               </td>
               <td>Embed of a stored diagram — the body is the diagram id</td>
+            </tr>
+            <tr>
+              <td>
+                <code>```freedraw</code>
+              </td>
+              <td>
+                Free-draw sketch pad (pen, eraser, undo) — insert via <strong>Add → Free draw</strong>
+              </td>
             </tr>
           </tbody>
         </table>

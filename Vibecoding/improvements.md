@@ -40,3 +40,10 @@ allow for the ability to resize multiple objects/shapes at once
 
 improve the drag and drop of the sections in a page.
 It is now not possible to drag beyond the screen top or bottom
+
+
+Free draw canvas
+Add a fully functioning free draw canvas as a page section
+
+
+Add a small page navigation overview pane to the page that the user can use to quickly navigate to a spot on the page.

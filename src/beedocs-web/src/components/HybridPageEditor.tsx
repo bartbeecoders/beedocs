@@ -5,6 +5,7 @@ import { withApiBase } from '../basePath'
 import { useBlockReorder } from '../hooks/useBlockReorder'
 import { useImageIntake, type ImageIntakeContext } from '../hooks/useImageIntake'
 import {
+  isFreedrawFenceLang,
   isMediaFenceLang,
   isVisualFenceLang,
   joinMarkdownSegments,
@@ -35,9 +36,11 @@ import {
   modelFormatFromExtension,
 } from '../media/mediaKinds'
 import { segmentsForInsert, segmentsForLinkedDiagram, type InsertKind } from '../pageBlocks'
+import { outlineId } from '../pageOutline'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { AiAssistBar, AiAssistField } from './AiAssist'
 import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
+import { FreeDrawCanvas } from './FreeDrawCanvas'
 import { MediaEmbed, parseMediaFenceBody } from './media/MediaEmbed'
 import { SyncedTextarea } from './SyncedText'
 
@@ -558,8 +561,10 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       {segments.map((seg, index) => (
         <div
           key={blockId(seg)}
+          id={outlineId(index)}
           className={`hybrid-block-wrap${reorder.dragIndex === index ? ' is-dragging' : ''}`}
           data-block-index={index}
+          data-outline-id={outlineId(index)}
         >
           <BlockHandle
             index={index}
@@ -584,6 +589,12 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             <MediaFenceBlock
               segment={seg}
               onChange={(next) => updateSegment(index, next)}
+              onRemove={() => removeSegment(index)}
+            />
+          ) : isFreedrawFenceLang(seg.lang) ? (
+            <FreeDrawFenceBlock
+              segment={seg}
+              onBodyChange={(body) => updateFenceBody(index, body)}
               onRemove={() => removeSegment(index)}
             />
           ) : isVisualFenceLang(seg.lang) ? (
@@ -969,6 +980,15 @@ function InsertToolbar({
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('mermaid-er')}>
           ER diagram
         </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
+          onClick={() => onInsert('freedraw')}
+          title="Insert a free-draw sketch pad stored on this page"
+        >
+          Free draw
+        </button>
       </div>
     </div>
   )
@@ -1032,6 +1052,7 @@ function InsertGap({
               ['subsection', 'Subsection'],
               ['beediagram', 'BeeDiagram'],
               ['beediagram-linked', 'Linked diagram'],
+              ['freedraw', 'Free draw'],
               ['mermaid-flow', 'Flowchart'],
               ['mermaid-sequence', 'Sequence'],
               ['table', 'Table'],
@@ -1215,6 +1236,31 @@ function MediaFenceBlock({
           <MediaEmbed lang={segment.lang} body={segment.body} />
         </div>
       )}
+    </div>
+  )
+}
+
+function FreeDrawFenceBlock({
+  segment,
+  onBodyChange,
+  onRemove,
+}: {
+  segment: FenceSegment
+  onBodyChange: (body: string) => void
+  onRemove: () => void
+}) {
+  return (
+    <div className="hybrid-visual-diagram hybrid-freedraw-block">
+      <div className="hybrid-fence-chrome">
+        <span className="inline-diagram-badge">Free draw</span>
+        <span className="hybrid-fence-title">Sketch pad · stored on this page</span>
+        <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+          Remove
+        </button>
+      </div>
+      <div className="hybrid-visual-body hybrid-visual-body--freedraw">
+        <FreeDrawCanvas source={segment.body} onChange={onBodyChange} compact />
+      </div>
     </div>
   )
 }
