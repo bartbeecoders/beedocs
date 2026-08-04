@@ -236,10 +236,12 @@ if (Test-Path $OutRoot) {
 }
 New-Item -ItemType Directory -Force -Path $ApiOut, $McpOut | Out-Null
 
+Write-Step 'Installing web UI dependencies'
+# Always install — a partial/stale node_modules (folder exists but packages
+# missing) would otherwise skip install and fail tsc with "Cannot find module".
+Invoke-Pnpm $WebDir @('install')
+
 Write-Step 'Building web UI'
-if (-not (Test-Path (Join-Path $WebDir 'node_modules'))) {
-    Invoke-Pnpm $WebDir @('install')
-}
 $env:BEEDOCS_UI_PATH_BASE = $ResolvedUiPathBase
 $env:VITE_BEEDOCS_API_PATH_BASE = $ResolvedApiPathBase
 try {
