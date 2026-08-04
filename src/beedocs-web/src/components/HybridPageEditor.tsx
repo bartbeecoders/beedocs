@@ -280,7 +280,8 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         const label = kind === 'section' ? 'Section title' : 'Subsection title'
         const title = window.prompt(label, kind === 'section' ? 'Overview' : 'Details')?.trim()
         if (!title) return
-        insertAt(at, segmentsForInsert(kind, { title }))
+        // Always prepend — new sections belong at the top of the page.
+        insertAt(0, segmentsForInsert(kind, { title }))
         return
       }
 

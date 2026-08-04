@@ -107,12 +107,15 @@ public sealed record UpsertPageRequest(
 );
 
 /// <summary>
-/// One-shot publish: ensure a book exists and write a Markdown page into it.
+/// One-shot publish: ensure a book exists and write a Markdown page into it,
+/// optionally inside a folder (chapter) of the book.
 /// Ideal for apps that push generated configuration docs.
 /// </summary>
 public sealed record PublishDocumentRequest(
     [property: Required] PublishBookPart Book,
-    [property: Required] PublishPagePart Page
+    [property: Required] PublishPagePart Page,
+    /// <summary>Optional folder inside the book the page is placed in (created when missing).</summary>
+    PublishFolderPart? Folder = null
 );
 
 public sealed record PublishBookPart(
@@ -131,11 +134,21 @@ public sealed record PublishPagePart(
     int? SortOrder
 );
 
+/// <summary>Folder (chapter) inside the book, matched by slug and created when missing.</summary>
+public sealed record PublishFolderPart(
+    [property: Required, MinLength(1)] string Title,
+    /// <summary>Stable id within the book. Defaults to a slug of <see cref="Title"/>.</summary>
+    string? Slug
+);
+
 public sealed record PublishDocumentResult(
     BookDto Book,
     PageDto Page,
     bool BookCreated,
-    bool PageCreated
+    bool PageCreated,
+    /// <summary>The folder the page was placed in, when the request specified one.</summary>
+    ChapterDto? Folder = null,
+    bool FolderCreated = false
 );
 
 public sealed record UpsertResult<T>(T Item, bool Created);

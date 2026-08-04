@@ -837,7 +837,7 @@ v1.MapPut("/books/{bookSlug}/pages/{pageSlug}", async (
 
     try
     {
-        var result = await docs.UpsertPageBySlugAsync(book.Id, pageSlug, body, ct);
+        var result = await docs.UpsertPageBySlugAsync(book.Id, pageSlug, body, ct: ct);
         return result.Created
             ? Results.Created($"/api/v1/books/{book.Slug}/pages/{result.Item.Slug}", result)
             : Results.Ok(result);
@@ -870,6 +870,8 @@ v1.MapPut("/publish", async (PublishDocumentRequest body, IDocumentService docs,
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["page.title"] = ["Page title is required."] });
     if (body.Page.Content is null)
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["page.content"] = ["Page content is required."] });
+    if (body.Folder is not null && string.IsNullOrWhiteSpace(body.Folder.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["folder.title"] = ["Folder title is required when a folder is specified."] });
 
     try
     {

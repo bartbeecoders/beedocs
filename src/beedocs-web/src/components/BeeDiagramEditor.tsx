@@ -31,6 +31,7 @@ import {
   uid,
   waypointsFromPolyline,
 } from '../diagram/beeModel'
+import { diagramPaintOrder } from '../diagram/containers'
 import { nodeLabelBox, nodeTransform } from '../diagram/shapes'
 import { useImageIntake } from '../hooks/useImageIntake'
 import { loadImageSize, type UploadedImage } from '../media/imageIntake'
@@ -161,6 +162,12 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
   const selectedEdge = useMemo(
     () => doc.edges.find((e) => e.id === selectedEdgeId) ?? null,
     [doc.edges, selectedEdgeId],
+  )
+
+  const nodeById = useMemo(() => new Map(doc.nodes.map((n) => [n.id, n])), [doc.nodes])
+  const paintOrder = useMemo(
+    () => diagramPaintOrder(doc.nodes, doc.edges),
+    [doc.nodes, doc.edges],
   )
 
   const clientToWorld = (clientX: number, clientY: number) => {
@@ -826,127 +833,95 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
           </defs>
           <rect width="960" height="560" fill="url(#bee-grid)" />
 
-          {doc.edges.map((e) => {
-            const from = doc.nodes.find((n) => n.id === e.from)
-            const to = doc.nodes.find((n) => n.id === e.to)
-            if (!from || !to) return null
-            const { d, mid, points } = edgePathD(from, to, e)
-            const active = e.id === selectedEdgeId
-            const hovered = e.id === hoverEdgeId
-            const isOrtho = (e.route ?? 'straight') === 'orthogonal'
-            const handles =
-              active && isOrtho && !readOnly ? orthogonalSegmentHandles(points) : []
-            return (
-              <g
-                key={e.id}
-                className={`bee-edge${active ? ' is-selected' : ''}${hovered ? ' is-hovered' : ''}`}
-                data-edge-id={e.id}
-                onPointerDown={(ev) => {
-                  if (readOnly || tool !== 'select') return
-                  if ((ev.target as Element).closest('[data-ortho-handle]')) return
-                  ev.stopPropagation()
-                  setSelectedEdgeId(e.id)
-                  setSelectedId(null)
-                  setDrag(null)
-                }}
-                onContextMenu={(ev) => openContextMenu(ev, { edgeId: e.id })}
-              >
-                {/* Wide hit target */}
-                <path
-                  d={d}
-                  fill="none"
-                  stroke="transparent"
-                  strokeWidth={14}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  style={{ cursor: 'pointer' }}
-                />
-                <path
-                  d={d}
-                  fill="none"
-                  stroke={active ? 'var(--accent, #e6a817)' : 'currentColor'}
-                  strokeWidth={active || hovered ? 2.75 : 2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  markerEnd="url(#bee-arrow-edit)"
-                  opacity={active ? 1 : 0.78}
-                  style={{ pointerEvents: 'none' }}
-                />
-                {e.label && (
-                  <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} style={{ pointerEvents: 'none' }}>
-                    {e.label}
-                  </text>
-                )}
-                {handles.map((h) => (
-                  <g
-                    key={`h-${e.id}-${h.segIndex}`}
-                    data-ortho-handle={h.segIndex}
-                    className="bee-ortho-handle"
-                    transform={`translate(${h.x},${h.y})`}
-                    style={{ cursor: h.axis === 'x' ? 'ew-resize' : 'ns-resize' }}
-                    onPointerDown={(ev) => {
-                      if (readOnly) return
-                      ev.stopPropagation()
-                      ev.preventDefault()
-                      svgRef.current?.setPointerCapture(ev.pointerId)
-                      setSelectedEdgeId(e.id)
-                      setSelectedId(null)
-                      setOrthoDrag({ edgeId: e.id, segIndex: h.segIndex, axis: h.axis })
-                    }}
-                  >
-                    <circle r={11} fill="transparent" />
-                    <rect
-                      x={-6}
-                      y={-6}
-                      width={12}
-                      height={12}
-                      rx={2}
-                      className="bee-ortho-handle-box"
-                      fill="var(--bg-elevated, #fff)"
-                      stroke="var(--accent, #e6a817)"
-                      strokeWidth={2}
-                    />
-                  </g>
-                ))}
-              </g>
-            )
-          })}
+          {paintOrder.map((item) => {
+            if (item.kind === 'edge') {
+              const e = item.edge
+              const from = nodeById.get(e.from)
+              const to = nodeById.get(e.to)
+              if (!from || !to) return null
+              const { d, mid, points } = edgePathD(from, to, e)
+              const active = e.id === selectedEdgeId
+              const hovered = e.id === hoverEdgeId
+              const isOrtho = (e.route ?? 'straight') === 'orthogonal'
+              const handles =
+                active && isOrtho && !readOnly ? orthogonalSegmentHandles(points) : []
+              return (
+                <g
+                  key={e.id}
+                  className={`bee-edge${active ? ' is-selected' : ''}${hovered ? ' is-hovered' : ''}`}
+                  data-edge-id={e.id}
+                  onPointerDown={(ev) => {
+                    if (readOnly || tool !== 'select') return
+                    if ((ev.target as Element).closest('[data-ortho-handle]')) return
+                    ev.stopPropagation()
+                    setSelectedEdgeId(e.id)
+                    setSelectedId(null)
+                    setDrag(null)
+                  }}
+                  onContextMenu={(ev) => openContextMenu(ev, { edgeId: e.id })}
+                >
+                  {/* Wide hit target */}
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke="transparent"
+                    strokeWidth={14}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke={active ? 'var(--accent, #e6a817)' : 'currentColor'}
+                    strokeWidth={active || hovered ? 2.75 : 2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    markerEnd="url(#bee-arrow-edit)"
+                    opacity={active ? 1 : 0.78}
+                    style={{ pointerEvents: 'none' }}
+                  />
+                  {e.label && (
+                    <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} style={{ pointerEvents: 'none' }}>
+                      {e.label}
+                    </text>
+                  )}
+                  {handles.map((h) => (
+                    <g
+                      key={`h-${e.id}-${h.segIndex}`}
+                      data-ortho-handle={h.segIndex}
+                      className="bee-ortho-handle"
+                      transform={`translate(${h.x},${h.y})`}
+                      style={{ cursor: h.axis === 'x' ? 'ew-resize' : 'ns-resize' }}
+                      onPointerDown={(ev) => {
+                        if (readOnly) return
+                        ev.stopPropagation()
+                        ev.preventDefault()
+                        svgRef.current?.setPointerCapture(ev.pointerId)
+                        setSelectedEdgeId(e.id)
+                        setSelectedId(null)
+                        setOrthoDrag({ edgeId: e.id, segIndex: h.segIndex, axis: h.axis })
+                      }}
+                    >
+                      <circle r={11} fill="transparent" />
+                      <rect
+                        x={-6}
+                        y={-6}
+                        width={12}
+                        height={12}
+                        rx={2}
+                        className="bee-ortho-handle-box"
+                        fill="var(--bg-elevated, #fff)"
+                        stroke="var(--accent, #e6a817)"
+                        strokeWidth={2}
+                      />
+                    </g>
+                  ))}
+                </g>
+              )
+            }
 
-          {linkDrag && linkPreviewEnd && (
-            <g className="bee-link-preview" pointerEvents="none">
-              {(() => {
-                const from = doc.nodes.find((n) => n.id === linkDrag.fromId)
-                if (!from) return null
-                const start = anchorPoint(from, linkDrag.fromAnchor)
-                return (
-                  <>
-                    <line
-                      x1={start.x}
-                      y1={start.y}
-                      x2={linkPreviewEnd.x}
-                      y2={linkPreviewEnd.y}
-                      stroke="var(--accent, #e6a817)"
-                      strokeWidth={2}
-                      strokeDasharray="6 4"
-                      markerEnd="url(#bee-arrow-edit)"
-                      opacity={0.9}
-                    />
-                    <circle cx={start.x} cy={start.y} r={5} fill="var(--accent, #e6a817)" />
-                    <circle
-                      cx={linkPreviewEnd.x}
-                      cy={linkPreviewEnd.y}
-                      r={5}
-                      fill="none"
-                      stroke="var(--accent, #e6a817)"
-                      strokeWidth={2}
-                    />
-                  </>
-                )
-              })()}
-            </g>
-          )}
-
-          {doc.nodes.map((n) => {
+            const n = item.node
             const active = n.id === selectedId
             const hovered = n.id === hoverId || n.id === linkDrag?.hoverId
             const showAnchors = showAnchorsFor(n.id) && labelEdit?.id !== n.id
@@ -1082,6 +1057,40 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
               </g>
             )
           })}
+
+          {linkDrag && linkPreviewEnd && (
+            <g className="bee-link-preview" pointerEvents="none">
+              {(() => {
+                const from = nodeById.get(linkDrag.fromId)
+                if (!from) return null
+                const start = anchorPoint(from, linkDrag.fromAnchor)
+                return (
+                  <>
+                    <line
+                      x1={start.x}
+                      y1={start.y}
+                      x2={linkPreviewEnd.x}
+                      y2={linkPreviewEnd.y}
+                      stroke="var(--accent, #e6a817)"
+                      strokeWidth={2}
+                      strokeDasharray="6 4"
+                      markerEnd="url(#bee-arrow-edit)"
+                      opacity={0.9}
+                    />
+                    <circle cx={start.x} cy={start.y} r={5} fill="var(--accent, #e6a817)" />
+                    <circle
+                      cx={linkPreviewEnd.x}
+                      cy={linkPreviewEnd.y}
+                      r={5}
+                      fill="none"
+                      stroke="var(--accent, #e6a817)"
+                      strokeWidth={2}
+                    />
+                  </>
+                )
+              })()}
+            </g>
+          )}
         </svg>
 
         {contextMenu && !readOnly && (

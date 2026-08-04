@@ -1,6 +1,7 @@
 import { useId, useMemo } from 'react'
 import type { BeeDiagramDoc } from '../types'
 import { edgePathD, parseBeeDoc } from '../diagram/beeModel'
+import { diagramPaintOrder } from '../diagram/containers'
 import { arrowMarkerId, collectEdgeMarkers, resolveEdgeStyle } from '../diagram/shapes'
 import { BeeShapeNode } from './BeeShapeNode'
 
@@ -40,6 +41,16 @@ export function BeeDiagramView({ source, doc: docProp, className }: Props) {
     [doc.edges, prefix],
   )
 
+  const paintOrder = useMemo(
+    () => diagramPaintOrder(doc.nodes, doc.edges),
+    [doc.nodes, doc.edges],
+  )
+
+  const nodeById = useMemo(() => {
+    const map = new Map(doc.nodes.map((n) => [n.id, n]))
+    return map
+  }, [doc.nodes])
+
   return (
     <div className={className ?? 'bee-diagram-view'}>
       <svg
@@ -72,9 +83,13 @@ export function BeeDiagramView({ source, doc: docProp, className }: Props) {
             </marker>
           ))}
         </defs>
-        {doc.edges.map((e) => {
-          const from = doc.nodes.find((n) => n.id === e.from)
-          const to = doc.nodes.find((n) => n.id === e.to)
+        {paintOrder.map((item) => {
+          if (item.kind === 'node') {
+            return <BeeShapeNode key={item.node.id} node={item.node} />
+          }
+          const e = item.edge
+          const from = nodeById.get(e.from)
+          const to = nodeById.get(e.to)
           if (!from || !to) return null
           const { d, mid } = edgePathD(from, to, e)
           const styled = !!e.style?.stroke
@@ -110,9 +125,6 @@ export function BeeDiagramView({ source, doc: docProp, className }: Props) {
             </g>
           )
         })}
-        {doc.nodes.map((n) => (
-          <BeeShapeNode key={n.id} node={n} />
-        ))}
       </svg>
       {doc.nodes.length === 0 && <p className="muted bee-empty">Empty diagram</p>}
     </div>

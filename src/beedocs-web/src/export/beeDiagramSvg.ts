@@ -1,5 +1,6 @@
 import type { BeeNode } from '../types'
 import { edgePathD, parseBeeDoc } from '../diagram/beeModel'
+import { diagramPaintOrder } from '../diagram/containers'
 import {
   arrowMarkerId,
   collectEdgeMarkers,
@@ -148,10 +149,13 @@ export function beeDiagramToSvg(source: string, title?: string): string {
     )
     .join('\n')
 
-  const edges = doc.edges
-    .map((e) => {
-      const from = doc.nodes.find((n) => n.id === e.from)
-      const to = doc.nodes.find((n) => n.id === e.to)
+  const byId = new Map(doc.nodes.map((n) => [n.id, n]))
+  const layered = diagramPaintOrder(doc.nodes, doc.edges)
+    .map((item) => {
+      if (item.kind === 'node') return nodeSvg(item.node)
+      const e = item.edge
+      const from = byId.get(e.from)
+      const to = byId.get(e.to)
       if (!from || !to) return ''
       const st = resolveEdgeStyle(e, '#333333')
       const { d, mid } = edgePathD(from, to, e)
@@ -172,16 +176,13 @@ export function beeDiagramToSvg(source: string, title?: string): string {
     })
     .join('\n')
 
-  const nodes = doc.nodes.map(nodeSvg).join('\n')
-
   return `<figure class="export-diagram">
     ${title ? `<figcaption>${esc(title)}</figcaption>` : ''}
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${width} ${height}" width="100%" style="max-height:480px">
       <defs>
         ${markers}
       </defs>
-      ${edges}
-      ${nodes}
+      ${layered}
     </svg>
   </figure>`
 }

@@ -224,15 +224,28 @@ export function DiagramCanvas({ onStateChange }: Props) {
   return (
     <div className="diagram-canvas">
       <div className="canvas-toolbar">
-        <input
-          className="canvas-title"
-          value={title}
-          onChange={(e) => {
-            setTitle(e.target.value)
-            setDirty(true)
-          }}
-          placeholder="Diagram title"
-        />
+        <div className="canvas-heading">
+          <input
+            className="canvas-title"
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value)
+              setDirty(true)
+            }}
+            placeholder="Diagram title"
+          />
+          <div className="canvas-meta">
+            <span>{kind}</span>
+            {statusLabel && (
+              <span className={dirty && !saving ? 'dirty-dot' : undefined}>· {statusLabel}</span>
+            )}
+            {autoSaveEnabled && (
+              <span className="muted save-hint" title="Ctrl/Cmd+S to save immediately">
+                · auto-save on
+              </span>
+            )}
+          </div>
+        </div>
         <div className="toolbar-group">
           <select
             value={kind}
@@ -250,17 +263,6 @@ export function DiagramCanvas({ onStateChange }: Props) {
             {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
           </button>
         </div>
-      </div>
-      <div className="canvas-meta">
-        <span>{kind}</span>
-        {statusLabel && (
-          <span className={dirty && !saving ? 'dirty-dot' : undefined}>· {statusLabel}</span>
-        )}
-        {autoSaveEnabled && (
-          <span className="muted save-hint" title="Ctrl/Cmd+S to save immediately">
-            · auto-save on
-          </span>
-        )}
       </div>
       {error && <div className="banner error compact">{error}</div>}
       {kind === 'beediagram' ? (

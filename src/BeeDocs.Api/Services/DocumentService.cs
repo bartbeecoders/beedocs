@@ -25,11 +25,14 @@ public interface IDocumentService
     Task<PageDto> CreatePageAsync(string bookId, CreatePageRequest request, CancellationToken ct = default);
     Task<PageDto?> UpdatePageAsync(string id, UpdatePageRequest request, CancellationToken ct = default);
     Task<bool> DeletePageAsync(string id, CancellationToken ct = default);
-    /// <summary>Create or update a page under a book by stable slug (external publish API).</summary>
+    /// <summary>Create or update a page under a book by stable slug (external publish API).
+    /// A non-null <paramref name="chapterId"/> places the page in that chapter; null leaves
+    /// the page where it is (book root on create).</summary>
     Task<UpsertResult<PageDto>> UpsertPageBySlugAsync(
         string bookId,
         string pageSlug,
         UpsertPageRequest request,
+        string? chapterId = null,
         CancellationToken ct = default);
 
     /// <summary>Ensure book + write page in one call (idempotent by slugs).</summary>
@@ -442,6 +445,7 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         string bookId,
         string pageSlug,
         UpsertPageRequest request,
+        string? chapterId = null,
         CancellationToken ct = default)
     {
         var book = await GetBookAsync(bookId, ct)
@@ -463,7 +467,7 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
                     Title: string.IsNullOrWhiteSpace(request.Title) ? slug : request.Title.Trim(),
                     Slug: slug,
                     Content: request.Content,
-                    ChapterId: null,
+                    ChapterId: chapterId,
                     SortOrder: request.SortOrder),
                 ct);
             return new UpsertResult<PageDto>(created, Created: true);
@@ -475,7 +479,7 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
                 Title: string.IsNullOrWhiteSpace(request.Title) ? existing.Title : request.Title.Trim(),
                 Slug: slug,
                 Content: request.Content ?? existing.Content,
-                ChapterId: existing.ChapterId,
+                ChapterId: chapterId ?? existing.ChapterId,
                 SortOrder: request.SortOrder ?? existing.SortOrder),
             ct) ?? existing;
 
@@ -509,17 +513,46 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
             new UpsertBookRequest(request.Book.Title, request.Book.Description, SortOrder: null),
             ct);
 
+        // Optional folder (chapter): match by slug within the book, create when missing.
+        // An existing folder is used as-is (its title is not renamed by a publish).
+        ChapterDto? folder = null;
+        var folderCreated = false;
+        if (request.Folder is not null)
+        {
+            if (string.IsNullOrWhiteSpace(request.Folder.Title))
+                throw new ArgumentException("Folder title is required when a folder is specified.", nameof(request));
+
+            var folderSlug = string.IsNullOrWhiteSpace(request.Folder.Slug)
+                ? SlugHelper.Slugify(request.Folder.Title)
+                : SlugHelper.Slugify(request.Folder.Slug);
+
+            var chapters = await ListChaptersAsync(bookResult.Item.Id, ct);
+            folder = chapters.FirstOrDefault(c =>
+                string.Equals(c.Slug, folderSlug, StringComparison.OrdinalIgnoreCase));
+            if (folder is null)
+            {
+                folder = await CreateChapterAsync(
+                    bookResult.Item.Id,
+                    new CreateChapterRequest(request.Folder.Title.Trim(), folderSlug, SortOrder: null),
+                    ct);
+                folderCreated = true;
+            }
+        }
+
         var pageResult = await UpsertPageBySlugAsync(
             bookResult.Item.Id,
             pageSlug,
             new UpsertPageRequest(request.Page.Title, request.Page.Content, request.Page.SortOrder),
+            folder?.Id,
             ct);
 
         return new PublishDocumentResult(
             Book: bookResult.Item,
             Page: pageResult.Item,
             BookCreated: bookResult.Created,
-            PageCreated: pageResult.Created);
+            PageCreated: pageResult.Created,
+            Folder: folder,
+            FolderCreated: folderCreated);
     }
 
     private static async Task InsertBookAsync(SqliteConnection conn, Book book, CancellationToken ct)

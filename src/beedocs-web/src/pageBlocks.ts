@@ -38,9 +38,10 @@ export function segmentsForInsert(kind: InsertKind, opts?: { diagramId?: string;
   const title = opts?.title?.trim() || 'New section'
   switch (kind) {
     case 'section':
-      return [{ type: 'text', text: `\n\n## ${title}\n\nDescribe this section…\n\n` }]
+      // Prepended at the top of the page — no leading blank lines.
+      return [{ type: 'text', text: `## ${title}\n\nDescribe this section…\n\n` }]
     case 'subsection':
-      return [{ type: 'text', text: `\n\n### ${title}\n\nDetails…\n\n` }]
+      return [{ type: 'text', text: `### ${title}\n\nDetails…\n\n` }]
     case 'paragraph':
       return [{ type: 'text', text: `\n\nWrite your paragraph here.\n\n` }]
     case 'bullet-list':

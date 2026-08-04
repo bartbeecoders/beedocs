@@ -36,6 +36,7 @@ import {
 } from '../../diagram/shapes'
 import {
   containerAt,
+  diagramPaintOrder,
   dropTargetFor,
   reparentNodes,
   topLevelOf,
@@ -226,6 +227,12 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
     for (const n of doc.nodes) map.set(n.id, n)
     return map
   }, [doc.nodes])
+
+  /** Edges after their container LCA so opaque fills do not cover nested links. */
+  const paintOrder = useMemo(
+    () => diagramPaintOrder(doc.nodes, doc.edges),
+    [doc.nodes, doc.edges],
+  )
 
   const selectedNodeIds = useMemo(() => new Set(ctrl.selection.nodes), [ctrl.selection.nodes])
   const selectedEdgeIds = useMemo(() => new Set(ctrl.selection.edges), [ctrl.selection.edges])
@@ -1160,88 +1167,89 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, Props>(function Studi
         )}
 
         <g transform={`translate(${viewport.x},${viewport.y}) scale(${viewport.zoom})`}>
-          {/* Connections */}
-          {doc.edges.map((edge) => {
-            const from = nodeById.get(edge.from)
-            const to = nodeById.get(edge.to)
-            if (!from || !to) return null
-            const st = resolveEdgeStyle(edge)
-            const { d, mid } = edgePathD(from, to, edge)
-            const selected = selectedEdgeIds.has(edge.id)
-            const hovered = hoverEdgeId === edge.id
-            const startId =
-              st.startArrow !== 'none' ? arrowMarkerId(uidPrefix, st.startArrow, 'start', st.stroke) : null
-            const endId =
-              st.endArrow !== 'none' ? arrowMarkerId(uidPrefix, st.endArrow, 'end', st.stroke) : null
-            const editingLabel = labelEdit?.kind === 'edge' && labelEdit.id === edge.id
-            return (
-              <g
-                key={edge.id}
-                className="studio-edge"
-                onPointerDown={(e) => {
-                  if (e.button !== 0 || readOnly || spaceDown) return
-                  e.stopPropagation()
-                  ctrl.selectEdges([edge.id], e.shiftKey || e.ctrlKey || e.metaKey)
-                }}
-                onContextMenu={(e) => openContextMenu(e, { edgeId: edge.id })}
-                onDoubleClick={(e) => {
-                  e.stopPropagation()
-                  startLabelEdit('edge', edge.id)
-                }}
-              >
-                <path d={d} fill="none" stroke="transparent" strokeWidth={12 * inv} style={{ cursor: 'pointer' }} />
-                {(selected || hovered) && (
+          {/* Shapes + connections interleaved so edges inside containers stay visible */}
+          {paintOrder.map((item) => {
+            if (item.kind === 'edge') {
+              const edge = item.edge
+              const from = nodeById.get(edge.from)
+              const to = nodeById.get(edge.to)
+              if (!from || !to) return null
+              const st = resolveEdgeStyle(edge)
+              const { d, mid } = edgePathD(from, to, edge)
+              const selected = selectedEdgeIds.has(edge.id)
+              const hovered = hoverEdgeId === edge.id
+              const startId =
+                st.startArrow !== 'none' ? arrowMarkerId(uidPrefix, st.startArrow, 'start', st.stroke) : null
+              const endId =
+                st.endArrow !== 'none' ? arrowMarkerId(uidPrefix, st.endArrow, 'end', st.stroke) : null
+              const editingLabel = labelEdit?.kind === 'edge' && labelEdit.id === edge.id
+              return (
+                <g
+                  key={edge.id}
+                  className="studio-edge"
+                  onPointerDown={(e) => {
+                    if (e.button !== 0 || readOnly || spaceDown) return
+                    e.stopPropagation()
+                    ctrl.selectEdges([edge.id], e.shiftKey || e.ctrlKey || e.metaKey)
+                  }}
+                  onContextMenu={(e) => openContextMenu(e, { edgeId: edge.id })}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    startLabelEdit('edge', edge.id)
+                  }}
+                >
+                  <path d={d} fill="none" stroke="transparent" strokeWidth={12 * inv} style={{ cursor: 'pointer' }} />
+                  {(selected || hovered) && (
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke="#2f7be5"
+                      strokeOpacity={selected ? 0.35 : 0.18}
+                      strokeWidth={(st.strokeWidth + 6) * (selected ? 1 : 0.8)}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ pointerEvents: 'none' }}
+                    />
+                  )}
                   <path
                     d={d}
                     fill="none"
-                    stroke="#2f7be5"
-                    strokeOpacity={selected ? 0.35 : 0.18}
-                    strokeWidth={(st.strokeWidth + 6) * (selected ? 1 : 0.8)}
+                    stroke={st.stroke}
+                    strokeWidth={st.strokeWidth}
+                    strokeDasharray={st.dash}
                     strokeLinecap="round"
                     strokeLinejoin="round"
+                    markerStart={startId ? `url(#${startId})` : undefined}
+                    markerEnd={endId ? `url(#${endId})` : undefined}
                     style={{ pointerEvents: 'none' }}
                   />
-                )}
-                <path
-                  d={d}
-                  fill="none"
-                  stroke={st.stroke}
-                  strokeWidth={st.strokeWidth}
-                  strokeDasharray={st.dash}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  markerStart={startId ? `url(#${startId})` : undefined}
-                  markerEnd={endId ? `url(#${endId})` : undefined}
-                  style={{ pointerEvents: 'none' }}
-                />
-                {edge.label && !editingLabel && (
-                  <g style={{ pointerEvents: 'none' }}>
-                    <rect
-                      x={mid.x - Math.max(12, edge.label.length * st.fontSize * 0.3)}
-                      y={mid.y - st.fontSize}
-                      width={Math.max(24, edge.label.length * st.fontSize * 0.6)}
-                      height={st.fontSize * 1.6}
-                      fill="#ffffff"
-                      opacity={0.92}
-                      rx={2}
-                    />
-                    <text
-                      x={mid.x}
-                      y={mid.y + st.fontSize * 0.35}
-                      textAnchor="middle"
-                      fontSize={st.fontSize}
-                      fill={st.fontColor}
-                    >
-                      {edge.label}
-                    </text>
-                  </g>
-                )}
-              </g>
-            )
-          })}
+                  {edge.label && !editingLabel && (
+                    <g style={{ pointerEvents: 'none' }}>
+                      <rect
+                        x={mid.x - Math.max(12, edge.label.length * st.fontSize * 0.3)}
+                        y={mid.y - st.fontSize}
+                        width={Math.max(24, edge.label.length * st.fontSize * 0.6)}
+                        height={st.fontSize * 1.6}
+                        fill="#ffffff"
+                        opacity={0.92}
+                        rx={2}
+                      />
+                      <text
+                        x={mid.x}
+                        y={mid.y + st.fontSize * 0.35}
+                        textAnchor="middle"
+                        fontSize={st.fontSize}
+                        fill={st.fontColor}
+                      >
+                        {edge.label}
+                      </text>
+                    </g>
+                  )}
+                </g>
+              )
+            }
 
-          {/* Shapes */}
-          {doc.nodes.map((node) => {
+            const node = item.node
             const editing = labelEdit?.kind === 'node' && labelEdit.id === node.id
             return (
               <BeeShapeNode

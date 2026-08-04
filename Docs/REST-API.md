@@ -70,9 +70,18 @@ curl -sS -X PUT "http://localhost:5080/api/v1/publish" \
       "title": "Configuration",
       "slug": "configuration",
       "content": "# Configuration\n\n| Key | Value |\n|-----|-------|\n| port | 8080 |\n"
+    },
+    "folder": {
+      "title": "Gateways",
+      "slug": "gateways"
     }
   }'
 ```
+
+`folder` is optional: when present, the page is placed inside that folder (chapter)
+of the book — matched by slug and **created automatically when missing** (an existing
+folder is used as-is; its title is not renamed). When omitted, an existing page keeps
+its current folder and a new page lands at the book root.
 
 Response (`201` when something was created, `200` when both already existed):
 
@@ -168,9 +177,10 @@ All fields optional. On create, missing `title` defaults to the path slug.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `PUT` | `/api/v1/publish` | Ensure book + write page (idempotent) |
+| `PUT` | `/api/v1/publish` | Ensure book (+ optional folder) + write page (idempotent) |
 
-See [Quick start](#quick-start--one-shot-publish).
+See [Quick start](#quick-start--one-shot-publish). The response echoes `folder`
+(and `folderCreated`) when the request specified one.
 
 ### Search
 

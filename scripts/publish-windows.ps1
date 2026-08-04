@@ -311,12 +311,17 @@ if (-not $SkipZip) {
         Remove-Item -LiteralPath $zipPath -Force
     }
     Compress-Archive -Path (Join-Path $OutRoot '*') -DestinationPath $zipPath -CompressionLevel Optimal
+
+    $zipCopyDest = '\\tsclient\C\NetData\aa'
+    Write-Step "Copying zip to $zipCopyDest"
+    Copy-Item -LiteralPath $zipPath -Destination $zipCopyDest -Force
 }
 
 Write-Step "Done. BeeDocs $AppVersion"
 Write-Step "Deploy folder: $OutRoot"
 if (-not $SkipZip) {
     Write-Step "Deploy archive: $zipPath"
+    Write-Step "Zip also copied to: $zipCopyDest"
 }
 Write-Host ''
 Write-Host "Version $AppVersion is written to src/BeeDocs.Api/BeeDocs.Api.csproj — commit it after deploying."

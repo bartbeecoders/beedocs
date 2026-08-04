@@ -228,15 +228,28 @@ export function PageCanvas({ onStateChange }: Props) {
   return (
     <div className="page-canvas" ref={pageRootRef}>
       <div className="canvas-toolbar">
-        <SyncedInput
-          className="canvas-title"
-          value={title}
-          onValueChange={(next) => {
-            setTitle(next)
-            setDirty(true)
-          }}
-          placeholder="Page title"
-        />
+        <div className="canvas-heading">
+          <SyncedInput
+            className="canvas-title"
+            value={title}
+            onValueChange={(next) => {
+              setTitle(next)
+              setDirty(true)
+            }}
+            placeholder="Page title"
+          />
+          <div className="canvas-meta">
+            <span>v{page.version}</span>
+            {statusLabel && (
+              <span className={dirty && !saving ? 'dirty-dot' : undefined}>· {statusLabel}</span>
+            )}
+            {autoSaveEnabled && (
+              <span className="muted save-hint" title="Ctrl/Cmd+S to save immediately">
+                · auto-save on
+              </span>
+            )}
+          </div>
+        </div>
         <div className="toolbar-group">
           <div className="segmented">
             {(
@@ -271,22 +284,6 @@ export function PageCanvas({ onStateChange }: Props) {
           </button>
           <ExportMenu scope="page" id={page.id} title={page.title} variant="icon" />
         </div>
-      </div>
-      <div className="canvas-meta">
-        <span>v{page.version}</span>
-        {statusLabel && (
-          <span className={dirty && !saving ? 'dirty-dot' : undefined}>· {statusLabel}</span>
-        )}
-        {autoSaveEnabled && (
-          <span className="muted save-hint" title="Ctrl/Cmd+S to save immediately">
-            · auto-save on
-          </span>
-        )}
-        <span className="muted">
-          {mode === 'edit' || mode === 'split'
-            ? 'Visual edit · BeeDiagram canvases on the page'
-            : 'Markdown · Mermaid · BeeDiagram'}
-        </span>
       </div>
       {error && <div className="banner error compact">{error}</div>}
       <div className={`page-body${showOutline ? ' has-outline' : ''}`}>

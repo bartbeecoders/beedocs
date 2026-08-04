@@ -98,8 +98,9 @@ The **Container** shape (Shapes → General) groups other shapes.
 
 Children keep absolute coordinates: **resizing** a container does not move or
 clip what is inside, and the contents are not confined to its bounds. The link
-is recorded as `parentId` on the child (see below), and a child always draws on
-top of its container.
+is recorded as `parentId` on the child (see below). A child always draws on top
+of its container, and connections between shapes inside a container paint after
+that container's fill so they stay visible.
 
 Classic mode has no container interaction — it ignores `parentId`, so moving a
 container there leaves its contents behind.

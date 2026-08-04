@@ -162,8 +162,8 @@ export function HelpPanel() {
         </p>
         <p className="muted">
           The small <strong>On this page</strong> pane (right of the editor) lists headings and major
-          embeds so you can jump around long pages. Hide it with its toggle; the choice is remembered
-          in this browser.
+          embeds so you can jump around long pages. Collapse it to a thin rail with the › control; the
+          choice is remembered in this browser.
         </p>
         <p className="muted">
           Fenced code blocks are syntax highlighted in the preview and in exports when the fence

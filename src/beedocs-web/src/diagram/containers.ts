@@ -1,4 +1,4 @@
-import type { BeeNode } from '../types'
+import type { BeeEdge, BeeNode } from '../types'
 import { nodeRect, rectContains, type Rect } from './studioOps'
 
 /**
@@ -8,7 +8,9 @@ import { nodeRect, rectContains, type Rect } from './studioOps'
  * **absolute** coordinates — nesting only affects:
  *   • moving a container (its descendants move with it)
  *   • deleting / copying a container (its descendants come along)
- *   • z-order (a child always renders above its container)
+ *   • z-order (a child always renders above its container; edges between
+ *     nested shapes paint after their common ancestor so container fills
+ *     do not cover them — see {@link diagramPaintOrder})
  *
  * Keeping coordinates absolute means every existing geometry path — hit
  * testing, edge routing, guides, resize — needs no knowledge of the hierarchy.
@@ -152,6 +154,73 @@ export function reparentNodes(
   })
 
   return changed ? restackContainers(next) : nodes
+}
+
+/**
+ * Self → parent → … chain for LCA. Cycle-safe; unknown ids yield `[id]`.
+ */
+function ancestorChain(id: string, byId: Map<string, BeeNode>): string[] {
+  const chain: string[] = []
+  const seen = new Set<string>()
+  let cursor: string | undefined = id
+  while (cursor && !seen.has(cursor)) {
+    seen.add(cursor)
+    chain.push(cursor)
+    cursor = byId.get(cursor)?.parentId
+  }
+  return chain
+}
+
+/**
+ * Deepest common ancestor of the edge endpoints (including an endpoint when
+ * the other sits inside it). `null` = canvas root (no shared parent).
+ */
+export function edgeLayerId(
+  edge: Pick<BeeEdge, 'from' | 'to'>,
+  byId: Map<string, BeeNode>,
+): string | null {
+  const toSet = new Set(ancestorChain(edge.to, byId))
+  for (const id of ancestorChain(edge.from, byId)) {
+    if (toSet.has(id)) return id
+  }
+  return null
+}
+
+export type DiagramPaintItem =
+  | { kind: 'node'; node: BeeNode }
+  | { kind: 'edge'; edge: BeeEdge }
+
+/**
+ * Interleave nodes and edges so connections inside a container paint *after*
+ * that container's opaque fill (and before / among its children). Root-level
+ * edges still paint before root shapes, matching the previous flat order.
+ *
+ * Nodes are emitted in {@link restackContainers} order.
+ */
+export function diagramPaintOrder(nodes: BeeNode[], edges: BeeEdge[]): DiagramPaintItem[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const ordered = restackContainers(nodes)
+
+  const byLayer = new Map<string | null, BeeEdge[]>()
+  for (const edge of edges) {
+    if (!byId.has(edge.from) || !byId.has(edge.to)) continue
+    const layer = edgeLayerId(edge, byId)
+    const list = byLayer.get(layer)
+    if (list) list.push(edge)
+    else byLayer.set(layer, [edge])
+  }
+
+  const out: DiagramPaintItem[] = []
+  for (const edge of byLayer.get(null) ?? []) {
+    out.push({ kind: 'edge', edge })
+  }
+  for (const node of ordered) {
+    out.push({ kind: 'node', node })
+    for (const edge of byLayer.get(node.id) ?? []) {
+      out.push({ kind: 'edge', edge })
+    }
+  }
+  return out
 }
 
 /**
