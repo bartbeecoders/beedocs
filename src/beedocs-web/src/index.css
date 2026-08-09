@@ -4573,10 +4573,25 @@ html[data-density='compact'] .media-embed-title {
   padding-left: 1.7rem;
 }
 
-.block-handle {
+.block-controls {
   position: absolute;
-  top: 0.35rem;
-  left: 0.1rem;
+  top: 0.2rem;
+  left: 0.05rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.hybrid-block-wrap:hover > .block-controls,
+.block-controls:focus-within {
+  opacity: 1;
+}
+
+.block-handle {
+  position: static;
   width: 1.35rem;
   height: 1.5rem;
   display: flex;
@@ -4590,14 +4605,8 @@ html[data-density='compact'] .media-embed-title {
   border: 1px solid transparent;
   border-radius: 6px;
   cursor: grab;
-  opacity: 0;
-  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
-}
-
-/* Revealed on hover, and always once focused so keyboard users can find it. */
-.hybrid-block-wrap:hover > .block-handle,
-.block-handle:focus-visible {
   opacity: 1;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
 }
 
 .block-handle:hover {
@@ -4608,6 +4617,28 @@ html[data-density='compact'] .media-embed-title {
 
 .block-handle:active {
   cursor: grabbing;
+}
+
+.block-remove {
+  width: 1.35rem;
+  height: 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.block-remove:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 .hybrid-block-wrap.is-dragging {

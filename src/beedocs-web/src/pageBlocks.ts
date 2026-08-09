@@ -73,50 +73,38 @@ export function segmentsForInsert(kind: InsertKind, opts?: { diagramId?: string;
         },
       ]
     case 'beediagram':
-      return [
-        { type: 'text', text: `\n\n### Architecture\n\n` },
-        { type: 'fence', lang: 'beediagram', body: starterBeeSource() },
-        { type: 'text', text: `\n\n` },
-      ]
+      return [{ type: 'fence', lang: 'beediagram', body: starterBeeSource() }]
     case 'freedraw':
       return [
-        { type: 'text', text: `\n\n### Sketch\n\n` },
         {
           type: 'fence',
           lang: 'freedraw',
           body: serializeFreeDrawDoc(structuredClone(EMPTY_FREE_DRAW_DOC)),
         },
-        { type: 'text', text: `\n\n` },
       ]
     case 'mermaid-flow':
       return [
-        { type: 'text', text: `\n\n### Flow\n\n` },
         {
           type: 'fence',
           lang: 'mermaid',
           body: `flowchart LR\n  A[Start] --> B[Step]\n  B --> C[End]`,
         },
-        { type: 'text', text: `\n\n` },
       ]
     case 'mermaid-sequence':
       return [
-        { type: 'text', text: `\n\n### Sequence\n\n` },
         {
           type: 'fence',
           lang: 'mermaid',
           body: `sequenceDiagram\n  participant User\n  participant API\n  User->>API: Request\n  API-->>User: Response`,
         },
-        { type: 'text', text: `\n\n` },
       ]
     case 'mermaid-er':
       return [
-        { type: 'text', text: `\n\n### Data model\n\n` },
         {
           type: 'fence',
           lang: 'mermaid',
           body: `erDiagram\n  BOOK ||--o{ PAGE : contains\n  PAGE ||--o{ DIAGRAM : embeds`,
         },
-        { type: 'text', text: `\n\n` },
       ]
     default:
       return [{ type: 'text', text: '\n\n' }]
@@ -124,11 +112,6 @@ export function segmentsForInsert(kind: InsertKind, opts?: { diagramId?: string;
 }
 
 /** Linked diagram: fence only (caller creates the diagram entity) */
-export function segmentsForLinkedDiagram(diagramId: string, title?: string): ContentSegment[] {
-  const heading = title?.trim() ? title.trim() : 'Linked diagram'
-  return [
-    { type: 'text', text: `\n\n### ${heading}\n\n` },
-    { type: 'fence', lang: 'beediagram-ref', body: diagramId },
-    { type: 'text', text: `\n\n` },
-  ]
+export function segmentsForLinkedDiagram(diagramId: string, _title?: string): ContentSegment[] {
+  return [{ type: 'fence', lang: 'beediagram-ref', body: diagramId }]
 }

@@ -574,6 +574,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             onDragStart={(e) => reorder.start(index, e)}
             onDragEnd={reorder.end}
             onMove={(to) => moveSegment(index, to)}
+            onRemove={() => removeSegment(index)}
           />
           {seg.type === 'text' ? (
             <RichTextBlock
@@ -651,6 +652,7 @@ function BlockHandle({
   onDragStart,
   onDragEnd,
   onMove,
+  onRemove,
 }: {
   index: number
   total: number
@@ -659,32 +661,51 @@ function BlockHandle({
   onDragEnd: () => void
   /** Target gap index. */
   onMove: (to: number) => void
+  onRemove: () => void
 }) {
   const canMoveUp = index > 0
   const canMoveDown = index < total - 1
+  // Keep at least one block so the page always has somewhere to type.
+  const canRemove = total > 1
 
   return (
-    <button
-      type="button"
-      className="block-handle"
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      // Keyboard equivalent — a drag gesture is not reachable without a pointer.
-      onKeyDown={(e) => {
-        if (e.key === 'ArrowUp' && canMoveUp) {
-          e.preventDefault()
-          onMove(index - 1)
-        } else if (e.key === 'ArrowDown' && canMoveDown) {
-          e.preventDefault()
-          onMove(index + 2)
-        }
-      }}
-      aria-label={`Move block: ${label}. Drag, or use arrow up and down.`}
-      title="Drag to reorder · ↑ / ↓ to move"
-    >
-      <span aria-hidden="true">{'⠿'}</span>
-    </button>
+    <div className="block-controls">
+      <button
+        type="button"
+        className="block-handle"
+        draggable
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        // Keyboard equivalent — a drag gesture is not reachable without a pointer.
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowUp' && canMoveUp) {
+            e.preventDefault()
+            onMove(index - 1)
+          } else if (e.key === 'ArrowDown' && canMoveDown) {
+            e.preventDefault()
+            onMove(index + 2)
+          } else if ((e.key === 'Delete' || e.key === 'Backspace') && canRemove) {
+            e.preventDefault()
+            onRemove()
+          }
+        }}
+        aria-label={`Move block: ${label}. Drag, or use arrow up and down.`}
+        title="Drag to reorder · ↑ / ↓ to move"
+      >
+        <span aria-hidden="true">{'⠿'}</span>
+      </button>
+      {canRemove && (
+        <button
+          type="button"
+          className="block-remove"
+          onClick={onRemove}
+          aria-label={`Remove block: ${label}`}
+          title="Remove block"
+        >
+          ×
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -761,13 +782,19 @@ function mergeAdjacentText(segments: ContentSegment[]): ContentSegment[] {
   // an input run's identity wherever the text came out the same, matching each
   // one only once so duplicate paragraphs cannot both claim it.
   const spare = segments.filter((s): s is Extract<ContentSegment, { type: 'text' }> => s.type === 'text')
-  return out.map((s) => {
+  const adopted = out.map((s) => {
     if (s.type !== 'text' || blockIds.has(s)) return s
     const i = spare.findIndex((c) => c.text === s.text)
     if (i === -1) return s
     const [claimed] = spare.splice(i, 1)
     return claimed ? keepBlockId(claimed, s) : s
   })
+
+  // Drop whitespace-only text blocks left behind after clearing a heading (or
+  // similar). Keep a lone empty text block so a blank page still has a caret.
+  if (adopted.length <= 1) return adopted
+  const pruned = adopted.filter((s) => s.type !== 'text' || s.text.trim() !== '')
+  return pruned.length > 0 ? pruned : adopted
 }
 
 /**

@@ -272,10 +272,26 @@ export function NavTree() {
             autoFocus
             value={bookTitle}
             onChange={(e) => setBookTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setBookTitle('')
+                setNewBookOpen(false)
+              }
+            }}
             placeholder="Book title"
           />
           <button type="submit" className="btn primary sm">
             Create
+          </button>
+          <button
+            type="button"
+            className="btn ghost sm"
+            onClick={() => {
+              setBookTitle('')
+              setNewBookOpen(false)
+            }}
+          >
+            Cancel
           </button>
         </form>
       )}
@@ -640,6 +656,9 @@ function BookNode({
                   autoFocus
                   value={childTitle}
                   onChange={(e) => setChildTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setCreatingIn(null)
+                  }}
                   placeholder={
                     creatingIn.kind === 'page'
                       ? 'Page title'
