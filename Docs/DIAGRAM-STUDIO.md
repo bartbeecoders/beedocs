@@ -129,6 +129,7 @@ documents keep working and stay editable in Classic mode:
     "id": "n_1", "type": "box", "label": "API",
     "x": 120, "y": 80, "w": 140, "h": 70,
     "shape": "rounded",              // draw.io-style shape (optional)
+    "icon": "aks",                   // shape="azure" only: stencil id (see below)
     "rotation": 15,                  // degrees (optional)
     "parentId": "n_0",               // id of the container shape holding this
                                      // node (optional); coordinates stay absolute
@@ -150,3 +151,29 @@ documents keep working and stay editable in Classic mode:
 
 Nodes without `shape` render with their classic `type` appearance
 (box / person / system / database / note / image).
+
+## Azure stencils
+
+The palette carries a separate Azure collection, grouped the way the
+[Azure architecture icons](https://learn.microsoft.com/en-us/azure/architecture/icons/)
+are — Compute, Containers, Storage, Databases, Networking, Integration,
+Identity & security, Analytics & AI, Management — plus **Azure · Boundaries**
+for the dashed subscription / resource-group / VNet / subnet / region frames.
+The boundaries are ordinary `container` shapes, so nesting, grouped moves and
+drop-to-adopt all work as usual.
+
+A service shape is `"shape": "azure"` plus an `"icon"` id
+(`aks`, `app-service`, `sql-database`, `table-storage`, …). The registry lives in
+`src/beedocs-web/src/diagram/azureIcons.ts`; `id` is the stored value, so it must
+stay stable when a service is renamed. Select a shape and use **Format → Style →
+Service** to swap one stencil for another without redrawing.
+
+Stencils are drawn with the same primitive model as every other shape (geometry
+authored in a 100 × 100 box, placed with one `transform`), so they render
+identically in Studio, in page previews and in the PDF/HTML export. They are
+BeeDocs' own drawings in Azure's palette rather than Microsoft's artwork —
+recognisable stand-ins that carry no redistribution question. Swapping in the
+official SVGs later is a data-only change to that one file.
+
+The icon keeps its brand colours; a node's `style.fill` / `style.stroke` draw an
+optional backplate behind it (nothing is drawn while both are unset).

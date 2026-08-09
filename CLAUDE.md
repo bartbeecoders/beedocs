@@ -133,6 +133,13 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
     used for inline ` ```beediagram ` fences inside Markdown pages.
   Both read/write the same JSON, so a diagram looks identical in either editor,
   in page previews, and in the PDF/HTML export (`export/`).
+  Shapes are declared once in `diagram/shapeLibrary.ts` (palette groups) and
+  drawn from `diagram/shapes.ts` (primitive geometry); the Azure service
+  stencils live in `diagram/azureIcons.ts`. `diagram/catalog.ts` serialises all
+  of it, and `scripts/gen-diagram-catalog.mjs` (run by `pnpm build`) writes
+  `src/BeeDocs.Mcp/diagram-catalog.json`, which the MCP server embeds — so a new
+  shape reaches AI agents without a second edit. Regenerate + `dotnet build`
+  BeeDocs.Mcp after touching those files.
 - **LLM writing help** (`/api/llm`, `Services/LlmProviderService.cs` +
   `LlmClient.cs`, `components/AiAssist.tsx` + `hooks/useLlmAssist.ts`) — inline
   autocomplete and selection actions (rewrite / grammar / format / summarize) in
@@ -145,10 +152,14 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   bill waiting to happen, and setting the key also switches the feature off in
   the UI (the browser has nowhere to keep the secret). See
   `Docs/LLM-PROVIDERS.md`.
-- **BeeDocs.Mcp** wraps the whole REST API for AI agents (official C# MCP SDK).
+- **BeeDocs.Mcp** wraps the whole REST API for AI agents (official C# MCP SDK
+  2.1.0, protocol revision `2026-07-28` with fallback to older ones).
   Tools/resources/prompts live under `Tools/`, `Resources/`, `Prompts/`; both
-  stdio and Streamable HTTP share the same registrations. `BeeDocsApiClient` is
-  the thin HTTP client back to `BeeDocs.Api`. Full tool catalog: `Docs/MCP-TOOLS.md`.
+  stdio and Streamable HTTP share the same registrations via
+  `AddBeeDocsMcpServer` in `Program.cs`, which is also where the request filters
+  that sort the listings and stamp their SEP-2549 `ttlMs`/`cacheScope` hints
+  live. `BeeDocsApiClient` is the thin HTTP client back to `BeeDocs.Api`. Full
+  tool catalog: `Docs/MCP-TOOLS.md`; protocol details: `Docs/MCP-SERVER.md`.
   - stdio: no auth, inherits whatever network access the host process has.
   - HTTP: stateless Streamable HTTP on `/mcp`, optional `MCP_AUTH_TOKEN` bearer
     auth — logs a loud warning if unset. `/healthz` is unauthenticated.

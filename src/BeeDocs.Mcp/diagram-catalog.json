@@ -1,0 +1,2008 @@
+{
+  "version": 1,
+  "nodeTypes": [
+    "box",
+    "person",
+    "system",
+    "database",
+    "note",
+    "image"
+  ],
+  "shapes": [
+    {
+      "id": "rectangle",
+      "w": 140,
+      "h": 70,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "rounded",
+      "w": 140,
+      "h": 70,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "stadium",
+      "w": 140,
+      "h": 60,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "text",
+      "w": 120,
+      "h": 40,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "ellipse",
+      "w": 140,
+      "h": 80,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "circle",
+      "w": 100,
+      "h": 100,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "triangle",
+      "w": 80,
+      "h": 100,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "rhombus",
+      "w": 120,
+      "h": 80,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "parallelogram",
+      "w": 140,
+      "h": 70,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "trapezoid",
+      "w": 140,
+      "h": 70,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "hexagon",
+      "w": 140,
+      "h": 70,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "step",
+      "w": 140,
+      "h": 70,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "process",
+      "w": 140,
+      "h": 70,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "document",
+      "w": 140,
+      "h": 90,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "tape",
+      "w": 140,
+      "h": 90,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "card",
+      "w": 140,
+      "h": 100,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "callout",
+      "w": 160,
+      "h": 90,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "note",
+      "w": 140,
+      "h": 100,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Paper"
+        },
+        {
+          "key": "fill2",
+          "label": "Fold"
+        }
+      ]
+    },
+    {
+      "id": "cube",
+      "w": 140,
+      "h": 100,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Front"
+        },
+        {
+          "key": "fill2",
+          "label": "Top / side"
+        }
+      ]
+    },
+    {
+      "id": "cylinder",
+      "w": 120,
+      "h": 100,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Body"
+        },
+        {
+          "key": "fill2",
+          "label": "Top"
+        }
+      ]
+    },
+    {
+      "id": "internalStorage",
+      "w": 140,
+      "h": 70,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "dataStorage",
+      "w": 140,
+      "h": 70,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "cloud",
+      "w": 160,
+      "h": 100,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "actor",
+      "w": 60,
+      "h": 90,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ]
+    },
+    {
+      "id": "container",
+      "w": 300,
+      "h": 200,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Header"
+        },
+        {
+          "key": "fill2",
+          "label": "Body"
+        }
+      ]
+    },
+    {
+      "id": "image",
+      "w": 200,
+      "h": 150,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Fill"
+        }
+      ],
+      "needsImageUrl": true
+    },
+    {
+      "id": "azure",
+      "w": 64,
+      "h": 64,
+      "fills": [
+        {
+          "key": "fill",
+          "label": "Backplate"
+        }
+      ],
+      "needsIcon": true
+    }
+  ],
+  "azure": {
+    "categories": [
+      {
+        "id": "general",
+        "title": "Azure · General"
+      },
+      {
+        "id": "compute",
+        "title": "Azure · Compute"
+      },
+      {
+        "id": "containers",
+        "title": "Azure · Containers"
+      },
+      {
+        "id": "web",
+        "title": "Azure · Web"
+      },
+      {
+        "id": "storage",
+        "title": "Azure · Storage"
+      },
+      {
+        "id": "databases",
+        "title": "Azure · Databases"
+      },
+      {
+        "id": "networking",
+        "title": "Azure · Networking"
+      },
+      {
+        "id": "integration",
+        "title": "Azure · Integration"
+      },
+      {
+        "id": "identity",
+        "title": "Azure · Identity & security"
+      },
+      {
+        "id": "analytics",
+        "title": "Azure · Analytics & AI"
+      },
+      {
+        "id": "management",
+        "title": "Azure · Management"
+      }
+    ],
+    "icons": [
+      {
+        "id": "azure",
+        "label": "Azure",
+        "category": "general",
+        "keywords": "cloud microsoft platform"
+      },
+      {
+        "id": "region",
+        "label": "Region",
+        "category": "general",
+        "keywords": "geography location datacenter availability zone"
+      },
+      {
+        "id": "subscription",
+        "label": "Subscription",
+        "category": "general",
+        "keywords": "billing account tenant"
+      },
+      {
+        "id": "resource-group",
+        "label": "Resource group",
+        "category": "general",
+        "keywords": "rg boundary grouping"
+      },
+      {
+        "id": "azure-user",
+        "label": "User",
+        "category": "general",
+        "keywords": "person actor human client"
+      },
+      {
+        "id": "vm",
+        "label": "Virtual machine",
+        "category": "compute",
+        "keywords": "vm server compute instance iaas"
+      },
+      {
+        "id": "vmss",
+        "label": "VM scale set",
+        "category": "compute",
+        "keywords": "vmss autoscale scale set virtual machine"
+      },
+      {
+        "id": "app-service",
+        "label": "App Service",
+        "category": "compute",
+        "keywords": "web app website paas api app service"
+      },
+      {
+        "id": "app-service-plan",
+        "label": "App Service plan",
+        "category": "compute",
+        "keywords": "asp hosting plan compute sku farm"
+      },
+      {
+        "id": "function-app",
+        "label": "Function App",
+        "category": "compute",
+        "keywords": "functions serverless lambda trigger"
+      },
+      {
+        "id": "batch",
+        "label": "Batch",
+        "category": "compute",
+        "keywords": "job pool hpc parallel task"
+      },
+      {
+        "id": "service-fabric",
+        "label": "Service Fabric",
+        "category": "compute",
+        "keywords": "microservices cluster mesh stateful"
+      },
+      {
+        "id": "aks",
+        "label": "Kubernetes Service (AKS)",
+        "category": "containers",
+        "keywords": "aks kubernetes k8s cluster orchestration pod"
+      },
+      {
+        "id": "container-instances",
+        "label": "Container Instances",
+        "category": "containers",
+        "keywords": "aci container docker instance"
+      },
+      {
+        "id": "container-apps",
+        "label": "Container Apps",
+        "category": "containers",
+        "keywords": "aca serverless container microservice dapr"
+      },
+      {
+        "id": "container-registry",
+        "label": "Container Registry",
+        "category": "containers",
+        "keywords": "acr registry image repository docker"
+      },
+      {
+        "id": "static-web-app",
+        "label": "Static Web App",
+        "category": "web",
+        "keywords": "swa static site jamstack frontend spa"
+      },
+      {
+        "id": "signalr",
+        "label": "SignalR Service",
+        "category": "web",
+        "keywords": "websocket realtime push broadcast hub"
+      },
+      {
+        "id": "storage-account",
+        "label": "Storage account",
+        "category": "storage",
+        "keywords": "storage account disk persistence"
+      },
+      {
+        "id": "blob-storage",
+        "label": "Blob Storage",
+        "category": "storage",
+        "keywords": "blob object container unstructured bucket"
+      },
+      {
+        "id": "table-storage",
+        "label": "Table Storage",
+        "category": "storage",
+        "keywords": "table nosql key value entity row column"
+      },
+      {
+        "id": "queue-storage",
+        "label": "Queue Storage",
+        "category": "storage",
+        "keywords": "queue message fifo buffer"
+      },
+      {
+        "id": "file-storage",
+        "label": "File share",
+        "category": "storage",
+        "keywords": "files smb nfs share folder"
+      },
+      {
+        "id": "data-lake",
+        "label": "Data Lake Storage",
+        "category": "storage",
+        "keywords": "adls gen2 hierarchical big data lake"
+      },
+      {
+        "id": "managed-disk",
+        "label": "Managed disk",
+        "category": "storage",
+        "keywords": "disk ssd vhd volume block"
+      },
+      {
+        "id": "sql-database",
+        "label": "SQL Database",
+        "category": "databases",
+        "keywords": "sql azure sql relational tsql mssql database"
+      },
+      {
+        "id": "sql-managed-instance",
+        "label": "SQL Managed Instance",
+        "category": "databases",
+        "keywords": "sql mi managed instance lift shift"
+      },
+      {
+        "id": "sql-server",
+        "label": "SQL Server",
+        "category": "databases",
+        "keywords": "sql logical server host mssql"
+      },
+      {
+        "id": "cosmos-db",
+        "label": "Cosmos DB",
+        "category": "databases",
+        "keywords": "cosmos nosql document mongo cassandra gremlin global"
+      },
+      {
+        "id": "postgresql",
+        "label": "Database for PostgreSQL",
+        "category": "databases",
+        "keywords": "postgres postgresql relational flexible server"
+      },
+      {
+        "id": "mysql",
+        "label": "Database for MySQL",
+        "category": "databases",
+        "keywords": "mysql mariadb relational flexible server"
+      },
+      {
+        "id": "redis-cache",
+        "label": "Cache for Redis",
+        "category": "databases",
+        "keywords": "redis cache in memory key value session"
+      },
+      {
+        "id": "synapse",
+        "label": "Synapse Analytics",
+        "category": "databases",
+        "keywords": "synapse data warehouse sql pool dedicated analytics"
+      },
+      {
+        "id": "vnet",
+        "label": "Virtual network",
+        "category": "networking",
+        "keywords": "vnet network address space topology"
+      },
+      {
+        "id": "subnet",
+        "label": "Subnet",
+        "category": "networking",
+        "keywords": "subnet cidr range segment"
+      },
+      {
+        "id": "load-balancer",
+        "label": "Load balancer",
+        "category": "networking",
+        "keywords": "lb layer4 distribute backend pool traffic"
+      },
+      {
+        "id": "application-gateway",
+        "label": "Application Gateway",
+        "category": "networking",
+        "keywords": "appgw waf layer7 ingress routing"
+      },
+      {
+        "id": "front-door",
+        "label": "Front Door",
+        "category": "networking",
+        "keywords": "afd global edge cdn waf routing anycast"
+      },
+      {
+        "id": "traffic-manager",
+        "label": "Traffic Manager",
+        "category": "networking",
+        "keywords": "dns routing failover geographic priority weighted"
+      },
+      {
+        "id": "dns-zone",
+        "label": "DNS zone",
+        "category": "networking",
+        "keywords": "dns zone record name resolution"
+      },
+      {
+        "id": "public-ip",
+        "label": "Public IP address",
+        "category": "networking",
+        "keywords": "ip address public endpoint frontend"
+      },
+      {
+        "id": "nsg",
+        "label": "Network security group",
+        "category": "networking",
+        "keywords": "nsg firewall rule inbound outbound acl security"
+      },
+      {
+        "id": "firewall",
+        "label": "Firewall",
+        "category": "networking",
+        "keywords": "firewall filter threat intelligence egress"
+      },
+      {
+        "id": "vpn-gateway",
+        "label": "VPN Gateway",
+        "category": "networking",
+        "keywords": "vpn site to site point ipsec tunnel hybrid"
+      },
+      {
+        "id": "expressroute",
+        "label": "ExpressRoute",
+        "category": "networking",
+        "keywords": "expressroute private peering circuit hybrid on premises"
+      },
+      {
+        "id": "cdn",
+        "label": "CDN profile",
+        "category": "networking",
+        "keywords": "cdn edge cache pop content delivery"
+      },
+      {
+        "id": "private-link",
+        "label": "Private Link",
+        "category": "networking",
+        "keywords": "private endpoint link peering secure"
+      },
+      {
+        "id": "nic",
+        "label": "Network interface",
+        "category": "networking",
+        "keywords": "nic interface adapter card ethernet"
+      },
+      {
+        "id": "api-management",
+        "label": "API Management",
+        "category": "integration",
+        "keywords": "apim gateway api product policy developer portal"
+      },
+      {
+        "id": "service-bus",
+        "label": "Service Bus",
+        "category": "integration",
+        "keywords": "servicebus queue topic subscription message broker"
+      },
+      {
+        "id": "event-grid",
+        "label": "Event Grid",
+        "category": "integration",
+        "keywords": "eventgrid pubsub topic subscription reactive event"
+      },
+      {
+        "id": "event-hubs",
+        "label": "Event Hubs",
+        "category": "integration",
+        "keywords": "eventhub kafka stream ingest telemetry partition"
+      },
+      {
+        "id": "logic-apps",
+        "label": "Logic Apps",
+        "category": "integration",
+        "keywords": "logic app workflow connector automation flow"
+      },
+      {
+        "id": "data-factory",
+        "label": "Data Factory",
+        "category": "integration",
+        "keywords": "adf pipeline etl ingest orchestration copy activity"
+      },
+      {
+        "id": "entra-id",
+        "label": "Microsoft Entra ID",
+        "category": "identity",
+        "keywords": "entra azure ad aad identity directory tenant sso oauth"
+      },
+      {
+        "id": "key-vault",
+        "label": "Key Vault",
+        "category": "identity",
+        "keywords": "keyvault secret certificate key hsm credential"
+      },
+      {
+        "id": "managed-identity",
+        "label": "Managed identity",
+        "category": "identity",
+        "keywords": "msi managed identity service principal rbac workload"
+      },
+      {
+        "id": "stream-analytics",
+        "label": "Stream Analytics",
+        "category": "analytics",
+        "keywords": "asa streaming realtime query window telemetry"
+      },
+      {
+        "id": "ai-search",
+        "label": "AI Search",
+        "category": "analytics",
+        "keywords": "cognitive search index vector semantic query"
+      },
+      {
+        "id": "ai-services",
+        "label": "AI Services",
+        "category": "analytics",
+        "keywords": "openai cognitive services gpt llm vision language ai"
+      },
+      {
+        "id": "machine-learning",
+        "label": "Machine Learning",
+        "category": "analytics",
+        "keywords": "aml ml model training endpoint neural network"
+      },
+      {
+        "id": "databricks",
+        "label": "Databricks",
+        "category": "analytics",
+        "keywords": "databricks spark notebook lakehouse cluster"
+      },
+      {
+        "id": "monitor",
+        "label": "Monitor",
+        "category": "management",
+        "keywords": "monitor metrics alert dashboard observability"
+      },
+      {
+        "id": "log-analytics",
+        "label": "Log Analytics workspace",
+        "category": "management",
+        "keywords": "log analytics kusto kql workspace query logs"
+      },
+      {
+        "id": "app-insights",
+        "label": "Application Insights",
+        "category": "management",
+        "keywords": "appinsights apm telemetry trace dependency performance"
+      },
+      {
+        "id": "backup-vault",
+        "label": "Recovery Services vault",
+        "category": "management",
+        "keywords": "backup restore recovery vault snapshot disaster"
+      }
+    ]
+  },
+  "palette": [
+    {
+      "id": "general",
+      "title": "General",
+      "items": [
+        {
+          "id": "rectangle",
+          "label": "Rectangle",
+          "shape": "rectangle",
+          "w": 140,
+          "h": 70,
+          "keywords": "box rect square"
+        },
+        {
+          "id": "rounded",
+          "label": "Rounded rectangle",
+          "shape": "rounded",
+          "w": 140,
+          "h": 70,
+          "keywords": "box rect"
+        },
+        {
+          "id": "text",
+          "label": "Text",
+          "shape": "text",
+          "preset": "Text",
+          "w": 120,
+          "h": 40,
+          "keywords": "label caption"
+        },
+        {
+          "id": "ellipse",
+          "label": "Ellipse",
+          "shape": "ellipse",
+          "w": 140,
+          "h": 80,
+          "keywords": "oval round"
+        },
+        {
+          "id": "square",
+          "label": "Square",
+          "shape": "rectangle",
+          "w": 100,
+          "h": 100,
+          "keywords": "box"
+        },
+        {
+          "id": "circle",
+          "label": "Circle",
+          "shape": "circle",
+          "w": 100,
+          "h": 100,
+          "keywords": "round dot"
+        },
+        {
+          "id": "process",
+          "label": "Process",
+          "shape": "process",
+          "w": 140,
+          "h": 70,
+          "keywords": "subroutine predefined"
+        },
+        {
+          "id": "rhombus",
+          "label": "Diamond",
+          "shape": "rhombus",
+          "w": 120,
+          "h": 80,
+          "keywords": "decision if"
+        },
+        {
+          "id": "parallelogram",
+          "label": "Parallelogram",
+          "shape": "parallelogram",
+          "w": 140,
+          "h": 70,
+          "keywords": "data io"
+        },
+        {
+          "id": "hexagon",
+          "label": "Hexagon",
+          "shape": "hexagon",
+          "w": 140,
+          "h": 70,
+          "keywords": "preparation"
+        },
+        {
+          "id": "triangle",
+          "label": "Triangle",
+          "shape": "triangle",
+          "w": 80,
+          "h": 100,
+          "keywords": "arrow play"
+        },
+        {
+          "id": "cylinder",
+          "label": "Cylinder",
+          "shape": "cylinder",
+          "w": 120,
+          "h": 100,
+          "keywords": "database storage disk"
+        },
+        {
+          "id": "cloud",
+          "label": "Cloud",
+          "shape": "cloud",
+          "w": 160,
+          "h": 100,
+          "keywords": "internet network"
+        },
+        {
+          "id": "document",
+          "label": "Document",
+          "shape": "document",
+          "w": 140,
+          "h": 90,
+          "keywords": "file report"
+        },
+        {
+          "id": "internalStorage",
+          "label": "Internal storage",
+          "shape": "internalStorage",
+          "w": 140,
+          "h": 70,
+          "keywords": "memory"
+        },
+        {
+          "id": "cube",
+          "label": "Cube",
+          "shape": "cube",
+          "w": 140,
+          "h": 100,
+          "keywords": "3d box block"
+        },
+        {
+          "id": "step",
+          "label": "Step",
+          "shape": "step",
+          "w": 140,
+          "h": 70,
+          "keywords": "chevron arrow"
+        },
+        {
+          "id": "trapezoid",
+          "label": "Trapezoid",
+          "shape": "trapezoid",
+          "w": 140,
+          "h": 70,
+          "keywords": "manual operation"
+        },
+        {
+          "id": "tape",
+          "label": "Tape",
+          "shape": "tape",
+          "w": 140,
+          "h": 90,
+          "keywords": "paper wave"
+        },
+        {
+          "id": "note",
+          "label": "Note",
+          "shape": "note",
+          "w": 140,
+          "h": 100,
+          "keywords": "comment annotation"
+        },
+        {
+          "id": "card",
+          "label": "Card",
+          "shape": "card",
+          "w": 140,
+          "h": 100,
+          "keywords": "punched"
+        },
+        {
+          "id": "callout",
+          "label": "Callout",
+          "shape": "callout",
+          "w": 160,
+          "h": 90,
+          "keywords": "speech bubble comment"
+        },
+        {
+          "id": "actor",
+          "label": "Actor",
+          "shape": "actor",
+          "preset": "Actor",
+          "w": 60,
+          "h": 90,
+          "keywords": "person user stick figure"
+        },
+        {
+          "id": "dataStorage",
+          "label": "Data storage",
+          "shape": "dataStorage",
+          "w": 140,
+          "h": 70,
+          "keywords": "disk"
+        },
+        {
+          "id": "stadium",
+          "label": "Terminator",
+          "shape": "stadium",
+          "w": 140,
+          "h": 60,
+          "keywords": "start end pill"
+        },
+        {
+          "id": "container",
+          "label": "Container",
+          "shape": "container",
+          "preset": "Group",
+          "w": 300,
+          "h": 200,
+          "keywords": "group boundary frame"
+        }
+      ]
+    },
+    {
+      "id": "flowchart",
+      "title": "Flowchart",
+      "items": [
+        {
+          "id": "fc-start",
+          "label": "Start / End",
+          "shape": "stadium",
+          "preset": "Start",
+          "w": 140,
+          "h": 60,
+          "keywords": "terminator"
+        },
+        {
+          "id": "fc-process",
+          "label": "Process",
+          "shape": "rectangle",
+          "preset": "Process",
+          "w": 140,
+          "h": 70,
+          "keywords": "action step"
+        },
+        {
+          "id": "fc-decision",
+          "label": "Decision",
+          "shape": "rhombus",
+          "preset": "Decision",
+          "w": 120,
+          "h": 80,
+          "keywords": "if branch"
+        },
+        {
+          "id": "fc-data",
+          "label": "Data",
+          "shape": "parallelogram",
+          "preset": "Data",
+          "w": 140,
+          "h": 70,
+          "keywords": "input output"
+        },
+        {
+          "id": "fc-predefined",
+          "label": "Predefined process",
+          "shape": "process",
+          "preset": "Subprocess",
+          "w": 140,
+          "h": 70
+        },
+        {
+          "id": "fc-document",
+          "label": "Document",
+          "shape": "document",
+          "preset": "Document",
+          "w": 140,
+          "h": 90
+        },
+        {
+          "id": "fc-database",
+          "label": "Database",
+          "shape": "cylinder",
+          "preset": "Database",
+          "w": 120,
+          "h": 100,
+          "keywords": "store"
+        },
+        {
+          "id": "fc-manual",
+          "label": "Manual input",
+          "shape": "trapezoid",
+          "preset": "Manual input",
+          "w": 140,
+          "h": 70
+        },
+        {
+          "id": "fc-prepare",
+          "label": "Preparation",
+          "shape": "hexagon",
+          "preset": "Preparation",
+          "w": 140,
+          "h": 70
+        },
+        {
+          "id": "fc-connector",
+          "label": "Connector",
+          "shape": "circle",
+          "preset": "A",
+          "w": 60,
+          "h": 60,
+          "keywords": "on page reference"
+        }
+      ]
+    },
+    {
+      "id": "beedocs",
+      "title": "BeeDocs (classic)",
+      "items": [
+        {
+          "id": "bee-person",
+          "label": "Person",
+          "legacyType": "person",
+          "w": 120,
+          "h": 100,
+          "keywords": "actor user"
+        },
+        {
+          "id": "bee-system",
+          "label": "System",
+          "legacyType": "system",
+          "w": 160,
+          "h": 80,
+          "keywords": "c4 software"
+        },
+        {
+          "id": "bee-database",
+          "label": "Database",
+          "legacyType": "database",
+          "w": 120,
+          "h": 90,
+          "keywords": "store db"
+        },
+        {
+          "id": "bee-note",
+          "label": "Note",
+          "legacyType": "note",
+          "w": 160,
+          "h": 100,
+          "keywords": "annotation"
+        },
+        {
+          "id": "bee-box",
+          "label": "Component",
+          "legacyType": "box",
+          "w": 140,
+          "h": 72,
+          "keywords": "container box"
+        },
+        {
+          "id": "bee-image",
+          "label": "Image",
+          "legacyType": "image",
+          "w": 220,
+          "h": 160,
+          "keywords": "picture photo"
+        }
+      ]
+    },
+    {
+      "id": "azure-scopes",
+      "title": "Azure · Boundaries",
+      "items": [
+        {
+          "id": "az-scope-subscription",
+          "label": "Subscription boundary",
+          "shape": "container",
+          "preset": "Subscription",
+          "style": {
+            "fill": "#e3f1fb",
+            "fill2": "#ffffff",
+            "stroke": "#0078D4",
+            "strokeWidth": 2,
+            "dashed": true,
+            "fontColor": "#005BA1",
+            "bold": true,
+            "align": "left"
+          },
+          "w": 480,
+          "h": 340,
+          "keywords": "azure boundary scope container group billing"
+        },
+        {
+          "id": "az-scope-resource-group",
+          "label": "Resource group boundary",
+          "shape": "container",
+          "preset": "Resource group",
+          "style": {
+            "fill": "#e3f1fb",
+            "fill2": "#ffffff",
+            "stroke": "#0078D4",
+            "strokeWidth": 2,
+            "dashed": true,
+            "fontColor": "#005BA1",
+            "bold": true,
+            "align": "left"
+          },
+          "w": 420,
+          "h": 300,
+          "keywords": "azure boundary scope container group rg"
+        },
+        {
+          "id": "az-scope-vnet",
+          "label": "Virtual network boundary",
+          "shape": "container",
+          "preset": "Virtual network",
+          "style": {
+            "fill": "#e3f1fb",
+            "fill2": "#ffffff",
+            "stroke": "#0078D4",
+            "strokeWidth": 2,
+            "dashed": true,
+            "fontColor": "#005BA1",
+            "bold": true,
+            "align": "left"
+          },
+          "w": 400,
+          "h": 280,
+          "keywords": "azure boundary scope container group vnet network"
+        },
+        {
+          "id": "az-scope-subnet",
+          "label": "Subnet boundary",
+          "shape": "container",
+          "preset": "Subnet",
+          "style": {
+            "fill": "#e3f1fb",
+            "fill2": "#ffffff",
+            "stroke": "#0078D4",
+            "strokeWidth": 2,
+            "dashed": true,
+            "fontColor": "#005BA1",
+            "bold": true,
+            "align": "left"
+          },
+          "w": 300,
+          "h": 200,
+          "keywords": "azure boundary scope container group subnet cidr"
+        },
+        {
+          "id": "az-scope-region",
+          "label": "Region boundary",
+          "shape": "container",
+          "preset": "Region",
+          "style": {
+            "fill": "#e3f1fb",
+            "fill2": "#ffffff",
+            "stroke": "#0078D4",
+            "strokeWidth": 2,
+            "dashed": true,
+            "fontColor": "#005BA1",
+            "bold": true,
+            "align": "left"
+          },
+          "w": 520,
+          "h": 380,
+          "keywords": "azure boundary scope container group region location"
+        }
+      ]
+    },
+    {
+      "id": "azure-general",
+      "title": "Azure · General",
+      "items": [
+        {
+          "id": "az-azure",
+          "label": "Azure",
+          "shape": "azure",
+          "icon": "azure",
+          "preset": "Azure",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure cloud microsoft platform"
+        },
+        {
+          "id": "az-region",
+          "label": "Region",
+          "shape": "azure",
+          "icon": "region",
+          "preset": "Region",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure geography location datacenter availability zone"
+        },
+        {
+          "id": "az-subscription",
+          "label": "Subscription",
+          "shape": "azure",
+          "icon": "subscription",
+          "preset": "Subscription",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure billing account tenant"
+        },
+        {
+          "id": "az-resource-group",
+          "label": "Resource group",
+          "shape": "azure",
+          "icon": "resource-group",
+          "preset": "Resource group",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure rg boundary grouping"
+        },
+        {
+          "id": "az-azure-user",
+          "label": "User",
+          "shape": "azure",
+          "icon": "azure-user",
+          "preset": "User",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure person actor human client"
+        }
+      ]
+    },
+    {
+      "id": "azure-compute",
+      "title": "Azure · Compute",
+      "items": [
+        {
+          "id": "az-vm",
+          "label": "Virtual machine",
+          "shape": "azure",
+          "icon": "vm",
+          "preset": "Virtual machine",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure vm server compute instance iaas"
+        },
+        {
+          "id": "az-vmss",
+          "label": "VM scale set",
+          "shape": "azure",
+          "icon": "vmss",
+          "preset": "VM scale set",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure vmss autoscale scale set virtual machine"
+        },
+        {
+          "id": "az-app-service",
+          "label": "App Service",
+          "shape": "azure",
+          "icon": "app-service",
+          "preset": "App Service",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure web app website paas api app service"
+        },
+        {
+          "id": "az-app-service-plan",
+          "label": "App Service plan",
+          "shape": "azure",
+          "icon": "app-service-plan",
+          "preset": "App Service plan",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure asp hosting plan compute sku farm"
+        },
+        {
+          "id": "az-function-app",
+          "label": "Function App",
+          "shape": "azure",
+          "icon": "function-app",
+          "preset": "Function App",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure functions serverless lambda trigger"
+        },
+        {
+          "id": "az-batch",
+          "label": "Batch",
+          "shape": "azure",
+          "icon": "batch",
+          "preset": "Batch",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure job pool hpc parallel task"
+        },
+        {
+          "id": "az-service-fabric",
+          "label": "Service Fabric",
+          "shape": "azure",
+          "icon": "service-fabric",
+          "preset": "Service Fabric",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure microservices cluster mesh stateful"
+        }
+      ]
+    },
+    {
+      "id": "azure-containers",
+      "title": "Azure · Containers",
+      "items": [
+        {
+          "id": "az-aks",
+          "label": "Kubernetes Service (AKS)",
+          "shape": "azure",
+          "icon": "aks",
+          "preset": "Kubernetes Service (AKS)",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure aks kubernetes k8s cluster orchestration pod"
+        },
+        {
+          "id": "az-container-instances",
+          "label": "Container Instances",
+          "shape": "azure",
+          "icon": "container-instances",
+          "preset": "Container Instances",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure aci container docker instance"
+        },
+        {
+          "id": "az-container-apps",
+          "label": "Container Apps",
+          "shape": "azure",
+          "icon": "container-apps",
+          "preset": "Container Apps",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure aca serverless container microservice dapr"
+        },
+        {
+          "id": "az-container-registry",
+          "label": "Container Registry",
+          "shape": "azure",
+          "icon": "container-registry",
+          "preset": "Container Registry",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure acr registry image repository docker"
+        }
+      ]
+    },
+    {
+      "id": "azure-web",
+      "title": "Azure · Web",
+      "items": [
+        {
+          "id": "az-static-web-app",
+          "label": "Static Web App",
+          "shape": "azure",
+          "icon": "static-web-app",
+          "preset": "Static Web App",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure swa static site jamstack frontend spa"
+        },
+        {
+          "id": "az-signalr",
+          "label": "SignalR Service",
+          "shape": "azure",
+          "icon": "signalr",
+          "preset": "SignalR Service",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure websocket realtime push broadcast hub"
+        }
+      ]
+    },
+    {
+      "id": "azure-storage",
+      "title": "Azure · Storage",
+      "items": [
+        {
+          "id": "az-storage-account",
+          "label": "Storage account",
+          "shape": "azure",
+          "icon": "storage-account",
+          "preset": "Storage account",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure storage account disk persistence"
+        },
+        {
+          "id": "az-blob-storage",
+          "label": "Blob Storage",
+          "shape": "azure",
+          "icon": "blob-storage",
+          "preset": "Blob Storage",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure blob object container unstructured bucket"
+        },
+        {
+          "id": "az-table-storage",
+          "label": "Table Storage",
+          "shape": "azure",
+          "icon": "table-storage",
+          "preset": "Table Storage",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure table nosql key value entity row column"
+        },
+        {
+          "id": "az-queue-storage",
+          "label": "Queue Storage",
+          "shape": "azure",
+          "icon": "queue-storage",
+          "preset": "Queue Storage",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure queue message fifo buffer"
+        },
+        {
+          "id": "az-file-storage",
+          "label": "File share",
+          "shape": "azure",
+          "icon": "file-storage",
+          "preset": "File share",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure files smb nfs share folder"
+        },
+        {
+          "id": "az-data-lake",
+          "label": "Data Lake Storage",
+          "shape": "azure",
+          "icon": "data-lake",
+          "preset": "Data Lake Storage",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure adls gen2 hierarchical big data lake"
+        },
+        {
+          "id": "az-managed-disk",
+          "label": "Managed disk",
+          "shape": "azure",
+          "icon": "managed-disk",
+          "preset": "Managed disk",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure disk ssd vhd volume block"
+        }
+      ]
+    },
+    {
+      "id": "azure-databases",
+      "title": "Azure · Databases",
+      "items": [
+        {
+          "id": "az-sql-database",
+          "label": "SQL Database",
+          "shape": "azure",
+          "icon": "sql-database",
+          "preset": "SQL Database",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure sql azure sql relational tsql mssql database"
+        },
+        {
+          "id": "az-sql-managed-instance",
+          "label": "SQL Managed Instance",
+          "shape": "azure",
+          "icon": "sql-managed-instance",
+          "preset": "SQL Managed Instance",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure sql mi managed instance lift shift"
+        },
+        {
+          "id": "az-sql-server",
+          "label": "SQL Server",
+          "shape": "azure",
+          "icon": "sql-server",
+          "preset": "SQL Server",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure sql logical server host mssql"
+        },
+        {
+          "id": "az-cosmos-db",
+          "label": "Cosmos DB",
+          "shape": "azure",
+          "icon": "cosmos-db",
+          "preset": "Cosmos DB",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure cosmos nosql document mongo cassandra gremlin global"
+        },
+        {
+          "id": "az-postgresql",
+          "label": "Database for PostgreSQL",
+          "shape": "azure",
+          "icon": "postgresql",
+          "preset": "Database for PostgreSQL",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure postgres postgresql relational flexible server"
+        },
+        {
+          "id": "az-mysql",
+          "label": "Database for MySQL",
+          "shape": "azure",
+          "icon": "mysql",
+          "preset": "Database for MySQL",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure mysql mariadb relational flexible server"
+        },
+        {
+          "id": "az-redis-cache",
+          "label": "Cache for Redis",
+          "shape": "azure",
+          "icon": "redis-cache",
+          "preset": "Cache for Redis",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure redis cache in memory key value session"
+        },
+        {
+          "id": "az-synapse",
+          "label": "Synapse Analytics",
+          "shape": "azure",
+          "icon": "synapse",
+          "preset": "Synapse Analytics",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure synapse data warehouse sql pool dedicated analytics"
+        }
+      ]
+    },
+    {
+      "id": "azure-networking",
+      "title": "Azure · Networking",
+      "items": [
+        {
+          "id": "az-vnet",
+          "label": "Virtual network",
+          "shape": "azure",
+          "icon": "vnet",
+          "preset": "Virtual network",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure vnet network address space topology"
+        },
+        {
+          "id": "az-subnet",
+          "label": "Subnet",
+          "shape": "azure",
+          "icon": "subnet",
+          "preset": "Subnet",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure subnet cidr range segment"
+        },
+        {
+          "id": "az-load-balancer",
+          "label": "Load balancer",
+          "shape": "azure",
+          "icon": "load-balancer",
+          "preset": "Load balancer",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure lb layer4 distribute backend pool traffic"
+        },
+        {
+          "id": "az-application-gateway",
+          "label": "Application Gateway",
+          "shape": "azure",
+          "icon": "application-gateway",
+          "preset": "Application Gateway",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure appgw waf layer7 ingress routing"
+        },
+        {
+          "id": "az-front-door",
+          "label": "Front Door",
+          "shape": "azure",
+          "icon": "front-door",
+          "preset": "Front Door",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure afd global edge cdn waf routing anycast"
+        },
+        {
+          "id": "az-traffic-manager",
+          "label": "Traffic Manager",
+          "shape": "azure",
+          "icon": "traffic-manager",
+          "preset": "Traffic Manager",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure dns routing failover geographic priority weighted"
+        },
+        {
+          "id": "az-dns-zone",
+          "label": "DNS zone",
+          "shape": "azure",
+          "icon": "dns-zone",
+          "preset": "DNS zone",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure dns zone record name resolution"
+        },
+        {
+          "id": "az-public-ip",
+          "label": "Public IP address",
+          "shape": "azure",
+          "icon": "public-ip",
+          "preset": "Public IP address",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure ip address public endpoint frontend"
+        },
+        {
+          "id": "az-nsg",
+          "label": "Network security group",
+          "shape": "azure",
+          "icon": "nsg",
+          "preset": "Network security group",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure nsg firewall rule inbound outbound acl security"
+        },
+        {
+          "id": "az-firewall",
+          "label": "Firewall",
+          "shape": "azure",
+          "icon": "firewall",
+          "preset": "Firewall",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure firewall filter threat intelligence egress"
+        },
+        {
+          "id": "az-vpn-gateway",
+          "label": "VPN Gateway",
+          "shape": "azure",
+          "icon": "vpn-gateway",
+          "preset": "VPN Gateway",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure vpn site to site point ipsec tunnel hybrid"
+        },
+        {
+          "id": "az-expressroute",
+          "label": "ExpressRoute",
+          "shape": "azure",
+          "icon": "expressroute",
+          "preset": "ExpressRoute",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure expressroute private peering circuit hybrid on premises"
+        },
+        {
+          "id": "az-cdn",
+          "label": "CDN profile",
+          "shape": "azure",
+          "icon": "cdn",
+          "preset": "CDN profile",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure cdn edge cache pop content delivery"
+        },
+        {
+          "id": "az-private-link",
+          "label": "Private Link",
+          "shape": "azure",
+          "icon": "private-link",
+          "preset": "Private Link",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure private endpoint link peering secure"
+        },
+        {
+          "id": "az-nic",
+          "label": "Network interface",
+          "shape": "azure",
+          "icon": "nic",
+          "preset": "Network interface",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure nic interface adapter card ethernet"
+        }
+      ]
+    },
+    {
+      "id": "azure-integration",
+      "title": "Azure · Integration",
+      "items": [
+        {
+          "id": "az-api-management",
+          "label": "API Management",
+          "shape": "azure",
+          "icon": "api-management",
+          "preset": "API Management",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure apim gateway api product policy developer portal"
+        },
+        {
+          "id": "az-service-bus",
+          "label": "Service Bus",
+          "shape": "azure",
+          "icon": "service-bus",
+          "preset": "Service Bus",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure servicebus queue topic subscription message broker"
+        },
+        {
+          "id": "az-event-grid",
+          "label": "Event Grid",
+          "shape": "azure",
+          "icon": "event-grid",
+          "preset": "Event Grid",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure eventgrid pubsub topic subscription reactive event"
+        },
+        {
+          "id": "az-event-hubs",
+          "label": "Event Hubs",
+          "shape": "azure",
+          "icon": "event-hubs",
+          "preset": "Event Hubs",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure eventhub kafka stream ingest telemetry partition"
+        },
+        {
+          "id": "az-logic-apps",
+          "label": "Logic Apps",
+          "shape": "azure",
+          "icon": "logic-apps",
+          "preset": "Logic Apps",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure logic app workflow connector automation flow"
+        },
+        {
+          "id": "az-data-factory",
+          "label": "Data Factory",
+          "shape": "azure",
+          "icon": "data-factory",
+          "preset": "Data Factory",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure adf pipeline etl ingest orchestration copy activity"
+        }
+      ]
+    },
+    {
+      "id": "azure-identity",
+      "title": "Azure · Identity & security",
+      "items": [
+        {
+          "id": "az-entra-id",
+          "label": "Microsoft Entra ID",
+          "shape": "azure",
+          "icon": "entra-id",
+          "preset": "Microsoft Entra ID",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure entra azure ad aad identity directory tenant sso oauth"
+        },
+        {
+          "id": "az-key-vault",
+          "label": "Key Vault",
+          "shape": "azure",
+          "icon": "key-vault",
+          "preset": "Key Vault",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure keyvault secret certificate key hsm credential"
+        },
+        {
+          "id": "az-managed-identity",
+          "label": "Managed identity",
+          "shape": "azure",
+          "icon": "managed-identity",
+          "preset": "Managed identity",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure msi managed identity service principal rbac workload"
+        }
+      ]
+    },
+    {
+      "id": "azure-analytics",
+      "title": "Azure · Analytics & AI",
+      "items": [
+        {
+          "id": "az-stream-analytics",
+          "label": "Stream Analytics",
+          "shape": "azure",
+          "icon": "stream-analytics",
+          "preset": "Stream Analytics",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure asa streaming realtime query window telemetry"
+        },
+        {
+          "id": "az-ai-search",
+          "label": "AI Search",
+          "shape": "azure",
+          "icon": "ai-search",
+          "preset": "AI Search",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure cognitive search index vector semantic query"
+        },
+        {
+          "id": "az-ai-services",
+          "label": "AI Services",
+          "shape": "azure",
+          "icon": "ai-services",
+          "preset": "AI Services",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure openai cognitive services gpt llm vision language ai"
+        },
+        {
+          "id": "az-machine-learning",
+          "label": "Machine Learning",
+          "shape": "azure",
+          "icon": "machine-learning",
+          "preset": "Machine Learning",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure aml ml model training endpoint neural network"
+        },
+        {
+          "id": "az-databricks",
+          "label": "Databricks",
+          "shape": "azure",
+          "icon": "databricks",
+          "preset": "Databricks",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure databricks spark notebook lakehouse cluster"
+        }
+      ]
+    },
+    {
+      "id": "azure-management",
+      "title": "Azure · Management",
+      "items": [
+        {
+          "id": "az-monitor",
+          "label": "Monitor",
+          "shape": "azure",
+          "icon": "monitor",
+          "preset": "Monitor",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure monitor metrics alert dashboard observability"
+        },
+        {
+          "id": "az-log-analytics",
+          "label": "Log Analytics workspace",
+          "shape": "azure",
+          "icon": "log-analytics",
+          "preset": "Log Analytics workspace",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure log analytics kusto kql workspace query logs"
+        },
+        {
+          "id": "az-app-insights",
+          "label": "Application Insights",
+          "shape": "azure",
+          "icon": "app-insights",
+          "preset": "Application Insights",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure appinsights apm telemetry trace dependency performance"
+        },
+        {
+          "id": "az-backup-vault",
+          "label": "Recovery Services vault",
+          "shape": "azure",
+          "icon": "backup-vault",
+          "preset": "Recovery Services vault",
+          "w": 64,
+          "h": 64,
+          "keywords": "azure backup restore recovery vault snapshot disaster"
+        }
+      ]
+    }
+  ],
+  "anchors": [
+    "n",
+    "ne",
+    "e",
+    "se",
+    "s",
+    "sw",
+    "w",
+    "nw",
+    "n1",
+    "n2",
+    "e1",
+    "e2",
+    "s1",
+    "s2",
+    "w1",
+    "w2"
+  ],
+  "edgeRoutes": [
+    {
+      "id": "straight",
+      "label": "Straight line",
+      "hint": "Direct line between anchors"
+    },
+    {
+      "id": "curved",
+      "label": "Curved line",
+      "hint": "Smooth bezier curve"
+    },
+    {
+      "id": "orthogonal",
+      "label": "Right-angle line",
+      "hint": "90° horizontal/vertical segments"
+    }
+  ],
+  "arrowHeads": [
+    "none",
+    "arrow",
+    "open",
+    "diamond",
+    "circle"
+  ]
+}

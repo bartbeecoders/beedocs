@@ -40,7 +40,8 @@ function absoluteUrl(url: string): string {
 
 function primToSvg(p: BeePrim): string {
   const opacity = p.k === 'image' ? p.opacity : p.opacity
-  const common = `${attr('opacity', opacity == null ? undefined : opacity / 100)}`
+  const common =
+    `${attr('opacity', opacity == null ? undefined : opacity / 100)}` + attr('transform', p.transform)
   if (p.k === 'rect') {
     return (
       `<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}"` +

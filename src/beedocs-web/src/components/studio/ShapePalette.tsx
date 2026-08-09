@@ -33,6 +33,15 @@ type ShapeGroup = {
   items: ShapeLibraryItem[]
 }
 
+/** Groups that open folded — the vendor stencil sets. */
+const DEFAULT_COLLAPSED: Record<string, boolean> = {
+  'app-collections': true,
+  'book-collections': true,
+  ...Object.fromEntries(
+    SHAPE_LIBRARY.filter((g) => g.collapsedByDefault).map((g) => [g.id, true]),
+  ),
+}
+
 type PaletteGroup = CollectionGroup | ShapeGroup
 
 function matchesQuery(c: ShapeCollection, terms: string[]): boolean {
@@ -50,10 +59,7 @@ export function ShapePalette({
   disabled,
 }: Props) {
   const [query, setQuery] = useState('')
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
-    'app-collections': true,
-    'book-collections': true,
-  })
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(DEFAULT_COLLAPSED)
   const [bookCollections, setBookCollections] = useState<ShapeCollection[]>([])
   const [appCollections, setAppCollections] = useState<ShapeCollection[]>([])
   const [collectionsError, setCollectionsError] = useState<string | null>(null)

@@ -85,8 +85,39 @@ pass through verbatim.
 | `beedocs_create_diagram` | `bookId`, `title`, `kind?`, `source?`, `pageId?` | Create (`beediagram` \| `mermaid` \| `c4` \| `plantuml`) |
 | `beedocs_update_diagram` | `diagramId`, `title`, `kind?`, `source?`, `pageId?` | Update diagram |
 | `beedocs_delete_diagram` | `diagramId` | Delete diagram |
-| `beedocs_create_beediagram_with_nodes` | `bookId`, `title`, `nodes[]`, `edges[]?`, `pageId?` | Structured BeeDiagram (nodes: box/person/system/db/note/**image**; edges: anchors, route, waypoints) |
+| `beedocs_list_diagram_shapes` | `section?`, `azureCategory?`, `query?` | The shape catalog: studio shapes, **Azure stencils**, palette groups, anchors, routes, arrow heads |
+| `beedocs_create_beediagram_with_nodes` | `bookId`, `title`, `nodes[]`, `edges[]?`, `pageId?` | Structured BeeDiagram — full studio model (see below) |
+| `beedocs_update_beediagram_nodes` | `diagramId`, `nodes[]`, `edges[]?`, `title?` | Replace an existing canvas with the same structured model |
 | `beedocs_embed_diagram_in_page` | `pageId`, `diagramId`, `heading?` | Append embed fence to page |
+
+#### Structured BeeDiagram nodes and edges
+
+`beedocs_create_beediagram_with_nodes` and `beedocs_update_beediagram_nodes` take
+the whole studio model, so an agent can build the same diagrams a human can:
+
+| Node field | Notes |
+|------------|-------|
+| `type` | Classic look: `box` \| `person` \| `system` \| `database` \| `note` \| `image` |
+| `shape` | Studio catalog shape (`rectangle`, `cylinder`, `hexagon`, `container`, `azure`, …). Wins over `type` |
+| `icon` | Azure stencil id for `shape=azure` — `aks`, `app-service`, `sql-database`, `table-storage`, … Setting it implies `shape=azure` |
+| `style` | `fill`, `fill2`, `stroke`, `strokeWidth`, `dashed`, `opacity`, `shadow`, `fontSize`, `fontColor`, `bold`, `italic`, `align`, `valign` |
+| `parentId` | Id of a `shape=container` node this one sits in (coordinates stay absolute) |
+| `rotation`, `x`/`y`, `w`/`h`, `color`, `imageUrl` | `w`/`h` default to the shape's natural size |
+
+| Edge field | Notes |
+|------------|-------|
+| `fromAnchor` / `toAnchor` | `n\|e\|s\|w`, corners `ne\|se\|sw\|nw`, quarter points `n1\|n2\|e1\|e2\|s1\|s2\|w1\|w2`; omit to auto-pick |
+| `route` | `straight` \| `curved` \| `orthogonal` |
+| `waypoints` | `[{x,y}]` bends for orthogonal routes |
+| `style` | `stroke`, `strokeWidth`, `dashed`, `startArrow`, `endArrow`, `fontSize`, `fontColor` |
+
+Unknown shape / stencil / anchor / route / arrow-head values are rejected with an
+error naming the valid ones, so a wrong guess costs one round trip.
+
+Typical Azure flow: `beedocs_list_diagram_shapes` (`section="azure"`, plus
+`azureCategory` or `query`) → `beedocs_create_beediagram_with_nodes` with
+`shape="container"` boundary nodes and `shape="azure"` + `icon` service nodes
+linked by `parentId` → `beedocs_embed_diagram_in_page`.
 
 ### Library
 
@@ -114,6 +145,7 @@ pass through verbatim.
 | `beedocs://books/{bookId}/chapters` | Folder list |
 | `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams |
 | `beedocs://pages/{pageId}` | Full page |
+| `beedocs://diagram/catalog` | Every shape, Azure stencil, palette group, anchor, route and arrow head |
 | `beedocs://diagrams/{diagramId}` | Full diagram |
 
 ---
@@ -124,3 +156,17 @@ pass through verbatim.
 cd src/BeeDocs.Mcp && dotnet build
 # restart the MCP process / Grok MCP connection
 ```
+
+The shape catalog served by `beedocs_list_diagram_shapes` and
+`beedocs://diagram/catalog` is `src/BeeDocs.Mcp/diagram-catalog.json`, an
+embedded resource generated from the studio TypeScript. Adding a shape or an
+Azure stencil in `src/beedocs-web/src/diagram/` therefore needs no C# edit —
+just regenerate and rebuild:
+
+```bash
+pnpm --dir src/beedocs-web gen:catalog   # also runs as part of `pnpm build`
+cd src/BeeDocs.Mcp && dotnet build
+```
+
+`node scripts/gen-diagram-catalog.mjs --check` (from `src/beedocs-web`) exits
+non-zero when the committed JSON has drifted from the TypeScript.

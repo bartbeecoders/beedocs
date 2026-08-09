@@ -61,6 +61,15 @@ public sealed class BeeDocsResources(BeeDocsApiClient client)
         return Text($"beedocs://pages/{pageId}", page);
     }
 
+    [McpServerResource(UriTemplate = "beedocs://diagram/catalog", Name = "beedocs-diagram-catalog", MimeType = "application/json")]
+    [Description("Every BeeDiagram shape, Azure service stencil, palette group, anchor, edge route and arrow head.")]
+    public TextResourceContents DiagramCatalogResource() => new()
+    {
+        Uri = "beedocs://diagram/catalog",
+        MimeType = "application/json",
+        Text = ToolHelpers.Json(DiagramCatalog.Root),
+    };
+
     [McpServerResource(UriTemplate = "beedocs://diagrams/{diagramId}", Name = "beedocs-diagram", MimeType = "application/json")]
     [Description("Full diagram including source payload.")]
     public async Task<TextResourceContents> Diagram(string diagramId, CancellationToken ct = default)

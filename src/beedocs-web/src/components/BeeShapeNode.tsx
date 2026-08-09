@@ -24,6 +24,7 @@ export function ShapePrimitives({ prims }: { prims: BeePrim[] }) {
       {prims.map((p, i) => {
         const common = {
           opacity: primOpacity(p),
+          transform: p.transform,
         }
         if (p.k === 'rect') {
           return (

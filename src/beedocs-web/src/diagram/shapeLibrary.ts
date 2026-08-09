@@ -1,4 +1,5 @@
-import type { BeeNode, BeeNodeType, BeeShape } from '../types'
+import type { BeeNode, BeeNodeStyle, BeeNodeType, BeeShape } from '../types'
+import { AZURE_CATEGORY_ORDER, AZURE_CATEGORY_TITLES, AZURE_ICONS } from './azureIcons'
 import { createNode } from './beeModel'
 import { createShapeNode, defaultShapeSize } from './shapes'
 
@@ -13,8 +14,12 @@ export type ShapeLibraryItem = {
   shape?: BeeShape
   /** Legacy BeeDocs node type (keeps the classic look) */
   legacyType?: BeeNodeType
+  /** For shape=azure: the stencil id from `azureIcons.ts` */
+  icon?: string
   /** Text placed on the new shape */
   preset?: string
+  /** Appearance applied to the new shape (boundaries, tinted plates) */
+  style?: BeeNodeStyle
   w?: number
   h?: number
   keywords?: string
@@ -24,7 +29,96 @@ export type ShapeLibraryGroup = {
   id: string
   title: string
   items: ShapeLibraryItem[]
+  /** Big vendor stencil sets start folded so the general shapes stay reachable. */
+  collapsedByDefault?: boolean
 }
+
+/**
+ * Scope boxes (subscription, resource group, VNet, subnet) — the dashed frames
+ * an Azure architecture diagram is built inside. They are ordinary `container`
+ * shapes carrying Azure's palette, so nesting and grouped moves work as usual.
+ */
+const AZURE_SCOPE_STYLE: BeeNodeStyle = {
+  fill: '#e3f1fb',
+  fill2: '#ffffff',
+  stroke: '#0078D4',
+  strokeWidth: 2,
+  dashed: true,
+  fontColor: '#005BA1',
+  bold: true,
+  align: 'left',
+}
+
+const AZURE_SCOPES: ShapeLibraryItem[] = [
+  {
+    id: 'az-scope-subscription',
+    label: 'Subscription boundary',
+    preset: 'Subscription',
+    keywords: 'azure boundary scope container group billing',
+    w: 480,
+    h: 340,
+  },
+  {
+    id: 'az-scope-resource-group',
+    label: 'Resource group boundary',
+    preset: 'Resource group',
+    keywords: 'azure boundary scope container group rg',
+    w: 420,
+    h: 300,
+  },
+  {
+    id: 'az-scope-vnet',
+    label: 'Virtual network boundary',
+    preset: 'Virtual network',
+    keywords: 'azure boundary scope container group vnet network',
+    w: 400,
+    h: 280,
+  },
+  {
+    id: 'az-scope-subnet',
+    label: 'Subnet boundary',
+    preset: 'Subnet',
+    keywords: 'azure boundary scope container group subnet cidr',
+    w: 300,
+    h: 200,
+  },
+  {
+    id: 'az-scope-region',
+    label: 'Region boundary',
+    preset: 'Region',
+    keywords: 'azure boundary scope container group region location',
+    w: 520,
+    h: 380,
+  },
+].map((item) => ({ ...item, shape: 'container' as BeeShape, style: AZURE_SCOPE_STYLE }))
+
+/**
+ * Azure stencils, one palette group per category, generated from the icon
+ * registry so adding a service means adding it in exactly one place.
+ */
+const AZURE_GROUPS: ShapeLibraryGroup[] = [
+  {
+    id: 'azure-scopes',
+    title: 'Azure · Boundaries',
+    collapsedByDefault: true,
+    items: AZURE_SCOPES,
+  },
+  ...AZURE_CATEGORY_ORDER.map((category) => ({
+    id: `azure-${category}`,
+    title: AZURE_CATEGORY_TITLES[category],
+    collapsedByDefault: true,
+    items: AZURE_ICONS.filter((icon) => icon.category === category).map(
+      (icon): ShapeLibraryItem => ({
+        id: `az-${icon.id}`,
+        label: icon.label,
+        shape: 'azure',
+        icon: icon.id,
+        preset: icon.label,
+        keywords: `azure ${icon.keywords ?? ''}`,
+      }),
+    ),
+  })).filter((g) => g.items.length > 0),
+]
 
 export const SHAPE_LIBRARY: ShapeLibraryGroup[] = [
   {
@@ -87,6 +181,7 @@ export const SHAPE_LIBRARY: ShapeLibraryGroup[] = [
       { id: 'bee-image', label: 'Image', legacyType: 'image', keywords: 'picture photo' },
     ],
   },
+  ...AZURE_GROUPS,
 ]
 
 export function findLibraryItem(id: string): ShapeLibraryItem | undefined {
@@ -115,6 +210,8 @@ export function nodeFromLibraryItem(item: ShapeLibraryItem, x: number, y: number
       label: item.preset ?? '',
       w: size.w,
       h: size.h,
+      icon: item.icon,
+      style: item.style ? { ...item.style } : undefined,
     })
   }
   const node = createNode(item.legacyType ?? 'box', x, y)
@@ -136,7 +233,8 @@ export function searchLibrary(query: string): ShapeLibraryGroup[] {
   return SHAPE_LIBRARY.map((g) => ({
     ...g,
     items: g.items.filter((i) => {
-      const hay = `${i.label} ${i.shape ?? ''} ${i.legacyType ?? ''} ${i.keywords ?? ''}`.toLowerCase()
+      const hay =
+        `${i.label} ${i.shape ?? ''} ${i.legacyType ?? ''} ${i.icon ?? ''} ${i.keywords ?? ''}`.toLowerCase()
       return terms.every((t) => hay.includes(t))
     }),
   })).filter((g) => g.items.length > 0)

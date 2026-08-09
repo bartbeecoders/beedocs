@@ -105,6 +105,7 @@ function normalizeNode(n: Partial<BeeNode>): BeeNode {
     color: n.color,
     imageUrl: n.imageUrl ? String(n.imageUrl) : undefined,
     shape: n.shape,
+    icon: n.icon ? String(n.icon) : undefined,
     style: n.style && typeof n.style === 'object' ? { ...n.style } : undefined,
     rotation: Number.isFinite(rotation) && rotation !== 0 ? rotation : undefined,
     parentId,

@@ -182,6 +182,8 @@ export type BeeShape =
   | 'actor'
   | 'container'
   | 'image'
+  /** Azure service icon — the glyph is picked by {@link BeeNode.icon}. */
+  | 'azure'
 
 export type BeeTextAlign = 'left' | 'center' | 'right'
 export type BeeTextVAlign = 'top' | 'middle' | 'bottom'
@@ -224,6 +226,11 @@ export type BeeNode = {
   imageUrl?: string
   /** Studio-mode shape; falls back to `type` when omitted */
   shape?: BeeShape
+  /**
+   * For shape=azure: the icon id from the Azure stencil registry
+   * (`diagram/azureIcons.ts`), e.g. `aks`, `sql-database`, `table-storage`.
+   */
+  icon?: string
   /** Studio-mode appearance overrides */
   style?: BeeNodeStyle
   /** Rotation in degrees around the shape centre */

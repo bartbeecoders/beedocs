@@ -7,6 +7,7 @@ import type {
   BeeTextAlign,
   BeeTextVAlign,
 } from '../types'
+import { azureIconPrimitives } from './azureIcons'
 import { defaultColor, uid } from './beeModel'
 
 /**
@@ -28,8 +29,15 @@ export type LegacyShape =
 
 export type RenderShape = BeeShape | LegacyShape
 
+/**
+ * Extra SVG `transform` on a single primitive. Only stencils use it: an icon is
+ * authored in its own coordinate box and placed with one translate+scale rather
+ * than by rewriting every path.
+ */
+type PrimTransform = { transform?: string }
+
 export type BeePrim =
-  | {
+  | ({
       k: 'rect'
       x: number
       y: number
@@ -41,8 +49,8 @@ export type BeePrim =
       sw?: number
       dash?: string
       opacity?: number
-    }
-  | {
+    } & PrimTransform)
+  | ({
       k: 'ellipse'
       cx: number
       cy: number
@@ -53,8 +61,8 @@ export type BeePrim =
       sw?: number
       dash?: string
       opacity?: number
-    }
-  | {
+    } & PrimTransform)
+  | ({
       k: 'path'
       d: string
       fill?: string
@@ -62,10 +70,10 @@ export type BeePrim =
       sw?: number
       dash?: string
       opacity?: number
-    }
-  | { k: 'image'; href: string; x: number; y: number; w: number; h: number; opacity?: number }
+    } & PrimTransform)
+  | ({ k: 'image'; href: string; x: number; y: number; w: number; h: number; opacity?: number } & PrimTransform)
   /** Fixed decoration text (stereotypes, placeholders) — not the node label */
-  | {
+  | ({
       k: 'text'
       x: number
       y: number
@@ -75,7 +83,7 @@ export type BeePrim =
       weight?: number
       anchor?: 'start' | 'middle' | 'end'
       opacity?: number
-    }
+    } & PrimTransform)
 
 export type ResolvedNodeStyle = {
   fill: string
@@ -131,6 +139,9 @@ export function shapeFillParts(shape: RenderShape): ShapeFillPart[] {
         { key: 'fill', label: 'Body' },
         { key: 'fill2', label: 'Top' },
       ]
+    case 'azure':
+      // The stencil keeps its brand colours; the fill is an optional backplate.
+      return [{ key: 'fill', label: 'Backplate' }]
     default:
       return [{ key: 'fill', label: 'Fill' }]
   }
@@ -163,6 +174,60 @@ const LEGACY_SHAPES: Record<BeeNodeType, LegacyShape> = {
 export function isLegacyShape(shape: RenderShape): shape is LegacyShape {
   return shape.startsWith('bee')
 }
+
+/**
+ * Every catalog shape, in palette order. `satisfies Record<BeeShape, 0>` makes
+ * this a compile error until a newly added {@link BeeShape} is listed here, so
+ * the generated MCP catalog can never silently miss one.
+ */
+export const BEE_SHAPES = Object.keys({
+  rectangle: 0,
+  rounded: 0,
+  stadium: 0,
+  text: 0,
+  ellipse: 0,
+  circle: 0,
+  triangle: 0,
+  rhombus: 0,
+  parallelogram: 0,
+  trapezoid: 0,
+  hexagon: 0,
+  step: 0,
+  process: 0,
+  document: 0,
+  tape: 0,
+  card: 0,
+  callout: 0,
+  note: 0,
+  cube: 0,
+  cylinder: 0,
+  internalStorage: 0,
+  dataStorage: 0,
+  cloud: 0,
+  actor: 0,
+  container: 0,
+  image: 0,
+  azure: 0,
+} satisfies Record<BeeShape, 0>) as BeeShape[]
+
+/** Every arrow head, same exhaustiveness trick. */
+export const BEE_ARROW_HEADS = Object.keys({
+  none: 0,
+  arrow: 0,
+  open: 0,
+  diamond: 0,
+  circle: 0,
+} satisfies Record<BeeArrowHead, 0>) as BeeArrowHead[]
+
+/** Legacy `BeeNode.type` values, for the same reason. */
+export const BEE_NODE_TYPES = Object.keys({
+  box: 0,
+  person: 0,
+  system: 0,
+  database: 0,
+  note: 0,
+  image: 0,
+} satisfies Record<BeeNodeType, 0>) as BeeNodeType[]
 
 /** Which geometry to draw for a node — explicit shape wins over the legacy type. */
 export function resolveShape(n: Pick<BeeNode, 'shape' | 'type'>): RenderShape {
@@ -199,6 +264,8 @@ export function defaultShapeSize(shape: RenderShape): { w: number; h: number } {
       return { w: 140, h: 60 }
     case 'image':
       return { w: 200, h: 150 }
+    case 'azure':
+      return { w: 64, h: 64 }
     case 'cube':
       return { w: 140, h: 100 }
     case 'dataStorage':
@@ -304,13 +371,13 @@ function defaultVAlign(shape: RenderShape): BeeTextVAlign {
 }
 
 function defaultShapeFill(shape: RenderShape): string {
-  if (shape === 'text' || shape === 'actor') return 'none'
+  if (shape === 'text' || shape === 'actor' || shape === 'azure') return 'none'
   if (shape === 'container') return '#f8fafc'
   return STUDIO_DEFAULT_FILL
 }
 
 function defaultShapeStroke(shape: RenderShape): string {
-  if (shape === 'text') return 'none'
+  if (shape === 'text' || shape === 'azure') return 'none'
   return STUDIO_DEFAULT_STROKE
 }
 
@@ -333,6 +400,9 @@ export function nodeLabelBox(n: BeeNode): LabelBox {
     case 'actor':
       // Sits just below the figure, like draw.io's bottom label position
       return { x: -20, y: h + 2, w: w + 40, h: 18, align: 'center', valign: 'middle' }
+    case 'azure':
+      // Service name under the stencil; `top` so extra wrapped lines grow down
+      return { x: -28, y: h + 5, w: w + 56, h: 16, align: 'center', valign: 'top' }
     case 'image':
       return { x: 0, y: h - 20, w, h: 20, align: 'center', valign: 'middle' }
     case 'container':
@@ -723,6 +793,15 @@ export function nodePrimitives(n: BeeNode): BeePrim[] {
         { k: 'path', d: `M0 ${header} H${w}`, fill: 'none', stroke, sw, dash },
       ]
     }
+    case 'azure': {
+      // The stencil carries its own brand colours. `fill`/`stroke` only draw an
+      // optional backplate behind it, so an untouched icon stays transparent.
+      const plate: BeePrim[] =
+        fill === 'none' && stroke === 'none'
+          ? []
+          : [{ k: 'rect', x: 0, y: 0, w, h, rx: 6, fill, stroke, sw, dash }]
+      return [...plate, ...azureIconPrimitives(n.icon, w, h)]
+    }
     case 'image':
       return [
         { k: 'rect', x: 0, y: 0, w, h, rx: 4, fill: fill === STUDIO_DEFAULT_FILL ? 'none' : fill, stroke, sw, dash },
@@ -850,6 +929,8 @@ export type StudioNodeInit = {
   w?: number
   h?: number
   imageUrl?: string
+  /** For shape=azure: the stencil id (see `diagram/azureIcons.ts`). */
+  icon?: string
   style?: BeeNode['style']
 }
 
@@ -871,6 +952,7 @@ export function createShapeNode(
     w: init.w ?? size.w,
     h: init.h ?? size.h,
     imageUrl: init.imageUrl,
+    icon: init.icon,
     style: init.style,
   }
 }

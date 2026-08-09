@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import type { BeeArrowHead, BeeEdgeRoute, BeeShape, BeeTextAlign, BeeTextVAlign } from '../../types'
 import {
+  AZURE_CATEGORY_ORDER,
+  AZURE_CATEGORY_TITLES,
+  AZURE_ICONS,
+} from '../../diagram/azureIcons'
+import {
   resolveEdgeStyle,
   resolveNodeStyle,
   resolveShape,
@@ -62,6 +67,7 @@ const SHAPE_SWAP: { id: BeeShape; label: string }[] = [
   { id: 'actor', label: 'Actor' },
   { id: 'container', label: 'Container' },
   { id: 'text', label: 'Text' },
+  { id: 'azure', label: 'Azure service' },
 ]
 
 const ARROW_HEADS: { id: BeeArrowHead; label: string }[] = [
@@ -214,6 +220,25 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                         ))}
                       </select>
                     </label>
+                    {primaryNode.shape === 'azure' && (
+                      <label className="studio-field">
+                        <span>Service</span>
+                        <select
+                          value={primaryNode.icon ?? 'azure'}
+                          onChange={(e) => ctrl.updateNodes(nodeIds, { icon: e.target.value })}
+                        >
+                          {AZURE_CATEGORY_ORDER.map((category) => (
+                            <optgroup key={category} label={AZURE_CATEGORY_TITLES[category]}>
+                              {AZURE_ICONS.filter((i) => i.category === category).map((i) => (
+                                <option key={i.id} value={i.id}>
+                                  {i.label}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                     {(primaryNode.shape === 'image' || primaryNode.type === 'image') && (
                       <label className="studio-field studio-field--stack">
                         <span>Image URL</span>

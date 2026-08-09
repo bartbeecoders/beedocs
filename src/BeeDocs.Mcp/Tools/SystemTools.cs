@@ -31,8 +31,16 @@ public sealed class SystemTools(BeeDocsApiClient client)
         apiBaseUrl = client.BaseUrl,
         entities = new[] { "book", "chapter (folder)", "page", "diagram", "upload" },
         diagramKinds = new[] { "beediagram", "mermaid", "c4", "plantuml" },
-        beediagramNodeTypes = new[] { "box", "person", "system", "database", "note", "image" },
-        beediagramEdgeRoutes = new[] { "straight", "curved", "orthogonal" },
+        beediagramNodeTypes = DiagramCatalog.NodeTypes,
+        beediagramShapes = DiagramCatalog.Shapes,
+        beediagramAzureStencils = new
+        {
+            count = DiagramCatalog.AzureIcons.Count,
+            usage = "shape=\"azure\" + icon=\"<id>\", e.g. aks, app-service, sql-database, table-storage",
+            catalog = "beedocs_list_diagram_shapes (section=\"azure\") or resource beedocs://diagram/catalog",
+        },
+        beediagramEdgeRoutes = DiagramCatalog.EdgeRoutes,
+        beediagramArrowHeads = DiagramCatalog.ArrowHeads,
         beediagramSourceShape = new
         {
             version = 1,
@@ -41,14 +49,19 @@ public sealed class SystemTools(BeeDocsApiClient client)
                 new
                 {
                     id = "n1",
-                    type = "box|person|system|database|note|image",
+                    type = "box|person|system|database|note|image (classic look)",
+                    shape = "studio catalog shape — wins over type; see beedocs_list_diagram_shapes",
+                    icon = "Azure stencil id, required when shape=azure",
                     label = "string",
                     x = 0,
                     y = 0,
                     w = 140,
                     h = 72,
                     color = "#hex optional",
-                    imageUrl = "optional for type=image",
+                    imageUrl = "optional for type/shape=image",
+                    rotation = "optional degrees",
+                    parentId = "optional id of a shape=container node holding this one",
+                    style = "optional { fill, fill2, stroke, strokeWidth, dashed, opacity, shadow, fontSize, fontColor, bold, italic, align, valign }",
                 },
             },
             edges = new[]
@@ -59,10 +72,11 @@ public sealed class SystemTools(BeeDocsApiClient client)
                     from = "n1",
                     to = "n2",
                     label = "optional",
-                    fromAnchor = "n|e|s|w",
-                    toAnchor = "n|e|s|w",
+                    fromAnchor = "n|e|s|w, ne|se|sw|nw, or n1|n2|e1|e2|s1|s2|w1|w2",
+                    toAnchor = "same set; omit to auto-pick",
                     route = "straight|curved|orthogonal",
                     waypoints = "optional [{x,y}] for orthogonal bends",
+                    style = "optional { stroke, strokeWidth, dashed, startArrow, endArrow, fontSize, fontColor }",
                 },
             },
             viewport = new { x = 0, y = 0, zoom = 1 },
@@ -78,13 +92,14 @@ public sealed class SystemTools(BeeDocsApiClient client)
         {
             folders = "chapters group pages; beedocs_create_chapter / update / delete / move_page",
             images = "beedocs_upload_image then embed Markdown or image nodes",
+            diagrams = "beedocs_list_diagram_shapes for the shape/Azure-stencil catalog, then beedocs_create_beediagram_with_nodes / beedocs_update_beediagram_nodes",
             export = "beedocs_export_book or beedocs_export_library_snapshot",
         },
         suggestedWorkflow = new[]
         {
             "beedocs_list_books → pick or beedocs_create_book",
             "beedocs_create_chapter for folders, beedocs_create_page with chapterId",
-            "beedocs_create_diagram / beedocs_create_beediagram_with_nodes",
+            "beedocs_list_diagram_shapes → beedocs_create_beediagram_with_nodes (or beedocs_create_diagram for mermaid/c4)",
             "beedocs_embed_diagram_in_page or beedocs_upload_image + append",
             "beedocs_export_book for structured content / UI Export PDF for print",
         },

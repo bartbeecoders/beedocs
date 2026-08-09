@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using BeeDocs.Mcp;
 using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
 
 var transport = (Environment.GetEnvironmentVariable("MCP_TRANSPORT") ?? "stdio")
     .Trim()
@@ -26,16 +27,8 @@ if (transport == "stdio")
     var builder = Host.CreateApplicationBuilder(args);
     builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
     BeeDocsApiClientFactory.Configure(builder.Services.AddHttpClient<BeeDocsApiClient>());
-    builder.Services
-        .AddMcpServer(o =>
-        {
-            o.ServerInfo = new Implementation { Name = "beedocs", Version = "1.0.0" };
-            o.ServerInstructions = instructions;
-        })
-        .WithStdioServerTransport()
-        .WithToolsFromAssembly()
-        .WithResourcesFromAssembly()
-        .WithPromptsFromAssembly();
+    AddBeeDocsMcpServer(builder.Services, instructions)
+        .WithStdioServerTransport();
 
     await builder.Build().RunAsync();
     return 0;
@@ -54,16 +47,10 @@ web.WebHost.UseUrls($"http://{host}:{port}");
 web.Logging.AddConsole();
 
 BeeDocsApiClientFactory.Configure(web.Services.AddHttpClient<BeeDocsApiClient>());
-web.Services
-    .AddMcpServer(o =>
-    {
-        o.ServerInfo = new Implementation { Name = "beedocs", Version = "1.0.0" };
-        o.ServerInstructions = instructions;
-    })
-    .WithHttpTransport(o => o.Stateless = true)
-    .WithToolsFromAssembly()
-    .WithResourcesFromAssembly()
-    .WithPromptsFromAssembly();
+AddBeeDocsMcpServer(web.Services, instructions)
+    // 2026-07-28 dropped protocol-level sessions outright; Stateless also keeps
+    // pre-2026 clients from pinning themselves to one pod (see Docs/MCP-HOSTING.md).
+    .WithHttpTransport(o => o.Stateless = true);
 
 var app = web.Build();
 
@@ -119,6 +106,74 @@ app.Lifetime.ApplicationStarted.Register(() =>
 
 await app.RunAsync();
 return 0;
+
+static IMcpServerBuilder AddBeeDocsMcpServer(IServiceCollection services, string instructions)
+{
+    // SEP-2549 (protocol 2026-07-28) requires ttlMs/cacheScope on every listing and
+    // resource read. The SDK defaults them to "immediately stale, private"; BeeDocs'
+    // tools, prompts and resource templates are compiled into the assembly, so they are
+    // identical for every caller and cannot change until the process restarts.
+    var staticTtl = TimeSpan.FromMinutes(5);
+
+    var builder = services
+        .AddMcpServer(o =>
+        {
+            o.ServerInfo = new Implementation { Name = "beedocs", Version = "1.0.0" };
+            o.ServerInstructions = instructions;
+        })
+        .WithToolsFromAssembly()
+        .WithResourcesFromAssembly()
+        .WithPromptsFromAssembly()
+        .WithRequestFilters(f => f
+            .AddListToolsFilter(next => async (ctx, ct) =>
+            {
+                var result = await next(ctx, ct);
+                // Tools are collected by reflection, so their order is not stable across
+                // builds; 2026-07-28 asks for a deterministic order so clients can cache
+                // the listing and keep LLM prompt-cache hits.
+                result.Tools = [.. result.Tools.OrderBy(t => t.Name, StringComparer.Ordinal)];
+                return Cacheable(result);
+            })
+            .AddListPromptsFilter(next => async (ctx, ct) =>
+            {
+                var result = await next(ctx, ct);
+                result.Prompts = [.. result.Prompts.OrderBy(p => p.Name, StringComparer.Ordinal)];
+                return Cacheable(result);
+            })
+            .AddListResourcesFilter(next => async (ctx, ct) =>
+            {
+                var result = await next(ctx, ct);
+                result.Resources = [.. result.Resources.OrderBy(r => r.Uri, StringComparer.Ordinal)];
+                return Cacheable(result);
+            })
+            .AddListResourceTemplatesFilter(next => async (ctx, ct) =>
+            {
+                var result = await next(ctx, ct);
+                result.ResourceTemplates =
+                    [.. result.ResourceTemplates.OrderBy(r => r.UriTemplate, StringComparer.Ordinal)];
+                return Cacheable(result);
+            })
+            .AddReadResourceFilter(next => async (ctx, ct) =>
+            {
+                var result = await next(ctx, ct);
+                // Only the shape catalog is static; every other resource reads live
+                // BeeDocs content and keeps the SDK's "do not cache" default.
+                return ctx.Params?.Uri == "beedocs://diagram/catalog" ? Cacheable(result) : result;
+            }));
+
+    // Roots, Sampling and Logging are all Deprecated as of 2026-07-28 and BeeDocs uses
+    // none of them: our logs go to stderr (stdio) or the ASP.NET logger (HTTP), never to
+    // the client. The SDK still advertises the logging capability on its own; that is
+    // harmless because nothing here ever emits notifications/message.
+    return builder;
+
+    T Cacheable<T>(T result) where T : ICacheableResult
+    {
+        result.TimeToLive = staticTtl;
+        result.CacheScope = CacheScope.Public;
+        return result;
+    }
+}
 
 static string NormalizePathBase(string? value)
 {

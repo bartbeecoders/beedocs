@@ -446,6 +446,32 @@ See [MCP-TOOLS.md](./MCP-TOOLS.md) for the full catalog.
 | `beedocs://pages/{pageId}` | Full page + Markdown |
 | `beedocs://diagrams/{diagramId}` | Full diagram + source |
 
+## Protocol revision
+
+BeeDocs.Mcp is built on the official C# SDK (`ModelContextProtocol` 2.1.0), which
+speaks the **2026-07-28** revision and every earlier one back to `2024-11-05`.
+The revision is picked per request, so nothing here needs configuring:
+
+- A 2026-07-28 client sends `server/discover` and carries its protocol version,
+  identity, and capabilities in `_meta` on every request. There is no
+  `initialize` handshake and no `Mcp-Session-Id`; requests must also carry the
+  `MCP-Protocol-Version`, `Mcp-Method`, and (where a name/URI applies)
+  `Mcp-Name` headers, which the server enforces.
+- An older client that opens with `initialize` still negotiates its own revision
+  and keeps working — the SDK answers both dialects on the same endpoint.
+
+What BeeDocs adds on top of the SDK defaults (`Program.cs`):
+
+| Behaviour | Why |
+|---|---|
+| `tools/list`, `prompts/list`, `resources/list`, `resources/templates/list` sorted by name/URI | 2026-07-28 asks for a deterministic order so clients can cache the listing and keep LLM prompt-cache hits; reflection order is not stable across builds |
+| Those listings — and `beedocs://diagram/catalog` — return `ttlMs: 300000`, `cacheScope: "public"` (SEP-2549) | They are compiled into the assembly: identical for every caller and unchanged until the process restarts. Live resource reads keep the SDK's "immediately stale, private" default |
+
+Deprecated-in-2026-07-28 features are unused: no Roots, no Sampling, and no
+Logging — the server logs to stderr (stdio) or the ASP.NET logger (HTTP), never
+to the client. Multi Round-Trip Requests are not needed either; every tool takes
+its arguments up front and returns a `"complete"` result.
+
 ## Troubleshooting
 
 ### Both transports

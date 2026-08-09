@@ -34,6 +34,10 @@ its behalf.
 **Transport:** Streamable HTTP, stateless. Every request builds its own
 `McpServer` and discards it — there are no sessions to pin to a pod, and a
 dropped connection through the tunnel costs nothing. Endpoint is `POST /mcp`.
+Protocol 2026-07-28 removed sessions from the wire entirely, so this is now what
+the spec assumes rather than a deployment choice; the `Stateless` flag stays on
+so pre-2026 clients cannot pin themselves to a pod either. See
+[MCP-SERVER.md](MCP-SERVER.md#protocol-revision).
 
 **Why a separate hostname and not `docs.<domain>/mcp`?** The two need different
 authentication. A human opening the web UI can complete an interactive SSO
