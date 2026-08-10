@@ -18,13 +18,18 @@
 #   .\scripts\publish-windows.ps1 -SkipZip
 #   $env:NO_BUMP = '1'; .\scripts\publish-windows.ps1   # rebuild without bumping
 #   .\scripts\publish-windows.ps1 -NoBump
-#   .\scripts\publish-windows.ps1 -Sign
-#   .\scripts\publish-windows.ps1 -Sign -CertificatePath .\scripts\CodeCertificates\code.pfx
+#   .\scripts\publish-windows.ps1 -SkipSign
+#   .\scripts\publish-windows.ps1 -SkipPublish
+#   .\scripts\publish-windows.ps1 -CertificatePath .\scripts\CodeCertificates\code.pfx
 #   .\scripts\publish-windows.ps1 -UiPathBase /beedocs -ApiPathBase /beedocs-api -McpPathBase /beedocs-mcp
 #
-# Signing (-Sign) uses scripts/CodeCertificates/signtool.exe. Put a .pfx in that
-# folder (or pass -CertificatePath). Password: -CertificatePassword or
-# $env:SIGN_CERT_PASSWORD.
+# Signing is on by default and uses scripts/CodeCertificates/signtool.exe with
+# the certificate at F:\Tools\CodeSign.pfx (override with -CertificatePath).
+# The pfx password is prompted for at the start of the run; skip the prompt with
+# -CertificatePassword or $env:SIGN_CERT_PASSWORD. Disable signing with -SkipSign.
+#
+# After zipping, the archive is uploaded to the file host (-PublishUrl, project
+# "BeeDocs", version = the built version). Disable with -SkipPublish.
 #
 # Path bases are the *public* ReverseProxy prefixes (strip_prefix). The backend
 # still listens at root; only the web build needs them so the browser hits
@@ -37,8 +42,11 @@ param(
     [switch]$SelfContained,
     [switch]$SkipZip,
     [switch]$NoBump,
-    [switch]$Sign,
-    [string]$CertificatePath = '',
+    [switch]$SkipSign,
+    [switch]$SkipPublish,
+    [string]$PublishUrl = 'https://app-filehost-dr7e2d.azurewebsites.net',
+    [string]$PublishProject = 'BeeDocs',
+    [string]$CertificatePath = 'F:\Tools\CodeSign.pfx',
     [string]$CertificatePassword = '',
     [string]$TimestampUrl = 'http://timestamp.digicert.com',
     [string]$UiPathBase = '',
@@ -220,6 +228,20 @@ function Invoke-SignPublishOutput {
     }
 }
 
+if (-not $SkipSign) {
+    if (-not (Test-Path -LiteralPath $CertificatePath -PathType Leaf)) {
+        throw "Signing certificate not found: $CertificatePath (pass -CertificatePath or -SkipSign)"
+    }
+    if (-not $CertificatePassword) { $CertificatePassword = $env:SIGN_CERT_PASSWORD }
+    if (-not $CertificatePassword) {
+        $secure = Read-Host -Prompt "Password for $CertificatePath" -AsSecureString
+        $CertificatePassword = [System.Net.NetworkCredential]::new('', $secure).Password
+    }
+    if (-not $CertificatePassword) {
+        throw 'A pfx password is required for signing (or run with -SkipSign).'
+    }
+}
+
 $AppVersion = Bump-BuildNumber (Get-AppVersion)
 $ResolvedUiPathBase = Normalize-PathBase $UiPathBase
 $ResolvedApiPathBase = Normalize-PathBase $ApiPathBase
@@ -299,7 +321,7 @@ if ($SelfContained) {
 
 Set-HostPathBases (Join-Path $OutRoot 'appsettings.json') $ResolvedUiPathBase $ResolvedApiPathBase $ResolvedMcpPathBase
 
-if ($Sign) {
+if (-not $SkipSign) {
     Invoke-SignPublishOutput
 }
 
@@ -312,22 +334,33 @@ if (-not $SkipZip) {
     }
     Compress-Archive -Path (Join-Path $OutRoot '*') -DestinationPath $zipPath -CompressionLevel Optimal
 
-    $zipCopyDest = '\\tsclient\C\NetData\aa'
-    Write-Step "Copying zip to $zipCopyDest"
-    Copy-Item -LiteralPath $zipPath -Destination $zipCopyDest -Force
+    if (-not $SkipPublish) {
+        $zipName = Split-Path $zipPath -Leaf
+        $uploadUri = "$($PublishUrl.TrimEnd('/'))/api/upload"
+        $downloadUrl = "$($PublishUrl.TrimEnd('/'))/files/$PublishProject/$AppVersion/$zipName"
+        Write-Step "Uploading $zipName to $uploadUri (project=$PublishProject, version=$AppVersion)"
+        Invoke-RestMethod -Method Post -Uri $uploadUri -Form @{
+            project = $PublishProject
+            version = $AppVersion
+            file    = Get-Item -LiteralPath $zipPath
+        } | Out-Null
+        Write-Step "Uploaded: $downloadUrl"
+    }
 }
 
 Write-Step "Done. BeeDocs $AppVersion"
 Write-Step "Deploy folder: $OutRoot"
 if (-not $SkipZip) {
     Write-Step "Deploy archive: $zipPath"
-    Write-Step "Zip also copied to: $zipCopyDest"
+    if (-not $SkipPublish) {
+        Write-Step "Published to: $downloadUrl"
+    }
 }
 Write-Host ''
 Write-Host "Version $AppVersion is written to src/BeeDocs.Api/BeeDocs.Api.csproj — commit it after deploying."
 Write-Host 'Next steps on the Windows server:'
 Write-Host "  1. Copy the folder to the server (e.g. C:\BeeDocs)"
-Write-Host '  2. Edit appsettings.json — set BeeDocsHost:McpAuthToken'
+Write-Host '  2. (optional) Edit appsettings.json — set BeeDocsHost:McpAuthToken to require a bearer token (empty = no auth)'
 Write-Host '  3. Install with NSSM:'
 Write-Host "       nssm install BeeDocs C:\BeeDocs\BeeDocs.Host.exe"
 Write-Host "       nssm set BeeDocs AppDirectory C:\BeeDocs"

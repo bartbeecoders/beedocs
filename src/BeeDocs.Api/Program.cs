@@ -49,6 +49,34 @@ builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 
 
 var app = builder.Build();
 
+// The public reverse proxy strips prefixes like /beedocs and /beedocs-api before
+// forwarding, so the app serves at root. Stripping the same prefixes here lets one
+// deployment also answer direct (un-proxied) requests that still carry them.
+// Inert unless BeeDocs:PublicPathBases is configured.
+var publicPathBases = (app.Configuration.GetSection("BeeDocs:PublicPathBases").Get<string[]>() ?? [])
+    .Select(p => "/" + (p ?? "").Trim().Trim('/'))
+    .Where(p => p.Length > 1)
+    .ToArray();
+if (publicPathBases.Length > 0)
+{
+    app.Use((ctx, next) =>
+    {
+        foreach (var basePath in publicPathBases)
+        {
+            if (ctx.Request.Path.StartsWithSegments(basePath, out var rest))
+            {
+                ctx.Request.Path = rest.HasValue ? rest : "/";
+                break;
+            }
+        }
+        return next(ctx);
+    });
+}
+
+// Explicit so endpoint matching sees the rewritten path (the implicit UseRouting
+// would otherwise run before the middleware above).
+app.UseRouting();
+
 app.UseCors();
 
 var wwwroot = Path.Combine(app.Environment.ContentRootPath, "wwwroot");

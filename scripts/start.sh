@@ -18,7 +18,7 @@ WEB_URL="http://localhost:${WEB_PORT}"
 MCP_URL="http://localhost:${MCP_PORT}"
 # Local-only shared secret. The deployed server gets a random one from the
 # cluster secret instead — see Docs/MCP-HOSTING.md.
-MCP_AUTH_TOKEN="${MCP_AUTH_TOKEN:-dev-token}"
+MCP_AUTH_TOKEN="${MCP_AUTH_TOKEN:-}"
 SKIP_MCP="${SKIP_MCP:-0}"
 
 API_PID=""
@@ -239,8 +239,13 @@ main() {
   log "  UI:  $WEB_URL"
   log "  API: $API_URL  (health: $API_URL/api/health)"
   if [[ "$SKIP_MCP" != "1" ]]; then
-    log "  MCP: $MCP_URL/mcp  (bearer: $MCP_AUTH_TOKEN)"
-    log "       claude mcp add --transport http beedocs-local $MCP_URL/mcp -H \"Authorization: Bearer $MCP_AUTH_TOKEN\""
+    if [[ -n "$MCP_AUTH_TOKEN" ]]; then
+      log "  MCP: $MCP_URL/mcp  (bearer: $MCP_AUTH_TOKEN)"
+      log "       claude mcp add --transport http beedocs-local $MCP_URL/mcp -H \"Authorization: Bearer $MCP_AUTH_TOKEN\""
+    else
+      log "  MCP: $MCP_URL/mcp  (auth disabled; set MCP_AUTH_TOKEN to require a bearer token)"
+      log "       claude mcp add --transport http beedocs-local $MCP_URL/mcp"
+    fi
   fi
   log "  Logs: ${tail_logs[*]}"
   log "Press Ctrl+C to stop everything."

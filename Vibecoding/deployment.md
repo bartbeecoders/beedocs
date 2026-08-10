@@ -93,3 +93,22 @@ nssm start BeeDocs
 ```
 
 `BeeDocs.Host` also registers as a native Windows service (`sc create BeeDocs binPath= "C:\BeeDocs\BeeDocs.Host.exe" start= auto`) if you prefer not to use NSSM.
+
+
+
+
+ Update the publish script (publish-windows.ps1) so I can run on this computer that does the following:
+
+- build the app
+- zip the file(s)
+- publish to https://app-filehost-dr7e2d.azurewebsites.net (see https://app-filehost-dr7e2d.azurewebsites.net/openapi/v1.json on how to do that)
+
+script should ask for the sign pfx password
+ Sign pfx is at F:\Tools\CodeSign.pfx
+
+ Publish it with project name BeeDocs
+
+
+ cd azure-deploy
+$tok = terraform output -raw mcp_auth_token
+claude mcp add beedocs --scope user --transport http https://app-beedocs-mcp-usbzan.azurewebsites.net/mcp --header "Authorization: Bearer $tok"

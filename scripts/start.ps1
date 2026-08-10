@@ -21,7 +21,7 @@ $McpPort = if ($env:MCP_PORT) { $env:MCP_PORT } else { '5090' }
 $ApiUrl = "http://localhost:$ApiPort"
 $WebUrl = "http://localhost:$WebPort"
 $McpUrl = "http://localhost:$McpPort"
-$McpAuthToken = if ($env:MCP_AUTH_TOKEN) { $env:MCP_AUTH_TOKEN } else { 'dev-token' }
+$McpAuthToken = if ($env:MCP_AUTH_TOKEN) { $env:MCP_AUTH_TOKEN } else { '' }
 $SkipMcp = ($env:SKIP_MCP -eq '1')
 
 $ApiProc = $null
@@ -193,7 +193,11 @@ try {
     Write-Log "  UI:  $WebUrl"
     Write-Log "  API: $ApiUrl  (health: $ApiUrl/api/health)"
     if (-not $SkipMcp) {
-        Write-Log "  MCP: $McpUrl/mcp  (bearer: $McpAuthToken)"
+        if ($McpAuthToken) {
+            Write-Log "  MCP: $McpUrl/mcp  (bearer: $McpAuthToken)"
+        } else {
+            Write-Log "  MCP: $McpUrl/mcp  (auth disabled; set MCP_AUTH_TOKEN to require a bearer token)"
+        }
     }
     Write-Log "  Logs: $logs"
     Write-Log "Press Ctrl+C to stop everything."

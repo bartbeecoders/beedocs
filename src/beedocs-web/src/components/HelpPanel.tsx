@@ -44,7 +44,7 @@ export function HelpPanel() {
   const [version, setVersion] = useState<string | null>(null)
   const [apiOk, setApiOk] = useState<boolean | null>(null)
   const [mcpUrl, setMcpUrl] = useState(guessMcpUrl)
-  const [mcpToken, setMcpToken] = useState('dev-token')
+  const [mcpToken, setMcpToken] = useState('')
   const [client, setClient] = useState<McpClient>('claude-code')
   const [repoPath, setRepoPath] = useState('/path/to/BeeDocs')
 
@@ -422,7 +422,7 @@ export function HelpPanel() {
               value={mcpToken}
               onChange={(e) => setMcpToken(e.target.value)}
               spellCheck={false}
-              placeholder="dev-token"
+              placeholder="leave empty for no auth"
             />
           </label>
           {client === 'stdio' && (
@@ -439,7 +439,8 @@ export function HelpPanel() {
         </div>
         <p className="muted sm">
           Local runs (<code>./scripts/start.sh</code>) serve MCP on{' '}
-          <code>http://localhost:5090/mcp</code> with the token <code>dev-token</code>. A hosted
+          <code>http://localhost:5090/mcp</code> with no auth unless{' '}
+          <code>MCP_AUTH_TOKEN</code> is set. A hosted
           instance uses <code>https://mcp.&lt;your-domain&gt;/mcp</code> — get its token with{' '}
           <code>./scripts/deploy-k3s.sh mcp-token</code>, and add the two{' '}
           <code>CF-Access-*</code> headers if Cloudflare Access is in front of it.
@@ -470,8 +471,7 @@ export function HelpPanel() {
         <CodeBlock
           title="Smoke test"
           code={`curl -s -X POST ${mcpUrl} \\
-  -H "Authorization: Bearer ${mcpToken}" \\
-  -H "Content-Type: application/json" \\
+${mcpToken.trim() ? `  -H "Authorization: Bearer ${mcpToken.trim()}" \\\n` : ''}  -H "Content-Type: application/json" \\
   -H "Accept: application/json, text/event-stream" \\
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'`}
         />
@@ -692,13 +692,17 @@ function mcpSnippet(
   client: McpClient,
   opts: { mcpUrl: string; token: string; repoPath: string },
 ): { title: string; code: string; note?: string } {
-  const { mcpUrl, token, repoPath } = opts
+  const { mcpUrl, repoPath } = opts
+  const token = opts.token.trim()
+  const headers = token ? { headers: { Authorization: `Bearer ${token}` } } : {}
   switch (client) {
     case 'claude-code':
       return {
         title: 'Terminal — registers the server for this project',
-        code: `claude mcp add --transport http beedocs ${mcpUrl} \\
-  -H "Authorization: Bearer ${token}"`,
+        code: token
+          ? `claude mcp add --transport http beedocs ${mcpUrl} \\
+  -H "Authorization: Bearer ${token}"`
+          : `claude mcp add --transport http beedocs ${mcpUrl}`,
         note: 'Add -s user to register it globally instead of per project.',
       }
     case 'cursor':
@@ -707,7 +711,7 @@ function mcpSnippet(
         code: JSON.stringify(
           {
             mcpServers: {
-              beedocs: { url: mcpUrl, headers: { Authorization: `Bearer ${token}` } },
+              beedocs: { url: mcpUrl, ...headers },
             },
           },
           null,
@@ -724,7 +728,7 @@ function mcpSnippet(
               beedocs: {
                 type: 'http',
                 url: mcpUrl,
-                headers: { Authorization: `Bearer ${token}` },
+                ...headers,
               },
             },
           },
@@ -740,7 +744,12 @@ function mcpSnippet(
             mcpServers: {
               beedocs: {
                 command: 'npx',
-                args: ['-y', 'mcp-remote', mcpUrl, '--header', `Authorization: Bearer ${token}`],
+                args: [
+                  '-y',
+                  'mcp-remote',
+                  mcpUrl,
+                  ...(token ? ['--header', `Authorization: Bearer ${token}`] : []),
+                ],
               },
             },
           },

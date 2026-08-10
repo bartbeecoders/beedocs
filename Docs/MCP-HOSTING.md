@@ -287,9 +287,9 @@ startup — a quick way to confirm the secret was mounted.
 `MCP_TRANSPORT` defaults to `stdio`, so the existing local setup in
 [MCP-SERVER.md](MCP-SERVER.md) keeps working untouched.
 
-`./scripts/start.sh` now also runs the HTTP transport on `:5090` with the bearer
-token `dev-token`, alongside the API and Vite. Use `SKIP_MCP=1` to leave it out,
-or `MCP_PORT` / `MCP_AUTH_TOKEN` to override.
+`./scripts/start.sh` now also runs the HTTP transport on `:5090`, alongside the
+API and Vite — with auth disabled by default. Use `SKIP_MCP=1` to leave it out,
+`MCP_PORT` to move it, or `MCP_AUTH_TOKEN` to require a bearer token.
 
 To run it by hand instead:
 

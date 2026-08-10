@@ -20,7 +20,8 @@ public sealed class BeeDocsHostOptions
 
     public int McpPort { get; set; } = 5090;
 
-    public string McpAuthToken { get; set; } = "change-me";
+    /// <summary>Bearer token for the MCP HTTP endpoint. Empty = no auth (MCP_AUTH_TOKEN unset).</summary>
+    public string McpAuthToken { get; set; } = "";
 
     /// <summary>HTTP bind address for the MCP server (passed to MCP_HTTP_HOST).</summary>
     public string McpBindHost { get; set; } = "0.0.0.0";

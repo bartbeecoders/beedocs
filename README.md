@@ -111,7 +111,7 @@ Starts all three services:
 |---------|-----|
 | API | `http://localhost:5080` (health `/api/health`) |
 | Vite UI | `http://localhost:5173` |
-| MCP (HTTP) | `http://localhost:5090/mcp` (health `/healthz`, bearer `dev-token`) |
+| MCP (HTTP) | `http://localhost:5090/mcp` (health `/healthz`, no auth by default — set `MCP_AUTH_TOKEN` to require a bearer) |
 
 Stops anything already listening on those ports first (safe re-run).  
 Ctrl+C stops all three. Logs: `scripts/.logs/`. Optional: `./scripts/stop.sh`.
@@ -123,8 +123,7 @@ transport spawn their own and don't need it running.
 Point an agent at the local HTTP server:
 
 ```bash
-claude mcp add --transport http beedocs-local http://localhost:5090/mcp \
-  -H "Authorization: Bearer dev-token"
+claude mcp add --transport http beedocs-local http://localhost:5090/mcp
 ```
 
 On a fresh clone the first run also installs MCP dependencies and builds it

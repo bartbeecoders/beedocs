@@ -29,8 +29,9 @@ There is currently no automated test suite in this repo (no test project/folder)
 ```
 
 Starts API (`:5080`), Vite UI (`:5200` in the scripts, `:5173` if run manually
-via `vite dev` — see `vite.config.ts`), and MCP over HTTP (`:5090`, bearer
-`dev-token`). It kills anything already bound to those ports first, so re-running
+via `vite dev` — see `vite.config.ts`), and MCP over HTTP (`:5090`, no auth by
+default — set `MCP_AUTH_TOKEN` to require a bearer token). It kills anything
+already bound to those ports first, so re-running
 is always a clean restart. Ctrl+C stops all three; logs land in `scripts/.logs/`.
 
 - `SKIP_MCP=1 ./scripts/start.sh` — skip the MCP HTTP process (stdio-transport agents spawn their own).

@@ -153,7 +153,7 @@ Two URLs, depending on which server you're talking to:
 
 | Target | URL | Headers |
 |---|---|---|
-| Local (`./scripts/start.sh`) | `http://localhost:5090/mcp` | `Authorization: Bearer dev-token` |
+| Local (`./scripts/start.sh`) | `http://localhost:5090/mcp` | _none by default_ (`Authorization: Bearer <token>` if you set `MCP_AUTH_TOKEN`) |
 | Hosted (K3S) | `https://mcp.<domain>/mcp` | `Authorization` + the two `CF-Access-*` headers |
 
 Hosted credentials: `./scripts/deploy-k3s.sh mcp-token` for the bearer token,
@@ -165,8 +165,7 @@ examples below show the local URL; swap in the hosted one and add the
 ### Claude Code / Claude CLI
 
 ```bash
-claude mcp add --transport http beedocs http://localhost:5090/mcp \
-  -H "Authorization: Bearer dev-token"
+claude mcp add --transport http beedocs http://localhost:5090/mcp
 ```
 
 Hosted:
@@ -494,7 +493,7 @@ its arguments up front and returns a `"complete"` result.
 
 | Symptom | Fix |
 |---------|-----|
-| `401` with a JSON-RPC error body | Bearer token is wrong. Local default is `dev-token`; hosted comes from `./scripts/deploy-k3s.sh mcp-token` |
+| `401` with a JSON-RPC error body | Bearer token is wrong. Local runs have no auth unless `MCP_AUTH_TOKEN` is set; hosted comes from `./scripts/deploy-k3s.sh mcp-token` |
 | `404 Not found. MCP endpoint is /mcp.` | URL is missing the `/mcp` path |
 | Connection refused on `:5090` | Server isn't running — `./scripts/start.sh`, or check `SKIP_MCP=1` wasn't set |
 | HTML login page instead of JSON | Hosted only: Cloudflare Access policy should be `Service Auth`, and the `CF-Access-*` headers must be present — see [MCP-HOSTING.md](MCP-HOSTING.md#troubleshooting) |
