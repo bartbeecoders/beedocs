@@ -1,8 +1,12 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
+import { api } from '../api'
+import { useAuth } from '../auth/AuthContext'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
+import { OwnerField } from './OwnerField'
+import { PageHistoryPanel } from './PageHistoryPanel'
 import { SyncedInput } from './SyncedText'
 
 type Props = {
@@ -13,6 +17,7 @@ type Props = {
 
 export function PropertiesPane({ pageState, diagramState, view }: Props) {
   const { bookId } = useParams()
+  const { canWrite } = useAuth()
   const { books } = useWorkspace()
   const book = books.find((b) => b.id === bookId)
 
@@ -59,7 +64,11 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
       <div className="props-pane">
         <h3>Page</h3>
         <Field label="Title">
-          <SyncedInput value={pageState.title} onValueChange={pageState.setTitle} />
+          {canWrite ? (
+            <SyncedInput value={pageState.title} onValueChange={pageState.setTitle} />
+          ) : (
+            <span>{pageState.title}</span>
+          )}
         </Field>
         <Field label="Slug">
           <code className="mono-block">{p?.slug ?? '—'}</code>
@@ -67,41 +76,68 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
         <Field label="Version">
           <span>{p?.version ?? '—'}</span>
         </Field>
+        <Field label="Owner">
+          <OwnerField
+            value={pageState.ownerId}
+            fallbackName={p?.ownerName}
+            onChange={pageState.setOwnerId}
+          />
+        </Field>
         <Field label="Updated">
           <span className="sm">{p ? new Date(p.updatedAt).toLocaleString() : '—'}</span>
         </Field>
-        <Field label="View mode">
-          <select
-            value={pageState.mode}
-            onChange={(e) => pageState.setMode(e.target.value as PageEditorState['mode'])}
-          >
-            <option value="edit">Edit (visual diagrams)</option>
-            <option value="source">Source (raw Markdown)</option>
-            <option value="split">Split</option>
-            <option value="preview">Preview</option>
-          </select>
-        </Field>
-        <div className="props-actions">
-          <button
-            type="button"
-            className="btn primary sm"
-            disabled={pageState.saving || !pageState.dirty}
-            onClick={() => void pageState.save()}
-          >
-            {pageState.saving ? 'Saving…' : 'Save page'}
-          </button>
-          <button type="button" className="btn danger ghost sm" onClick={() => void pageState.deletePage()}>
-            Delete
-          </button>
-        </div>
+        {p?.updatedByName && (
+          <Field label="Last changed by">
+            <span className="sm">{p.updatedByName}</span>
+          </Field>
+        )}
         <div className="props-hint">
-          <h4>Add content</h4>
-          <p className="muted sm">
-            In <strong>edit</strong> mode use the sticky <strong>Add</strong> bar (or <strong>+</strong> between
-            blocks): sections, lists, tables, BeeDiagram, Mermaid. Linked diagrams are book entities; inline
-            BeeDiagram lives only on this page.
-          </p>
+          <h4>History</h4>
+          <PageHistoryPanel pageId={p?.id ?? ''} version={p?.version} />
         </div>
+        {/* View mode, saving and the how-to-add-content note are all about
+            editing. A read-only account is shown the page's facts and nothing
+            it cannot act on. */}
+        {canWrite && (
+          <>
+            <Field label="View mode">
+              <select
+                value={pageState.mode}
+                onChange={(e) => pageState.setMode(e.target.value as PageEditorState['mode'])}
+              >
+                <option value="edit">Edit (visual diagrams)</option>
+                <option value="source">Source (raw Markdown)</option>
+                <option value="split">Split</option>
+                <option value="preview">Preview</option>
+              </select>
+            </Field>
+            <div className="props-actions">
+              <button
+                type="button"
+                className="btn primary sm"
+                disabled={pageState.saving || !pageState.dirty}
+                onClick={() => void pageState.save()}
+              >
+                {pageState.saving ? 'Saving…' : 'Save page'}
+              </button>
+              <button
+                type="button"
+                className="btn danger ghost sm"
+                onClick={() => void pageState.deletePage()}
+              >
+                Delete
+              </button>
+            </div>
+            <div className="props-hint">
+              <h4>Add content</h4>
+              <p className="muted sm">
+                In <strong>edit</strong> mode use the sticky <strong>Add</strong> bar (or{' '}
+                <strong>+</strong> between blocks): sections, lists, tables, BeeDiagram, Mermaid.
+                Linked diagrams are book entities; inline BeeDiagram lives only on this page.
+              </p>
+            </div>
+          </>
+        )}
       </div>
     )
   }
@@ -112,38 +148,48 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
       <div className="props-pane">
         <h3>Diagram</h3>
         <Field label="Title">
-          <SyncedInput value={diagramState.title} onValueChange={diagramState.setTitle} />
+          {canWrite ? (
+            <SyncedInput value={diagramState.title} onValueChange={diagramState.setTitle} />
+          ) : (
+            <span>{diagramState.title}</span>
+          )}
         </Field>
         <Field label="Kind">
-          <select
-            value={diagramState.kind}
-            onChange={(e) => diagramState.setKind(e.target.value)}
-          >
-            <option value="beediagram">BeeDiagram</option>
-            <option value="mermaid">Mermaid</option>
-            <option value="c4">C4 (Mermaid)</option>
-          </select>
+          {canWrite ? (
+            <select
+              value={diagramState.kind}
+              onChange={(e) => diagramState.setKind(e.target.value)}
+            >
+              <option value="beediagram">BeeDiagram</option>
+              <option value="mermaid">Mermaid</option>
+              <option value="c4">C4 (Mermaid)</option>
+            </select>
+          ) : (
+            <span>{diagramState.kind}</span>
+          )}
         </Field>
         <Field label="Updated">
           <span className="sm">{d ? new Date(d.updatedAt).toLocaleString() : '—'}</span>
         </Field>
-        <div className="props-actions">
-          <button
-            type="button"
-            className="btn primary sm"
-            disabled={diagramState.saving || !diagramState.dirty}
-            onClick={() => void diagramState.save()}
-          >
-            {diagramState.saving ? 'Saving…' : 'Save diagram'}
-          </button>
-          <button
-            type="button"
-            className="btn danger ghost sm"
-            onClick={() => void diagramState.deleteDiagram()}
-          >
-            Delete
-          </button>
-        </div>
+        {canWrite && (
+          <div className="props-actions">
+            <button
+              type="button"
+              className="btn primary sm"
+              disabled={diagramState.saving || !diagramState.dirty}
+              onClick={() => void diagramState.save()}
+            >
+              {diagramState.saving ? 'Saving…' : 'Save diagram'}
+            </button>
+            <button
+              type="button"
+              className="btn danger ghost sm"
+              onClick={() => void diagramState.deleteDiagram()}
+            >
+              Delete
+            </button>
+          </div>
+        )}
         <div className="props-hint">
           <h4>Markdown embed</h4>
           <pre className="embed-snippet sm">{diagramState.embedSnippet}</pre>
@@ -180,8 +226,13 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
         <Field label="Diagrams">
           <span>{book.diagrams.length}</span>
         </Field>
+        <Field label="Owner">
+          <BookOwnerField bookId={book.id} title={book.title} ownerId={book.ownerId ?? ''} ownerName={book.ownerName} />
+        </Field>
         <p className="muted sm">
-          Select a page to edit in the canvas, or create one from the tree.
+          {canWrite
+            ? 'Select a page to edit in the canvas, or create one from the tree.'
+            : 'Select a page or diagram in the tree to read it.'}
         </p>
       </div>
     )
@@ -191,7 +242,9 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
     <div className="props-pane">
       <h3>Properties</h3>
       <p className="muted sm">
-        Select a book, page, or diagram in the library to inspect and edit metadata.
+        {canWrite
+          ? 'Select a book, page, or diagram in the library to inspect and edit metadata.'
+          : 'Select a book, page, or diagram in the library to inspect its details.'}
       </p>
       <ul className="props-legend">
         <li>
@@ -205,6 +258,57 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
         </li>
       </ul>
     </div>
+  )
+}
+
+/**
+ * A book has no editor to save through, so its owner is written on change.
+ * The title rides along because the API requires it on every book update.
+ */
+function BookOwnerField({
+  bookId,
+  title,
+  ownerId,
+  ownerName,
+}: {
+  bookId: string
+  title: string
+  ownerId: string
+  ownerName?: string | null
+}) {
+  const { refreshTree } = useWorkspace()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const assign = async (next: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.updateBook(bookId, { title, ownerId: next })
+      // The tree carries the book DTO the pane renders from, so it has to be the
+      // thing that learns about the new owner.
+      await refreshTree()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <OwnerField
+        value={ownerId}
+        fallbackName={ownerName}
+        disabled={busy}
+        onChange={(next) => void assign(next)}
+      />
+      {error && (
+        <span className="users-error" role="alert">
+          {error}
+        </span>
+      )}
+    </>
   )
 }
 

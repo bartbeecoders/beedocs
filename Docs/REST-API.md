@@ -93,6 +93,8 @@ Response (`201` when something was created, `200` when both already existed):
     "slug": "application1",
     "description": "Runtime docs for Application1",
     "sortOrder": 0,
+    "ownerId": null,
+    "ownerName": null,
     "createdAt": "…",
     "updatedAt": "…"
   },
@@ -103,6 +105,10 @@ Response (`201` when something was created, `200` when both already existed):
     "slug": "configuration",
     "content": "# Configuration\n\n…",
     "version": 1,
+    "ownerId": null,
+    "ownerName": null,
+    "updatedById": null,
+    "updatedByName": "API key",
     "createdAt": "…",
     "updatedAt": "…"
   },
@@ -112,6 +118,13 @@ Response (`201` when something was created, `200` when both already existed):
 ```
 
 Omitting `slug` derives it from `title` (`Application1` → `application1`).
+
+**Ownership and history.** Publishing never reassigns a document: a republish
+leaves `ownerId` exactly as it was, and a book or page created through this API
+is unowned unless an account is behind the call. Every write does append to the
+page's change log — an API-key caller is recorded as `"API key"` rather than as a
+person, since the key is not an account. See
+[USERS-AND-ROLES.md](./USERS-AND-ROLES.md).
 
 ---
 

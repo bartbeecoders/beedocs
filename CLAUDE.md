@@ -94,11 +94,11 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
 - **BeeDocs.Api** is a single-file minimal-API (`Program.cs`) mapping `/api/books`,
   `/api/books/{id}/chapters`, `/api/books/{id}/pages`, `/api/pages/{id}`,
   `/api/books/{id}/diagrams`, `/api/diagrams/{id}`, `/api/uploads`, `/api/search`,
-  plus `/api/health` and `/api/version`. Business logic lives in `Services/`
+  `/api/auth/*`, `/api/users/*`, plus `/api/health` and `/api/version`.
+  Business logic lives in `Services/`
   (`DocumentService` for books/chapters/pages, `DiagramService` for diagrams);
   entities are in `Models/Entities.cs` (`Book`, `Chapter`, `Page`,
-  `PageRevision`, `Diagram` — plain POCOs with string ids). Every page
-  update writes a `PageRevision` snapshot.
+  `PageRevision`, `Diagram` — plain POCOs with string ids).
 - **SQLite** is file-backed by default (`data/sqlite/beedocs.db` under the API
   content root, directory configurable via `BeeDocs:DataPath`, or a full
   `ConnectionStrings:Sqlite`). There is no separate DB server.
@@ -141,6 +141,44 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `src/BeeDocs.Mcp/diagram-catalog.json`, which the MCP server embeds — so a new
   shape reaches AI agents without a second edit. Regenerate + `dotnet build`
   BeeDocs.Mcp after touching those files.
+- **Ownership & page history** — `book.owner_id` / `page.owner_id` name the
+  account answerable for a document (a page inherits its book's owner at
+  creation, falling back to its creator); neither grants any permission, which
+  stays purely role-based. `page_revision` is the page's **change log**: one row
+  per change holding the state the page was *left in*, plus `changed_by` and a
+  `changed_by_name` snapshot that survives a rename or a deleted account. The
+  newest row therefore mirrors the live page, which is where `PageDto`'s
+  `updatedByName` comes from — no extra column. Served by
+  `GET /api/pages/{id}/history` and rendered in the properties pane.
+  `ICurrentUserAccessor` is how the singleton `DocumentService` reaches the acting
+  user without an actor parameter on every method of four interfaces.
+  Rows written before the log existed are labelled `change_kind = 'legacy'` by the
+  migration rather than reinterpreted — they hold the state a page moved *away*
+  from. New columns reach existing databases through `AddColumnIfMissingAsync` in
+  `DatabaseInitializer`; `CREATE TABLE IF NOT EXISTS` alone would skip them.
+  See `Docs/USERS-AND-ROLES.md`.
+- **Users & roles** (`Services/UserService.cs`, `PasswordHasher.cs`,
+  `AuthEndpointFilter.cs`, `auth/AuthContext.tsx`, `components/UsersPanel.tsx`)
+  — accounts in `app_user`, sessions in `user_session`, three fixed roles
+  (`UserRoles`: admin / editor / viewer). Passwords are PBKDF2-HMAC-SHA256 with
+  the parameters stored alongside the hash, so the cost can be raised later and
+  each row upgrades on its owner's next sign-in; the column is selected only on
+  the login and change-password paths and never reaches a DTO. **Enforcement is
+  opt-in** (`BeeDocs:Auth:Enabled`, default off) — the tables and the seeded
+  admin exist either way, so the flag can be flipped without a migration.
+  `RequestAuthenticator` resolves a caller once and is shared by the `/api`
+  endpoint filter and the `/uploads` middleware (static files answer before any
+  endpoint filter, so gating pages without gating uploads would be no gate at
+  all). The default rule is read-for-everyone / write-for-editors; only
+  `/api/users` and the LLM provider routes carry `RequireRole.Admin` metadata.
+  `BeeDocs:ApiKey` authenticates a *machine* (MCP, publishing apps) as admin —
+  MCP passes it via `BEEDOCS_API_KEY`. Nothing is seeded: an empty `app_user`
+  table means the instance is *unclaimed*, and `POST /api/auth/setup`
+  (`SetupScreen.tsx`, gated on `authEnabled && setupRequired` from
+  `/api/auth/me`) creates its first admin with a chosen password and signs them
+  in. That endpoint's emptiness check lives inside the `INSERT … WHERE NOT
+  EXISTS`, so concurrent claims cannot both win; it answers 409 forever after.
+  See `Docs/USERS-AND-ROLES.md`.
 - **LLM writing help** (`/api/llm`, `Services/LlmProviderService.cs` +
   `LlmClient.cs`, `components/AiAssist.tsx` + `hooks/useLlmAssist.ts`) — inline
   autocomplete and selection actions (rewrite / grammar / format / summarize) in
@@ -185,5 +223,6 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/MCP-HOSTING.md` — running the MCP server on K3S behind Cloudflare Access.
 - `Docs/MCP-TOOLS.md` — full MCP tool/resource/prompt catalog.
 - `Docs/DIAGRAM-STUDIO.md` — BeeDiagram Studio editor interactions and JSON format.
+- `Docs/USERS-AND-ROLES.md` — accounts, roles, sessions, and the opt-in sign-in wall.
 - `Docs/LLM-PROVIDERS.md` — LLM providers, key storage, and the `/api/llm` security trade-off.
 - `Vibecoding/Instructions.md` — product goals/vision behind the MVP.

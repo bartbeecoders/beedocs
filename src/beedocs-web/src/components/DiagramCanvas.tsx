@@ -3,9 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { useTheme } from '../theme'
+import { useAuth } from '../auth/AuthContext'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { Diagram } from '../types'
 import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
+import { BeeDiagramView } from './BeeDiagramView'
 import { MarkdownView } from './MarkdownView'
 
 export type DiagramEditorState = {
@@ -33,6 +35,7 @@ export function DiagramCanvas({ onStateChange }: Props) {
   const navigate = useNavigate()
   const { renameInTree, deleteDiagram: deleteFromTree } = useWorkspace()
   const { autoSaveEnabled } = useTheme()
+  const { canWrite } = useAuth()
   const [diagram, setDiagram] = useState<Diagram | null>(null)
   const [title, setTitle] = useState('')
   const [source, setSource] = useState('')
@@ -225,21 +228,25 @@ export function DiagramCanvas({ onStateChange }: Props) {
     <div className="diagram-canvas">
       <div className="canvas-toolbar">
         <div className="canvas-heading">
-          <input
-            className="canvas-title"
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value)
-              setDirty(true)
-            }}
-            placeholder="Diagram title"
-          />
+          {canWrite ? (
+            <input
+              className="canvas-title"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value)
+                setDirty(true)
+              }}
+              placeholder="Diagram title"
+            />
+          ) : (
+            <span className="canvas-title">{title}</span>
+          )}
           <div className="canvas-meta">
             <span>{kind}</span>
             {statusLabel && (
               <span className={dirty && !saving ? 'dirty-dot' : undefined}>· {statusLabel}</span>
             )}
-            {autoSaveEnabled && (
+            {autoSaveEnabled && canWrite && (
               <span className="muted save-hint" title="Ctrl/Cmd+S to save immediately">
                 · auto-save on
               </span>
@@ -247,25 +254,48 @@ export function DiagramCanvas({ onStateChange }: Props) {
           </div>
         </div>
         <div className="toolbar-group">
-          <select
-            value={kind}
-            onChange={(e) => {
-              setKind(e.target.value)
-              setDirty(true)
-            }}
-            aria-label="Diagram kind"
-          >
-            <option value="beediagram">BeeDiagram</option>
-            <option value="mermaid">Mermaid</option>
-            <option value="c4">C4 (Mermaid)</option>
-          </select>
-          <button type="button" className="btn primary sm" disabled={saving || !dirty} onClick={() => void save()}>
-            {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
-          </button>
+          {canWrite ? (
+            <>
+              <select
+                value={kind}
+                onChange={(e) => {
+                  setKind(e.target.value)
+                  setDirty(true)
+                }}
+                aria-label="Diagram kind"
+              >
+                <option value="beediagram">BeeDiagram</option>
+                <option value="mermaid">Mermaid</option>
+                <option value="c4">C4 (Mermaid)</option>
+              </select>
+              <button
+                type="button"
+                className="btn primary sm"
+                disabled={saving || !dirty}
+                onClick={() => void save()}
+              >
+                {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+              </button>
+            </>
+          ) : (
+            <span className="ws-theme-pill" title="Your account has read-only access">
+              Read-only
+            </span>
+          )}
         </div>
       </div>
       {error && <div className="banner error compact">{error}</div>}
-      {kind === 'beediagram' ? (
+      {/* Read-only accounts get the rendered diagram, not the studio: the
+          workbench is an editor whose every change would fail at save. */}
+      {!canWrite ? (
+        <div className="editor-preview diagram-readonly">
+          {kind === 'beediagram' ? (
+            <BeeDiagramView source={source} />
+          ) : (
+            <MarkdownView content={'```mermaid\n' + source + '\n```'} />
+          )}
+        </div>
+      ) : kind === 'beediagram' ? (
         <BeeDiagramWorkbench
           bookId={bookId}
           source={source}

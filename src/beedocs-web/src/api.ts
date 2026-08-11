@@ -1,6 +1,12 @@
 import type {
+  AuthState,
   Book,
   Chapter,
+  CreateUserRequest,
+  SetUserPasswordResult,
+  UpdateUserRequest,
+  User,
+  UserSummary,
   Diagram,
   DiagramSummary,
   ExportFormat,
@@ -15,6 +21,7 @@ import type {
   LlmTestResult,
   UpdateLlmProviderRequest,
   Page,
+  PageHistory,
   PageSummary,
   SearchKind,
   SearchResponse,
@@ -80,6 +87,31 @@ const DEFAULT_TIMEOUT_MS = 30_000
 
 type RequestInitWithTimeout = RequestInit & { timeoutMs?: number }
 
+/**
+ * A session can expire, be revoked by an admin, or die with the account behind
+ * it, and the first the UI hears of any of that is a 401 on whatever it happened
+ * to be doing. Rather than teach ~40 call sites to recognise it, every response
+ * passes through here and one listener (AuthProvider) turns it back into the
+ * login screen.
+ */
+type UnauthorizedListener = () => void
+
+const unauthorizedListeners = new Set<UnauthorizedListener>()
+
+export function onUnauthorized(listener: UnauthorizedListener): () => void {
+  unauthorizedListeners.add(listener)
+  return () => unauthorizedListeners.delete(listener)
+}
+
+/**
+ * `/api/auth/*` is exempt: a failed sign-in is a 401 the form is showing a
+ * message for, not a session that just died.
+ */
+function notifyUnauthorized(path: string) {
+  if (path.startsWith('/api/auth/')) return
+  for (const listener of unauthorizedListeners) listener()
+}
+
 async function request<T>(path: string, init?: RequestInitWithTimeout): Promise<T> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...rest } = init ?? {}
   const deadline = AbortSignal.timeout(timeoutMs)
@@ -104,6 +136,8 @@ async function request<T>(path: string, init?: RequestInitWithTimeout): Promise<
     throw e
   }
 
+  if (res.status === 401) notifyUnauthorized(path)
+
   // errorText, not res.text(): every caller that wanted a readable message was
   // re-implementing the same ValidationProblem unwrap on the thrown string, and
   // a 404 with an empty body still arrived as "" and rendered as nothing.
@@ -115,6 +149,66 @@ async function request<T>(path: string, init?: RequestInitWithTimeout): Promise<
 export const api = {
   getVersion: () => request<{ version: string }>('/api/version'),
   getHealth: () => request<{ status: string; service?: string; version?: string }>('/api/health'),
+
+  /**
+   * Sign-in state. The app's first call, and the only one that is safe to make
+   * before knowing whether there is a session: it answers "nobody" rather than
+   * 401ing, which is what lets the shell decide between login and workspace.
+   */
+  getAuthState: () => request<AuthState>('/api/auth/me'),
+
+  /** 401 on bad credentials, a disabled account, or an unknown user — deliberately indistinguishable. */
+  login: (username: string, password: string) =>
+    request<AuthState>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+
+  /**
+   * First-run claim: creates the instance's admin and signs it in. 409 once any
+   * account exists, so this cannot be replayed to mint a second administrator.
+   */
+  setup: (username: string, password: string, displayName?: string) =>
+    request<AuthState>('/api/auth/setup', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, displayName: displayName || undefined }),
+    }),
+
+  logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
+
+  /**
+   * Change your own password. Every other session for the account is dropped;
+   * this browser is re-issued a cookie, so it stays signed in.
+   */
+  changeOwnPassword: (currentPassword: string, newPassword: string) =>
+    request<AuthState>('/api/auth/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+
+  /**
+   * Enabled accounts, id and name only — what an owner picker needs. Readable by
+   * every signed-in role, unlike listUsers below.
+   */
+  listUserDirectory: () => request<UserSummary[]>('/api/users/directory'),
+
+  /** Account management. Admin-only server-side, including the reads. */
+  listUsers: () => request<User[]>('/api/users'),
+  createUser: (body: CreateUserRequest) =>
+    request<User>('/api/users', { method: 'POST', body: JSON.stringify(body) }),
+  updateUser: (id: string, body: UpdateUserRequest) =>
+    request<User>(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteUser: (id: string) => request<void>(`/api/users/${id}`, { method: 'DELETE' }),
+
+  /**
+   * Admin reset. Omit `password` to have one generated — it comes back in
+   * `password` exactly once and is unrecoverable afterwards.
+   */
+  setUserPassword: (id: string, body: { password?: string; mustChangePassword?: boolean }) =>
+    request<SetUserPasswordResult>(`/api/users/${id}/password`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 
   /**
    * Full-text search over books, folders, pages and diagrams. `signal` lets the
@@ -145,10 +239,13 @@ export const api = {
 
   listBooks: () => request<Book[]>('/api/books'),
   getBook: (id: string) => request<Book>(`/api/books/${id}`),
-  createBook: (body: { title: string; description?: string; slug?: string }) =>
+  createBook: (body: { title: string; description?: string; slug?: string; ownerId?: string }) =>
     request<Book>('/api/books', { method: 'POST', body: JSON.stringify(body) }),
-  updateBook: (id: string, body: { title: string; description?: string; slug?: string }) =>
-    request<Book>(`/api/books/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  /** `ownerId`: omit to leave the owner alone, "" to clear it. */
+  updateBook: (
+    id: string,
+    body: { title: string; description?: string; slug?: string; ownerId?: string | null },
+  ) => request<Book>(`/api/books/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteBook: (id: string) => request<void>(`/api/books/${id}`, { method: 'DELETE' }),
 
   listChapters: (bookId: string) => request<Chapter[]>(`/api/books/${bookId}/chapters`),
@@ -171,6 +268,8 @@ export const api = {
       slug?: string
       chapterId?: string
       sortOrder?: number
+      /** Omit to inherit the book's owner. */
+      ownerId?: string
     },
   ) =>
     request<Page>(`/api/books/${bookId}/pages`, {
@@ -186,9 +285,18 @@ export const api = {
       /** Pass "" to clear folder assignment */
       chapterId?: string | null
       sortOrder?: number
+      /** Omit to leave the owner alone; "" clears it. */
+      ownerId?: string | null
     },
   ) => request<Page>(`/api/pages/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deletePage: (id: string) => request<void>(`/api/pages/${id}`, { method: 'DELETE' }),
+
+  /**
+   * The page's change log, newest first. The first entry matches the page's live
+   * version — every save adds one.
+   */
+  getPageHistory: (id: string, limit?: number) =>
+    request<PageHistory>(`/api/pages/${id}/history${limit ? `?limit=${limit}` : ''}`),
 
   listDiagrams: (bookId: string) => request<DiagramSummary[]>(`/api/books/${bookId}/diagrams`),
   listPageDiagrams: (pageId: string) => request<DiagramSummary[]>(`/api/pages/${pageId}/diagrams`),

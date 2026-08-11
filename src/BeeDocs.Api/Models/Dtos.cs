@@ -2,27 +2,35 @@ using System.ComponentModel.DataAnnotations;
 
 namespace BeeDocs.Api.Models;
 
+/// <param name="OwnerId">Account responsible for the book, or null when nobody was identified.</param>
+/// <param name="OwnerName">That account's display name, resolved for the client. Null when the account is gone.</param>
 public sealed record BookDto(
     string Id,
     string Title,
     string? Description,
     string Slug,
     int SortOrder,
+    string? OwnerId,
+    string? OwnerName,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
 );
 
+/// <param name="OwnerId">Omit to take the caller as owner.</param>
 public sealed record CreateBookRequest(
     [property: Required, MinLength(1)] string Title,
     string? Description,
-    string? Slug
+    string? Slug,
+    string? OwnerId = null
 );
 
+/// <param name="OwnerId">null leaves the owner untouched; "" clears it; anything else replaces it.</param>
 public sealed record UpdateBookRequest(
     [property: Required, MinLength(1)] string Title,
     string? Description,
     string? Slug,
-    int? SortOrder
+    int? SortOrder,
+    string? OwnerId = null
 );
 
 public sealed record ChapterDto(
@@ -55,9 +63,13 @@ public sealed record PageSummaryDto(
     string Slug,
     int SortOrder,
     int Version,
+    string? OwnerId,
+    string? OwnerName,
     DateTimeOffset UpdatedAt
 );
 
+/// <param name="OwnerId">Account responsible for the page. Inherited from the book on create.</param>
+/// <param name="UpdatedById">Who made the most recent change. Null on pages last changed before history was recorded.</param>
 public sealed record PageDto(
     string Id,
     string BookId,
@@ -67,24 +79,59 @@ public sealed record PageDto(
     string Content,
     int SortOrder,
     int Version,
+    string? OwnerId,
+    string? OwnerName,
+    string? UpdatedById,
+    string? UpdatedByName,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
 );
 
+/// <param name="OwnerId">Omit to inherit the book's owner, falling back to the caller.</param>
 public sealed record CreatePageRequest(
     [property: Required, MinLength(1)] string Title,
     string? Slug,
     string? Content,
     string? ChapterId,
-    int? SortOrder
+    int? SortOrder,
+    string? OwnerId = null
 );
 
+/// <param name="OwnerId">null leaves the owner untouched; "" clears it; anything else replaces it.</param>
 public sealed record UpdatePageRequest(
     [property: Required, MinLength(1)] string Title,
     string? Slug,
     string? Content,
     string? ChapterId,
-    int? SortOrder
+    int? SortOrder,
+    string? OwnerId = null
+);
+
+/// <summary>
+/// One change to a page: what version it produced, when, and who made it.
+/// </summary>
+/// <param name="Version">The page version this change produced.</param>
+/// <param name="Title">The page's title after the change.</param>
+/// <param name="ChangeKind">created | updated.</param>
+/// <param name="ChangedById">Null for an API-key caller, for changes made while sign-in was off, and for history recorded before this feature existed.</param>
+/// <param name="ChangedByName">Display name captured at the time of the change.</param>
+/// <param name="IsCurrent">True for the entry matching the page's live version.</param>
+public sealed record PageHistoryEntryDto(
+    string Id,
+    int Version,
+    string Title,
+    string ChangeKind,
+    string? ChangedById,
+    string? ChangedByName,
+    DateTimeOffset ChangedAt,
+    bool IsCurrent
+);
+
+public sealed record PageHistoryDto(
+    string PageId,
+    string Title,
+    int Version,
+    IReadOnlyList<PageHistoryEntryDto> Entries
 );
 
 // --- External publish API (slug-based, /api/v1) ---
@@ -348,4 +395,123 @@ public sealed record LlmTestResultDto(
     /// <summary>Model count the provider reported, when the call got that far.</summary>
     int? ModelCount,
     int ElapsedMs
+);
+
+// --- Users, roles & sign-in ---
+
+/// <summary>
+/// An account as every client sees it. There is deliberately no password field in
+/// either direction of this record — the hash is selected in exactly one place
+/// (<see cref="Services.UserService"/>'s login path) and never reaches a DTO.
+/// </summary>
+/// <param name="Role">admin | editor | viewer.</param>
+/// <param name="MustChangePassword">Set for the seeded admin and after an admin reset.</param>
+/// <summary>
+/// The minimum needed to name an account: what an owner picker shows. Available
+/// to every signed-in role, unlike <see cref="UserDto"/> — you cannot assign an
+/// owner you are not allowed to name.
+/// </summary>
+public sealed record UserSummaryDto(
+    string Id,
+    string Username,
+    string? DisplayName,
+    string Role
+);
+
+public sealed record UserDto(
+    string Id,
+    string Username,
+    string? DisplayName,
+    string? Email,
+    string Role,
+    bool Enabled,
+    bool MustChangePassword,
+    DateTimeOffset? LastLoginAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="Role">Defaults to viewer — the role that cannot break anything.</param>
+public sealed record CreateUserRequest(
+    [property: Required, MinLength(1)] string Username,
+    [property: Required, MinLength(1)] string Password,
+    string? DisplayName,
+    string? Email,
+    string? Role,
+    bool? Enabled,
+    bool? MustChangePassword
+);
+
+/// <summary>Every field is optional: omitted means "leave as it is".</summary>
+public sealed record UpdateUserRequest(
+    string? Username,
+    string? DisplayName,
+    string? Email,
+    string? Role,
+    bool? Enabled
+);
+
+/// <summary>Admin-initiated reset. Omit <paramref name="Password"/> to have one generated.</summary>
+public sealed record SetUserPasswordRequest(
+    string? Password,
+    bool? MustChangePassword
+);
+
+/// <param name="Password">The new password, echoed back only when the server generated it.</param>
+public sealed record SetUserPasswordResultDto(
+    UserDto User,
+    string? Password
+);
+
+/// <summary>
+/// The first-run claim: the account the person setting the instance up chooses
+/// for themselves. Accepted only while no account exists.
+/// </summary>
+public sealed record SetupRequest(
+    [property: Required, MinLength(1)] string Username,
+    [property: Required, MinLength(1)] string Password,
+    string? DisplayName
+);
+
+public sealed record LoginRequest(
+    [property: Required, MinLength(1)] string Username,
+    [property: Required, MinLength(1)] string Password
+);
+
+public sealed record ChangePasswordRequest(
+    [property: Required, MinLength(1)] string CurrentPassword,
+    [property: Required, MinLength(1)] string NewPassword
+);
+
+/// <summary>
+/// What the caller may do, resolved server-side. The UI hides affordances from
+/// these rather than re-deriving the role rules, so there is one implementation.
+/// </summary>
+public sealed record AuthPermissionsDto(
+    bool CanRead,
+    bool CanWrite,
+    bool CanManageUsers
+);
+
+/// <summary>
+/// The answer to "who am I, and is any of this switched on" — the SPA's first
+/// call, and the reason it can render a login screen or skip straight past one.
+/// </summary>
+/// <param name="AuthEnabled">False when BeeDocs:Auth:Enabled is off: nothing is gated.</param>
+/// <param name="Via">session | apiKey | open.</param>
+/// <param name="User">Null for an API-key caller and when auth is off.</param>
+/// <param name="SetupRequired">
+/// No account exists yet, so the instance is unclaimed and
+/// <c>POST /api/auth/setup</c> is open. Reported whatever
+/// <paramref name="AuthEnabled"/> says — an instance running openly has simply
+/// never needed one — so a client that wants to show a setup screen should
+/// require both.
+/// </param>
+public sealed record AuthStateDto(
+    bool AuthEnabled,
+    bool Authenticated,
+    string Via,
+    UserDto? User,
+    AuthPermissionsDto Permissions,
+    bool SetupRequired
 );

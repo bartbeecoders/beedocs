@@ -4,6 +4,7 @@ import { api } from '../api'
 import { exportBookToPdf, exportPageToPdf } from '../export/pdf'
 import { ImportDialog } from './ImportDialog'
 import type { ExportFormat } from '../types'
+import { useAuth } from '../auth/AuthContext'
 import { useWorkspace, type TreeBook } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
 import type { Chapter, DiagramSummary, PageSummary } from '../types'
@@ -74,6 +75,7 @@ export function NavTree() {
   } = useWorkspace()
   const navigate = useNavigate()
   const params = useParams()
+  const { canWrite } = useAuth()
   const [newBookOpen, setNewBookOpen] = useState(false)
   const [bookTitle, setBookTitle] = useState('')
   const [creatingIn, setCreatingIn] = useState<Creating | null>(null)
@@ -250,17 +252,26 @@ export function NavTree() {
   return (
     <div className="nav-tree">
       <div className="nav-tree-actions">
-        <button type="button" className="btn primary sm" onClick={() => setNewBookOpen((v) => !v)}>
-          New book
-        </button>
-        <button
-          type="button"
-          className="btn sm"
-          onClick={() => setImportOpen({})}
-          title="Import a BeeDocs archive, a zip of Markdown, or a single .md file"
-        >
-          Import
-        </button>
+        {/* A read-only account gets a library to browse, not to add to. */}
+        {canWrite && (
+          <>
+            <button
+              type="button"
+              className="btn primary sm"
+              onClick={() => setNewBookOpen((v) => !v)}
+            >
+              New book
+            </button>
+            <button
+              type="button"
+              className="btn sm"
+              onClick={() => setImportOpen({})}
+              title="Import a BeeDocs archive, a zip of Markdown, or a single .md file"
+            >
+              Import
+            </button>
+          </>
+        )}
         <button type="button" className="icon-btn" onClick={() => void refreshTree()} title="Refresh">
           ↻
         </button>
@@ -327,7 +338,11 @@ export function NavTree() {
       {!loading && books.length === 0 && (
         <div className="empty-tree">
           <p>No books yet.</p>
-          <p className="muted sm">Create a book to start documenting architecture.</p>
+          <p className="muted sm">
+            {canWrite
+              ? 'Create a book to start documenting architecture.'
+              : 'Nothing has been published to this instance yet.'}
+          </p>
         </div>
       )}
 
@@ -338,6 +353,7 @@ export function NavTree() {
               <div className="tree-context-heading">{menu.title}</div>
               <MenuItem
                 label="New page"
+                write
                 onClick={() => {
                   setCreatingIn({ bookId: menu.bookId, kind: 'page' })
                   setMenu(null)
@@ -345,6 +361,7 @@ export function NavTree() {
               />
               <MenuItem
                 label="New folder"
+                write
                 onClick={() => {
                   setCreatingIn({ bookId: menu.bookId, kind: 'folder' })
                   setMenu(null)
@@ -352,6 +369,7 @@ export function NavTree() {
               />
               <MenuItem
                 label="New diagram"
+                write
                 onClick={() => {
                   setCreatingIn({ bookId: menu.bookId, kind: 'diagram' })
                   setMenu(null)
@@ -364,6 +382,7 @@ export function NavTree() {
               />
               <MenuItem
                 label="Import into this book…"
+                write
                 onClick={() => {
                   setImportOpen({ targetBookId: menu.bookId })
                   setMenu(null)
@@ -380,6 +399,7 @@ export function NavTree() {
               <div className="tree-context-sep" />
               <MenuItem
                 label="Delete book"
+                write
                 danger
                 onClick={() => {
                   if (confirm(`Delete book “${menu.title}”?`)) {
@@ -397,6 +417,7 @@ export function NavTree() {
               <div className="tree-context-heading">📁 {menu.title}</div>
               <MenuItem
                 label="New page in folder"
+                write
                 onClick={() => {
                   setCreatingIn({ bookId: menu.bookId, kind: 'page', chapterId: menu.chapterId })
                   setMenu(null)
@@ -404,6 +425,7 @@ export function NavTree() {
               />
               <MenuItem
                 label="Rename folder"
+                write
                 onClick={() => {
                   const t = window.prompt('Folder name', menu.title)?.trim()
                   if (t) void renameFolder(menu.chapterId, menu.bookId, t)
@@ -413,6 +435,7 @@ export function NavTree() {
               <div className="tree-context-sep" />
               <MenuItem
                 label="Delete folder"
+                write
                 danger
                 onClick={() => {
                   if (
@@ -439,6 +462,7 @@ export function NavTree() {
               />
               <MenuItem
                 label="Move to book root"
+                write
                 disabled={menu.chapterId == null}
                 onClick={() => {
                   void movePage({
@@ -457,6 +481,7 @@ export function NavTree() {
               <div className="tree-context-sep" />
               <MenuItem
                 label="Delete page"
+                write
                 danger
                 onClick={() => {
                   if (confirm(`Delete page “${menu.title}”?`)) {
@@ -482,6 +507,7 @@ export function NavTree() {
               <div className="tree-context-sep" />
               <MenuItem
                 label="Delete diagram"
+                write
                 danger
                 onClick={() => {
                   if (confirm(`Delete diagram “${menu.title}”?`)) {
@@ -542,12 +568,22 @@ function MenuItem({
   onClick,
   danger,
   disabled,
+  write,
 }: {
   label: string
   onClick: () => void
   danger?: boolean
   disabled?: boolean
+  /**
+   * This item changes something. A read-only account never sees it — disabling
+   * instead would show a menu of things the account is being refused, and the
+   * check lives here so each of the eleven call sites stays one line.
+   */
+  write?: boolean
 }) {
+  const { canWrite } = useAuth()
+  if (write && !canWrite) return null
+
   return (
     <button
       type="button"
@@ -786,6 +822,7 @@ function FolderNode({
     e: React.DragEvent,
   ) => Promise<void>
 }) {
+  const { canWrite } = useAuth()
   const dropId = `folder:${folder.id}`
   const folderSelected =
     selection.kind === 'folder' && selection.chapterId === folder.id
@@ -797,7 +834,7 @@ function FolderNode({
     <li className="tree-folder">
       <div
         className={`tree-row child folder-row${folderSelected ? ' active' : ''}${dragOver === dropId ? ' drag-over' : ''}`}
-        draggable
+        draggable={canWrite}
         onDragStart={(e) =>
           onDragStart(e, { type: 'folder', chapterId: folder.id, bookId: book.id })
         }
@@ -903,6 +940,7 @@ function PageRow({
   ) => Promise<void>
   onSelect: () => void
 }) {
+  const { canWrite } = useAuth()
   const beforeId = `page-before:${page.id}`
   const afterId = `page-after:${page.id}`
   return (
@@ -919,7 +957,7 @@ function PageRow({
       />
       <div
         className={`tree-row child ${active ? 'active' : ''}${dragOver === `page:${page.id}` ? ' drag-over' : ''}`}
-        draggable
+        draggable={canWrite}
         onDragStart={(e) =>
           onDragStart(e, {
             type: 'page',

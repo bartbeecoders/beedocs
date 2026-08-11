@@ -77,7 +77,30 @@ cd src/BeeDocs.Mcp && dotnet run
 # API must be running on :5080
 ```
 
-Full setup for Cursor, Claude Desktop, Claude Code, VS Code: **[Docs/MCP-SERVER.md](Docs/MCP-SERVER.md)**  
+Full setup for Cursor, Claude Desktop, Claude Code, VS Code: **[Docs/MCP-SERVER.md](Docs/MCP-SERVER.md)**
+
+## Users & roles
+
+BeeDocs has accounts with three roles — **admin** (everything, plus account and
+AI-provider settings), **editor** (create/edit/delete content) and **viewer**
+(read, search, export). Passwords are stored as PBKDF2 hashes.
+
+Sign-in is **off by default**, so an existing deployment keeps working exactly as
+it did. Turn it on and every `/api` route and uploaded file needs a signed-in
+account:
+
+```bash
+BeeDocs__Auth__Enabled=true
+BeeDocs__ApiKey=$(openssl rand -hex 24)   # so MCP and publishing apps can still authenticate
+```
+
+An instance with no accounts is *unclaimed*: the browser shows a one-time setup
+screen where you create the administrator with a password you choose, and signs
+you straight in. Nothing is seeded and no password is written to disk — so claim
+a new instance before leaving it reachable, since the first visitor to reach it
+becomes the admin.
+
+Full reference: **[Docs/USERS-AND-ROLES.md](Docs/USERS-AND-ROLES.md)**  
 Tool catalog: **[Docs/MCP-TOOLS.md](Docs/MCP-TOOLS.md)**  
 Hosted MCP over HTTP + Cloudflare Access: **[Docs/MCP-HOSTING.md](Docs/MCP-HOSTING.md)**
 

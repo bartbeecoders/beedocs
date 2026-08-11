@@ -37,18 +37,46 @@ public interface IDocumentService
 
     /// <summary>Ensure book + write page in one call (idempotent by slugs).</summary>
     Task<PublishDocumentResult> PublishDocumentAsync(PublishDocumentRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// The page's change log, newest first: one entry per change, with who made
+    /// it and when. Null when the page does not exist.
+    /// </summary>
+    Task<PageHistoryDto?> GetPageHistoryAsync(string id, int limit = 100, CancellationToken ct = default);
 }
 
-public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentService
+public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAccessor currentUser) : IDocumentService
 {
+    /// <summary>Book columns, plus the owner's display name resolved for the client.</summary>
+    private const string BookSelect = """
+        SELECT b.id, b.title, b.description, b.slug, b.sort_order, b.owner_id, b.created_at, b.updated_at,
+               COALESCE(NULLIF(TRIM(u.display_name), ''), u.username) AS owner_name
+        FROM book b
+        LEFT JOIN app_user u ON u.id = b.owner_id
+        """;
+
+    /// <summary>
+    /// Page columns, plus the owner's name and the author of the newest change.
+    /// The change log's row for the page's current version *is* its last change,
+    /// so "who touched this last" needs no extra column on the page itself.
+    /// </summary>
+    private const string PageSelect = """
+        SELECT p.id, p.book_id, p.chapter_id, p.title, p.slug, p.content, p.sort_order, p.version,
+               p.owner_id, p.created_at, p.updated_at,
+               COALESCE(NULLIF(TRIM(uo.display_name), ''), uo.username) AS owner_name,
+               r.changed_by, r.changed_by_name
+        FROM page p
+        LEFT JOIN app_user uo ON uo.id = p.owner_id
+        LEFT JOIN page_revision r ON r.page_id = p.id AND r.version = p.version
+        """;
+
     public async Task<IReadOnlyList<BookDto>> ListBooksAsync(CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT id, title, description, slug, sort_order, created_at, updated_at
-            FROM book
-            ORDER BY sort_order, title COLLATE NOCASE
+        cmd.CommandText = $"""
+            {BookSelect}
+            ORDER BY b.sort_order, b.title COLLATE NOCASE
             """;
         var list = new List<BookDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -60,8 +88,11 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
     public async Task<BookDto?> GetBookAsync(string id, CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
-        var book = await SelectBookAsync(conn, id, ct);
-        return book is null ? null : ToDto(book);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"{BookSelect} WHERE b.id = $id LIMIT 1";
+        SqliteHelpers.Add(cmd, "$id", id);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? ReadBookDto(reader) : null;
     }
 
     public async Task<BookDto?> GetBookBySlugAsync(string slug, CancellationToken ct = default)
@@ -69,10 +100,7 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         var want = SlugHelper.Slugify(slug);
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT id, title, description, slug, sort_order, created_at, updated_at
-            FROM book WHERE lower(slug) = lower($slug) LIMIT 1
-            """;
+        cmd.CommandText = $"{BookSelect} WHERE lower(b.slug) = lower($slug) LIMIT 1";
         SqliteHelpers.Add(cmd, "$slug", want);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return null;
@@ -87,6 +115,10 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
             ? await UniqueBookSlugAsync(conn, SlugHelper.Slugify(request.Title), ct)
             : SlugHelper.Slugify(request.Slug);
 
+        // A book with no owner is a book nobody is answerable for, so the caller
+        // takes it unless they said otherwise. Stays null when nobody is
+        // identified — sign-in off, or an API-key caller.
+        var actor = currentUser.Current;
         var book = new Book
         {
             Id = SqliteHelpers.NewId(),
@@ -94,12 +126,13 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
             Description = request.Description?.Trim(),
             Slug = slug,
             SortOrder = 0,
+            OwnerId = NormalizeOwnerId(request.OwnerId) ?? actor.Id,
             CreatedAt = now,
             UpdatedAt = now,
         };
 
         await InsertBookAsync(conn, book, ct);
-        return ToDto(book);
+        return ToDto(book, await OwnerNameAsync(conn, book.OwnerId, ct));
     }
 
     public async Task<BookDto?> UpdateBookAsync(string id, UpdateBookRequest request, CancellationToken ct = default)
@@ -114,12 +147,15 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
             existing.Slug = SlugHelper.Slugify(request.Slug);
         if (request.SortOrder is int order)
             existing.SortOrder = order;
+        // null leaves the owner alone, "" clears it. Anything else replaces it.
+        if (request.OwnerId is not null)
+            existing.OwnerId = NormalizeOwnerId(request.OwnerId);
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             UPDATE book SET title = $title, description = $description, slug = $slug,
-              sort_order = $sort_order, updated_at = $updated_at
+              sort_order = $sort_order, owner_id = $owner_id, updated_at = $updated_at
             WHERE id = $id
             """;
         SqliteHelpers.Add(cmd, "$id", existing.Id);
@@ -127,9 +163,10 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         SqliteHelpers.Add(cmd, "$description", existing.Description);
         SqliteHelpers.Add(cmd, "$slug", existing.Slug);
         SqliteHelpers.Add(cmd, "$sort_order", existing.SortOrder);
+        SqliteHelpers.Add(cmd, "$owner_id", existing.OwnerId);
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
-        return ToDto(existing);
+        return ToDto(existing, await OwnerNameAsync(conn, existing.OwnerId, ct));
     }
 
     public async Task<bool> DeleteBookAsync(string id, CancellationToken ct = default)
@@ -141,6 +178,11 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         // Cascade pages, chapters, diagrams and book-scoped shape collections.
         await using (var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct))
         {
+            // Revisions first: they are addressed by page id, so deleting the
+            // pages before them would strand every row in the log.
+            await ExecAsync(conn, tx,
+                "DELETE FROM page_revision WHERE page_id IN (SELECT id FROM page WHERE book_id = $id)",
+                ("$id", id), ct);
             await ExecAsync(conn, tx, "DELETE FROM page WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx, "DELETE FROM chapter WHERE book_id = $id", ("$id", id), ct);
             // Diagrams were missed here, so deleting a book used to strand them: no
@@ -183,7 +225,10 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
                 Title: string.IsNullOrWhiteSpace(request.Title) ? existing.Title : request.Title.Trim(),
                 Description: request.Description ?? existing.Description,
                 Slug: bookSlug,
-                SortOrder: request.SortOrder ?? existing.SortOrder),
+                SortOrder: request.SortOrder ?? existing.SortOrder,
+                // Publishing over a book does not reassign it: OwnerId is absent
+                // from UpsertBookRequest, and null here means "leave as it is".
+                OwnerId: null),
             ct) ?? existing;
 
         return new UpsertResult<BookDto>(updated, Created: false);
@@ -298,9 +343,12 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, book_id, chapter_id, title, slug, sort_order, version, updated_at
-            FROM page WHERE book_id = $book_id
-            ORDER BY sort_order, title COLLATE NOCASE
+            SELECT p.id, p.book_id, p.chapter_id, p.title, p.slug, p.sort_order, p.version,
+                   p.owner_id, COALESCE(NULLIF(TRIM(u.display_name), ''), u.username), p.updated_at
+            FROM page p
+            LEFT JOIN app_user u ON u.id = p.owner_id
+            WHERE p.book_id = $book_id
+            ORDER BY p.sort_order, p.title COLLATE NOCASE
             """;
         SqliteHelpers.Add(cmd, "$book_id", bookId);
         var list = new List<PageSummaryDto>();
@@ -315,7 +363,9 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
                 Slug: reader.GetString(4),
                 SortOrder: reader.GetInt32(5),
                 Version: reader.GetInt32(6),
-                UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 7))));
+                OwnerId: SqliteHelpers.GetNullableString(reader, 7),
+                OwnerName: SqliteHelpers.GetNullableString(reader, 8),
+                UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 9))));
         }
 
         return list;
@@ -324,8 +374,11 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
     public async Task<PageDto?> GetPageAsync(string id, CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
-        var page = await SelectPageAsync(conn, id, ct);
-        return page is null ? null : ToDto(page);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"{PageSelect} WHERE p.id = $id LIMIT 1";
+        SqliteHelpers.Add(cmd, "$id", id);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? ReadPageDto(reader) : null;
     }
 
     public async Task<PageDto?> GetPageBySlugAsync(string bookId, string pageSlug, CancellationToken ct = default)
@@ -333,17 +386,15 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         var wantSlug = SlugHelper.Slugify(pageSlug);
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT id, book_id, chapter_id, title, slug, content, sort_order, version, created_at, updated_at
-            FROM page
-            WHERE book_id = $book_id AND lower(slug) = lower($slug)
+        cmd.CommandText = $"""
+            {PageSelect}
+            WHERE p.book_id = $book_id AND lower(p.slug) = lower($slug)
             LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$book_id", bookId);
         SqliteHelpers.Add(cmd, "$slug", wantSlug);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
-        if (!await reader.ReadAsync(ct)) return null;
-        return ToDto(ReadPage(reader));
+        return await reader.ReadAsync(ct) ? ReadPageDto(reader) : null;
     }
 
     public async Task<PageDto> CreatePageAsync(string bookId, CreatePageRequest request, CancellationToken ct = default)
@@ -353,6 +404,7 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
             ?? throw new KeyNotFoundException($"Book '{bookId}' not found.");
 
         var now = DateTimeOffset.UtcNow;
+        var actor = currentUser.Current;
         var page = new Page
         {
             Id = SqliteHelpers.NewId(),
@@ -365,12 +417,24 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
             Content = request.Content ?? string.Empty,
             SortOrder = request.SortOrder ?? 0,
             Version = 1,
+            // Inherited from the book, so a page written into someone's book is
+            // theirs by default. Falls back to whoever is creating it when the
+            // book has no owner either.
+            OwnerId = NormalizeOwnerId(request.OwnerId) ?? book.OwnerId ?? actor.Id,
             CreatedAt = now,
             UpdatedAt = now,
         };
 
-        await InsertPageAsync(conn, page, ct);
-        return ToDto(page);
+        // Page and its first log entry in one transaction: a page whose history
+        // does not start at its own creation is a history with a hole in it.
+        await using (var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct))
+        {
+            await InsertPageAsync(conn, page, tx, ct);
+            await InsertRevisionAsync(conn, tx, page, PageChangeKinds.Created, actor, now, ct);
+            await tx.CommitAsync(ct);
+        }
+
+        return ToDto(page, await OwnerNameAsync(conn, page.OwnerId, ct), actor.Id, actor.Name);
     }
 
     public async Task<PageDto?> UpdatePageAsync(string id, UpdatePageRequest request, CancellationToken ct = default)
@@ -381,22 +445,6 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
 
         await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
 
-        await using (var rev = conn.CreateCommand())
-        {
-            rev.Transaction = tx;
-            rev.CommandText = """
-                INSERT INTO page_revision (id, page_id, version, title, content, created_at)
-                VALUES ($id, $page_id, $version, $title, $content, $created_at)
-                """;
-            SqliteHelpers.Add(rev, "$id", SqliteHelpers.NewId());
-            SqliteHelpers.Add(rev, "$page_id", existing.Id);
-            SqliteHelpers.Add(rev, "$version", existing.Version);
-            SqliteHelpers.Add(rev, "$title", existing.Title);
-            SqliteHelpers.Add(rev, "$content", existing.Content);
-            SqliteHelpers.Add(rev, "$created_at", SqliteHelpers.FormatTimestamp(DateTimeOffset.UtcNow));
-            await rev.ExecuteNonQueryAsync(ct);
-        }
-
         existing.Title = request.Title.Trim();
         if (!string.IsNullOrWhiteSpace(request.Slug))
             existing.Slug = SlugHelper.Slugify(request.Slug);
@@ -406,6 +454,8 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
             existing.ChapterId = string.IsNullOrWhiteSpace(request.ChapterId) ? null : request.ChapterId.Trim();
         if (request.SortOrder is int order)
             existing.SortOrder = order;
+        if (request.OwnerId is not null)
+            existing.OwnerId = NormalizeOwnerId(request.OwnerId);
         existing.Version += 1;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -414,7 +464,7 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
             cmd.Transaction = tx;
             cmd.CommandText = """
                 UPDATE page SET title = $title, slug = $slug, content = $content, chapter_id = $chapter_id,
-                  sort_order = $sort_order, version = $version, updated_at = $updated_at
+                  sort_order = $sort_order, version = $version, owner_id = $owner_id, updated_at = $updated_at
                 WHERE id = $id
                 """;
             SqliteHelpers.Add(cmd, "$id", existing.Id);
@@ -424,12 +474,18 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
             SqliteHelpers.Add(cmd, "$chapter_id", existing.ChapterId);
             SqliteHelpers.Add(cmd, "$sort_order", existing.SortOrder);
             SqliteHelpers.Add(cmd, "$version", existing.Version);
+            SqliteHelpers.Add(cmd, "$owner_id", existing.OwnerId);
             SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
             await cmd.ExecuteNonQueryAsync(ct);
         }
 
+        // Logged *after* the write and holding the new state, so the newest entry
+        // always mirrors the live page and reading the log needs no off-by-one.
+        var actor = currentUser.Current;
+        await InsertRevisionAsync(conn, tx, existing, PageChangeKinds.Updated, actor, existing.UpdatedAt, ct);
+
         await tx.CommitAsync(ct);
-        return ToDto(existing);
+        return ToDto(existing, await OwnerNameAsync(conn, existing.OwnerId, ct), actor.Id, actor.Name);
     }
 
     public async Task<bool> DeletePageAsync(string id, CancellationToken ct = default)
@@ -437,7 +493,11 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectPageAsync(conn, id, ct);
         if (existing is null) return false;
-        await ExecAsync(conn, null, "DELETE FROM page WHERE id = $id", ("$id", id), ct);
+
+        await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
+        await ExecAsync(conn, tx, "DELETE FROM page_revision WHERE page_id = $id", ("$id", id), ct);
+        await ExecAsync(conn, tx, "DELETE FROM page WHERE id = $id", ("$id", id), ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 
@@ -480,7 +540,9 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
                 Slug: slug,
                 Content: request.Content ?? existing.Content,
                 ChapterId: chapterId ?? existing.ChapterId,
-                SortOrder: request.SortOrder ?? existing.SortOrder),
+                SortOrder: request.SortOrder ?? existing.SortOrder,
+                // Republishing does not reassign the page — null leaves it alone.
+                OwnerId: null),
             ct) ?? existing;
 
         return new UpsertResult<PageDto>(updated, Created: false);
@@ -555,29 +617,141 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
             FolderCreated: folderCreated);
     }
 
+    public async Task<PageHistoryDto?> GetPageHistoryAsync(
+        string id,
+        int limit = 100,
+        CancellationToken ct = default)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var page = await SelectPageAsync(conn, id, ct);
+        if (page is null) return null;
+
+        var take = Math.Clamp(limit, 1, 500);
+        var entries = new List<PageHistoryEntryDto>();
+
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                SELECT id, version, title, change_kind, changed_by, changed_by_name, created_at
+                FROM page_revision
+                WHERE page_id = $page_id
+                ORDER BY version DESC, created_at DESC
+                LIMIT $limit
+                """;
+            SqliteHelpers.Add(cmd, "$page_id", page.Id);
+            SqliteHelpers.Add(cmd, "$limit", take);
+
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                var version = reader.GetInt32(1);
+                entries.Add(new PageHistoryEntryDto(
+                    Id: reader.GetString(0),
+                    Version: version,
+                    Title: reader.GetString(2),
+                    ChangeKind: reader.IsDBNull(3) ? PageChangeKinds.Updated : reader.GetString(3),
+                    ChangedById: SqliteHelpers.GetNullableString(reader, 4),
+                    ChangedByName: SqliteHelpers.GetNullableString(reader, 5),
+                    ChangedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 6)),
+                    IsCurrent: version == page.Version));
+            }
+        }
+
+        // A page last written before the change log existed has no entry for the
+        // version it is sitting on. Synthesising one from the page itself keeps
+        // the newest row and the live page in step — with no author, because
+        // there genuinely is no record of one.
+        if (!entries.Any(e => e.IsCurrent))
+        {
+            entries.Insert(0, new PageHistoryEntryDto(
+                Id: $"current:{page.Id}",
+                Version: page.Version,
+                Title: page.Title,
+                ChangeKind: PageChangeKinds.Legacy,
+                ChangedById: null,
+                ChangedByName: null,
+                ChangedAt: Coalesce(page.UpdatedAt),
+                IsCurrent: true));
+        }
+
+        return new PageHistoryDto(page.Id, page.Title, page.Version, entries);
+    }
+
+    private static async Task InsertRevisionAsync(
+        SqliteConnection conn,
+        SqliteTransaction? tx,
+        Page page,
+        string changeKind,
+        CurrentActor actor,
+        DateTimeOffset changedAt,
+        CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            INSERT INTO page_revision
+              (id, page_id, version, title, content, changed_by, changed_by_name, change_kind, created_at)
+            VALUES
+              ($id, $page_id, $version, $title, $content, $changed_by, $changed_by_name, $change_kind, $created_at)
+            """;
+        SqliteHelpers.Add(cmd, "$id", SqliteHelpers.NewId());
+        SqliteHelpers.Add(cmd, "$page_id", page.Id);
+        SqliteHelpers.Add(cmd, "$version", page.Version);
+        SqliteHelpers.Add(cmd, "$title", page.Title);
+        SqliteHelpers.Add(cmd, "$content", page.Content);
+        SqliteHelpers.Add(cmd, "$changed_by", actor.Id);
+        SqliteHelpers.Add(cmd, "$changed_by_name", actor.Name);
+        SqliteHelpers.Add(cmd, "$change_kind", changeKind);
+        SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(changedAt));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>Display name for an owner id — what the client shows instead of a raw id.</summary>
+    private static async Task<string?> OwnerNameAsync(SqliteConnection conn, string? ownerId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(ownerId)) return null;
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT COALESCE(NULLIF(TRIM(display_name), ''), username) FROM app_user WHERE id = $id LIMIT 1
+            """;
+        SqliteHelpers.Add(cmd, "$id", ownerId);
+        return await cmd.ExecuteScalarAsync(ct) as string;
+    }
+
+    /// <summary>Blank means "no owner"; the API takes "" as an explicit clear.</summary>
+    private static string? NormalizeOwnerId(string? raw) =>
+        string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+
     private static async Task InsertBookAsync(SqliteConnection conn, Book book, CancellationToken ct)
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO book (id, title, description, slug, sort_order, created_at, updated_at)
-            VALUES ($id, $title, $description, $slug, $sort_order, $created_at, $updated_at)
+            INSERT INTO book (id, title, description, slug, sort_order, owner_id, created_at, updated_at)
+            VALUES ($id, $title, $description, $slug, $sort_order, $owner_id, $created_at, $updated_at)
             """;
         SqliteHelpers.Add(cmd, "$id", book.Id);
         SqliteHelpers.Add(cmd, "$title", book.Title);
         SqliteHelpers.Add(cmd, "$description", book.Description);
         SqliteHelpers.Add(cmd, "$slug", book.Slug);
         SqliteHelpers.Add(cmd, "$sort_order", book.SortOrder);
+        SqliteHelpers.Add(cmd, "$owner_id", book.OwnerId);
         SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(book.CreatedAt));
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(book.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private static async Task InsertPageAsync(SqliteConnection conn, Page page, CancellationToken ct)
+    private static async Task InsertPageAsync(
+        SqliteConnection conn,
+        Page page,
+        SqliteTransaction? tx,
+        CancellationToken ct)
     {
         await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
         cmd.CommandText = """
-            INSERT INTO page (id, book_id, chapter_id, title, slug, content, sort_order, version, created_at, updated_at)
-            VALUES ($id, $book_id, $chapter_id, $title, $slug, $content, $sort_order, $version, $created_at, $updated_at)
+            INSERT INTO page (id, book_id, chapter_id, title, slug, content, sort_order, version, owner_id, created_at, updated_at)
+            VALUES ($id, $book_id, $chapter_id, $title, $slug, $content, $sort_order, $version, $owner_id, $created_at, $updated_at)
             """;
         SqliteHelpers.Add(cmd, "$id", page.Id);
         SqliteHelpers.Add(cmd, "$book_id", page.BookId);
@@ -587,6 +761,7 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         SqliteHelpers.Add(cmd, "$content", page.Content);
         SqliteHelpers.Add(cmd, "$sort_order", page.SortOrder);
         SqliteHelpers.Add(cmd, "$version", page.Version);
+        SqliteHelpers.Add(cmd, "$owner_id", page.OwnerId);
         SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(page.CreatedAt));
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(page.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
@@ -596,7 +771,7 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, title, description, slug, sort_order, created_at, updated_at
+            SELECT id, title, description, slug, sort_order, owner_id, created_at, updated_at
             FROM book WHERE id = $id LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$id", id);
@@ -609,8 +784,9 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
             Description = SqliteHelpers.GetNullableString(reader, 2),
             Slug = reader.GetString(3),
             SortOrder = reader.GetInt32(4),
-            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 5),
-            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 6),
+            OwnerId = SqliteHelpers.GetNullableString(reader, 5),
+            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 6),
+            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 7),
         };
     }
 
@@ -640,7 +816,7 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, book_id, chapter_id, title, slug, content, sort_order, version, created_at, updated_at
+            SELECT id, book_id, chapter_id, title, slug, content, sort_order, version, owner_id, created_at, updated_at
             FROM page WHERE id = $id LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$id", id);
@@ -659,8 +835,9 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         Content = reader.GetString(5),
         SortOrder = reader.GetInt32(6),
         Version = reader.GetInt32(7),
-        CreatedAt = SqliteHelpers.ReadTimestamp(reader, 8),
-        UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 9),
+        OwnerId = SqliteHelpers.GetNullableString(reader, 8),
+        CreatedAt = SqliteHelpers.ReadTimestamp(reader, 9),
+        UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 10),
     };
 
     private static async Task<string> UniqueBookSlugAsync(SqliteConnection conn, string baseSlug, CancellationToken ct)
@@ -730,14 +907,34 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
     private static DateTimeOffset Coalesce(DateTimeOffset value) =>
         value == default ? DateTimeOffset.UtcNow : value;
 
+    /// <summary>Reads a row shaped by <see cref="BookSelect"/>.</summary>
     private static BookDto ReadBookDto(SqliteDataReader reader) => new(
         Id: reader.GetString(0),
         Title: reader.GetString(1),
         Description: SqliteHelpers.GetNullableString(reader, 2),
         Slug: reader.GetString(3),
         SortOrder: reader.GetInt32(4),
-        CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 5)),
-        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 6)));
+        OwnerId: SqliteHelpers.GetNullableString(reader, 5),
+        CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 6)),
+        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 7)),
+        OwnerName: SqliteHelpers.GetNullableString(reader, 8));
+
+    /// <summary>Reads a row shaped by <see cref="PageSelect"/>.</summary>
+    private static PageDto ReadPageDto(SqliteDataReader reader) => new(
+        Id: reader.GetString(0),
+        BookId: reader.GetString(1),
+        ChapterId: SqliteHelpers.GetNullableString(reader, 2),
+        Title: reader.GetString(3),
+        Slug: reader.GetString(4),
+        Content: reader.GetString(5),
+        SortOrder: reader.GetInt32(6),
+        Version: reader.GetInt32(7),
+        OwnerId: SqliteHelpers.GetNullableString(reader, 8),
+        CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 9)),
+        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 10)),
+        OwnerName: SqliteHelpers.GetNullableString(reader, 11),
+        UpdatedById: SqliteHelpers.GetNullableString(reader, 12),
+        UpdatedByName: SqliteHelpers.GetNullableString(reader, 13));
 
     private static ChapterDto ReadChapterDto(SqliteDataReader reader) => new(
         Id: reader.GetString(0),
@@ -748,12 +945,14 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 5)),
         UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 6)));
 
-    private static BookDto ToDto(Book b) => new(
+    private static BookDto ToDto(Book b, string? ownerName) => new(
         Id: b.Id,
         Title: b.Title,
         Description: b.Description,
         Slug: b.Slug,
         SortOrder: b.SortOrder,
+        OwnerId: b.OwnerId,
+        OwnerName: ownerName,
         CreatedAt: Coalesce(b.CreatedAt),
         UpdatedAt: Coalesce(b.UpdatedAt));
 
@@ -766,7 +965,7 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         CreatedAt: Coalesce(c.CreatedAt),
         UpdatedAt: Coalesce(c.UpdatedAt));
 
-    private static PageDto ToDto(Page p) => new(
+    private static PageDto ToDto(Page p, string? ownerName, string? updatedById, string? updatedByName) => new(
         Id: p.Id,
         BookId: p.BookId,
         ChapterId: p.ChapterId,
@@ -775,6 +974,10 @@ public sealed class DocumentService(SqliteConnectionFactory db) : IDocumentServi
         Content: p.Content,
         SortOrder: p.SortOrder,
         Version: p.Version,
+        OwnerId: p.OwnerId,
+        OwnerName: ownerName,
+        UpdatedById: updatedById,
+        UpdatedByName: updatedByName,
         CreatedAt: Coalesce(p.CreatedAt),
         UpdatedAt: Coalesce(p.UpdatedAt));
 }

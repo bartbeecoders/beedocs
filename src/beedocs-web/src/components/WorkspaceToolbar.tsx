@@ -1,5 +1,6 @@
 import { Children, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
 import { ExportMenu } from './ExportMenu'
@@ -162,6 +163,10 @@ export function WorkspaceToolbar({
     refreshTree,
   } = useWorkspace()
   const navigate = useNavigate()
+  // Viewers can read everything and change nothing. The API enforces that on its
+  // own; hiding the buttons here is so the toolbar shows what this account can
+  // actually do rather than a row of guaranteed 403s.
+  const { canWrite } = useAuth()
   const [importOpen, setImportOpen] = useState<{ targetBookId?: string } | null>(null)
   const [namePrompt, setNamePrompt] = useState<NamePrompt | null>(null)
 
@@ -211,31 +216,36 @@ export function WorkspaceToolbar({
 
       {context.kind === 'library' && (
         <>
-          <Group>
-            <button
-              type="button"
-              className="btn primary sm"
-              onClick={() =>
-                setNamePrompt({
-                  title: 'New book',
-                  label: 'Book title',
-                  placeholder: 'e.g. Platform architecture',
-                  confirmLabel: 'Create book',
-                  run: async (title) => {
-                    const book = await createBook(title)
-                    setSelection({ kind: 'book', bookId: book.id })
-                    void navigate(`/books/${book.id}`)
-                  },
-                })
-              }
-            >
-              New book
-            </button>
-            <button type="button" className="btn ghost sm" onClick={() => setImportOpen({})}>
-              Import
-            </button>
-          </Group>
-          <Sep />
+          {/* Viewers get the library read-only, so buttons that would 403 are not drawn */}
+          {canWrite && (
+            <>
+              <Group>
+                <button
+                  type="button"
+                  className="btn primary sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: 'New book',
+                      label: 'Book title',
+                      placeholder: 'e.g. Platform architecture',
+                      confirmLabel: 'Create book',
+                      run: async (title) => {
+                        const book = await createBook(title)
+                        setSelection({ kind: 'book', bookId: book.id })
+                        void navigate(`/books/${book.id}`)
+                      },
+                    })
+                  }
+                >
+                  New book
+                </button>
+                <button type="button" className="btn ghost sm" onClick={() => setImportOpen({})}>
+                  Import
+                </button>
+              </Group>
+              <Sep />
+            </>
+          )}
           <Group>
             <button
               type="button"
@@ -251,71 +261,79 @@ export function WorkspaceToolbar({
 
       {context.kind === 'book' && (
         <>
-          <Group>
-            <button
-              type="button"
-              className="btn primary sm"
-              onClick={() =>
-                setNamePrompt({
-                  title: 'New page',
-                  label: 'Page title',
-                  placeholder: 'e.g. System Context',
-                  confirmLabel: 'Create page',
-                  run: async (title) => {
-                    const p = await createPage(context.bookId, title)
-                    void navigate(`/books/${context.bookId}/pages/${p.id}`)
-                  },
-                })
-              }
-            >
-              New page
-            </button>
-            <button
-              type="button"
-              className="btn ghost sm"
-              onClick={() =>
-                setNamePrompt({
-                  title: 'New folder',
-                  label: 'Folder name',
-                  placeholder: 'e.g. Design',
-                  confirmLabel: 'Create folder',
-                  run: async (title) => {
-                    await createFolder(context.bookId, title)
-                  },
-                })
-              }
-            >
-              New folder
-            </button>
-            <button
-              type="button"
-              className="btn ghost sm"
-              onClick={() =>
-                setNamePrompt({
-                  title: 'New diagram',
-                  label: 'Diagram title',
-                  placeholder: 'e.g. Network overview',
-                  confirmLabel: 'Create diagram',
-                  run: async (title) => {
-                    const d = await createDiagram(context.bookId, title)
-                    void navigate(`/books/${context.bookId}/diagrams/${d.id}`)
-                  },
-                })
-              }
-            >
-              New diagram
-            </button>
-          </Group>
-          <Sep />
+          {canWrite && (
+            <>
+              <Group>
+                <button
+                  type="button"
+                  className="btn primary sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: 'New page',
+                      label: 'Page title',
+                      placeholder: 'e.g. System Context',
+                      confirmLabel: 'Create page',
+                      run: async (title) => {
+                        const p = await createPage(context.bookId, title)
+                        void navigate(`/books/${context.bookId}/pages/${p.id}`)
+                      },
+                    })
+                  }
+                >
+                  New page
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: 'New folder',
+                      label: 'Folder name',
+                      placeholder: 'e.g. Design',
+                      confirmLabel: 'Create folder',
+                      run: async (title) => {
+                        await createFolder(context.bookId, title)
+                      },
+                    })
+                  }
+                >
+                  New folder
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: 'New diagram',
+                      label: 'Diagram title',
+                      placeholder: 'e.g. Network overview',
+                      confirmLabel: 'Create diagram',
+                      run: async (title) => {
+                        const d = await createDiagram(context.bookId, title)
+                        void navigate(`/books/${context.bookId}/diagrams/${d.id}`)
+                      },
+                    })
+                  }
+                >
+                  New diagram
+                </button>
+              </Group>
+              <Sep />
+            </>
+          )}
           <Group>
             <ExportMenu scope="book" id={context.bookId} title={context.title} />
-            <button
-              type="button"
-              className="btn ghost sm"
-              onClick={() => setImportOpen({ targetBookId: context.bookId })}
-            >
-              Import…
-            </button>
+            {canWrite && (
+            <>
+              <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() => setImportOpen({ targetBookId: context.bookId })}
+                >
+                  Import…
+                </button>
+            </>
+          )}
             {(view !== 'book' || bookId !== context.bookId) && (
               <button
                 type="button"
@@ -327,84 +345,96 @@ export function WorkspaceToolbar({
             )}
           </Group>
           <span className="ws-toolbar-spacer" />
-          <Group>
-            <button
-              type="button"
-              className="btn ghost danger sm"
-              onClick={() => {
-                if (!confirm(`Delete book “${context.title}”?`)) return
-                void deleteBook(context.bookId).then(() => {
-                  setSelection({ kind: 'none' })
-                  if (bookId === context.bookId) void navigate('/')
-                })
-              }}
-            >
-              Delete book
-            </button>
-          </Group>
+          {canWrite && (
+            <>
+              <Group>
+                <button
+                  type="button"
+                  className="btn ghost danger sm"
+                  onClick={() => {
+                    if (!confirm(`Delete book “${context.title}”?`)) return
+                    void deleteBook(context.bookId).then(() => {
+                      setSelection({ kind: 'none' })
+                      if (bookId === context.bookId) void navigate('/')
+                    })
+                  }}
+                >
+                  Delete book
+                </button>
+              </Group>
+            </>
+          )}
         </>
       )}
 
       {context.kind === 'folder' && (
         <>
-          <Group>
-            <button
-              type="button"
-              className="btn primary sm"
-              onClick={() =>
-                setNamePrompt({
-                  title: 'New page',
-                  label: 'Page title',
-                  placeholder: 'e.g. System Context',
-                  confirmLabel: 'Create page',
-                  run: async (title) => {
-                    const p = await createPage(context.bookId, title, context.chapterId)
-                    void navigate(`/books/${context.bookId}/pages/${p.id}`)
-                  },
-                })
-              }
-            >
-              New page in folder
-            </button>
-            <button
-              type="button"
-              className="btn ghost sm"
-              onClick={() =>
-                setNamePrompt({
-                  title: 'Rename folder',
-                  label: 'Folder name',
-                  defaultValue: context.title,
-                  confirmLabel: 'Rename',
-                  run: async (t) => {
-                    await renameFolder(context.chapterId, context.bookId, t)
-                  },
-                })
-              }
-            >
-              Rename folder
-            </button>
-          </Group>
+          {canWrite && (
+            <>
+              <Group>
+                <button
+                  type="button"
+                  className="btn primary sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: 'New page',
+                      label: 'Page title',
+                      placeholder: 'e.g. System Context',
+                      confirmLabel: 'Create page',
+                      run: async (title) => {
+                        const p = await createPage(context.bookId, title, context.chapterId)
+                        void navigate(`/books/${context.bookId}/pages/${p.id}`)
+                      },
+                    })
+                  }
+                >
+                  New page in folder
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: 'Rename folder',
+                      label: 'Folder name',
+                      defaultValue: context.title,
+                      confirmLabel: 'Rename',
+                      run: async (t) => {
+                        await renameFolder(context.chapterId, context.bookId, t)
+                      },
+                    })
+                  }
+                >
+                  Rename folder
+                </button>
+              </Group>
+            </>
+          )}
           <span className="ws-toolbar-spacer" />
-          <Group>
-            <button
-              type="button"
-              className="btn ghost danger sm"
-              onClick={() => {
-                if (
-                  !confirm(
-                    `Delete folder “${context.title}”? Pages inside move to the book root.`,
-                  )
-                ) {
-                  return
-                }
-                void deleteFolder(context.chapterId, context.bookId).then(() => {
-                  setSelection({ kind: 'book', bookId: context.bookId })
-                })
-              }}
-            >
-              Delete folder
-            </button>
-          </Group>
+          {canWrite && (
+            <>
+              <Group>
+                <button
+                  type="button"
+                  className="btn ghost danger sm"
+                  onClick={() => {
+                    if (
+                      !confirm(
+                        `Delete folder “${context.title}”? Pages inside move to the book root.`,
+                      )
+                    ) {
+                      return
+                    }
+                    void deleteFolder(context.chapterId, context.bookId).then(() => {
+                      setSelection({ kind: 'book', bookId: context.bookId })
+                    })
+                  }}
+                >
+                  Delete folder
+                </button>
+              </Group>
+            </>
+          )}
         </>
       )}
 
@@ -422,22 +452,26 @@ export function WorkspaceToolbar({
                 Open
               </button>
             )}
-            {context.chapterId != null && (
-              <button
-                type="button"
-                className="btn ghost sm"
-                title="Move this page to the book root"
-                onClick={() => {
-                  void movePage({
-                    pageId: context.pageId,
-                    bookId: context.bookId,
-                    chapterId: null,
-                  })
-                }}
-              >
-                Move to root
-              </button>
-            )}
+            {canWrite && (
+            <>
+              {context.chapterId != null && (
+                  <button
+                    type="button"
+                    className="btn ghost sm"
+                    title="Move this page to the book root"
+                    onClick={() => {
+                      void movePage({
+                        pageId: context.pageId,
+                        bookId: context.bookId,
+                        chapterId: null,
+                      })
+                    }}
+                  >
+                    Move to root
+                  </button>
+                )}
+            </>
+          )}
           </Group>
           <Sep />
           <Group>
@@ -450,21 +484,25 @@ export function WorkspaceToolbar({
             </>
           )}
           <span className="ws-toolbar-spacer" />
-          <Group>
-            <button
-              type="button"
-              className="btn ghost danger sm"
-              onClick={() => {
-                if (!confirm(`Delete page “${context.title}”?`)) return
-                void deletePage(context.pageId, context.bookId).then(() => {
-                  setSelection({ kind: 'book', bookId: context.bookId })
-                  if (pageId === context.pageId) void navigate(`/books/${context.bookId}`)
-                })
-              }}
-            >
-              Delete page
-            </button>
-          </Group>
+          {canWrite && (
+            <>
+              <Group>
+                <button
+                  type="button"
+                  className="btn ghost danger sm"
+                  onClick={() => {
+                    if (!confirm(`Delete page “${context.title}”?`)) return
+                    void deletePage(context.pageId, context.bookId).then(() => {
+                      setSelection({ kind: 'book', bookId: context.bookId })
+                      if (pageId === context.pageId) void navigate(`/books/${context.bookId}`)
+                    })
+                  }}
+                >
+                  Delete page
+                </button>
+              </Group>
+            </>
+          )}
         </>
       )}
 
@@ -493,22 +531,26 @@ export function WorkspaceToolbar({
             </>
           )}
           <span className="ws-toolbar-spacer" />
-          <Group>
-            <button
-              type="button"
-              className="btn ghost danger sm"
-              onClick={() => {
-                if (!confirm(`Delete diagram “${context.title}”?`)) return
-                void deleteDiagram(context.diagramId, context.bookId).then(() => {
-                  setSelection({ kind: 'book', bookId: context.bookId })
-                  if (diagramId === context.diagramId)
-                    void navigate(`/books/${context.bookId}`)
-                })
-              }}
-            >
-              Delete diagram
-            </button>
-          </Group>
+          {canWrite && (
+            <>
+              <Group>
+                <button
+                  type="button"
+                  className="btn ghost danger sm"
+                  onClick={() => {
+                    if (!confirm(`Delete diagram “${context.title}”?`)) return
+                    void deleteDiagram(context.diagramId, context.bookId).then(() => {
+                      setSelection({ kind: 'book', bookId: context.bookId })
+                      if (diagramId === context.diagramId)
+                        void navigate(`/books/${context.bookId}`)
+                    })
+                  }}
+                >
+                  Delete diagram
+                </button>
+              </Group>
+            </>
+          )}
         </>
       )}
 

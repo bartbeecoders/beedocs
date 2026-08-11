@@ -1,14 +1,18 @@
 import { Link } from 'react-router-dom'
 import { THEMES, useTheme, type ThemeId } from '../theme'
 import { loadPaneLayout, savePaneLayout } from '../workspace/layoutPrefs'
+import { useAuth } from '../auth/AuthContext'
 import { LlmProviders } from './LlmProviders'
+import { UsersPanel } from './UsersPanel'
 import '../styles/llm-providers.css'
+import '../styles/users.css'
 
 type Props = {
   onResetPanes?: () => void
 }
 
 export function SettingsPanel({ onResetPanes }: Props) {
+  const { canManageUsers } = useAuth()
   const {
     theme,
     setTheme,
@@ -111,9 +115,19 @@ export function SettingsPanel({ onResetPanes }: Props) {
       </section>
 
       <section className="settings-section">
-        <h2>AI providers</h2>
-        <LlmProviders />
+        <h2>Users &amp; roles</h2>
+        <UsersPanel />
       </section>
+
+      {/* Provider rows hold a paid credential, so the API refuses to list them
+          for anyone but an admin — showing the section to an editor would only
+          render a 403. */}
+      {canManageUsers && (
+        <section className="settings-section">
+          <h2>AI providers</h2>
+          <LlmProviders />
+        </section>
+      )}
 
       <section className="settings-section">
         <h2>Layout</h2>

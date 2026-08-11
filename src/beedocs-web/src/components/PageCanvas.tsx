@@ -8,6 +8,7 @@ import {
   savePageViewMode,
   type PageViewMode,
 } from '../workspace/pageViewPrefs'
+import { useAuth } from '../auth/AuthContext'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { Page } from '../types'
 import { HybridPageEditor } from './HybridPageEditor'
@@ -20,12 +21,19 @@ export type PageEditorState = {
   page: Page | null
   title: string
   content: string
+  /**
+   * The account answerable for the page. Part of the editor's dirty state rather
+   * than a field that saves itself, so reassigning an owner and renaming a page
+   * are one save and one history entry, not two.
+   */
+  ownerId: string
   dirty: boolean
   saving: boolean
   error: string | null
   mode: PageViewMode
   setTitle: (v: string) => void
   setContent: (v: string) => void
+  setOwnerId: (v: string) => void
   setMode: (m: PageViewMode) => void
   save: () => Promise<void>
   deletePage: () => Promise<void>
@@ -40,12 +48,20 @@ export function PageCanvas({ onStateChange }: Props) {
   const navigate = useNavigate()
   const { renameInTree, deletePage: deleteFromTree } = useWorkspace()
   const { showPreviewDefault, autoSaveEnabled } = useTheme()
+  const { canWrite } = useAuth()
   const [page, setPage] = useState<Page | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
-  const [mode, setModeState] = useState<PageViewMode>(() =>
+  /** "" means unassigned — the same thing the API takes to clear an owner. */
+  const [ownerId, setOwnerId] = useState('')
+  const [chosenMode, setModeState] = useState<PageViewMode>(() =>
     loadPageViewMode(pageId) ?? (showPreviewDefault ? 'split' : 'edit'),
   )
+  // A read-only account only ever sees the rendered page. Handing it an editor
+  // would collect edits the API refuses at save time — and the remembered view
+  // for this page must not be overwritten on the way, so the choice is layered
+  // on top rather than written back through setMode.
+  const mode: PageViewMode = canWrite ? chosenMode : 'preview'
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -53,6 +69,7 @@ export function PageCanvas({ onStateChange }: Props) {
 
   const titleRef = useRef(title)
   const contentRef = useRef(content)
+  const ownerRef = useRef(ownerId)
   const dirtyRef = useRef(dirty)
   const pageIdRef = useRef(pageId)
   const savingRef = useRef(false)
@@ -63,6 +80,7 @@ export function PageCanvas({ onStateChange }: Props) {
 
   titleRef.current = title
   contentRef.current = content
+  ownerRef.current = ownerId
   dirtyRef.current = dirty
   pageIdRef.current = pageId
 
@@ -84,7 +102,11 @@ export function PageCanvas({ onStateChange }: Props) {
     const id = pageId
     return () => {
       if (!dirtyRef.current) return
-      const payload = { title: titleRef.current, content: contentRef.current }
+      const payload = {
+        title: titleRef.current,
+        content: contentRef.current,
+        ownerId: ownerRef.current,
+      }
       void api.updatePage(id, payload).catch(() => {
         /* best-effort flush */
       })
@@ -104,6 +126,7 @@ export function PageCanvas({ onStateChange }: Props) {
         setPage(p)
         setTitle(p.title)
         setContent(p.content)
+        setOwnerId(p.ownerId ?? '')
         treeTitleRef.current = p.title
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
@@ -118,7 +141,11 @@ export function PageCanvas({ onStateChange }: Props) {
     const id = pageIdRef.current
     if (!id || savingRef.current) return
 
-    const payload = { title: titleRef.current, content: contentRef.current }
+    const payload = {
+      title: titleRef.current,
+      content: contentRef.current,
+      ownerId: ownerRef.current,
+    }
     savingRef.current = true
     setSaving(true)
     setError(null)
@@ -183,6 +210,7 @@ export function PageCanvas({ onStateChange }: Props) {
       page,
       title,
       content,
+      ownerId,
       dirty,
       saving,
       error,
@@ -195,12 +223,16 @@ export function PageCanvas({ onStateChange }: Props) {
         setContent(v)
         setDirty(true)
       },
+      setOwnerId: (v) => {
+        setOwnerId(v)
+        setDirty(true)
+      },
       setMode,
       save,
       deletePage: remove,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, title, content, dirty, saving, error, mode, save])
+  }, [page, title, content, ownerId, dirty, saving, error, mode, save])
 
   useEffect(() => {
     return () => onStateChange?.(null)
@@ -229,21 +261,25 @@ export function PageCanvas({ onStateChange }: Props) {
     <div className="page-canvas" ref={pageRootRef}>
       <div className="canvas-toolbar">
         <div className="canvas-heading">
-          <SyncedInput
-            className="canvas-title"
-            value={title}
-            onValueChange={(next) => {
-              setTitle(next)
-              setDirty(true)
-            }}
-            placeholder="Page title"
-          />
+          {canWrite ? (
+            <SyncedInput
+              className="canvas-title"
+              value={title}
+              onValueChange={(next) => {
+                setTitle(next)
+                setDirty(true)
+              }}
+              placeholder="Page title"
+            />
+          ) : (
+            <span className="canvas-title">{title}</span>
+          )}
           <div className="canvas-meta">
             <span>v{page.version}</span>
             {statusLabel && (
               <span className={dirty && !saving ? 'dirty-dot' : undefined}>· {statusLabel}</span>
             )}
-            {autoSaveEnabled && (
+            {autoSaveEnabled && canWrite && (
               <span className="muted save-hint" title="Ctrl/Cmd+S to save immediately">
                 · auto-save on
               </span>
@@ -251,37 +287,46 @@ export function PageCanvas({ onStateChange }: Props) {
           </div>
         </div>
         <div className="toolbar-group">
-          <div className="segmented">
-            {(
-              [
-                { id: 'edit' as const, label: 'edit' },
-                { id: 'source' as const, label: 'source' },
-                { id: 'split' as const, label: 'split' },
-                { id: 'preview' as const, label: 'preview' },
-              ] as const
-            ).map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                className={mode === m.id ? 'active' : ''}
-                onClick={() => setMode(m.id)}
-                title={
-                  m.id === 'edit'
-                    ? 'Visual page edit — diagrams are canvases on the page'
-                    : m.id === 'source'
-                      ? 'Raw Markdown only'
-                      : m.id === 'split'
-                        ? 'Visual edit + live preview'
-                        : 'Rendered preview'
-                }
-              >
-                {m.label}
+          {!canWrite && (
+            <span className="ws-theme-pill" title="Your account has read-only access">
+              Read-only
+            </span>
+          )}
+          {canWrite && (
+            <>
+              <div className="segmented">
+                {(
+                  [
+                    { id: 'edit' as const, label: 'edit' },
+                    { id: 'source' as const, label: 'source' },
+                    { id: 'split' as const, label: 'split' },
+                    { id: 'preview' as const, label: 'preview' },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={mode === m.id ? 'active' : ''}
+                    onClick={() => setMode(m.id)}
+                    title={
+                      m.id === 'edit'
+                        ? 'Visual page edit — diagrams are canvases on the page'
+                        : m.id === 'source'
+                          ? 'Raw Markdown only'
+                          : m.id === 'split'
+                            ? 'Visual edit + live preview'
+                            : 'Rendered preview'
+                    }
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="btn primary sm" disabled={saving || !dirty} onClick={() => void save()}>
+                {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
               </button>
-            ))}
-          </div>
-          <button type="button" className="btn primary sm" disabled={saving || !dirty} onClick={() => void save()}>
-            {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
-          </button>
+            </>
+          )}
           <ExportMenu scope="page" id={page.id} title={page.title} variant="icon" />
         </div>
       </div>

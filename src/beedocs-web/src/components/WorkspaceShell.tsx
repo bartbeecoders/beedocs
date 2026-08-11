@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTheme } from '../theme'
+import { useAuth } from '../auth/AuthContext'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { loadPaneLayout, savePaneLayout, type PaneLayout } from '../workspace/layoutPrefs'
 import { api } from '../api'
@@ -143,6 +144,7 @@ export function WorkspaceShell() {
           <span className="ws-theme-pill" title="Active theme">
             {themeDef.label}
           </span>
+          <UserMenu />
           <Link to="/help" className={`btn ghost sm ${view === 'help' ? 'active-nav' : ''}`}>
             Help
           </Link>
@@ -215,26 +217,101 @@ export function WorkspaceShell() {
   )
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Admin',
+  editor: 'Editor',
+  viewer: 'Viewer',
+}
+
+/**
+ * Who is signed in, and the way out. Renders nothing when sign-in is disabled —
+ * there is no account to name and no session to end, and an "anonymous" chip in
+ * the header of a single-user instance is pure noise.
+ */
+function UserMenu() {
+  const { authEnabled, user, logout } = useAuth()
+  const [open, setOpen] = useState(false)
+
+  // Click-outside and Escape, because the popover has no backdrop to catch either.
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.ws-user-menu')) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  if (!authEnabled || !user) return null
+
+  const name = user.displayName || user.username
+  const initials = name.slice(0, 2).toUpperCase()
+
+  return (
+    <div className="ws-user-menu">
+      <button
+        type="button"
+        className="ws-user-pill"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title={`Signed in as ${user.username}`}
+      >
+        <span className="ws-user-avatar" aria-hidden>
+          {initials}
+        </span>
+        <span className="ws-user-name">{name}</span>
+      </button>
+
+      {open && (
+        <div className="ws-user-popover">
+          <strong>{name}</strong>
+          <span className="muted sm">{user.username}</span>
+          <span className={`role-pill ${user.role}`}>{ROLE_LABELS[user.role] ?? user.role}</span>
+          <Link to="/settings" className="btn ghost sm" onClick={() => setOpen(false)}>
+            Account &amp; settings
+          </Link>
+          <button type="button" className="btn sm" onClick={() => void logout()}>
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function WelcomeCanvas() {
+  const { canWrite } = useAuth()
   return (
     <div className="welcome-canvas">
       <div className="welcome-card">
         <h1>Architecture documentation workspace</h1>
         <p className="muted">
-          Select a book in the library, or create one. Edit pages in the center canvas with live
-          Markdown, Mermaid, BeeDiagram, images, PDFs, and 3D model embeds.
+          {canWrite
+            ? 'Select a book in the library, or create one. Edit pages in the center canvas with live Markdown, Mermaid, BeeDiagram, images, PDFs, and 3D model embeds.'
+            : 'Select a book in the library to read it. Pages render Markdown, Mermaid, BeeDiagram, images, PDFs, and 3D model embeds.'}
         </p>
-        <ul className="welcome-steps">
-          <li>
-            <strong>1.</strong> Create a book in the left library
-          </li>
-          <li>
-            <strong>2.</strong> Add pages for C4 / design notes
-          </li>
-          <li>
-            <strong>3.</strong> Attach BeeDiagrams and embed them in Markdown
-          </li>
-        </ul>
+        {/* The three steps are an author's onboarding; a read-only account is
+            being told to do things its role forbids. */}
+        {canWrite && (
+          <ul className="welcome-steps">
+            <li>
+              <strong>1.</strong> Create a book in the left library
+            </li>
+            <li>
+              <strong>2.</strong> Add pages for C4 / design notes
+            </li>
+            <li>
+              <strong>3.</strong> Attach BeeDiagrams and embed them in Markdown
+            </li>
+          </ul>
+        )}
         <p className="muted sm">
           New here? Read <Link to="/help">About &amp; Help</Link> — including how to connect an AI
           agent to this instance over MCP.
@@ -246,6 +323,7 @@ function WelcomeCanvas() {
 
 function BookOverview({ bookId }: { bookId: string }) {
   const navigate = useNavigate()
+  const { canWrite } = useAuth()
   const { books, createPage, createDiagram } = useWorkspace()
   const book = books.find((b) => b.id === bookId)
   const [prompt, setPrompt] = useState<'page' | 'diagram' | null>(null)
@@ -275,14 +353,16 @@ function BookOverview({ bookId }: { bookId: string }) {
         Choose a page or diagram from the tree to open it in the editor. Properties appear on the
         right.
       </p>
-      <div className="row" style={{ gap: '0.5rem', marginTop: '1rem' }}>
-        <button type="button" className="btn primary sm" onClick={() => setPrompt('page')}>
-          New page
-        </button>
-        <button type="button" className="btn sm" onClick={() => setPrompt('diagram')}>
-          New diagram
-        </button>
-      </div>
+      {canWrite && (
+        <div className="row" style={{ gap: '0.5rem', marginTop: '1rem' }}>
+          <button type="button" className="btn primary sm" onClick={() => setPrompt('page')}>
+            New page
+          </button>
+          <button type="button" className="btn sm" onClick={() => setPrompt('diagram')}>
+            New diagram
+          </button>
+        </div>
+      )}
 
       <NamePromptDialog
         open={prompt === 'page'}

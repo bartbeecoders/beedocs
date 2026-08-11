@@ -22,6 +22,10 @@ public static class DatabaseInitializer
               description TEXT,
               slug TEXT NOT NULL UNIQUE,
               sort_order INTEGER NOT NULL DEFAULT 0,
+              -- app_user.id, or NULL when nobody was identified (sign-in off, or
+              -- an API-key caller). Not a foreign key: deleting an account must
+              -- not cascade into deleting its books.
+              owner_id TEXT,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -45,16 +49,28 @@ public static class DatabaseInitializer
               content TEXT NOT NULL DEFAULT '',
               sort_order INTEGER NOT NULL DEFAULT 0,
               version INTEGER NOT NULL DEFAULT 1,
+              -- Defaults from the owning book when the page is created.
+              owner_id TEXT,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
 
+            -- The page's change log: one row per change, holding the state the
+            -- page was left in. The newest row therefore mirrors the live page,
+            -- and "who changed this, when" is a single ordered read.
             CREATE TABLE IF NOT EXISTS page_revision (
               id TEXT PRIMARY KEY NOT NULL,
               page_id TEXT NOT NULL,
               version INTEGER NOT NULL,
               title TEXT NOT NULL,
               content TEXT NOT NULL,
+              -- app_user.id at the time, and the display name captured with it so
+              -- the log still reads correctly after the account is renamed or
+              -- deleted. Both NULL when nobody was identified.
+              changed_by TEXT,
+              changed_by_name TEXT,
+              -- created | updated
+              change_kind TEXT NOT NULL DEFAULT 'updated',
               created_at TEXT NOT NULL
             );
 
@@ -93,6 +109,41 @@ public static class DatabaseInitializer
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
+
+            -- Accounts. password_hash is write-only in the same sense as
+            -- llm_provider.api_key: UserService selects it to verify one login and
+            -- no DTO carries it. The table exists whether or not sign-in is
+            -- enforced, so BeeDocs:Auth:Enabled can be flipped without a migration.
+            CREATE TABLE IF NOT EXISTS app_user (
+              id TEXT PRIMARY KEY NOT NULL,
+              username TEXT NOT NULL,
+              display_name TEXT,
+              email TEXT,
+              role TEXT NOT NULL DEFAULT 'viewer',
+              password_hash TEXT NOT NULL,
+              enabled INTEGER NOT NULL DEFAULT 1,
+              must_change_password INTEGER NOT NULL DEFAULT 0,
+              last_login_at TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            -- Usernames are stored normalised (trimmed, lower-cased), so a plain
+            -- UNIQUE index is already the case-insensitive constraint.
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_app_user_username ON app_user(username);
+
+            -- One row per signed-in browser, keyed by the SHA-256 of the cookie
+            -- token — the raw token exists only in the cookie, so a copied
+            -- database cannot be replayed as a live session.
+            CREATE TABLE IF NOT EXISTS user_session (
+              token_hash TEXT PRIMARY KEY NOT NULL,
+              user_id TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              expires_at TEXT NOT NULL,
+              last_seen_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_user_session_user ON user_session(user_id);
 
             CREATE INDEX IF NOT EXISTS idx_page_book ON page(book_id);
             CREATE INDEX IF NOT EXISTS idx_chapter_book ON chapter(book_id);
@@ -134,11 +185,69 @@ public static class DatabaseInitializer
 
         await cmd.ExecuteNonQueryAsync(ct);
 
+        // CREATE TABLE IF NOT EXISTS does nothing to a table that already exists,
+        // so columns added after a release reach existing databases only here.
+        // Ordered before the indexes below, which reference them.
+        await AddColumnIfMissingAsync(connection, "book", "owner_id", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "page", "owner_id", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "page_revision", "changed_by", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "page_revision", "changed_by_name", "TEXT", ct);
+        // 'legacy', not 'updated', on the migration path only. Rows written before
+        // the change log existed hold the state a page was moved *away* from, so
+        // their timestamp is when that version ended rather than when it began and
+        // their author is unknowable. Labelling them lets the history view show
+        // them as earlier revisions instead of misreporting who changed what when.
+        // Every insert names its own kind, so this default never touches a new row.
+        await AddColumnIfMissingAsync(
+            connection, "page_revision", "change_kind", "TEXT NOT NULL DEFAULT 'legacy'", ct);
+
+        await using (var indexes = connection.CreateCommand())
+        {
+            indexes.CommandText = """
+                -- History reads newest-first, and a page's "last changed by" is
+                -- the row matching its current version.
+                CREATE INDEX IF NOT EXISTS idx_page_revision_page_version ON page_revision(page_id, version DESC);
+                CREATE INDEX IF NOT EXISTS idx_book_owner ON book(owner_id);
+                CREATE INDEX IF NOT EXISTS idx_page_owner ON page(owner_id);
+                """;
+            await indexes.ExecuteNonQueryAsync(ct);
+        }
+
         await using (var triggers = connection.CreateCommand())
         {
             triggers.CommandText = QueueTriggerSql;
             await triggers.ExecuteNonQueryAsync(ct);
         }
+    }
+
+    /// <summary>
+    /// <c>ALTER TABLE … ADD COLUMN</c>, but only when the column is genuinely
+    /// missing — SQLite has no <c>IF NOT EXISTS</c> for columns, and re-running it
+    /// is an error rather than a no-op. Reads <c>PRAGMA table_info</c> to decide.
+    /// </summary>
+    private static async Task AddColumnIfMissingAsync(
+        SqliteConnection connection,
+        string table,
+        string column,
+        string definition,
+        CancellationToken ct)
+    {
+        await using (var probe = connection.CreateCommand())
+        {
+            // No parameter binding here: PRAGMA takes an identifier, not a value.
+            // Both arguments are compile-time constants from the call sites above.
+            probe.CommandText = $"PRAGMA table_info({table})";
+            await using var reader = await probe.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+        }
+
+        await using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition}";
+        await alter.ExecuteNonQueryAsync(ct);
     }
 
     /// <summary>Enqueue every change to a searchable table. One trigger set per operation.</summary>

@@ -4,6 +4,10 @@ export type Book = {
   description?: string | null
   slug: string
   sortOrder: number
+  /** Account responsible for the book. Null when nobody was identified. */
+  ownerId?: string | null
+  /** The owner's display name, resolved server-side. Null once the account is gone. */
+  ownerName?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -26,12 +30,46 @@ export type PageSummary = {
   slug: string
   sortOrder: number
   version: number
+  /** Inherited from the book when the page is created; reassignable afterwards. */
+  ownerId?: string | null
+  ownerName?: string | null
   updatedAt: string
 }
 
 export type Page = PageSummary & {
   content: string
+  /** Who made the most recent change. Null on pages last written before history existed. */
+  updatedById?: string | null
+  updatedByName?: string | null
   createdAt: string
+}
+
+/**
+ * `created` and `updated` are real log entries. `legacy` marks a revision from
+ * before the change log existed: its content is right, but its timestamp marks
+ * when that version *ended* and nobody recorded an author.
+ */
+export type PageChangeKind = 'created' | 'updated' | 'legacy'
+
+/** One change to a page: the version it produced, when, and who made it. */
+export type PageHistoryEntry = {
+  id: string
+  version: number
+  title: string
+  changeKind: PageChangeKind
+  changedById: string | null
+  changedByName: string | null
+  changedAt: string
+  /** True for the entry matching the page's live version. */
+  isCurrent: boolean
+}
+
+export type PageHistory = {
+  pageId: string
+  title: string
+  version: number
+  /** Newest first. */
+  entries: PageHistoryEntry[]
 }
 
 /** Server-rendered export formats. PDF is produced in the browser instead. */
@@ -393,6 +431,92 @@ export type LlmCompleteRequest = {
   model?: string
   maxTokens?: number
   temperature?: number
+}
+
+/**
+ * admin — everything, plus account management
+ * editor — create/edit/delete content
+ * viewer — read, search and export only
+ */
+export type UserRole = 'admin' | 'editor' | 'viewer'
+
+/** An account. Passwords never travel in this direction — there is no hash field. */
+export type User = {
+  id: string
+  /** Normalised (lower-case) login name. */
+  username: string
+  displayName: string | null
+  email: string | null
+  role: UserRole
+  enabled: boolean
+  /** Set on the seeded admin and after an admin reset. Advisory: nothing is blocked. */
+  mustChangePassword: boolean
+  lastLoginAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** Resolved server-side, so the UI never re-derives the role rules. */
+export type AuthPermissions = {
+  canRead: boolean
+  canWrite: boolean
+  canManageUsers: boolean
+}
+
+/**
+ * `authEnabled: false` means BeeDocs:Auth:Enabled is off — nothing is gated and
+ * `permissions` is wide open. `via` says how the caller was recognised:
+ * `session` (cookie), `apiKey` (a machine), `open` (auth off), `none`.
+ */
+export type AuthState = {
+  authEnabled: boolean
+  authenticated: boolean
+  via: 'session' | 'apiKey' | 'open' | 'none'
+  user: User | null
+  permissions: AuthPermissions
+  /**
+   * No account exists yet, so the instance is unclaimed and `/api/auth/setup` is
+   * open. Reported whether or not sign-in is enabled — an open instance has
+   * simply never needed an account — so the setup screen requires both this and
+   * {@link AuthState.authEnabled}.
+   */
+  setupRequired: boolean
+}
+
+/**
+ * Enough to name an account, for owner pickers. Readable by every signed-in
+ * role, unlike the full {@link User} list which is admin-only.
+ */
+export type UserSummary = {
+  id: string
+  username: string
+  displayName: string | null
+  role: UserRole
+}
+
+export type CreateUserRequest = {
+  username: string
+  password: string
+  displayName?: string
+  email?: string
+  role?: UserRole
+  enabled?: boolean
+  mustChangePassword?: boolean
+}
+
+/** Every field optional: omitted means "leave as it is". */
+export type UpdateUserRequest = {
+  username?: string
+  displayName?: string
+  email?: string
+  role?: UserRole
+  enabled?: boolean
+}
+
+/** `password` is non-null only when the server generated it — the one time it is ever returned. */
+export type SetUserPasswordResult = {
+  user: User
+  password: string | null
 }
 
 export type LlmCompleteResponse = {

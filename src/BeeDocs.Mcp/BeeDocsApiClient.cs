@@ -250,12 +250,26 @@ public static class BeeDocsApiClientFactory
         return baseUrl.TrimEnd('/');
     }
 
+    /// <summary>
+    /// The API's own shared secret (BeeDocs:ApiKey) — not MCP_AUTH_TOKEN, which
+    /// guards this server's HTTP transport. Needed once the API has sign-in
+    /// enabled: an agent has no cookie, so the key is how it authenticates.
+    /// </summary>
+    public static string? ResolveApiKey() =>
+        Environment.GetEnvironmentVariable("BEEDOCS_API_KEY")?.Trim() is { Length: > 0 } key ? key : null;
+
     public static void Configure(IHttpClientBuilder builder)
     {
         builder.ConfigureHttpClient(client =>
         {
             client.BaseAddress = new Uri(ResolveBaseUrl() + "/");
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            // X-Api-Key rather than Authorization: the HTTP transport already
+            // reads Authorization for MCP_AUTH_TOKEN, and reusing the header for
+            // two different secrets is how one ends up sent to the wrong place.
+            if (ResolveApiKey() is { } apiKey)
+                client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
         });
     }
 }

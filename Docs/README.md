@@ -7,6 +7,7 @@
 | [MCP Hosting](./MCP-HOSTING.md) | Running the MCP server on K3S and putting Cloudflare Access in front of it |
 | [MCP Tools reference](./MCP-TOOLS.md) | Full list of tools, resources, and prompts |
 | [Diagram Studio](./DIAGRAM-STUDIO.md) | The draw.io-style BeeDiagram editor — shapes, connections, shortcuts, JSON format |
+| [Users & roles](./USERS-AND-ROLES.md) | Accounts, the admin/editor/viewer roles, and the opt-in sign-in wall |
 | [LLM providers](./LLM-PROVIDERS.md) | Writing help in the editor — providers, where keys are stored, and why `/api/llm` needs protecting |
 | [Export & import](./EXPORT-IMPORT.md) | Export books and documents to PDF, Markdown, Word or a re-importable archive — and import them back |
 | [Architecture](./ARCHITECTURE.md) | High-level product architecture |

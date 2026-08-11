@@ -1,0 +1,490 @@
+/* Accounts, roles and the sign-in screen. Every colour comes from the theme
+   tokens so the seven themes stay in step; nothing here may be a literal colour.
+   Sized off the same scale as the AI provider section — the two sit next to each
+   other in Settings and a second spacing rhythm shows immediately. */
+
+.users-panel,
+.login-card {
+  --usr-1: 0.25rem;
+  --usr-2: 0.5rem;
+  --usr-3: 0.75rem;
+  --usr-4: 1rem;
+  --usr-r: var(--radius);
+  --usr-r-sm: 8px;
+  /* --border sits at 1.5–2.3:1 against --bg, which is not a perceivable surface
+     (WCAG 1.4.11 wants 3:1). This lands at 3.5:1 or better in every theme. */
+  --usr-line: color-mix(in srgb, var(--muted) 70%, var(--border));
+}
+
+.users-panel {
+  display: grid;
+  gap: var(--usr-3);
+}
+
+/* ===== Cards ===== */
+
+.users-card {
+  border: 1px solid var(--usr-line);
+  border-radius: var(--usr-r);
+  background: var(--bg-elevated);
+  padding: var(--usr-3) var(--usr-4);
+  display: grid;
+  gap: var(--usr-3);
+}
+
+.users-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--usr-3);
+  flex-wrap: wrap;
+}
+
+.users-card-head h3 {
+  margin: 0 0 0.15rem;
+  font-size: 0.95rem;
+}
+
+.users-card-head p {
+  margin: 0;
+}
+
+.users-notice {
+  margin: 0;
+  padding: var(--usr-2) var(--usr-3);
+  border-radius: var(--usr-r-sm);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--usr-line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+  font-size: 0.82rem;
+}
+
+/* ===== Forms ===== */
+
+.users-form {
+  display: grid;
+  gap: var(--usr-3);
+}
+
+.users-form.new-user {
+  padding: var(--usr-3);
+  border: 1px dashed var(--usr-line);
+  border-radius: var(--usr-r-sm);
+  background: color-mix(in srgb, var(--bg-soft) 45%, var(--bg-elevated));
+}
+
+.users-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--usr-3);
+}
+
+.users-field {
+  display: grid;
+  gap: var(--usr-1);
+  font-size: 0.82rem;
+  min-width: 0;
+}
+
+.users-field > span {
+  color: var(--muted);
+}
+
+.users-field.inline {
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: var(--usr-2);
+}
+
+.users-field input,
+.users-field select,
+.users-inline-input {
+  padding: 0.42rem 0.55rem;
+  border: 1px solid var(--usr-line);
+  border-radius: var(--usr-r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  min-width: 0;
+}
+
+.users-field input:focus-visible,
+.users-field select:focus-visible,
+.users-inline-input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.users-form-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--usr-2) var(--usr-3);
+}
+
+.users-ok {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.users-error {
+  color: var(--danger);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+/* ===== Account list ===== */
+
+.users-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--usr-2);
+}
+
+.users-row {
+  border: 1px solid var(--usr-line);
+  border-radius: var(--usr-r-sm);
+  background: var(--bg);
+}
+
+.users-row.disabled {
+  opacity: 0.62;
+}
+
+.users-row-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--usr-2);
+  padding: var(--usr-2) var(--usr-3);
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--usr-r-sm);
+}
+
+.users-row-head:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.users-chevron {
+  color: var(--muted);
+  font-size: 0.7rem;
+  width: 0.85rem;
+  flex: none;
+}
+
+/* min-width:0 so a long username truncates instead of shoving the role pill
+   off the end of the row. */
+.users-identity {
+  display: grid;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.users-identity > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-pill {
+  flex: none;
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--usr-line);
+  color: var(--muted);
+  background: var(--bg-elevated);
+}
+
+/* Admin is the only role worth spotting at a glance in a long list. */
+.role-pill.admin {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--usr-line));
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
+  color: var(--text);
+}
+
+.users-flag {
+  flex: none;
+  font-size: 0.68rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--usr-line);
+  color: var(--muted);
+}
+
+.users-flag.warn {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--usr-line));
+  color: var(--danger);
+}
+
+.users-row-body {
+  display: grid;
+  gap: var(--usr-3);
+  padding: 0 var(--usr-3) var(--usr-3);
+  border-top: 1px solid color-mix(in srgb, var(--usr-line) 60%, transparent);
+  padding-top: var(--usr-3);
+}
+
+.users-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--usr-4);
+  flex-wrap: wrap;
+}
+
+.users-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--usr-2);
+  flex-wrap: wrap;
+}
+
+.users-or {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.users-inline-input {
+  width: 12rem;
+}
+
+/* The generated password appears once and is unrecoverable, so it gets the most
+   visible surface on the card rather than sitting in with the muted text. */
+.users-generated {
+  margin: 0;
+  padding: var(--usr-2) var(--usr-3);
+  border-radius: var(--usr-r-sm);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--usr-line));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+  font-size: 0.85rem;
+}
+
+.users-generated code {
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 5px;
+  background: var(--bg);
+  user-select: all;
+}
+
+/* ===== Sign-in screen ===== */
+
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.login-card {
+  width: min(24rem, 100%);
+  display: grid;
+  gap: var(--usr-3);
+  padding: 1.75rem;
+  border: 1px solid var(--usr-line);
+  border-radius: var(--usr-r);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--usr-2);
+}
+
+.login-mark {
+  font-size: 1.4rem;
+}
+
+.login-title {
+  font-weight: 650;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+.login-lead {
+  margin: -0.35rem 0 0;
+}
+
+.login-field {
+  display: grid;
+  gap: var(--usr-1);
+  font-size: 0.82rem;
+}
+
+.login-field > span {
+  color: var(--muted);
+}
+
+.login-field input {
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--usr-line);
+  border-radius: var(--usr-r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.login-field input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.login-error {
+  margin: 0;
+  padding: var(--usr-2) var(--usr-3);
+  border-radius: var(--usr-r-sm);
+  border: 1px solid color-mix(in srgb, var(--danger) 50%, var(--usr-line));
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-elevated));
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+.login-submit {
+  justify-content: center;
+  width: 100%;
+}
+
+.login-hint {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.login-hint code {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+/* Hiding a write action from a read-only account can leave the separator that
+   framed it stranded — doubled up, or dangling at the end of the menu. */
+.tree-context-menu > .tree-context-sep + .tree-context-sep,
+.tree-context-menu > .tree-context-sep:last-child {
+  display: none;
+}
+
+/* ===== Header ===== */
+
+.ws-user-menu {
+  position: relative;
+}
+
+.ws-user-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+  max-width: 12rem;
+}
+
+.ws-user-pill:hover {
+  border-color: var(--border-strong);
+}
+
+.ws-user-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-user-avatar {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 30%, var(--bg-soft));
+  color: var(--text);
+  font-size: 0.62rem;
+  font-weight: 650;
+}
+
+.ws-user-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 40;
+  min-width: 12.5rem;
+  display: grid;
+  gap: var(--usr-2, 0.5rem);
+  padding: 0.65rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+.ws-user-popover .role-pill {
+  justify-self: start;
+}
+
+/* ===== Page change log ===== */
+
+.page-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+  /* Long histories must not push the rest of the properties pane out of reach. */
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.page-history-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.page-history-version {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+/* The entry the page is actually sitting on. */
+.page-history-row.current .page-history-version {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+}
+
+.page-history-body {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.page-history-who {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -16,3 +16,17 @@ data:
   BeeDocs__UploadsPath: "/data/uploads"
   # Optional: protect /api/v1 (external publish API). Prefer a Secret in production.
   # BeeDocs__ApiKey: ""
+
+  # Sign-in. Off by default: this instance is fronted by Cloudflare Access, which
+  # already decides who reaches it. Turn it on to get per-person accounts and
+  # roles (admin / editor / viewer) on top of that — see Docs/USERS-AND-ROLES.md.
+  #
+  # Two things to set at the same time:
+  #   * BeeDocs__ApiKey — the MCP sidecar below has no cookie, so without a key
+  #     every one of its calls to the API becomes a 401.
+  #   * BeeDocs__Auth__SecureCookie — Cloudflare terminates TLS and forwards
+  #     plain HTTP, so the request does not look secure to Kestrel and the flag
+  #     would otherwise be left off.
+  # BeeDocs__Auth__Enabled: "true"
+  # BeeDocs__Auth__SecureCookie: "true"
+  # BeeDocs__Auth__SessionHours: "168"

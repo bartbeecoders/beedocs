@@ -2,6 +2,7 @@ using System.Reflection;
 using BeeDocs.Api.Models;
 using BeeDocs.Api.Services;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,7 +29,29 @@ Directory.CreateDirectory(uploadsRoot);
 
 builder.Services.AddSingleton(new StorageOptions(uploadsRoot));
 builder.Services.Configure<ApiKeyOptions>(builder.Configuration.GetSection(ApiKeyOptions.SectionName));
+builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.AddSingleton<ApiKeyEndpointFilter>();
+builder.Services.AddSingleton<RequestAuthenticator>();
+
+// Ownership and page history record who acted. The filter above resolves that
+// once per request; this is how the singleton services reach it.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<ICurrentUserAccessor, HttpCurrentUserAccessor>();
+builder.Services.AddSingleton<AuthEndpointFilter>();
+
+// The session lifetime is configuration, but it is also the number the session
+// table stores and slides against — handing it to the service once keeps the
+// cookie and the row from ever disagreeing about when a login ends.
+builder.Services.AddSingleton<IUserService>(sp =>
+{
+    var auth = sp.GetRequiredService<IOptions<AuthOptions>>().Value;
+    return new UserService(
+        sp.GetRequiredService<SqliteConnectionFactory>(),
+        sp.GetRequiredService<ILogger<UserService>>())
+    {
+        SessionLifetime = auth.SessionLifetime,
+    };
+});
 builder.Services.AddSingleton<IDocumentService, DocumentService>();
 builder.Services.AddSingleton<IDiagramService, DiagramService>();
 builder.Services.AddSingleton<IShapeCollectionService, ShapeCollectionService>();
@@ -86,6 +109,33 @@ if (Directory.Exists(wwwroot))
     app.UseStaticFiles();
 }
 
+// Gate /uploads behind the same sign-in as /api. Static file middleware answers
+// before any endpoint filter runs, so without this an instance with auth enabled
+// still hands every uploaded screenshot to anyone who knows the URL — and those
+// URLs are in the Markdown of pages the same instance is busy protecting.
+// Inert while BeeDocs:Auth:Enabled is off.
+app.UseWhen(
+    ctx => ctx.Request.Path.StartsWithSegments("/uploads"),
+    branch => branch.Use(async (ctx, next) =>
+    {
+        var authenticator = ctx.RequestServices.GetRequiredService<RequestAuthenticator>();
+        if (!authenticator.Enabled)
+        {
+            await next(ctx);
+            return;
+        }
+
+        var caller = await authenticator.ResolveAsync(ctx);
+        if (caller is null)
+        {
+            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        ctx.SetCurrentUser(caller);
+        await next(ctx);
+    }));
+
 // Serve the uploads directory resolved above.
 // Map 3D formats that the default content-type provider omits (otherwise 404).
 var uploadContentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
@@ -116,9 +166,30 @@ using (var scope = app.Services.CreateScope())
     {
         app.Logger.LogError(ex, "Search index could not be initialized — search may return nothing until POST /api/search/reindex.");
     }
+
+    // No account is created here. An instance with an empty account table is
+    // "unclaimed": the browser shows a one-time setup screen and whoever fills it
+    // in becomes the admin, with a password they chose. The alternative — seeding
+    // a random password and printing it — put the only copy of a credential in a
+    // log file and asked the operator to go dig it out.
+    if (app.Services.GetRequiredService<IOptions<AuthOptions>>().Value.Enabled
+        && await scope.ServiceProvider.GetRequiredService<IUserService>().CountAsync() == 0)
+    {
+        // Worth shouting about: until someone claims it, anyone who can reach
+        // this instance can, and they will be its administrator.
+        app.Logger.LogWarning(
+            "No accounts exist — BeeDocs is waiting for first-run setup. The first visitor to reach " +
+            "this instance can claim the admin account, so do not leave it publicly reachable while " +
+            "it is unclaimed.");
+    }
 }
 
 var api = app.MapGroup("/api");
+
+// Sign-in and role checks for everything under /api. Added to the group, so the
+// /api/v1 and /api/llm subgroups inherit it. Endpoints that must stay reachable
+// without a session (health, version, sign-in itself) carry AllowAnonymousEndpoint.
+api.AddEndpointFilter<AuthEndpointFilter>();
 
 // Build version, sourced from <Version> in BeeDocs.Api.csproj. The deploy script
 // bumps the last digit (the build number) on every deploy, so this is what the
@@ -152,9 +223,296 @@ if (string.IsNullOrWhiteSpace(configuredApiKey)
         "so anyone who can reach this port can spend that key. Set BeeDocs__ApiKey (or BeeDocs:ApiKey).");
 }
 
-api.MapGet("/health", () => Results.Ok(new { status = "ok", service = "BeeDocs.Api", version = appVersion }));
+var authOptions = app.Services.GetRequiredService<IOptions<AuthOptions>>().Value;
+if (authOptions.Enabled)
+{
+    app.Logger.LogInformation(
+        "BeeDocs:Auth:Enabled is on — /api and /uploads require a signed-in account (sessions last {Hours}h).",
+        authOptions.SessionLifetime.TotalHours);
 
-api.MapGet("/version", () => Results.Ok(new { version = appVersion }));
+    // MCP and every publishing app reach /api with no cookie. With sign-in on and
+    // no key configured they get a 401 on the next request they make, which reads
+    // as "the server broke" rather than "the server now wants credentials".
+    if (string.IsNullOrWhiteSpace(configuredApiKey))
+    {
+        app.Logger.LogWarning(
+            "Sign-in is enabled but BeeDocs:ApiKey is not set — non-browser clients (the MCP server, " +
+            "publishing apps) cannot authenticate and will receive 401. Set BeeDocs__ApiKey and pass it " +
+            "as BEEDOCS_API_KEY to BeeDocs.Mcp.");
+    }
+}
+
+// Health and version answer before any credential check: a readiness probe that
+// needs a session is a readiness probe that reports the wrong thing.
+api.MapGet("/health", () => Results.Ok(new { status = "ok", service = "BeeDocs.Api", version = appVersion }))
+    .WithMetadata(new AllowAnonymousEndpoint());
+
+api.MapGet("/version", () => Results.Ok(new { version = appVersion }))
+    .WithMetadata(new AllowAnonymousEndpoint());
+
+// --- Sign-in & accounts ---
+// /api/auth/* is anonymous by necessity: it is how a browser with no cookie
+// finds out whether it needs one and gets one. Each handler does its own check.
+var auth = api.MapGroup("/auth")
+    .WithMetadata(new AllowAnonymousEndpoint())
+    .WithTags("Auth");
+
+// Cookie flags in one place. HttpOnly so a script cannot read the token, Lax so
+// it survives ordinary navigation without riding along on cross-site POSTs, and
+// Secure whenever the request arrived over TLS (or SecureCookie forces it, which
+// is what a TLS-terminating proxy in front of plain HTTP needs).
+CookieOptions SessionCookie(HttpContext http, DateTimeOffset? expires) => new()
+{
+    HttpOnly = true,
+    IsEssential = true,
+    SameSite = SameSiteMode.Lax,
+    Secure = authOptions.SecureCookie ?? http.Request.IsHttps,
+    Path = "/",
+    Expires = expires,
+};
+
+static AuthStateDto AuthState(bool enabled, CurrentUser? caller, bool setupRequired = false) =>
+    new(
+        AuthEnabled: enabled,
+        Authenticated: caller is not null,
+        Via: caller?.Via ?? "none",
+        User: caller?.User,
+        Permissions: new AuthPermissionsDto(
+            CanRead: caller is not null,
+            CanWrite: caller?.CanWrite ?? false,
+            CanManageUsers: caller?.CanManageUsers ?? false),
+        SetupRequired: setupRequired);
+
+// The SPA's first call: is sign-in switched on, and who am I? Never 401s —
+// "nobody" is a valid answer and the one that renders the login screen.
+auth.MapGet("/me", async (HttpContext http, RequestAuthenticator authenticator, IUserService users, CancellationToken ct) =>
+{
+    // One COUNT per page load, on a table with a handful of rows. Cheap enough
+    // not to cache, and caching it would mean a stale "already set up" the first
+    // time someone claims the instance.
+    var unclaimed = await users.CountAsync(ct) == 0;
+
+    if (!authenticator.Enabled)
+        return Results.Ok(AuthState(false, CurrentUser.Open, unclaimed));
+
+    var caller = await authenticator.ResolveAsync(http);
+    return Results.Ok(AuthState(true, caller, unclaimed));
+});
+
+// First-run claim. Open only while the account table is empty; the emptiness
+// check lives inside the INSERT, so this cannot be raced into two admins.
+auth.MapPost("/setup", async (
+    SetupRequest body,
+    HttpContext http,
+    RequestAuthenticator authenticator,
+    IUserService users,
+    CancellationToken ct) =>
+{
+    try
+    {
+        var admin = await users.CreateFirstAdminAsync(body.Username, body.Password, body.DisplayName, ct);
+
+        // Signed straight in: making someone type the password they chose ten
+        // seconds ago into a login form proves nothing.
+        var ticket = await users.CreateSessionAsync(admin.Id, ct);
+        http.Response.Cookies.Append(authenticator.CookieName, ticket.Token, SessionCookie(http, ticket.ExpiresAt));
+
+        return Results.Ok(AuthState(authenticator.Enabled, RequestAuthenticator.ToCurrentUser(admin)));
+    }
+    catch (AlreadySetUpException e)
+    {
+        return Results.Json(new { error = e.Message }, statusCode: StatusCodes.Status409Conflict);
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["setup"] = [e.Message] });
+    }
+});
+
+auth.MapPost("/login", async (
+    LoginRequest body,
+    HttpContext http,
+    RequestAuthenticator authenticator,
+    IUserService users,
+    CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Username) || string.IsNullOrWhiteSpace(body.Password))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["username"] = ["Username and password are required."] });
+
+    var user = await users.AuthenticateAsync(body.Username, body.Password, ct);
+    if (user is null)
+    {
+        // One message for a wrong username, a wrong password and a disabled
+        // account. Which of the three it was is exactly what an attacker wants.
+        // The sentence goes in `error` because that is the field the whole API
+        // puts a readable message in — and the login form shows it verbatim.
+        return Results.Json(
+            new { error = "Incorrect username or password." },
+            statusCode: StatusCodes.Status401Unauthorized);
+    }
+
+    var ticket = await users.CreateSessionAsync(user.Id, ct);
+    http.Response.Cookies.Append(authenticator.CookieName, ticket.Token, SessionCookie(http, ticket.ExpiresAt));
+
+    return Results.Ok(AuthState(authenticator.Enabled, RequestAuthenticator.ToCurrentUser(user)));
+});
+
+auth.MapPost("/logout", async (HttpContext http, RequestAuthenticator authenticator, IUserService users, CancellationToken ct) =>
+{
+    if (http.Request.Cookies[authenticator.CookieName] is { Length: > 0 } token)
+        await users.RevokeSessionAsync(token, ct);
+
+    // Same flags as the cookie being replaced — a Delete that differs in Path or
+    // Secure leaves the original in place and the browser still signed in.
+    http.Response.Cookies.Append(authenticator.CookieName, "", SessionCookie(http, DateTimeOffset.UnixEpoch));
+    return Results.NoContent();
+});
+
+// Change your own password. Signing in is the only requirement, so this stays in
+// the anonymous group and does the check itself — a viewer may change theirs too.
+auth.MapPost("/password", async (
+    ChangePasswordRequest body,
+    HttpContext http,
+    RequestAuthenticator authenticator,
+    IUserService users,
+    CancellationToken ct) =>
+{
+    var caller = authenticator.Enabled ? await authenticator.ResolveAsync(http) : http.GetCurrentUser();
+    if (caller?.User is null)
+    {
+        return Results.Json(
+            new { error = "Unauthorized", message = "Sign in to change your password." },
+            statusCode: StatusCodes.Status401Unauthorized);
+    }
+
+    try
+    {
+        var updated = await users.ChangePasswordAsync(caller.User.Id, body.CurrentPassword, body.NewPassword, ct);
+        if (updated is null) return Results.NotFound();
+
+        // Changing a password drops every session for the account, including this
+        // one — so issue a fresh cookie rather than signing the user out of the
+        // browser they just proved themselves in.
+        var ticket = await users.CreateSessionAsync(updated.Id, ct);
+        http.Response.Cookies.Append(authenticator.CookieName, ticket.Token, SessionCookie(http, ticket.ExpiresAt));
+
+        return Results.Ok(AuthState(authenticator.Enabled, RequestAuthenticator.ToCurrentUser(updated)));
+    }
+    catch (InvalidPasswordException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["currentPassword"] = [e.Message] });
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["newPassword"] = [e.Message] });
+    }
+});
+
+// --- User management (admin only) ---
+// Admin for reads as well as writes: the list is who can reach this instance and
+// with what authority, which is not something an editor needs to enumerate.
+// Naming an account is not managing one: an editor has to be able to see who
+// they are handing a book to. Deliberately outside the admin group below, and
+// deliberately thinner than UserDto — id, name and role, enabled accounts only.
+// A literal path segment outranks "/users/{id}", so the two do not collide.
+api.MapGet("/users/directory", async (IUserService users, CancellationToken ct) =>
+    (await users.ListAsync(ct))
+        .Where(u => u.Enabled)
+        .Select(u => new UserSummaryDto(u.Id, u.Username, u.DisplayName, u.Role))
+        .ToList());
+
+var userAdmin = api.MapGroup("/users")
+    .WithMetadata(RequireRole.Admin)
+    .WithTags("Users");
+
+static IResult UserConflict(Exception e) =>
+    Results.Json(new { error = "Conflict", message = e.Message }, statusCode: StatusCodes.Status409Conflict);
+
+userAdmin.MapGet("/", async (IUserService users, CancellationToken ct) =>
+    Results.Ok(await users.ListAsync(ct)));
+
+userAdmin.MapGet("/roles", () => Results.Ok(UserRoles.All.Select(role => new
+{
+    id = role,
+    canWrite = UserRoles.CanWrite(role),
+    canManageUsers = UserRoles.CanManageUsers(role),
+})));
+
+userAdmin.MapPost("/", async (CreateUserRequest body, IUserService users, CancellationToken ct) =>
+{
+    try
+    {
+        var created = await users.CreateAsync(body, ct);
+        return Results.Created($"/api/users/{created.Id}", created);
+    }
+    catch (DuplicateUserException e)
+    {
+        return UserConflict(e);
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["user"] = [e.Message] });
+    }
+});
+
+userAdmin.MapGet("/{id}", async (string id, IUserService users, CancellationToken ct) =>
+{
+    var user = await users.GetAsync(id, ct);
+    return user is null ? Results.NotFound() : Results.Ok(user);
+});
+
+userAdmin.MapPut("/{id}", async (string id, UpdateUserRequest body, IUserService users, CancellationToken ct) =>
+{
+    try
+    {
+        var updated = await users.UpdateAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (DuplicateUserException e)
+    {
+        return UserConflict(e);
+    }
+    catch (LastAdminException e)
+    {
+        return UserConflict(e);
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["user"] = [e.Message] });
+    }
+});
+
+userAdmin.MapDelete("/{id}", async (string id, IUserService users, CancellationToken ct) =>
+{
+    try
+    {
+        return await users.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound();
+    }
+    catch (LastAdminException e)
+    {
+        return UserConflict(e);
+    }
+});
+
+// Admin reset. With no password in the body the server generates one and returns
+// it once — the only response in the API that carries a password, and the reason
+// an admin can hand someone a working login without inventing one themselves.
+userAdmin.MapPost("/{id}/password", async (
+    string id,
+    SetUserPasswordRequest? body,
+    IUserService users,
+    CancellationToken ct) =>
+{
+    try
+    {
+        var result = await users.SetPasswordAsync(id, body?.Password, body?.MustChangePassword ?? true, ct);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["password"] = [e.Message] });
+    }
+});
 
 // --- Search ---
 // Full-text over book, folder, page and diagram text. `kinds` is a comma-separated
@@ -298,6 +656,14 @@ api.MapPut("/pages/{id}", async (string id, UpdatePageRequest body, IDocumentSer
     return updated is null ? Results.NotFound() : Results.Ok(updated);
 });
 
+// Who changed this page, and when. Newest first; the first entry matches the
+// page's live version.
+api.MapGet("/pages/{id}/history", async (string id, int? limit, IDocumentService docs, CancellationToken ct) =>
+{
+    var history = await docs.GetPageHistoryAsync(id, limit ?? 100, ct);
+    return history is null ? Results.NotFound() : Results.Ok(history);
+});
+
 api.MapDelete("/pages/{id}", async (string id, IDocumentService docs, CancellationToken ct) =>
 {
     var ok = await docs.DeletePageAsync(id, ct);
@@ -414,11 +780,17 @@ var llm = api.MapGroup("/llm")
     .AddEndpointFilter<ApiKeyEndpointFilter>()
     .WithTags("LLM");
 
+// Provider rows are settings that hold a paid credential, so reading the list is
+// as much an admin question as editing it — RequireRole.Admin rather than the
+// default read/write split. /llm/complete below stays on the default rule: an
+// editor writing a page is exactly who the assist feature is for.
+var llmAdmin = RequireRole.Admin;
+
 static IResult LlmFailure(LlmException ex) =>
     Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status502BadGateway);
 
 llm.MapGet("/providers", async (ILlmProviderService providers, CancellationToken ct) =>
-    Results.Ok(await providers.ListAsync(ct)));
+    Results.Ok(await providers.ListAsync(ct))).WithMetadata(llmAdmin);
 
 llm.MapPost("/providers", async (CreateLlmProviderRequest body, ILlmProviderService providers, CancellationToken ct) =>
 {
@@ -431,13 +803,13 @@ llm.MapPost("/providers", async (CreateLlmProviderRequest body, ILlmProviderServ
     {
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["provider"] = [ex.Message] });
     }
-});
+}).WithMetadata(llmAdmin);
 
 llm.MapGet("/providers/{id}", async (string id, ILlmProviderService providers, CancellationToken ct) =>
 {
     var provider = await providers.GetAsync(id, ct);
     return provider is null ? Results.NotFound() : Results.Ok(provider);
-});
+}).WithMetadata(llmAdmin);
 
 llm.MapPut("/providers/{id}", async (string id, UpdateLlmProviderRequest body, ILlmProviderService providers, CancellationToken ct) =>
 {
@@ -450,13 +822,13 @@ llm.MapPut("/providers/{id}", async (string id, UpdateLlmProviderRequest body, I
     {
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["provider"] = [ex.Message] });
     }
-});
+}).WithMetadata(llmAdmin);
 
 llm.MapDelete("/providers/{id}", async (string id, ILlmProviderService providers, CancellationToken ct) =>
 {
     var ok = await providers.DeleteAsync(id, ct);
     return ok ? Results.NoContent() : Results.NotFound();
-});
+}).WithMetadata(llmAdmin);
 
 // Promote to default: first in sort order, and enabled, in one transaction.
 // Doing it client-side meant one PUT per provider with no way to undo a failure
@@ -465,7 +837,7 @@ llm.MapPost("/providers/{id}/default", async (string id, ILlmProviderService pro
 {
     var promoted = await providers.MakeDefaultAsync(id, ct);
     return promoted is null ? Results.NotFound() : Results.Ok(promoted);
-});
+}).WithMetadata(llmAdmin);
 
 // Reachability + credentials. Reports failure in the payload rather than as an
 // error status, because the settings UI shows the message either way.
@@ -479,7 +851,7 @@ llm.MapPost("/providers/{id}/test", async (string id, ILlmClient client, Cancell
     {
         return Results.NotFound();
     }
-});
+}).WithMetadata(llmAdmin);
 
 llm.MapGet("/providers/{id}/models", async (string id, ILlmClient client, CancellationToken ct) =>
 {
@@ -495,7 +867,7 @@ llm.MapGet("/providers/{id}/models", async (string id, ILlmClient client, Cancel
     {
         return LlmFailure(ex);
     }
-});
+}).WithMetadata(llmAdmin);
 
 llm.MapPost("/complete", async (LlmCompleteRequest body, ILlmClient client, CancellationToken ct) =>
 {

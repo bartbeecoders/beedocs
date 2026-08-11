@@ -98,10 +98,15 @@ server someone else is running.
 | `MCP_TRANSPORT` | `stdio` | `stdio` or `http` |
 | `BEEDOCS_API_URL` | `http://localhost:5080` | Base URL of BeeDocs API (no trailing slash required) |
 | `BEEDOCS_URL` | (fallback) | Same as `BEEDOCS_API_URL` if set |
+| `BEEDOCS_API_KEY` | _(unset)_ | The **API's** shared secret (`BeeDocs:ApiKey`), sent as `X-Api-Key`. Required once the API has sign-in enabled — an agent has no session cookie. See [USERS-AND-ROLES.md](./USERS-AND-ROLES.md) |
 | `MCP_HTTP_PORT` | `5090` | Listen port (http only) |
 | `MCP_HTTP_HOST` | `0.0.0.0` | Bind address (http only) |
 | `MCP_AUTH_TOKEN` | _(unset)_ | Required `Authorization: Bearer` token (http only). Unset = no auth, and the server logs a warning |
 | `MCP_PATH_BASE` | _(unset)_ | Optional URL prefix when reverse-proxied (e.g. `/beedocs-mcp`) |
+
+`BEEDOCS_API_KEY` and `MCP_AUTH_TOKEN` are different secrets for different hops:
+the first authenticates this server *to BeeDocs.Api*, the second authenticates
+*clients to this server*. Give them different values.
 
 ## Run manually (debug)
 

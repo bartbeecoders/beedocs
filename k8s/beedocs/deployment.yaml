@@ -88,6 +88,16 @@ spec:
             # Loopback within the pod — the API container above.
             - name: BEEDOCS_API_URL
               value: "http://localhost:8080"
+            # The API's own key (BeeDocs__ApiKey), sent as X-Api-Key. Only needed
+            # once the API has BeeDocs__Auth__Enabled on: an agent has no session
+            # cookie, so this is how the sidecar authenticates. Uncomment together
+            # with the auth block in the ConfigMap.
+            #
+            # - name: BEEDOCS_API_KEY
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: beedocs-api-key
+            #       key: key
             # MCP_AUTH_TOKEN is deliberately NOT set: the origin bearer check
             # is disabled, so /mcp accepts every caller that can reach it.
             # There is no Cloudflare Access policy on the MCP hostname either,
