@@ -31,7 +31,7 @@ public sealed record SearchQuery(
 );
 
 /// <summary>
-/// Full-text search over books, folders, pages and diagrams.
+/// Full-text search over shelves, books, folders, pages and diagrams.
 ///
 /// The index is a plain <c>search_doc</c> table holding extracted text, with an
 /// FTS5 table mirroring it for matching and ranking. Writes never go through this
@@ -190,12 +190,19 @@ public sealed partial class SearchIndexService(
             WHERE d.id IS NULL OR d.updated_at <> c.updated_at;
 
             INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+            SELECT 'shelf', s.id, 'upsert', datetime('now')
+            FROM shelf s
+            LEFT JOIN search_doc d ON d.kind = 'shelf' AND d.entity_id = s.id
+            WHERE d.id IS NULL OR d.updated_at <> s.updated_at;
+
+            INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
             SELECT d.kind, d.entity_id, 'delete', datetime('now')
             FROM search_doc d
             WHERE (d.kind = 'page'    AND NOT EXISTS (SELECT 1 FROM page    WHERE id = d.entity_id))
                OR (d.kind = 'diagram' AND NOT EXISTS (SELECT 1 FROM diagram WHERE id = d.entity_id))
                OR (d.kind = 'book'    AND NOT EXISTS (SELECT 1 FROM book    WHERE id = d.entity_id))
-               OR (d.kind = 'folder'  AND NOT EXISTS (SELECT 1 FROM chapter WHERE id = d.entity_id));
+               OR (d.kind = 'folder'  AND NOT EXISTS (SELECT 1 FROM chapter WHERE id = d.entity_id))
+               OR (d.kind = 'shelf'   AND NOT EXISTS (SELECT 1 FROM shelf   WHERE id = d.entity_id));
             """;
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -281,6 +288,7 @@ public sealed partial class SearchIndexService(
             "diagram" => "SELECT title, source, book_id, kind, updated_at FROM diagram WHERE id = $id",
             "book" => "SELECT title, description, updated_at FROM book WHERE id = $id",
             "folder" => "SELECT title, book_id, updated_at FROM chapter WHERE id = $id",
+            "shelf" => "SELECT title, description, updated_at FROM shelf WHERE id = $id",
             _ => null!,
         };
         if (cmd.CommandText is null) return null;
@@ -321,6 +329,14 @@ public sealed partial class SearchIndexService(
                 id,
                 reader.GetString(0),
                 "",
+                reader.GetString(2)),
+
+            // No book_id: a shelf sits above books rather than inside one, so
+            // scoping a search to a book must not turn up its shelf.
+            "shelf" => new IndexDoc(
+                kind, id, null, null,
+                reader.GetString(0),
+                SqliteHelpers.GetNullableString(reader, 1) ?? "",
                 reader.GetString(2)),
 
             _ => null,
@@ -521,6 +537,7 @@ public sealed partial class SearchIndexService(
         "diagram" when bookId is not null => $"/books/{bookId}/diagrams/{entityId}",
         "folder" when bookId is not null => $"/books/{bookId}",
         "book" => $"/books/{entityId}",
+        "shelf" => $"/shelves/{entityId}",
         _ => "/",
     };
 
@@ -661,13 +678,14 @@ public sealed partial class SearchIndexService(
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'diagram'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'book'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'folder'),
+              (SELECT COUNT(*) FROM search_doc WHERE kind = 'shelf'),
               (SELECT MAX(indexed_at) FROM search_doc)
             """;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))
-            return new SearchStatusDto(_fts ? "fts5" : "like", 0, 0, 0, 0, 0, 0, null);
+            return new SearchStatusDto(_fts ? "fts5" : "like", 0, 0, 0, 0, 0, 0, 0, null);
 
-        var lastIndexed = SqliteHelpers.GetNullableString(reader, 6) is { } raw
+        var lastIndexed = SqliteHelpers.GetNullableString(reader, 7) is { } raw
             && DateTimeOffset.TryParse(raw, out var parsed)
                 ? parsed
                 : (DateTimeOffset?)null;
@@ -680,6 +698,7 @@ public sealed partial class SearchIndexService(
             Diagrams: reader.GetInt32(3),
             Books: reader.GetInt32(4),
             Folders: reader.GetInt32(5),
+            Shelves: reader.GetInt32(6),
             LastIndexedAt: lastIndexed);
     }
 }

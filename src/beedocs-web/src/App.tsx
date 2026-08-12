@@ -82,6 +82,7 @@ const router = createBrowserRouter(
         { path: '/', element: <WorkspaceShell /> },
         { path: '/settings', element: <WorkspaceShell /> },
         { path: '/help', element: <WorkspaceShell /> },
+        { path: '/shelves/:shelfId', element: <WorkspaceShell /> },
         { path: '/books/:bookId', element: <WorkspaceShell /> },
         { path: '/books/:bookId/pages/:pageId', element: <WorkspaceShell /> },
         { path: '/books/:bookId/diagrams/:diagramId', element: <WorkspaceShell /> },

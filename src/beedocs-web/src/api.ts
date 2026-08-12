@@ -27,6 +27,7 @@ import type {
   SearchResponse,
   SearchStatus,
   ShapeCollection,
+  Shelf,
 } from './types'
 import { withApiBase } from './basePath'
 
@@ -237,14 +238,51 @@ export const api = {
   getSearchStatus: () => request<SearchStatus>('/api/search/status'),
   reindexSearch: () => request<SearchStatus>('/api/search/reindex', { method: 'POST' }),
 
+  /**
+   * Shelves — the level above books. Deleting one leaves its books alone; they
+   * simply return to the library root.
+   */
+  listShelves: () => request<Shelf[]>('/api/shelves'),
+  getShelf: (id: string) => request<Shelf>(`/api/shelves/${id}`),
+  listShelfBooks: (id: string) => request<Book[]>(`/api/shelves/${id}/books`),
+  createShelf: (body: { title: string; description?: string; slug?: string; ownerId?: string }) =>
+    request<Shelf>('/api/shelves', { method: 'POST', body: JSON.stringify(body) }),
+  updateShelf: (
+    id: string,
+    body: {
+      title: string
+      description?: string
+      slug?: string
+      sortOrder?: number
+      /** Omit to leave the owner alone; "" clears it. */
+      ownerId?: string | null
+    },
+  ) => request<Shelf>(`/api/shelves/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteShelf: (id: string) => request<void>(`/api/shelves/${id}`, { method: 'DELETE' }),
+
   listBooks: () => request<Book[]>('/api/books'),
   getBook: (id: string) => request<Book>(`/api/books/${id}`),
-  createBook: (body: { title: string; description?: string; slug?: string; ownerId?: string }) =>
-    request<Book>('/api/books', { method: 'POST', body: JSON.stringify(body) }),
-  /** `ownerId`: omit to leave the owner alone, "" to clear it. */
+  createBook: (body: {
+    title: string
+    description?: string
+    slug?: string
+    ownerId?: string
+    /** Omit to create the book at the library root. */
+    shelfId?: string
+  }) => request<Book>('/api/books', { method: 'POST', body: JSON.stringify(body) }),
+  /**
+   * `ownerId`: omit to leave the owner alone, "" to clear it.
+   * `shelfId`: omit to leave the shelf alone, "" to move the book to the root.
+   */
   updateBook: (
     id: string,
-    body: { title: string; description?: string; slug?: string; ownerId?: string | null },
+    body: {
+      title: string
+      description?: string
+      slug?: string
+      ownerId?: string | null
+      shelfId?: string | null
+    },
   ) => request<Book>(`/api/books/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteBook: (id: string) => request<void>(`/api/books/${id}`, { method: 'DELETE' }),
 

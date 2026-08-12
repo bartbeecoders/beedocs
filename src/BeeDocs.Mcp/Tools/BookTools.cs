@@ -8,7 +8,7 @@ namespace BeeDocs.Mcp.Tools;
 public sealed class BookTools(BeeDocsApiClient client)
 {
     [McpServerTool(Name = "beedocs_list_books", Title = "List books"),
-     Description("List all documentation books (shelves) in BeeDocs.")]
+     Description("List all documentation books in BeeDocs. Each carries shelfId/shelfTitle when it is filed on a shelf; see beedocs_list_shelves for the level above.")]
     public Task<string> ListBooks(CancellationToken ct) =>
         ToolHelpers.RunAsync(async () => ToolHelpers.Json(await client.ListBooksAsync(ct)));
 
@@ -25,21 +25,26 @@ public sealed class BookTools(BeeDocsApiClient client)
         [Description("Book title")] string title,
         [Description("Optional description")] string? description = null,
         [Description("Optional URL slug (auto-generated if omitted)")] string? slug = null,
+        [Description("Optional shelf to file the book on. Omit to create it at the library root.")]
+        string? shelfId = null,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
-            ToolHelpers.Json(await client.CreateBookAsync(new { title, description, slug }, ct)));
+            ToolHelpers.Json(await client.CreateBookAsync(new { title, description, slug, shelfId }, ct)));
 
     [McpServerTool(Name = "beedocs_update_book", Title = "Update book"),
-     Description("Update an existing book title, description, slug, or sort order.")]
+     Description("Update an existing book title, description, slug, sort order, or shelf. Omitted fields are left as they are.")]
     public Task<string> UpdateBook(
         string bookId,
         string title,
         string? description = null,
         string? slug = null,
         int? sortOrder = null,
+        [Description("Shelf to file the book on. Omit to leave it where it is; pass an empty string to move it to the library root.")]
+        string? shelfId = null,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
-            ToolHelpers.Json(await client.UpdateBookAsync(bookId, new { title, description, slug, sortOrder }, ct)));
+            ToolHelpers.Json(await client.UpdateBookAsync(
+                bookId, new { title, description, slug, sortOrder, shelfId }, ct)));
 
     [McpServerTool(Name = "beedocs_delete_book", Title = "Delete book", Destructive = true),
      Description("Delete a book and cascade its pages/chapters. Destructive.")]

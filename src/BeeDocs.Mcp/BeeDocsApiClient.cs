@@ -26,6 +26,24 @@ public sealed class BeeDocsApiClient(HttpClient http)
     public Task<JsonElement> HealthAsync(CancellationToken ct = default)
         => GetAsync("/api/health", ct);
 
+    public Task<JsonElement> ListShelvesAsync(CancellationToken ct = default)
+        => GetAsync("/api/shelves", ct);
+
+    public Task<JsonElement> GetShelfAsync(string id, CancellationToken ct = default)
+        => GetAsync($"/api/shelves/{Uri.EscapeDataString(id)}", ct);
+
+    public Task<JsonElement> ListShelfBooksAsync(string id, CancellationToken ct = default)
+        => GetAsync($"/api/shelves/{Uri.EscapeDataString(id)}/books", ct);
+
+    public Task<JsonElement> CreateShelfAsync(object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Post, "/api/shelves", body, ct);
+
+    public Task<JsonElement> UpdateShelfAsync(string id, object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Put, $"/api/shelves/{Uri.EscapeDataString(id)}", body, ct);
+
+    public Task DeleteShelfAsync(string id, CancellationToken ct = default)
+        => SendAsync(HttpMethod.Delete, $"/api/shelves/{Uri.EscapeDataString(id)}", null, ct);
+
     public Task<JsonElement> ListBooksAsync(CancellationToken ct = default)
         => GetAsync("/api/books", ct);
 

@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { api } from '../api'
-import type { Book, Chapter, DiagramSummary, PageSummary } from '../types'
+import type { Book, Chapter, DiagramSummary, PageSummary, Shelf } from '../types'
 import {
   selectionEquals,
   selectionFromRoute,
@@ -29,8 +29,18 @@ export type TreeBook = Book & {
   loading?: boolean
 }
 
+export type TreeShelf = Shelf & {
+  expanded: boolean
+}
+
 type WorkspaceCtx = {
+  /**
+   * Every book, shelved or not — the tree groups them by {@link TreeBook.shelfId}
+   * rather than nesting them, so a book keeps one identity and one loaded set of
+   * children wherever it is shown.
+   */
   books: TreeBook[]
+  shelves: TreeShelf[]
   loading: boolean
   error: string | null
   /** Current library selection (route-synced + folder tree clicks) */
@@ -42,11 +52,19 @@ type WorkspaceCtx = {
   toggleBook: (bookId: string) => Promise<void>
   expandBook: (bookId: string) => Promise<void>
   toggleFolder: (bookId: string, chapterId: string) => void
-  createBook: (title: string, description?: string) => Promise<Book>
+  toggleShelf: (shelfId: string) => void
+  /** Omit `shelfId` to create the book at the library root. */
+  createBook: (title: string, description?: string, shelfId?: string | null) => Promise<Book>
+  createShelf: (title: string, description?: string) => Promise<Shelf>
   createPage: (bookId: string, title: string, chapterId?: string | null) => Promise<PageSummary>
   createFolder: (bookId: string, title: string) => Promise<Chapter>
   createDiagram: (bookId: string, title: string) => Promise<DiagramSummary>
   deleteBook: (bookId: string) => Promise<void>
+  /** The shelf goes; its books return to the library root. */
+  deleteShelf: (shelfId: string) => Promise<void>
+  renameShelf: (shelfId: string, title: string) => Promise<void>
+  /** Move a book onto a shelf, or to the library root when `shelfId` is null. */
+  moveBookToShelf: (bookId: string, shelfId: string | null) => Promise<void>
   deletePage: (pageId: string, bookId: string) => Promise<void>
   deleteFolder: (chapterId: string, bookId: string) => Promise<void>
   deleteDiagram: (diagramId: string, bookId: string) => Promise<void>
@@ -67,6 +85,7 @@ const Ctx = createContext<WorkspaceCtx | null>(null)
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [books, setBooks] = useState<TreeBook[]>([])
+  const [shelves, setShelves] = useState<TreeShelf[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selection, setSelectionState] = useState<TreeSelection>({ kind: 'none' })
@@ -86,6 +105,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return new Set()
     }
   })
+  // Shelves start open. A collapsed shelf hides whole books, and someone who has
+  // never used the feature should not find their library apparently empty.
+  const [collapsedShelves, setCollapsedShelves] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('beedocs-collapsed-shelves')
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set()
+    } catch {
+      return new Set()
+    }
+  })
 
   useEffect(() => {
     localStorage.setItem('beedocs-expanded-books', JSON.stringify([...expandedIds]))
@@ -94,6 +123,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('beedocs-expanded-folders', JSON.stringify([...expandedFolders]))
   }, [expandedFolders])
+
+  useEffect(() => {
+    localStorage.setItem('beedocs-collapsed-shelves', JSON.stringify([...collapsedShelves]))
+  }, [collapsedShelves])
 
   /** Last route key applied by sync — folder clicks only stick until the route changes. */
   const lastRouteKeyRef = useRef<string | null>(null)
@@ -123,7 +156,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const refreshTree = useCallback(async () => {
     setError(null)
     try {
-      const list = await api.listBooks()
+      const [shelfList, list] = await Promise.all([api.listShelves(), api.listBooks()])
+      setShelves(
+        shelfList.map((s) => ({ ...s, expanded: !collapsedShelves.has(s.id) })),
+      )
       const next: TreeBook[] = await Promise.all(
         list.map(async (b) => {
           const expanded = expandedIds.has(b.id)
@@ -165,7 +201,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [expandedIds, expandedFolders])
+  }, [expandedIds, expandedFolders, collapsedShelves])
 
   useEffect(() => {
     void refreshTree()
@@ -239,20 +275,110 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     )
   }, [])
 
-  const createBook = useCallback(async (title: string, description?: string) => {
-    const book = await api.createBook({ title, description })
-    setBooks((prev) => [
-      ...prev,
-      {
-        ...book,
-        pages: [],
-        diagrams: [],
-        chapters: [],
-        expanded: false,
-        expandedFolders: new Set(),
-      },
-    ])
-    return book
+  const toggleShelf = useCallback((shelfId: string) => {
+    setCollapsedShelves((s) => {
+      const n = new Set(s)
+      if (n.has(shelfId)) n.delete(shelfId)
+      else n.add(shelfId)
+      return n
+    })
+    setShelves((prev) =>
+      prev.map((s) => (s.id === shelfId ? { ...s, expanded: !s.expanded } : s)),
+    )
+  }, [])
+
+  const createBook = useCallback(
+    async (title: string, description?: string, shelfId?: string | null) => {
+      const book = await api.createBook({ title, description, shelfId: shelfId ?? undefined })
+      setBooks((prev) => [
+        ...prev,
+        {
+          ...book,
+          pages: [],
+          diagrams: [],
+          chapters: [],
+          expanded: false,
+          expandedFolders: new Set(),
+        },
+      ])
+      if (book.shelfId) {
+        setShelves((prev) =>
+          prev.map((s) =>
+            s.id === book.shelfId ? { ...s, bookCount: s.bookCount + 1, expanded: true } : s,
+          ),
+        )
+        setCollapsedShelves((s) => {
+          const n = new Set(s)
+          n.delete(book.shelfId!)
+          return n
+        })
+      }
+      return book
+    },
+    [],
+  )
+
+  const createShelf = useCallback(async (title: string, description?: string) => {
+    const shelf = await api.createShelf({ title, description })
+    setShelves((prev) => [...prev, { ...shelf, expanded: true }])
+    return shelf
+  }, [])
+
+  const renameShelf = useCallback(async (shelfId: string, title: string) => {
+    const updated = await api.updateShelf(shelfId, { title })
+    setShelves((prev) =>
+      prev.map((s) => (s.id === shelfId ? { ...updated, expanded: s.expanded } : s)),
+    )
+    // The book rows carry the shelf title for the properties pane, so they have
+    // to hear about the rename too.
+    setBooks((prev) =>
+      prev.map((b) => (b.shelfId === shelfId ? { ...b, shelfTitle: updated.title } : b)),
+    )
+  }, [])
+
+  const deleteShelf = useCallback(async (shelfId: string) => {
+    await api.deleteShelf(shelfId)
+    setShelves((prev) => prev.filter((s) => s.id !== shelfId))
+    // Server-side the books are unshelved, not deleted — mirror that rather than
+    // dropping them out of the tree until the next refresh.
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.shelfId === shelfId ? { ...b, shelfId: null, shelfTitle: null } : b,
+      ),
+    )
+  }, [])
+
+  const moveBookToShelf = useCallback(async (bookId: string, shelfId: string | null) => {
+    const book = await api.getBook(bookId)
+    if ((book.shelfId ?? null) === shelfId) return
+    const updated = await api.updateBook(bookId, {
+      title: book.title,
+      // "" is the API's "move to the library root"; omitting it would mean
+      // "leave the shelf alone", which is the opposite of what unshelving needs.
+      shelfId: shelfId ?? '',
+    })
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.id === bookId
+          ? { ...b, shelfId: updated.shelfId ?? null, shelfTitle: updated.shelfTitle ?? null }
+          : b,
+      ),
+    )
+    const from = book.shelfId ?? null
+    setShelves((prev) =>
+      prev.map((s) => {
+        if (s.id === from) return { ...s, bookCount: Math.max(0, s.bookCount - 1) }
+        if (s.id === shelfId) return { ...s, bookCount: s.bookCount + 1, expanded: true }
+        return s
+      }),
+    )
+    if (shelfId) {
+      setCollapsedShelves((s) => {
+        const n = new Set(s)
+        n.delete(shelfId)
+        return n
+      })
+    }
   }, [])
 
   const createPage = useCallback(async (bookId: string, title: string, chapterId?: string | null) => {
@@ -339,10 +465,21 @@ graph LR
     return diagram
   }, [])
 
-  const deleteBook = useCallback(async (bookId: string) => {
-    await api.deleteBook(bookId)
-    setBooks((prev) => prev.filter((b) => b.id !== bookId))
-  }, [])
+  const deleteBook = useCallback(
+    async (bookId: string) => {
+      const shelfId = books.find((b) => b.id === bookId)?.shelfId ?? null
+      await api.deleteBook(bookId)
+      setBooks((prev) => prev.filter((b) => b.id !== bookId))
+      if (shelfId) {
+        setShelves((prev) =>
+          prev.map((s) =>
+            s.id === shelfId ? { ...s, bookCount: Math.max(0, s.bookCount - 1) } : s,
+          ),
+        )
+      }
+    },
+    [books],
+  )
 
   const deletePage = useCallback(async (pageId: string, bookId: string) => {
     await api.deletePage(pageId)
@@ -476,6 +613,7 @@ graph LR
   const value = useMemo(
     () => ({
       books,
+      shelves,
       loading,
       error,
       selection,
@@ -485,11 +623,16 @@ graph LR
       toggleBook,
       expandBook,
       toggleFolder,
+      toggleShelf,
       createBook,
+      createShelf,
       createPage,
       createFolder,
       createDiagram,
       deleteBook,
+      deleteShelf,
+      renameShelf,
+      moveBookToShelf,
       deletePage,
       deleteFolder,
       deleteDiagram,
@@ -500,6 +643,7 @@ graph LR
     }),
     [
       books,
+      shelves,
       loading,
       error,
       selection,
@@ -509,11 +653,16 @@ graph LR
       toggleBook,
       expandBook,
       toggleFolder,
+      toggleShelf,
       createBook,
+      createShelf,
       createPage,
       createFolder,
       createDiagram,
       deleteBook,
+      deleteShelf,
+      renameShelf,
+      moveBookToShelf,
       deletePage,
       deleteFolder,
       deleteDiagram,

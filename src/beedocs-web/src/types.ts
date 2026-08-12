@@ -1,9 +1,32 @@
+/**
+ * The level above books: a named grouping of related books. A shelf holds no
+ * content of its own — deleting one returns its books to the library root.
+ */
+export type Shelf = {
+  id: string
+  title: string
+  description?: string | null
+  slug: string
+  sortOrder: number
+  /** Account responsible for the shelf. Null when nobody was identified. */
+  ownerId?: string | null
+  ownerName?: string | null
+  /** Books currently on the shelf. */
+  bookCount: number
+  createdAt: string
+  updatedAt: string
+}
+
 export type Book = {
   id: string
   title: string
   description?: string | null
   slug: string
   sortOrder: number
+  /** Shelf this book sits on. Null/undefined means the library root. */
+  shelfId?: string | null
+  /** That shelf's title, resolved server-side. */
+  shelfTitle?: string | null
   /** Account responsible for the book. Null when nobody was identified. */
   ownerId?: string | null
   /** The owner's display name, resolved server-side. Null once the account is gone. */
@@ -75,7 +98,7 @@ export type PageHistory = {
 /** Server-rendered export formats. PDF is produced in the browser instead. */
 export type ExportFormat = 'archive' | 'markdown' | 'docx'
 
-export type SearchKind = 'page' | 'diagram' | 'book' | 'folder'
+export type SearchKind = 'page' | 'diagram' | 'book' | 'folder' | 'shelf'
 
 /** Sentinels the API wraps matched terms in. Never present in stored content. */
 export const HIGHLIGHT_OPEN = '\ue000'
@@ -115,6 +138,7 @@ export type SearchStatus = {
   diagrams: number
   books: number
   folders: number
+  shelves: number
   lastIndexedAt: string | null
 }
 

@@ -867,6 +867,12 @@ select:focus {
   font-weight: 600;
 }
 
+/* A shelf sits above books, so it reads a shade stronger than one. */
+.tree-label.shelf {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
 .tree-text {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2533,6 +2539,44 @@ select:focus {
 .drop-line.active {
   background: var(--accent);
   height: 4px;
+}
+
+/* The "Not on a shelf" heading is also where a book is dropped to unshelve it,
+   so it needs the same drag affordance as a real row. */
+.tree-group-label.root-drop {
+  border-radius: 6px;
+}
+
+.tree-group-label.root-drop.drag-over {
+  outline: 1px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.shelf-book-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.shelf-book-link {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+}
+
+.shelf-book-link:hover {
+  border-color: var(--accent);
+}
+
+.shelf-book-title {
+  font-weight: 600;
 }
 
 .tree-folder > .tree-children.nested {

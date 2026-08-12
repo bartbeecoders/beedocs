@@ -15,6 +15,7 @@ const KIND_GROUPS: { kind: SearchKind; label: string }[] = [
   { kind: 'diagram', label: 'Diagrams' },
   { kind: 'book', label: 'Books' },
   { kind: 'folder', label: 'Folders' },
+  { kind: 'shelf', label: 'Shelves' },
 ]
 
 const KIND_ICON: Record<SearchKind, string> = {
@@ -22,6 +23,7 @@ const KIND_ICON: Record<SearchKind, string> = {
   diagram: '\u2B21',
   book: '\u{1F4D8}',
   folder: '\u{1F4C1}',
+  shelf: '\u{1F4DA}',
 }
 
 /** Debounce long enough to skip intermediate keystrokes, short enough to feel live. */

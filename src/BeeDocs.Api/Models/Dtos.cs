@@ -2,6 +2,41 @@ using System.ComponentModel.DataAnnotations;
 
 namespace BeeDocs.Api.Models;
 
+/// <param name="OwnerId">Account responsible for the shelf, or null when nobody was identified.</param>
+/// <param name="BookCount">Books currently on the shelf.</param>
+public sealed record ShelfDto(
+    string Id,
+    string Title,
+    string? Description,
+    string Slug,
+    int SortOrder,
+    string? OwnerId,
+    string? OwnerName,
+    int BookCount,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="OwnerId">Omit to take the caller as owner.</param>
+public sealed record CreateShelfRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Description,
+    string? Slug,
+    string? OwnerId = null
+);
+
+/// <param name="Description">null leaves it untouched; "" clears it.</param>
+/// <param name="OwnerId">null leaves the owner untouched; "" clears it; anything else replaces it.</param>
+public sealed record UpdateShelfRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Description,
+    string? Slug,
+    int? SortOrder,
+    string? OwnerId = null
+);
+
+/// <param name="ShelfId">The shelf this book sits on, or null when it sits at the library root.</param>
+/// <param name="ShelfTitle">That shelf's title, resolved for the client.</param>
 /// <param name="OwnerId">Account responsible for the book, or null when nobody was identified.</param>
 /// <param name="OwnerName">That account's display name, resolved for the client. Null when the account is gone.</param>
 public sealed record BookDto(
@@ -10,27 +45,34 @@ public sealed record BookDto(
     string? Description,
     string Slug,
     int SortOrder,
+    string? ShelfId,
+    string? ShelfTitle,
     string? OwnerId,
     string? OwnerName,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
 );
 
+/// <param name="ShelfId">Omit or leave blank to create the book at the library root.</param>
 /// <param name="OwnerId">Omit to take the caller as owner.</param>
 public sealed record CreateBookRequest(
     [property: Required, MinLength(1)] string Title,
     string? Description,
     string? Slug,
-    string? OwnerId = null
+    string? OwnerId = null,
+    string? ShelfId = null
 );
 
+/// <param name="Description">null leaves it untouched; "" clears it. A partial update must not delete text it never mentioned.</param>
+/// <param name="ShelfId">null leaves the shelf untouched; "" moves the book to the library root; anything else shelves it there.</param>
 /// <param name="OwnerId">null leaves the owner untouched; "" clears it; anything else replaces it.</param>
 public sealed record UpdateBookRequest(
     [property: Required, MinLength(1)] string Title,
     string? Description,
     string? Slug,
     int? SortOrder,
-    string? OwnerId = null
+    string? OwnerId = null,
+    string? ShelfId = null
 );
 
 public sealed record ChapterDto(
@@ -265,7 +307,7 @@ public sealed record UpdateShapeCollectionRequest(
     string? Source
 );
 
-/// <param name="Kind">book, folder, page or diagram.</param>
+/// <param name="Kind">shelf, book, folder, page or diagram.</param>
 /// <param name="Snippet">Matching excerpt. Matched terms are wrapped in U+E000/U+E001.</param>
 /// <param name="Url">Workspace route for the hit.</param>
 /// <param name="Score">bm25 rank — lower is a better match.</param>
@@ -302,6 +344,7 @@ public sealed record SearchStatusDto(
     int Diagrams,
     int Books,
     int Folders,
+    int Shelves,
     DateTimeOffset? LastIndexedAt
 );
 

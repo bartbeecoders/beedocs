@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 BeeDocs is a self-hosted documentation platform (BookStack-style) for software +
-hardware systems architecture: Books → Pages, Markdown editor, Mermaid/C4
+hardware systems architecture: Shelves → Books → Pages, Markdown editor, Mermaid/C4
 diagrams, and a custom draw.io-style diagram editor ("BeeDiagram"). Three
 components in one repo, no separate database container (SQLite is embedded):
 
@@ -91,21 +91,33 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
  BeeDocs.Mcp (.NET, stdio or HTTP :5090)
 ```
 
-- **BeeDocs.Api** is a single-file minimal-API (`Program.cs`) mapping `/api/books`,
+- **BeeDocs.Api** is a single-file minimal-API (`Program.cs`) mapping `/api/shelves`,
+  `/api/books`,
   `/api/books/{id}/chapters`, `/api/books/{id}/pages`, `/api/pages/{id}`,
   `/api/books/{id}/diagrams`, `/api/diagrams/{id}`, `/api/uploads`, `/api/search`,
   `/api/auth/*`, `/api/users/*`, plus `/api/health` and `/api/version`.
   Business logic lives in `Services/`
-  (`DocumentService` for books/chapters/pages, `DiagramService` for diagrams);
-  entities are in `Models/Entities.cs` (`Book`, `Chapter`, `Page`,
+  (`DocumentService` for shelves/books/chapters/pages, `DiagramService` for diagrams);
+  entities are in `Models/Entities.cs` (`Shelf`, `Book`, `Chapter`, `Page`,
   `PageRevision`, `Diagram` — plain POCOs with string ids).
+- **Shelves** are the level above books: `shelf` rows plus a nullable
+  `book.shelf_id`, so a book sits on at most one shelf and a book with no shelf
+  sits at the library root — which is where every book was before the feature, so
+  the migration needs no backfill. A shelf holds no content, so `DeleteShelfAsync`
+  clears `shelf_id` on its books instead of cascading. `UpdateBookRequest` follows
+  one convention for all three optional fields (`ShelfId`, `OwnerId`,
+  `Description`): **null leaves it alone, `""` clears it** — the UI sends partial
+  updates, and reading an omitted field as "clear it" is how assigning an owner
+  used to delete a book's description. The tree groups books by `shelfId` rather
+  than nesting them (`WorkspaceContext` keeps one flat `books` list), so a book has
+  one identity and one loaded set of children wherever it is drawn.
 - **SQLite** is file-backed by default (`data/sqlite/beedocs.db` under the API
   content root, directory configurable via `BeeDocs:DataPath`, or a full
   `ConnectionStrings:Sqlite`). There is no separate DB server.
 - **Search** is SQLite FTS5 over a `search_doc` projection built by
   `SearchIndexService`, which is also where Markdown is reduced to indexable text
   (diagram JSON contributes only its shape labels). Nothing calls the indexer to
-  register a write: triggers on `page`/`diagram`/`book`/`chapter` record changes
+  register a write: triggers on `page`/`diagram`/`book`/`chapter`/`shelf` record changes
   in `search_queue`, and the queue is drained at startup and before each search,
   so the index stays correct whoever wrote the row — UI, MCP, import, or direct
   SQL. Exposed at `/api/search`, `/api/v1/search`, and the `beedocs_search` MCP

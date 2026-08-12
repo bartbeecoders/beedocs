@@ -1,5 +1,28 @@
 namespace BeeDocs.Api.Models;
 
+/// <summary>
+/// The level above books: a named grouping of related books. A shelf holds no
+/// content of its own, and a book belongs to at most one — books with no shelf
+/// stay at the root of the library, which is where every book was before shelves
+/// existed.
+/// </summary>
+public sealed class Shelf
+{
+    public string Id { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string Slug { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    /// <summary>
+    /// <see cref="User.Id"/> of the account responsible for this shelf, or null
+    /// when nobody was identified. Like every other owner, it grants nothing —
+    /// permissions stay role-based.
+    /// </summary>
+    public string? OwnerId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 /// <summary>Top-level collection of related chapters/pages (BookStack-style book).</summary>
 public sealed class Book
 {
@@ -8,6 +31,11 @@ public sealed class Book
     public string? Description { get; set; }
     public string Slug { get; set; } = string.Empty;
     public int SortOrder { get; set; }
+    /// <summary>
+    /// <see cref="Shelf.Id"/> this book sits on, or null when it sits at the
+    /// library root. Deleting a shelf clears this rather than the book.
+    /// </summary>
+    public string? ShelfId { get; set; }
     /// <summary>
     /// <see cref="User.Id"/> of the account responsible for this book, or null
     /// when nobody was identified. Pages created in the book inherit it.

@@ -16,12 +16,29 @@ public static class DatabaseInitializer
 
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = """
+            -- The level above books. Holds no content itself, so deleting one
+            -- unshelves its books rather than cascading into them.
+            CREATE TABLE IF NOT EXISTS shelf (
+              id TEXT PRIMARY KEY NOT NULL,
+              title TEXT NOT NULL,
+              description TEXT,
+              slug TEXT NOT NULL UNIQUE,
+              sort_order INTEGER NOT NULL DEFAULT 0,
+              owner_id TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS book (
               id TEXT PRIMARY KEY NOT NULL,
               title TEXT NOT NULL,
               description TEXT,
               slug TEXT NOT NULL UNIQUE,
               sort_order INTEGER NOT NULL DEFAULT 0,
+              -- shelf.id, or NULL for a book at the library root. Not a foreign
+              -- key, for the same reason owner_id is not: the shelf going away
+              -- must not take the book with it.
+              shelf_id TEXT,
               -- app_user.id, or NULL when nobody was identified (sign-in off, or
               -- an API-key caller). Not a foreign key: deleting an account must
               -- not cascade into deleting its books.
@@ -189,6 +206,9 @@ public static class DatabaseInitializer
         // so columns added after a release reach existing databases only here.
         // Ordered before the indexes below, which reference them.
         await AddColumnIfMissingAsync(connection, "book", "owner_id", "TEXT", ct);
+        // NULL is "at the library root", which is where every book in an existing
+        // database already is — so the migration needs no backfill.
+        await AddColumnIfMissingAsync(connection, "book", "shelf_id", "TEXT", ct);
         await AddColumnIfMissingAsync(connection, "page", "owner_id", "TEXT", ct);
         await AddColumnIfMissingAsync(connection, "page_revision", "changed_by", "TEXT", ct);
         await AddColumnIfMissingAsync(connection, "page_revision", "changed_by_name", "TEXT", ct);
@@ -209,6 +229,8 @@ public static class DatabaseInitializer
                 CREATE INDEX IF NOT EXISTS idx_page_revision_page_version ON page_revision(page_id, version DESC);
                 CREATE INDEX IF NOT EXISTS idx_book_owner ON book(owner_id);
                 CREATE INDEX IF NOT EXISTS idx_page_owner ON page(owner_id);
+                CREATE INDEX IF NOT EXISTS idx_book_shelf ON book(shelf_id);
+                CREATE INDEX IF NOT EXISTS idx_shelf_owner ON shelf(owner_id);
                 """;
             await indexes.ExecuteNonQueryAsync(ct);
         }
@@ -289,6 +311,19 @@ public static class DatabaseInitializer
         CREATE TRIGGER IF NOT EXISTS trg_book_search_delete AFTER DELETE ON book BEGIN
           INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
           VALUES ('book', old.id, 'delete', datetime('now'));
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_shelf_search_insert AFTER INSERT ON shelf BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('shelf', new.id, 'upsert', datetime('now'));
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_shelf_search_update AFTER UPDATE ON shelf BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('shelf', new.id, 'upsert', datetime('now'));
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_shelf_search_delete AFTER DELETE ON shelf BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('shelf', old.id, 'delete', datetime('now'));
         END;
 
         CREATE TRIGGER IF NOT EXISTS trg_chapter_search_insert AFTER INSERT ON chapter BEGIN

@@ -21,7 +21,7 @@ export function WorkspaceShell() {
   const location = useLocation()
   const params = useParams()
   const { themeDef } = useTheme()
-  const { books, expandBook, syncSelectionFromRoute } = useWorkspace()
+  const { books, shelves, expandBook, syncSelectionFromRoute } = useWorkspace()
   const [layout, setLayout] = useState<PaneLayout>(() => loadPaneLayout())
   const [pageState, setPageState] = useState<PageEditorState | null>(null)
   const [diagramState, setDiagramState] = useState<DiagramEditorState | null>(null)
@@ -62,18 +62,27 @@ export function WorkspaceShell() {
     if (params.pageId) return 'page' as const
     if (params.diagramId) return 'diagram' as const
     if (params.bookId) return 'book' as const
+    if (params.shelfId) return 'shelf' as const
     return 'welcome' as const
-  }, [location.pathname, params.bookId, params.pageId, params.diagramId])
+  }, [location.pathname, params.shelfId, params.bookId, params.pageId, params.diagramId])
 
   // Keep toolbar selection aligned with the route (folders stick until route changes).
   useEffect(() => {
     syncSelectionFromRoute({
       view,
+      shelfId: params.shelfId,
       bookId: params.bookId,
       pageId: params.pageId,
       diagramId: params.diagramId,
     })
-  }, [view, params.bookId, params.pageId, params.diagramId, syncSelectionFromRoute])
+  }, [
+    view,
+    params.shelfId,
+    params.bookId,
+    params.pageId,
+    params.diagramId,
+    syncSelectionFromRoute,
+  ])
 
   // Expand book when navigating into it
   useEffect(() => {
@@ -93,6 +102,11 @@ export function WorkspaceShell() {
     if (view === 'help') return [{ label: 'About & Help' }]
     const book = books.find((b) => b.id === params.bookId)
     const crumbs: { label: string; to?: string }[] = [{ label: 'Library', to: '/' }]
+    // A shelf is the level above books, so it goes in front of the book crumb
+    // whether we are sitting on the shelf or somewhere below it.
+    const shelfId = params.shelfId ?? book?.shelfId ?? null
+    const shelf = shelfId ? shelves.find((s) => s.id === shelfId) : undefined
+    if (shelf) crumbs.push({ label: shelf.title, to: `/shelves/${shelf.id}` })
     if (book) {
       crumbs.push({ label: book.title, to: `/books/${book.id}` })
       if (params.pageId) {
@@ -104,7 +118,17 @@ export function WorkspaceShell() {
       }
     }
     return crumbs
-  }, [view, books, params.bookId, params.pageId, params.diagramId, pageState?.title, diagramState?.title])
+  }, [
+    view,
+    books,
+    shelves,
+    params.shelfId,
+    params.bookId,
+    params.pageId,
+    params.diagramId,
+    pageState?.title,
+    diagramState?.title,
+  ])
 
   return (
     <div className="workspace">
@@ -159,6 +183,7 @@ export function WorkspaceShell() {
 
       <WorkspaceToolbar
         view={view}
+        shelfId={params.shelfId}
         bookId={params.bookId}
         pageId={params.pageId}
         diagramId={params.diagramId}
@@ -193,6 +218,7 @@ export function WorkspaceShell() {
           )}
           {view === 'help' && <HelpPanel />}
           {view === 'welcome' && <WelcomeCanvas />}
+          {view === 'shelf' && <ShelfOverview shelfId={params.shelfId!} />}
           {view === 'book' && <BookOverview bookId={params.bookId!} />}
           {view === 'page' && <PageCanvas onStateChange={setPageState} />}
           {view === 'diagram' && <DiagramCanvas onStateChange={setDiagramState} />}
@@ -317,6 +343,82 @@ function WelcomeCanvas() {
           agent to this instance over MCP.
         </p>
       </div>
+    </div>
+  )
+}
+
+/**
+ * A shelf has no content of its own, so its canvas is the list of books on it
+ * and a way to add another.
+ */
+function ShelfOverview({ shelfId }: { shelfId: string }) {
+  const navigate = useNavigate()
+  const { canWrite } = useAuth()
+  const { shelves, books, createBook } = useWorkspace()
+  const shelf = shelves.find((s) => s.id === shelfId)
+  const [prompt, setPrompt] = useState(false)
+
+  if (!shelf) {
+    return <div className="canvas-message muted">Loading shelf…</div>
+  }
+
+  const shelved = books
+    .filter((b) => b.shelfId === shelfId)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title))
+
+  return (
+    <div className="book-overview">
+      <div className="book-overview-head">
+        <h1>📚 {shelf.title}</h1>
+      </div>
+      {shelf.description && <p className="muted lead">{shelf.description}</p>}
+      <div className="overview-stats">
+        <div className="stat">
+          <span className="stat-value">{shelved.length}</span>
+          <span className="stat-label">Books</span>
+        </div>
+      </div>
+
+      {shelved.length > 0 ? (
+        <ul className="shelf-book-list">
+          {shelved.map((b) => (
+            <li key={b.id}>
+              <Link to={`/books/${b.id}`} className="shelf-book-link">
+                <span aria-hidden>📘</span>
+                <span className="shelf-book-title">{b.title}</span>
+                {b.description && <span className="muted sm">{b.description}</span>}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">
+          {canWrite
+            ? 'No books on this shelf yet. Create one, or drag an existing book onto the shelf in the library tree.'
+            : 'No books on this shelf yet.'}
+        </p>
+      )}
+
+      {canWrite && (
+        <div className="row" style={{ gap: '0.5rem', marginTop: '1rem' }}>
+          <button type="button" className="btn primary sm" onClick={() => setPrompt(true)}>
+            New book on this shelf
+          </button>
+        </div>
+      )}
+
+      <NamePromptDialog
+        open={prompt}
+        title="New book"
+        label="Book title"
+        placeholder="e.g. Platform Architecture"
+        confirmLabel="Create book"
+        onSubmit={async (title) => {
+          const b = await createBook(title, undefined, shelfId)
+          void navigate(`/books/${b.id}`)
+        }}
+        onClose={() => setPrompt(false)}
+      />
     </div>
   )
 }

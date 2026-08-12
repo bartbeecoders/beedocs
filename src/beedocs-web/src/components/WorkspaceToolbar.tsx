@@ -9,10 +9,18 @@ import { NamePromptDialog } from './NamePromptDialog'
 import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
 
-export type WorkspaceView = 'welcome' | 'book' | 'page' | 'diagram' | 'settings' | 'help'
+export type WorkspaceView =
+  | 'welcome'
+  | 'shelf'
+  | 'book'
+  | 'page'
+  | 'diagram'
+  | 'settings'
+  | 'help'
 
 type Props = {
   view: WorkspaceView
+  shelfId?: string
   bookId?: string
   pageId?: string
   diagramId?: string
@@ -140,6 +148,7 @@ const ICONS = {
  */
 export function WorkspaceToolbar({
   view,
+  shelfId,
   bookId,
   pageId,
   diagramId,
@@ -148,9 +157,13 @@ export function WorkspaceToolbar({
 }: Props) {
   const {
     books,
+    shelves,
     selection,
     setSelection,
     createBook,
+    createShelf,
+    deleteShelf,
+    renameShelf,
     createPage,
     createFolder,
     createDiagram,
@@ -171,8 +184,8 @@ export function WorkspaceToolbar({
   const [namePrompt, setNamePrompt] = useState<NamePrompt | null>(null)
 
   const context = useMemo(
-    () => resolveToolbarContext(view, selection, books, bookId, pageId, diagramId),
-    [view, selection, books, bookId, pageId, diagramId],
+    () => resolveToolbarContext(view, selection, books, shelves, shelfId, bookId, pageId, diagramId),
+    [view, selection, books, shelves, shelfId, bookId, pageId, diagramId],
   )
 
   if (view === 'settings' || view === 'help') {
@@ -239,6 +252,26 @@ export function WorkspaceToolbar({
                 >
                   New book
                 </button>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  title="A shelf groups related books"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: 'New shelf',
+                      label: 'Shelf name',
+                      placeholder: 'e.g. Platform',
+                      confirmLabel: 'Create shelf',
+                      run: async (title) => {
+                        const shelf = await createShelf(title)
+                        setSelection({ kind: 'shelf', shelfId: shelf.id })
+                        void navigate(`/shelves/${shelf.id}`)
+                      },
+                    })
+                  }
+                >
+                  New shelf
+                </button>
                 <button type="button" className="btn ghost sm" onClick={() => setImportOpen({})}>
                   Import
                 </button>
@@ -256,6 +289,88 @@ export function WorkspaceToolbar({
               Refresh library
             </button>
           </Group>
+        </>
+      )}
+
+      {context.kind === 'shelf' && (
+        <>
+          {canWrite && (
+            <>
+              <Group>
+                <button
+                  type="button"
+                  className="btn primary sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: 'New book',
+                      label: 'Book title',
+                      placeholder: 'e.g. Platform architecture',
+                      confirmLabel: 'Create book',
+                      run: async (title) => {
+                        const book = await createBook(title, undefined, context.shelfId)
+                        setSelection({ kind: 'book', bookId: book.id })
+                        void navigate(`/books/${book.id}`)
+                      },
+                    })
+                  }
+                >
+                  New book on shelf
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: 'Rename shelf',
+                      label: 'Shelf name',
+                      defaultValue: context.title,
+                      confirmLabel: 'Rename',
+                      run: async (title) => {
+                        await renameShelf(context.shelfId, title)
+                      },
+                    })
+                  }
+                >
+                  Rename
+                </button>
+              </Group>
+              <Sep />
+            </>
+          )}
+          <Group>
+            {(view !== 'shelf' || shelfId !== context.shelfId) && (
+              <button
+                type="button"
+                className="btn ghost sm"
+                onClick={() => void navigate(`/shelves/${context.shelfId}`)}
+              >
+                Open shelf
+              </button>
+            )}
+          </Group>
+          <span className="ws-toolbar-spacer" />
+          {canWrite && (
+            <Group>
+              <button
+                type="button"
+                className="btn danger ghost sm"
+                onClick={() => {
+                  if (
+                    !confirm(
+                      `Delete shelf “${context.title}”? Its books are kept and move to the library root.`,
+                    )
+                  )
+                    return
+                  void deleteShelf(context.shelfId).then(() => {
+                    setSelection({ kind: 'none' })
+                    void navigate('/')
+                  })
+                }}
+              >
+                Delete shelf
+              </button>
+            </Group>
+          )}
         </>
       )}
 
@@ -585,8 +700,17 @@ type BookLike = {
   chapters: { id: string; title: string }[]
 }
 
+type ShelfLike = { id: string; title: string; bookCount: number }
+
 type ToolbarContext =
   | { kind: 'library'; icon: ReactNode; title: string; dirtyHint?: string }
+  | {
+      kind: 'shelf'
+      icon: ReactNode
+      title: string
+      shelfId: string
+      dirtyHint?: string
+    }
   | {
       kind: 'book'
       icon: ReactNode
@@ -627,6 +751,8 @@ function resolveToolbarContext(
   view: WorkspaceView,
   selection: TreeSelection,
   books: BookLike[],
+  shelves: ShelfLike[],
+  shelfId?: string,
   bookId?: string,
   pageId?: string,
   diagramId?: string,
@@ -680,6 +806,17 @@ function resolveToolbarContext(
       icon: ICONS.book,
       title: book?.title ?? 'Book',
       bookId: bId,
+    }
+  }
+
+  if (selection.kind === 'shelf' || (view === 'shelf' && shelfId)) {
+    const sId = selection.kind === 'shelf' ? selection.shelfId : shelfId!
+    const shelf = shelves.find((s) => s.id === sId)
+    return {
+      kind: 'shelf',
+      icon: ICONS.library,
+      title: shelf?.title ?? 'Shelf',
+      shelfId: sId,
     }
   }
 

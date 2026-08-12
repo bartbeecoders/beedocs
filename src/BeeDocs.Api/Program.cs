@@ -515,7 +515,7 @@ userAdmin.MapPost("/{id}/password", async (
 });
 
 // --- Search ---
-// Full-text over book, folder, page and diagram text. `kinds` is a comma-separated
+// Full-text over shelf, book, folder, page and diagram text. `kinds` is a comma-separated
 // filter; `prefix=false` turns off as-you-type matching on the final term.
 api.MapGet("/search", async (
     string? q,
@@ -552,6 +552,48 @@ static string[]? ParseKinds(string? raw) =>
         ? null
         : raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+// --- Shelves ---
+// The level above books. A shelf holds no content, so deleting one unshelves its
+// books instead of cascading; there is deliberately no "delete the books too".
+api.MapGet("/shelves", async (IDocumentService docs, CancellationToken ct) =>
+    Results.Ok(await docs.ListShelvesAsync(ct)));
+
+api.MapGet("/shelves/{id}", async (string id, IDocumentService docs, CancellationToken ct) =>
+{
+    var shelf = await docs.GetShelfAsync(id, ct);
+    return shelf is null ? Results.NotFound() : Results.Ok(shelf);
+});
+
+api.MapGet("/shelves/{id}/books", async (string id, IDocumentService docs, CancellationToken ct) =>
+{
+    if (await docs.GetShelfAsync(id, ct) is null) return Results.NotFound();
+    return Results.Ok(await docs.ListShelfBooksAsync(id, ct));
+});
+
+api.MapPost("/shelves", async (CreateShelfRequest body, IDocumentService docs, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    var created = await docs.CreateShelfAsync(body, ct);
+    return Results.Created($"/api/shelves/{created.Id}", created);
+});
+
+api.MapPut("/shelves/{id}", async (string id, UpdateShelfRequest body, IDocumentService docs, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    var updated = await docs.UpdateShelfAsync(id, body, ct);
+    return updated is null ? Results.NotFound() : Results.Ok(updated);
+});
+
+api.MapDelete("/shelves/{id}", async (string id, IDocumentService docs, CancellationToken ct) =>
+{
+    var ok = await docs.DeleteShelfAsync(id, ct);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
 // --- Books ---
 api.MapGet("/books", async (IDocumentService docs, CancellationToken ct) =>
     Results.Ok(await docs.ListBooksAsync(ct)));
@@ -567,8 +609,17 @@ api.MapPost("/books", async (CreateBookRequest body, IDocumentService docs, Canc
     if (string.IsNullOrWhiteSpace(body.Title))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
 
-    var created = await docs.CreateBookAsync(body, ct);
-    return Results.Created($"/api/books/{created.Id}", created);
+    // A shelfId naming nothing is the caller's mistake, not a missing book —
+    // 404 here would read as "POST /api/books does not exist".
+    try
+    {
+        var created = await docs.CreateBookAsync(body, ct);
+        return Results.Created($"/api/books/{created.Id}", created);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["shelfId"] = [ex.Message] });
+    }
 });
 
 api.MapPut("/books/{id}", async (string id, UpdateBookRequest body, IDocumentService docs, CancellationToken ct) =>
@@ -576,8 +627,15 @@ api.MapPut("/books/{id}", async (string id, UpdateBookRequest body, IDocumentSer
     if (string.IsNullOrWhiteSpace(body.Title))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
 
-    var updated = await docs.UpdateBookAsync(id, body, ct);
-    return updated is null ? Results.NotFound() : Results.Ok(updated);
+    try
+    {
+        var updated = await docs.UpdateBookAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["shelfId"] = [ex.Message] });
+    }
 });
 
 api.MapDelete("/books/{id}", async (string id, IDocumentService docs, CancellationToken ct) =>

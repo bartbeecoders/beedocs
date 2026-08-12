@@ -5,14 +5,22 @@ import { exportBookToPdf, exportPageToPdf } from '../export/pdf'
 import { ImportDialog } from './ImportDialog'
 import type { ExportFormat } from '../types'
 import { useAuth } from '../auth/AuthContext'
-import { useWorkspace, type TreeBook } from '../workspace/WorkspaceContext'
+import { useWorkspace, type TreeBook, type TreeShelf } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
 import type { Chapter, DiagramSummary, PageSummary } from '../types'
 
 type CtxMenu =
   | {
+      kind: 'shelf'
+      shelfId: string
+      title: string
+      x: number
+      y: number
+    }
+  | {
       kind: 'book'
       bookId: string
+      shelfId: string | null
       title: string
       x: number
       y: number
@@ -46,6 +54,7 @@ type CtxMenu =
 type DragPayload =
   | { type: 'page'; pageId: string; bookId: string; chapterId: string | null }
   | { type: 'folder'; chapterId: string; bookId: string }
+  | { type: 'book'; bookId: string; shelfId: string | null }
 
 type Creating =
   | { bookId: string; kind: 'page'; chapterId?: string | null }
@@ -55,28 +64,39 @@ type Creating =
 export function NavTree() {
   const {
     books,
+    shelves,
     loading,
     error,
     selection,
     setSelection,
     toggleBook,
     createBook,
+    createShelf,
     createPage,
     createFolder,
     createDiagram,
     deleteBook,
+    deleteShelf,
+    renameShelf,
+    moveBookToShelf,
     deletePage,
     deleteFolder,
     deleteDiagram,
     renameFolder,
     movePage,
     toggleFolder,
+    toggleShelf,
     refreshTree,
   } = useWorkspace()
   const navigate = useNavigate()
   const params = useParams()
   const { canWrite } = useAuth()
-  const [newBookOpen, setNewBookOpen] = useState(false)
+  /**
+   * The top-of-tree creation form, shared by books and shelves. `shelfId` is the
+   * shelf a new book lands on — null for the library root.
+   */
+  const [newBookOpen, setNewBookOpen] = useState<{ shelfId: string | null } | null>(null)
+  const [newShelfOpen, setNewShelfOpen] = useState(false)
   const [bookTitle, setBookTitle] = useState('')
   const [creatingIn, setCreatingIn] = useState<Creating | null>(null)
   const [childTitle, setChildTitle] = useState('')
@@ -144,10 +164,36 @@ export function NavTree() {
   const onCreateBook = async (e: FormEvent) => {
     e.preventDefault()
     if (!bookTitle.trim()) return
-    const book = await createBook(bookTitle.trim())
+    const title = bookTitle.trim()
+
+    if (newShelfOpen) {
+      const shelf = await createShelf(title)
+      setBookTitle('')
+      setNewShelfOpen(false)
+      void navigate(`/shelves/${shelf.id}`)
+      return
+    }
+
+    const book = await createBook(title, undefined, newBookOpen?.shelfId ?? null)
     setBookTitle('')
-    setNewBookOpen(false)
+    setNewBookOpen(null)
     void navigate(`/books/${book.id}`)
+  }
+
+  const closeCreateForm = () => {
+    setBookTitle('')
+    setNewBookOpen(null)
+    setNewShelfOpen(false)
+  }
+
+  /** Drop a dragged book onto a shelf, or onto the library root when null. */
+  const dropOnShelf = async (shelfId: string | null, e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(null)
+    const payload = parseDrag(e)
+    if (payload?.type !== 'book') return
+    await moveBookToShelf(payload.bookId, shelfId)
   }
 
   const onCreateChild = async (e: FormEvent) => {
@@ -240,6 +286,9 @@ export function NavTree() {
     }
   }
 
+  /** Books at the library root — everything not on a shelf. */
+  const rootBooks = books.filter((b) => !b.shelfId)
+
   const menuStyle = menu
     ? {
         position: 'fixed' as const,
@@ -258,9 +307,23 @@ export function NavTree() {
             <button
               type="button"
               className="btn primary sm"
-              onClick={() => setNewBookOpen((v) => !v)}
+              onClick={() => {
+                setNewShelfOpen(false)
+                setNewBookOpen((v) => (v ? null : { shelfId: null }))
+              }}
             >
               New book
+            </button>
+            <button
+              type="button"
+              className="btn sm"
+              onClick={() => {
+                setNewBookOpen(null)
+                setNewShelfOpen((v) => !v)
+              }}
+              title="A shelf groups related books"
+            >
+              New shelf
             </button>
             <button
               type="button"
@@ -277,31 +340,26 @@ export function NavTree() {
         </button>
       </div>
 
-      {newBookOpen && (
+      {(newBookOpen || newShelfOpen) && (
         <form className="inline-form" onSubmit={(e) => void onCreateBook(e)}>
+          {newBookOpen?.shelfId && (
+            <span className="muted sm">
+              On shelf: {shelves.find((s) => s.id === newBookOpen.shelfId)?.title ?? '—'}
+            </span>
+          )}
           <input
             autoFocus
             value={bookTitle}
             onChange={(e) => setBookTitle(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setBookTitle('')
-                setNewBookOpen(false)
-              }
+              if (e.key === 'Escape') closeCreateForm()
             }}
-            placeholder="Book title"
+            placeholder={newShelfOpen ? 'Shelf name' : 'Book title'}
           />
           <button type="submit" className="btn primary sm">
             Create
           </button>
-          <button
-            type="button"
-            className="btn ghost sm"
-            onClick={() => {
-              setBookTitle('')
-              setNewBookOpen(false)
-            }}
-          >
+          <button type="button" className="btn ghost sm" onClick={closeCreateForm}>
             Cancel
           </button>
         </form>
@@ -311,7 +369,50 @@ export function NavTree() {
       {loading && <p className="muted sm">Loading library…</p>}
 
       <ul className="tree-root">
-        {books.map((book) => (
+        {shelves.map((shelf) => (
+          <ShelfNode
+            key={shelf.id}
+            shelf={shelf}
+            books={books.filter((b) => b.shelfId === shelf.id)}
+            params={params}
+            selection={selection}
+            setSelection={setSelection}
+            dragOver={dragOver}
+            setDragOver={setDragOver}
+            creatingIn={creatingIn}
+            setCreatingIn={setCreatingIn}
+            childTitle={childTitle}
+            setChildTitle={setChildTitle}
+            onCreateChild={onCreateChild}
+            toggleShelf={toggleShelf}
+            toggleBook={toggleBook}
+            toggleFolder={toggleFolder}
+            openMenu={openMenu}
+            onDragStart={onDragStart}
+            dropOnShelf={dropOnShelf}
+            dropOnFolder={dropOnFolder}
+            dropReorderPage={dropReorderPage}
+          />
+        ))}
+
+        {/* Doubles as the "unshelve" drop target, so it stays put even with no
+            books at the root — otherwise a book dragged onto a shelf could never
+            be dragged back off it. */}
+        {shelves.length > 0 && (
+          <li
+            className={`tree-group-label root-drop${dragOver === 'library-root' ? ' drag-over' : ''}`}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragOver('library-root')
+            }}
+            onDragLeave={() => setDragOver(null)}
+            onDrop={(e) => void dropOnShelf(null, e)}
+          >
+            Not on a shelf
+          </li>
+        )}
+
+        {rootBooks.map((book) => (
           <BookNode
             key={book.id}
             book={book}
@@ -335,12 +436,12 @@ export function NavTree() {
         ))}
       </ul>
 
-      {!loading && books.length === 0 && (
+      {!loading && books.length === 0 && shelves.length === 0 && (
         <div className="empty-tree">
           <p>No books yet.</p>
           <p className="muted sm">
             {canWrite
-              ? 'Create a book to start documenting architecture.'
+              ? 'Create a book to start documenting architecture, or a shelf to group several.'
               : 'Nothing has been published to this instance yet.'}
           </p>
         </div>
@@ -348,6 +449,55 @@ export function NavTree() {
 
       {menu && (
         <div ref={menuRef} className="tree-context-menu" style={menuStyle} role="menu">
+          {menu.kind === 'shelf' && (
+            <>
+              <div className="tree-context-heading">📚 {menu.title}</div>
+              <MenuItem
+                label="New book on this shelf"
+                write
+                onClick={() => {
+                  setNewShelfOpen(false)
+                  setNewBookOpen({ shelfId: menu.shelfId })
+                  setMenu(null)
+                }}
+              />
+              <MenuItem
+                label="Rename shelf"
+                write
+                onClick={() => {
+                  const t = window.prompt('Shelf name', menu.title)?.trim()
+                  if (t) void renameShelf(menu.shelfId, t)
+                  setMenu(null)
+                }}
+              />
+              <div className="tree-context-sep" />
+              <MenuItem
+                label="Open shelf"
+                onClick={() => {
+                  void navigate(`/shelves/${menu.shelfId}`)
+                  setMenu(null)
+                }}
+              />
+              <div className="tree-context-sep" />
+              <MenuItem
+                label="Delete shelf"
+                write
+                danger
+                onClick={() => {
+                  if (
+                    confirm(
+                      `Delete shelf “${menu.title}”? Its books are kept and move to the library root.`,
+                    )
+                  ) {
+                    void deleteShelf(menu.shelfId).then(() => {
+                      if (params.shelfId === menu.shelfId) void navigate('/')
+                    })
+                  }
+                  setMenu(null)
+                }}
+              />
+            </>
+          )}
           {menu.kind === 'book' && (
             <>
               <div className="tree-context-heading">{menu.title}</div>
@@ -393,6 +543,17 @@ export function NavTree() {
                 label="Open book"
                 onClick={() => {
                   void navigate(`/books/${menu.bookId}`)
+                  setMenu(null)
+                }}
+              />
+              {/* Shelving a book is a drag onto a shelf, or the picker in the
+                  properties pane; only the way back out needs a menu item. */}
+              <MenuItem
+                label="Move to library root"
+                write
+                disabled={menu.shelfId == null}
+                onClick={() => {
+                  void moveBookToShelf(menu.bookId, null)
                   setMenu(null)
                 }}
               />
@@ -597,6 +758,136 @@ function MenuItem({
   )
 }
 
+/**
+ * A shelf and the books on it. The shelf owns no content of its own, so the row
+ * is a label, a twist, and a drop target — everything below it is a BookNode
+ * identical to one at the library root.
+ */
+function ShelfNode({
+  shelf,
+  books,
+  params,
+  selection,
+  setSelection,
+  dragOver,
+  setDragOver,
+  creatingIn,
+  setCreatingIn,
+  childTitle,
+  setChildTitle,
+  onCreateChild,
+  toggleShelf,
+  toggleBook,
+  toggleFolder,
+  openMenu,
+  onDragStart,
+  dropOnShelf,
+  dropOnFolder,
+  dropReorderPage,
+}: {
+  shelf: TreeShelf
+  books: TreeBook[]
+  params: Readonly<Partial<Record<string, string>>>
+  selection: TreeSelection
+  setSelection: (next: TreeSelection) => void
+  dragOver: string | null
+  setDragOver: (v: string | null) => void
+  creatingIn: Creating | null
+  setCreatingIn: (v: Creating | null) => void
+  childTitle: string
+  setChildTitle: (v: string) => void
+  onCreateChild: (e: FormEvent) => void
+  toggleShelf: (shelfId: string) => void
+  toggleBook: (id: string) => Promise<void>
+  toggleFolder: (bookId: string, chapterId: string) => void
+  openMenu: (e: React.MouseEvent, next: CtxMenu) => void
+  onDragStart: (e: React.DragEvent, payload: DragPayload) => void
+  dropOnShelf: (shelfId: string | null, e: React.DragEvent) => Promise<void>
+  dropOnFolder: (bookId: string, chapterId: string | null, e: React.DragEvent) => Promise<void>
+  dropReorderPage: (
+    bookId: string,
+    target: PageSummary,
+    place: 'before' | 'after',
+    e: React.DragEvent,
+  ) => Promise<void>
+}) {
+  const dropId = `shelf:${shelf.id}`
+  const active =
+    params.shelfId === shelf.id ||
+    (selection.kind === 'shelf' && selection.shelfId === shelf.id)
+
+  return (
+    <li className="tree-shelf">
+      <div
+        className={`tree-row ${active ? 'active' : ''}${dragOver === dropId ? ' drag-over' : ''}`}
+        onContextMenu={(e) =>
+          openMenu(e, {
+            kind: 'shelf',
+            shelfId: shelf.id,
+            title: shelf.title,
+            x: e.clientX,
+            y: e.clientY,
+          })
+        }
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragOver(dropId)
+        }}
+        onDragLeave={() => setDragOver(null)}
+        onDrop={(e) => void dropOnShelf(shelf.id, e)}
+      >
+        <button
+          type="button"
+          className="tree-twist"
+          aria-expanded={shelf.expanded}
+          onClick={() => toggleShelf(shelf.id)}
+        >
+          {shelf.expanded ? '▾' : '▸'}
+        </button>
+        <NavLink
+          to={`/shelves/${shelf.id}`}
+          className="tree-label shelf"
+          onClick={() => setSelection({ kind: 'shelf', shelfId: shelf.id })}
+        >
+          <span className="tree-icon">📚</span>
+          <span className="tree-text">{shelf.title}</span>
+          <span className="muted sm">({books.length})</span>
+        </NavLink>
+      </div>
+
+      {shelf.expanded && (
+        <ul className="tree-children">
+          {books.map((book) => (
+            <BookNode
+              key={book.id}
+              book={book}
+              params={params}
+              selection={selection}
+              setSelection={setSelection}
+              dragOver={dragOver}
+              setDragOver={setDragOver}
+              creatingIn={creatingIn}
+              setCreatingIn={setCreatingIn}
+              childTitle={childTitle}
+              setChildTitle={setChildTitle}
+              onCreateChild={onCreateChild}
+              toggleBook={toggleBook}
+              toggleFolder={toggleFolder}
+              openMenu={openMenu}
+              onDragStart={onDragStart}
+              dropOnFolder={dropOnFolder}
+              dropReorderPage={dropReorderPage}
+            />
+          ))}
+          {books.length === 0 && (
+            <li className="muted sm tree-empty">Empty shelf — drop books here</li>
+          )}
+        </ul>
+      )}
+    </li>
+  )
+}
+
 function BookNode({
   book,
   params,
@@ -639,6 +930,7 @@ function BookNode({
     e: React.DragEvent,
   ) => Promise<void>
 }) {
+  const { canWrite } = useAuth()
   const bookActive =
     (params.bookId === book.id && !params.pageId && !params.diagramId) ||
     (selection.kind === 'book' && selection.bookId === book.id)
@@ -654,8 +946,22 @@ function BookNode({
     <li key={book.id} className="tree-book">
       <div
         className={`tree-row ${bookActive ? 'active' : ''}${dragOver === rootDropId ? ' drag-over' : ''}`}
+        // Dragged to be shelved; also a drop target for pages moving to the
+        // book root. The two never collide — a book payload is only accepted by
+        // shelf rows, a page payload only by book and folder rows.
+        draggable={canWrite}
+        onDragStart={(e) =>
+          onDragStart(e, { type: 'book', bookId: book.id, shelfId: book.shelfId ?? null })
+        }
         onContextMenu={(e) =>
-          openMenu(e, { kind: 'book', bookId: book.id, title: book.title, x: e.clientX, y: e.clientY })
+          openMenu(e, {
+            kind: 'book',
+            bookId: book.id,
+            shelfId: book.shelfId ?? null,
+            title: book.title,
+            x: e.clientX,
+            y: e.clientY,
+          })
         }
         onDragOver={(e) => {
           e.preventDefault()

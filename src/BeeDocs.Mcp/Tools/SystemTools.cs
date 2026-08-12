@@ -29,7 +29,9 @@ public sealed class SystemTools(BeeDocsApiClient client)
     public string GetApiInfo() => ToolHelpers.Json(new
     {
         apiBaseUrl = client.BaseUrl,
-        entities = new[] { "book", "chapter (folder)", "page", "diagram", "upload" },
+        entities = new[] { "shelf", "book", "chapter (folder)", "page", "diagram", "upload" },
+        hierarchy = "shelf → book → chapter (folder) → page. Only the book level is required: "
+            + "a book sits on at most one shelf, and an unshelved book sits at the library root.",
         diagramKinds = new[] { "beediagram", "mermaid", "c4", "plantuml" },
         beediagramNodeTypes = DiagramCatalog.NodeTypes,
         beediagramShapes = DiagramCatalog.Shapes,

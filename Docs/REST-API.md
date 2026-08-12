@@ -162,6 +162,12 @@ All fields optional. On create, missing `title` defaults to the path slug.
 **Response:** `{ "item": { …book }, "created": true|false }`  
 `201 Created` when new, `200 OK` when updated.
 
+A book may sit on a **shelf** — the grouping level above books. Shelves are not
+part of the publish surface: republishing over a book never moves it, and a book
+created here lands at the library root. Shelves are managed through the id-based
+API instead (`/api/shelves`, and `shelfId` on `POST`/`PUT /api/books/{id}`),
+which is also what the workspace UI and the MCP server use.
+
 ### Pages
 
 | Method | Path | Description |
@@ -199,7 +205,7 @@ See [Quick start](#quick-start--one-shot-publish). The response echoes `folder`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/v1/search?q=` | Full-text search across books, folders, pages and diagrams |
+| `GET` | `/api/v1/search?q=` | Full-text search across shelves, books, folders, pages and diagrams |
 
 | Query param | Default | Description |
 |-------------|---------|-------------|
@@ -207,7 +213,7 @@ See [Quick start](#quick-start--one-shot-publish). The response echoes `folder`
 | `limit` | `20` | Hits to return, capped at 100. |
 | `offset` | `0` | Paging offset. |
 | `bookSlug` | *(all books)* | Restrict to one book. 404 if the slug is unknown. |
-| `kinds` | *(all)* | Comma-separated: `page`, `diagram`, `book`, `folder`. |
+| `kinds` | *(all)* | Comma-separated: `page`, `diagram`, `book`, `folder`, `shelf`. |
 | `prefix` | `true` | Match the final term as a prefix, for as-you-type search. |
 
 ```http

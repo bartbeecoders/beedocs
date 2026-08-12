@@ -6,12 +6,14 @@
 
 export type TreeSelection =
   | { kind: 'none' }
+  | { kind: 'shelf'; shelfId: string }
   | { kind: 'book'; bookId: string }
   | { kind: 'folder'; bookId: string; chapterId: string }
   | { kind: 'page'; bookId: string; pageId: string }
   | { kind: 'diagram'; bookId: string; diagramId: string }
 
 export type RouteSelectionParams = {
+  shelfId?: string
   bookId?: string
   pageId?: string
   diagramId?: string
@@ -23,6 +25,9 @@ export type RouteSelectionParams = {
 export function selectionFromRoute(params: RouteSelectionParams): TreeSelection {
   if (params.view === 'settings' || params.view === 'help') {
     return { kind: 'none' }
+  }
+  if (params.shelfId) {
+    return { kind: 'shelf', shelfId: params.shelfId }
   }
   if (params.bookId && params.pageId) {
     return { kind: 'page', bookId: params.bookId, pageId: params.pageId }
@@ -41,6 +46,8 @@ export function selectionEquals(a: TreeSelection, b: TreeSelection): boolean {
   switch (a.kind) {
     case 'none':
       return true
+    case 'shelf':
+      return b.kind === 'shelf' && a.shelfId === b.shelfId
     case 'book':
       return b.kind === 'book' && a.bookId === b.bookId
     case 'folder':

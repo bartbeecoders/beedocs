@@ -12,14 +12,15 @@ import { SyncedInput } from './SyncedText'
 type Props = {
   pageState: PageEditorState | null
   diagramState: DiagramEditorState | null
-  view: 'welcome' | 'book' | 'page' | 'diagram' | 'settings' | 'help'
+  view: 'welcome' | 'shelf' | 'book' | 'page' | 'diagram' | 'settings' | 'help'
 }
 
 export function PropertiesPane({ pageState, diagramState, view }: Props) {
-  const { bookId } = useParams()
+  const { bookId, shelfId } = useParams()
   const { canWrite } = useAuth()
-  const { books } = useWorkspace()
+  const { books, shelves } = useWorkspace()
   const book = books.find((b) => b.id === bookId)
+  const shelf = shelves.find((s) => s.id === shelfId)
 
   if (view === 'help') {
     return (
@@ -205,6 +206,40 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
     )
   }
 
+  if (view === 'shelf' && shelf) {
+    return (
+      <div className="props-pane">
+        <h3>Shelf</h3>
+        <Field label="Title">
+          <span>{shelf.title}</span>
+        </Field>
+        <Field label="Slug">
+          <code className="mono-block">{shelf.slug}</code>
+        </Field>
+        {shelf.description && (
+          <Field label="Description">
+            <span className="sm">{shelf.description}</span>
+          </Field>
+        )}
+        <Field label="Books">
+          <span>{shelf.bookCount}</span>
+        </Field>
+        <Field label="Owner">
+          <ShelfOwnerField
+            shelfId={shelf.id}
+            title={shelf.title}
+            ownerId={shelf.ownerId ?? ''}
+            ownerName={shelf.ownerName}
+          />
+        </Field>
+        <p className="muted sm">
+          A shelf groups books; it holds no pages of its own. Deleting it keeps every book —
+          they move back to the library root.
+        </p>
+      </div>
+    )
+  }
+
   if (view === 'book' && book) {
     return (
       <div className="props-pane">
@@ -220,6 +255,9 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
             <span className="sm">{book.description}</span>
           </Field>
         )}
+        <Field label="Shelf">
+          <BookShelfField bookId={book.id} title={book.title} shelfId={book.shelfId ?? ''} />
+        </Field>
         <Field label="Pages">
           <span>{book.pages.length}</span>
         </Field>
@@ -258,6 +296,111 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
         </li>
       </ul>
     </div>
+  )
+}
+
+/**
+ * Which shelf the book sits on. Written on change like the owner field, and for
+ * the same reason: a book has no save button of its own.
+ */
+function BookShelfField({
+  bookId,
+  title,
+  shelfId,
+}: {
+  bookId: string
+  title: string
+  shelfId: string
+}) {
+  const { canWrite } = useAuth()
+  const { shelves, moveBookToShelf } = useWorkspace()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (!canWrite) {
+    return <span>{shelves.find((s) => s.id === shelfId)?.title ?? 'Library root'}</span>
+  }
+
+  const assign = async (next: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await moveBookToShelf(bookId, next || null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <select
+        value={shelfId}
+        disabled={busy || shelves.length === 0}
+        onChange={(e) => void assign(e.target.value)}
+        title={title}
+      >
+        <option value="">Library root (no shelf)</option>
+        {shelves.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.title}
+          </option>
+        ))}
+      </select>
+      {shelves.length === 0 && <span className="muted sm">No shelves yet.</span>}
+      {error && (
+        <span className="users-error" role="alert">
+          {error}
+        </span>
+      )}
+    </>
+  )
+}
+
+/** The shelf equivalent of {@link BookOwnerField} — same write-on-change reason. */
+function ShelfOwnerField({
+  shelfId,
+  title,
+  ownerId,
+  ownerName,
+}: {
+  shelfId: string
+  title: string
+  ownerId: string
+  ownerName?: string | null
+}) {
+  const { refreshTree } = useWorkspace()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const assign = async (next: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.updateShelf(shelfId, { title, ownerId: next })
+      await refreshTree()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <OwnerField
+        value={ownerId}
+        fallbackName={ownerName}
+        disabled={busy}
+        onChange={(next) => void assign(next)}
+      />
+      {error && (
+        <span className="users-error" role="alert">
+          {error}
+        </span>
+      )}
+    </>
   )
 }
 

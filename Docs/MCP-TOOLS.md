@@ -23,7 +23,7 @@ says rather than what it is called.
 
 | Tool | Args | Description |
 |------|------|-------------|
-| `beedocs_search` | `query`, `limit?`, `offset?`, `bookId?`, `kinds?` | Search books, folders, pages and diagram labels |
+| `beedocs_search` | `query`, `limit?`, `offset?`, `bookId?`, `kinds?` | Search shelves, books, folders, pages and diagram labels |
 | `beedocs_search_status` | — | Engine, document counts by kind, queued changes |
 | `beedocs_reindex` | — | Rebuild the index from stored documents (recovery only) |
 
@@ -35,14 +35,30 @@ Query syntax: terms are ANDed, `"quoted runs"` match as a phrase, and diacritics
 fold (`cafe` finds `café`). Operators are not interpreted — any input is safe to
 pass through verbatim.
 
+### Shelves
+
+The level above books: a shelf groups related books and holds no pages of its
+own. A book sits on at most one shelf; a book with no shelf sits at the library
+root. Deleting a shelf keeps every book on it — they return to the root.
+
+| Tool | Args | Description |
+|------|------|-------------|
+| `beedocs_list_shelves` | — | List all shelves (with `bookCount`) |
+| `beedocs_get_shelf` | `shelfId` | Get shelf |
+| `beedocs_list_shelf_books` | `shelfId` | Books filed on one shelf |
+| `beedocs_create_shelf` | `title`, `description?`, `slug?` | Create shelf |
+| `beedocs_update_shelf` | `shelfId`, `title`, `description?`, `slug?`, `sortOrder?` | Rename / reorder shelf |
+| `beedocs_delete_shelf` | `shelfId` | Delete shelf (books kept, moved to library root) |
+| `beedocs_move_book_to_shelf` | `bookId`, `shelfId?` | File a book on a shelf; omit `shelfId` to move it to the root |
+
 ### Books
 
 | Tool | Args | Description |
 |------|------|-------------|
-| `beedocs_list_books` | — | List all books |
+| `beedocs_list_books` | — | List all books (each with `shelfId`/`shelfTitle` when shelved) |
 | `beedocs_get_book` | `bookId` | Get book |
-| `beedocs_create_book` | `title`, `description?`, `slug?` | Create book |
-| `beedocs_update_book` | `bookId`, `title`, `description?`, `slug?`, `sortOrder?` | Update book |
+| `beedocs_create_book` | `title`, `description?`, `slug?`, `shelfId?` | Create book (optionally on a shelf) |
+| `beedocs_update_book` | `bookId`, `title`, `description?`, `slug?`, `sortOrder?`, `shelfId?` | Update book (omitted fields are left alone; `shelfId: ""` unshelves) |
 | `beedocs_delete_book` | `bookId` | Delete book (+ cascade pages/chapters) |
 | `beedocs_get_book_tree` | `bookId` | Folders + root pages + diagrams tree |
 | `beedocs_export_book` | `bookId`, `includePageContent?`, `includeDiagramSource?` | Structured export of one book |
