@@ -24,6 +24,8 @@ import { highlightCode, resolveLanguage } from '../syntaxHighlight'
 import { DataTree } from './DataTree'
 import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
 import { BeeDiagramView } from './BeeDiagramView'
+import { ExcelGridCanvas } from './ExcelGridCanvas'
+import { ExcelGridView } from './ExcelGridView'
 import { FreeDrawCanvas } from './FreeDrawCanvas'
 import { FreeDrawView } from './FreeDrawView'
 import { MediaEmbed } from './media/MediaEmbed'
@@ -237,6 +239,60 @@ function InlineFreeDrawEditor({
       </div>
       <div className="inline-diagram-body inline-diagram-body--freedraw">
         <FreeDrawCanvas source={live} onChange={commitSource} compact />
+      </div>
+    </figure>
+  )
+}
+
+/** Always-on Excel-style grid editor for inline ```excelgrid fences. */
+function InlineExcelGridEditor({
+  source,
+  fenceLang,
+  fenceIndex,
+  contentRef,
+  onContentChange,
+  draft,
+  onDraftChange,
+}: {
+  source: string
+  fenceLang: string
+  fenceIndex: number
+  contentRef: React.MutableRefObject<string>
+  onContentChange: (next: string) => void
+  draft: string | undefined
+  onDraftChange: (next: string) => void
+}) {
+  const live = draft ?? source
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  const commitSource = useCallback(
+    (next: string) => {
+      onDraftChange(next)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => {
+        onContentChange(replaceFenceBody(contentRef.current, fenceLang, fenceIndex, next))
+      }, 450)
+    },
+    [contentRef, fenceIndex, fenceLang, onContentChange, onDraftChange],
+  )
+
+  return (
+    <figure className="inline-diagram is-editing inline-diagram--excelgrid">
+      <div className="inline-diagram-chrome">
+        <div className="inline-diagram-labels">
+          <span className="inline-diagram-badge">Spreadsheet</span>
+          <figcaption className="inline-diagram-title">Excel grid</figcaption>
+        </div>
+        <span className="muted sm">Cells · format · CSV</span>
+      </div>
+      <div className="inline-diagram-body inline-diagram-body--excelgrid">
+        <ExcelGridCanvas source={live} onChange={commitSource} compact />
       </div>
     </figure>
   )
@@ -688,6 +744,33 @@ export const MarkdownView = memo(function MarkdownView({
             idx,
             <figure className="freedraw-embed">
               <FreeDrawView source={code} />
+            </figure>,
+          )
+        }
+
+        if (lang === 'excelgrid' || lang === 'spreadsheet' || lang === 'grid') {
+          const idx = nextIndex(lang)
+          if (editable && onContentChange) {
+            const key = `excelgrid:${idx}`
+            return wrapOutline(
+              lang,
+              idx,
+              <InlineExcelGridEditor
+                source={code}
+                fenceLang={lang}
+                fenceIndex={idx}
+                contentRef={contentRef}
+                onContentChange={handleContentChange}
+                draft={beeDrafts[key]}
+                onDraftChange={(next) => setBeeDraft(key, next)}
+              />,
+            )
+          }
+          return wrapOutline(
+            lang,
+            idx,
+            <figure className="excelgrid-embed">
+              <ExcelGridView source={code} />
             </figure>,
           )
         }

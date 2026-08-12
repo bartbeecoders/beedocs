@@ -41,6 +41,9 @@ export const VISUAL_FENCE_LANGS = new Set(['beediagram', 'beediagram-ref'])
 /** Free-draw sketch pad (JSON stroke document) */
 export const FREEDRAW_FENCE_LANGS = new Set(['freedraw', 'sketch'])
 
+/** Excel-style grid (JSON cell document) */
+export const EXCELGRID_FENCE_LANGS = new Set(['excelgrid', 'spreadsheet', 'grid'])
+
 /** PDF / 3D model fence languages — hybrid editor shows MediaEmbed, not source-only */
 export const MEDIA_FENCE_LANGS = new Set(['pdf', 'glb', 'gltf', 'obj', 'model'])
 
@@ -157,6 +160,10 @@ export function isVisualFenceLang(lang: string): boolean {
 
 export function isFreedrawFenceLang(lang: string): boolean {
   return FREEDRAW_FENCE_LANGS.has(lang.toLowerCase())
+}
+
+export function isExcelGridFenceLang(lang: string): boolean {
+  return EXCELGRID_FENCE_LANGS.has(lang.toLowerCase())
 }
 
 export function isMediaFenceLang(lang: string): boolean {

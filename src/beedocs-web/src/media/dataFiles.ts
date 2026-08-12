@@ -44,6 +44,15 @@ export function isDataFile(file: File): boolean {
   return dataFenceLangForFile(file) != null
 }
 
+/** CSV / TSV — dropped onto a page as an excelgrid section. */
+export function isCsvFile(file: File): boolean {
+  const name = (file.name || '').toLowerCase()
+  const type = (file.type || '').toLowerCase().split(';')[0]?.trim() ?? ''
+  const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : ''
+  if (ext === 'csv' || ext === 'tsv') return true
+  return type === 'text/csv' || type === 'text/tab-separated-values'
+}
+
 export function collectDataFilesFromDataTransfer(dt: DataTransfer | null): File[] {
   if (!dt?.files?.length) return []
   return Array.from(dt.files).filter(isDataFile)

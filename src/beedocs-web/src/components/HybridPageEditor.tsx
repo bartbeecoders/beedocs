@@ -5,6 +5,7 @@ import { withApiBase } from '../basePath'
 import { useBlockReorder } from '../hooks/useBlockReorder'
 import { useImageIntake, type ImageIntakeContext } from '../hooks/useImageIntake'
 import {
+  isExcelGridFenceLang,
   isFreedrawFenceLang,
   isMediaFenceLang,
   isVisualFenceLang,
@@ -34,9 +35,13 @@ import {
   dataFenceLangForFile,
   formatJson,
   formatXml,
+  isCsvFile,
   readDataFile,
   type DataFenceLang,
 } from '../media/dataFiles'
+import { parseCsv } from '../excelgrid/csv'
+import { fromWorking, serializeExcelGridDoc, starterExcelGridDoc, toWorking } from '../excelgrid/model'
+import { MAX_COLS, MAX_ROWS } from '../excelgrid/types'
 import {
   extensionFromPath,
   modelFormatFromExtension,
@@ -46,6 +51,7 @@ import { outlineId } from '../pageOutline'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { AiAssistBar, AiAssistField } from './AiAssist'
 import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
+import { ExcelGridCanvas } from './ExcelGridCanvas'
 import { FreeDrawCanvas } from './FreeDrawCanvas'
 import { MarkdownTableEditor } from './MarkdownTableEditor'
 import { MediaEmbed, parseMediaFenceBody } from './media/MediaEmbed'
@@ -65,6 +71,20 @@ function dataFenceFromFile(lang: DataFenceLang, body: string): ContentSegment[] 
   return [
     { type: 'text', text: '\n\n' },
     { type: 'fence', lang, body: body.replace(/\r\n/g, '\n').replace(/\s+$/, '') },
+    { type: 'text', text: '\n\n' },
+  ]
+}
+
+/** Dropped CSV/TSV becomes an excelgrid fence, not a raw text block. */
+function excelGridFenceFromCsv(text: string): ContentSegment[] {
+  const parsed = parseCsv(text)
+  const working = toWorking(starterExcelGridDoc())
+  working.cells = parsed.cells
+  working.rowCount = Math.min(MAX_ROWS, Math.max(parsed.rowCount + 2, 8))
+  working.colCount = Math.min(MAX_COLS, Math.max(parsed.colCount + 1, 4))
+  return [
+    { type: 'text', text: '\n\n' },
+    { type: 'fence', lang: 'excelgrid', body: serializeExcelGridDoc(fromWorking(working)) },
     { type: 'text', text: '\n\n' },
   ]
 }
@@ -505,6 +525,50 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
     return () => el.removeEventListener('drop', onDrop)
   }, [insertAt])
 
+  /** Drop CSV / TSV — opened as an Excel-style grid section. */
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+
+    const onDrop = (e: DragEvent) => {
+      const files = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : []
+      const csvFiles = files.filter(isCsvFile)
+      if (!csvFiles.length) return
+      if (files.some((f) => isImageFile(f) || isMediaFile(f))) return
+
+      e.preventDefault()
+      e.stopPropagation()
+
+      const slot = (e.target as Element | null)?.closest?.('[data-drop-slot]')
+      const raw = slot?.getAttribute('data-drop-slot') ?? ''
+      const at: InsertAt = raw.startsWith('before:') ? Number(raw.slice(7)) : 'end'
+      const target: InsertAt = typeof at === 'number' && Number.isFinite(at) ? at : 'end'
+
+      void (async () => {
+        setBusy(true)
+        setInsertError(null)
+        setDropHint(null)
+        try {
+          const problems: string[] = []
+          for (const file of csvFiles) {
+            const read = await readDataFile(file)
+            if ('error' in read) {
+              problems.push(read.error)
+              continue
+            }
+            insertAt(target, excelGridFenceFromCsv(read.text))
+          }
+          if (problems.length) setInsertError(problems.join(' '))
+        } finally {
+          setBusy(false)
+        }
+      })()
+    }
+
+    el.addEventListener('drop', onDrop)
+    return () => el.removeEventListener('drop', onDrop)
+  }, [insertAt])
+
   /**
    * Drop a page or book dragged from the library tree — inserts a Markdown
    * link to it. A link is inline content, so a drop into a text section lands
@@ -634,7 +698,8 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         sections, <strong>tables</strong> (edited as a grid — add/remove rows and columns in place),
         diagrams, <strong>PDF</strong>, and <strong>3D models</strong> (or drop <code>.pdf</code> /{' '}
         <code>.glb</code> / <code>.obj</code> files). Dropping <code>.json</code> / <code>.xml</code> inlines
-        the file as a code block you can reformat. Drag a <strong>page or book from the library</strong>{' '}
+        the file as a code block you can reformat; <code>.csv</code> / <code>.tsv</code> becomes a
+        spreadsheet section. Drag a <strong>page or book from the library</strong>{' '}
         into a section to insert a link to it.
       </p>
 
@@ -686,6 +751,12 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             />
           ) : isFreedrawFenceLang(seg.lang) ? (
             <FreeDrawFenceBlock
+              segment={seg}
+              onBodyChange={(body) => updateFenceBody(index, body)}
+              onRemove={() => removeSegment(index)}
+            />
+          ) : isExcelGridFenceLang(seg.lang) ? (
+            <ExcelGridFenceBlock
               segment={seg}
               onBodyChange={(body) => updateFenceBody(index, body)}
               onRemove={() => removeSegment(index)}
@@ -1059,6 +1130,15 @@ function InsertToolbar({
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('table')}>
           Table
         </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
+          onClick={() => onInsert('excelgrid')}
+          title="Insert an Excel-style spreadsheet stored on this page"
+        >
+          Spreadsheet
+        </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('callout')}>
           Callout
         </button>
@@ -1195,6 +1275,7 @@ function InsertGap({
               ['beediagram', 'BeeDiagram'],
               ['beediagram-linked', 'Linked diagram'],
               ['freedraw', 'Free draw'],
+              ['excelgrid', 'Spreadsheet'],
               ['mermaid-flow', 'Flowchart'],
               ['mermaid-sequence', 'Sequence'],
               ['table', 'Table'],
@@ -1402,6 +1483,31 @@ function FreeDrawFenceBlock({
       </div>
       <div className="hybrid-visual-body hybrid-visual-body--freedraw">
         <FreeDrawCanvas source={segment.body} onChange={onBodyChange} compact />
+      </div>
+    </div>
+  )
+}
+
+function ExcelGridFenceBlock({
+  segment,
+  onBodyChange,
+  onRemove,
+}: {
+  segment: FenceSegment
+  onBodyChange: (body: string) => void
+  onRemove: () => void
+}) {
+  return (
+    <div className="hybrid-visual-diagram hybrid-excelgrid-block">
+      <div className="hybrid-fence-chrome">
+        <span className="inline-diagram-badge">Spreadsheet</span>
+        <span className="hybrid-fence-title">Excel grid · stored on this page</span>
+        <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+          Remove
+        </button>
+      </div>
+      <div className="hybrid-visual-body hybrid-visual-body--excelgrid">
+        <ExcelGridCanvas source={segment.body} onChange={onBodyChange} compact />
       </div>
     </div>
   )

@@ -88,6 +88,7 @@ public sealed class SystemTools(BeeDocsApiClient client)
             mermaid = "```mermaid\\n...\\n```",
             beediagramRef = "```beediagram-ref\\nDIAGRAM_ID\\n```",
             beediagramInline = "```beediagram\\n{json}\\n```",
+            excelgrid = "```excelgrid\\n{\"version\":1,\"rowCount\":16,\"colCount\":8,\"cells\":[{\"r\":0,\"c\":0,\"v\":\"Item\"}]}\\n```",
             image = "![alt](/uploads/...)",
         },
         capabilities = new

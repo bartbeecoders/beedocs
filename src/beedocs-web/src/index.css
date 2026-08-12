@@ -1938,6 +1938,243 @@ select:focus {
   padding: 0.25rem 0.3rem;
 }
 
+/* ===== Excel-style grid (d3-excelgrid) ===== */
+.excelgrid-embed {
+  margin: 0.75rem 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-elevated);
+  padding: 0.35rem;
+}
+
+.inline-diagram--excelgrid,
+.inline-diagram-body--excelgrid,
+.hybrid-visual-body--excelgrid {
+  min-height: 0;
+}
+
+.inline-diagram-body--excelgrid,
+.hybrid-visual-body--excelgrid {
+  padding: 0.35rem 0.45rem 0.5rem;
+}
+
+.excelgrid {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.excelgrid-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+}
+
+.excelgrid-toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem;
+  padding-right: 0.45rem;
+  border-right: 1px solid var(--border);
+}
+
+.excelgrid-toolbar-group:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+
+.excelgrid-toolbar-group--end {
+  margin-left: auto;
+  border-right: 0;
+}
+
+.excelgrid-tool {
+  min-width: 1.8rem;
+  height: 1.7rem;
+  padding: 0 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.excelgrid-tool:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+}
+
+.excelgrid-tool.is-active {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-elevated));
+  border-color: var(--accent);
+}
+
+.excelgrid-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.excelgrid-color {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.excelgrid-color input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.excelgrid-select {
+  height: 1.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0 0.25rem;
+}
+
+.excelgrid-formula {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.excelgrid-addr {
+  flex: 0 0 auto;
+  min-width: 2.6rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-soft);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+.excelgrid-formula-input {
+  flex: 1;
+  min-width: 0;
+  height: 1.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0 0.5rem;
+}
+
+.excelgrid-surface {
+  position: relative;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  outline: none;
+}
+
+.excelgrid-surface:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+.excelgrid-sheet {
+  position: relative;
+}
+
+.excelgrid-sheet svg {
+  display: block;
+}
+
+.excelgrid-editor {
+  position: absolute;
+  z-index: 4;
+  margin: 0;
+  border: 2px solid var(--accent);
+  border-radius: 0;
+  padding: 0 5px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.excelgrid-editor.is-idle {
+  display: none;
+}
+
+.excelgrid-hint {
+  margin: 0;
+}
+
+.excelgrid-view-title {
+  margin: 0 0 0.35rem;
+}
+
+.excelgrid-menu {
+  position: absolute;
+  z-index: 8;
+  min-width: 10rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.excelgrid-menu button {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.excelgrid-menu button:hover {
+  background: var(--bg-soft);
+}
+
+.excelgrid-menu hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 0.2rem 0;
+}
+
+.excelgrid.is-compact .excelgrid-toolbar {
+  padding: 0.25rem 0.3rem;
+}
+
 .inline-diagram-status-inline {
   font-size: 0.75rem;
   font-family: var(--mono);

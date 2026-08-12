@@ -10,8 +10,9 @@ namespace BeeDocs.Api.Services;
 /// syntax rather than prose — a search for "rect" would hit every page carrying an
 /// inline BeeDiagram, whose body is a JSON document full of shape keywords. So
 /// fences are handled by kind: diagram JSON contributes only its shape labels,
-/// media fences only their title, and ordinary code blocks are kept as-is because
-/// finding a config snippet or a type name is exactly what these docs are for.
+/// excelgrid JSON only its cell values, media fences only their title, and
+/// ordinary code blocks are kept as-is because finding a config snippet or a
+/// type name is exactly what these docs are for.
 /// </summary>
 public static class SearchText
 {
@@ -22,6 +23,10 @@ public static class SearchText
     /// <summary>Fence languages whose body is an embed descriptor, not prose.</summary>
     private static readonly HashSet<string> MediaFences =
         new(StringComparer.OrdinalIgnoreCase) { "pdf", "glb", "gltf", "obj", "model" };
+
+    /// <summary>Fence languages whose body is an Excel-grid JSON document.</summary>
+    private static readonly HashSet<string> GridFences =
+        new(StringComparer.OrdinalIgnoreCase) { "excelgrid", "spreadsheet", "grid" };
 
     /// <summary>Plain text for a Markdown page body.</summary>
     public static string FromMarkdown(string? markdown)
@@ -90,6 +95,9 @@ public static class SearchText
             return "";
         }
 
+        if (GridFences.Contains(lang))
+            return LooksLikeJson(body) ? GridValues(body) : "";
+
         return body;
     }
 
@@ -125,6 +133,34 @@ public static class SearchText
         catch (JsonException)
         {
             // A half-typed diagram is not worth failing an index write over.
+            return "";
+        }
+    }
+
+    /// <summary>Pull cell values out of an excelgrid JSON document.</summary>
+    private static string GridValues(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return "";
+            if (!doc.RootElement.TryGetProperty("cells", out var cells)
+                || cells.ValueKind != JsonValueKind.Array)
+            {
+                return "";
+            }
+
+            var sb = new StringBuilder();
+            foreach (var cell in cells.EnumerateArray())
+            {
+                if (cell.ValueKind != JsonValueKind.Object) continue;
+                if (cell.TryGetProperty("v", out var value) && value.ValueKind == JsonValueKind.String)
+                    Append(sb, value.GetString());
+            }
+            return sb.ToString();
+        }
+        catch (JsonException)
+        {
             return "";
         }
     }

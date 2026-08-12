@@ -17,7 +17,7 @@ public sealed class PageTools(BeeDocsApiClient client)
         ToolHelpers.RunAsync(async () => ToolHelpers.Json(await client.GetPageAsync(pageId, ct)));
 
     [McpServerTool(Name = "beedocs_create_page", Title = "Create page"),
-     Description("Create a Markdown documentation page in a book. Content supports Mermaid fences and beediagram-ref embeds.")]
+     Description("Create a Markdown documentation page in a book. Content supports Mermaid fences, beediagram-ref embeds, and excelgrid spreadsheet fences.")]
     public Task<string> CreatePage(
         string bookId,
         string title,

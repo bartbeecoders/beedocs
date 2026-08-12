@@ -1,6 +1,6 @@
 import { splitMarkdownSegments, type ContentSegment } from './markdownFences'
 
-export type PageOutlineKind = 'heading' | 'diagram' | 'freedraw' | 'media' | 'code' | 'block'
+export type PageOutlineKind = 'heading' | 'diagram' | 'freedraw' | 'excelgrid' | 'media' | 'code' | 'block'
 
 export type PageOutlineItem = {
   /** Stable DOM id used for scroll targets (`page-ol-N`). */
@@ -55,6 +55,9 @@ function outlineItemForSegment(seg: ContentSegment, blockIndex: number): PageOut
   }
   if (lang === 'freedraw' || lang === 'sketch') {
     return { id, blockIndex, level: 7, label: 'Sketch', kind: 'freedraw' }
+  }
+  if (lang === 'excelgrid' || lang === 'spreadsheet' || lang === 'grid') {
+    return { id, blockIndex, level: 7, label: 'Spreadsheet', kind: 'excelgrid' }
   }
   if (lang === 'pdf' || lang === 'glb' || lang === 'gltf' || lang === 'obj' || lang === 'model') {
     return {

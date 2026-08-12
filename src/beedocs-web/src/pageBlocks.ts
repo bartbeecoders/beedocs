@@ -1,4 +1,5 @@
 import { serializeBeeDoc, EMPTY_BEE_DOC, createNode } from './diagram/beeModel'
+import { serializeExcelGridDoc, starterExcelGridDoc } from './excelgrid/model'
 import { serializeFreeDrawDoc, EMPTY_FREE_DRAW_DOC } from './freedraw/model'
 import type { ContentSegment } from './markdownFences'
 
@@ -12,6 +13,7 @@ export type InsertKind =
   | 'callout'
   | 'beediagram'
   | 'freedraw'
+  | 'excelgrid'
   | 'mermaid-flow'
   | 'mermaid-sequence'
   | 'mermaid-er'
@@ -80,6 +82,14 @@ export function segmentsForInsert(kind: InsertKind, opts?: { diagramId?: string;
           type: 'fence',
           lang: 'freedraw',
           body: serializeFreeDrawDoc(structuredClone(EMPTY_FREE_DRAW_DOC)),
+        },
+      ]
+    case 'excelgrid':
+      return [
+        {
+          type: 'fence',
+          lang: 'excelgrid',
+          body: serializeExcelGridDoc(starterExcelGridDoc()),
         },
       ]
     case 'mermaid-flow':

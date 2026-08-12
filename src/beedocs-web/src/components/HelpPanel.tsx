@@ -186,7 +186,8 @@ export function HelpPanel() {
         <p className="muted">
           Dropping a <code>.json</code> or <code>.xml</code> file inlines its text as a fenced code
           block instead of uploading it, so config and schemas are versioned with the page and turn
-          up in search. The text is kept exactly as the file had it; the block's{' '}
+          up in search. A <code>.csv</code> or <code>.tsv</code> file becomes a spreadsheet
+          section instead. The text is kept exactly as the file had it; the block's{' '}
           <strong>Format</strong> button re-indents it on request, and declines when reformatting
           would alter the data — oversized numbers, numeric object keys, or XML whose whitespace is
           part of the content. Files above 0.5 MB are refused rather than wedged into the page.
@@ -230,6 +231,15 @@ export function HelpPanel() {
               </td>
               <td>
                 Free-draw sketch pad (pen, eraser, undo) — insert via <strong>Add → Free draw</strong>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>```excelgrid</code>
+              </td>
+              <td>
+                Excel-style spreadsheet (cells, formatting, CSV import) — insert via{' '}
+                <strong>Add → Spreadsheet</strong>, or drop a <code>.csv</code> file on the page
               </td>
             </tr>
           </tbody>
@@ -534,6 +544,35 @@ ${mcpToken.trim() ? `  -H "Authorization: Bearer ${mcpToken.trim()}" \\\n` : ''}
                     <kbd>Ctrl</kbd>+<kbd>S</kbd>
                   </td>
                   <td>Save the open page or diagram</td>
+                </tr>
+              </tbody>
+            </table>
+            <h3 className="help-sub">Spreadsheet</h3>
+            <table className="help-table">
+              <tbody>
+                <tr>
+                  <td>
+                    Arrows / <kbd>Tab</kbd> / <kbd>Enter</kbd>
+                  </td>
+                  <td>Move the active cell (Shift extends the selection)</td>
+                </tr>
+                <tr>
+                  <td>
+                    Type or <kbd>F2</kbd>
+                  </td>
+                  <td>Edit the active cell</td>
+                </tr>
+                <tr>
+                  <td>
+                    <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd>
+                  </td>
+                  <td>Copy / cut / paste (TSV, including from Excel)</td>
+                </tr>
+                <tr>
+                  <td>
+                    <kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd>
+                  </td>
+                  <td>Bold / italic / underline</td>
                 </tr>
               </tbody>
             </table>

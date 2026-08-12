@@ -1,6 +1,7 @@
 import mermaid from 'mermaid'
 import { api } from '../api'
 import { withApiBase } from '../basePath'
+import { excelGridToHtml } from '../excelgrid/model'
 import { freeDrawToSvg } from '../freedraw/model'
 import type { Chapter, Page } from '../types'
 import { beeDiagramToSvg } from './beeDiagramSvg'
@@ -220,6 +221,9 @@ async function renderFence(
   }
   if (lang === 'freedraw' || lang === 'sketch') {
     return freeDrawToSvg(body)
+  }
+  if (lang === 'excelgrid' || lang === 'spreadsheet' || lang === 'grid') {
+    return excelGridToHtml(body)
   }
   if (lang === 'plantuml') {
     return `<pre class="export-code"><code>${esc(body)}</code></pre>`
@@ -490,6 +494,17 @@ const PRINT_CSS = `
     font-size: 0.9rem;
     color: #555;
     margin-bottom: 0.35em;
+  }
+  .export-excelgrid-table {
+    border-collapse: collapse;
+    width: auto;
+    max-width: 100%;
+    font-size: 0.9em;
+  }
+  .export-excelgrid-table th, .export-excelgrid-table td {
+    border: 1px solid #ccc;
+    padding: 0.3em 0.55em;
+    min-width: 4em;
   }
   .export-diagram svg, .export-mermaid svg {
     max-width: 100%;
