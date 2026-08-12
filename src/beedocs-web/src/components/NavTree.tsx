@@ -5,6 +5,7 @@ import { exportBookToPdf, exportPageToPdf } from '../export/pdf'
 import { ImportDialog } from './ImportDialog'
 import type { ExportFormat } from '../types'
 import { useAuth } from '../auth/AuthContext'
+import { TREE_DRAG_MIME } from '../markdownLinks'
 import { useWorkspace, type TreeBook, type TreeShelf } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
 import type { Chapter, DiagramSummary, PageSummary } from '../types'
@@ -51,10 +52,15 @@ type CtxMenu =
       y: number
     }
 
+/**
+ * Tree drags double as "insert a link" drops in the page editor
+ * (markdownLinks.ts), which is why page and book payloads carry their title —
+ * the editor uses it as the link text.
+ */
 type DragPayload =
-  | { type: 'page'; pageId: string; bookId: string; chapterId: string | null }
+  | { type: 'page'; pageId: string; bookId: string; chapterId: string | null; title: string }
   | { type: 'folder'; chapterId: string; bookId: string }
-  | { type: 'book'; bookId: string; shelfId: string | null }
+  | { type: 'book'; bookId: string; shelfId: string | null; title: string }
 
 type Creating =
   | { bookId: string; kind: 'page'; chapterId?: string | null }
@@ -219,7 +225,7 @@ export function NavTree() {
 
   const parseDrag = (e: React.DragEvent): DragPayload | null => {
     try {
-      const raw = e.dataTransfer.getData('application/x-beedocs-tree') || e.dataTransfer.getData('text/plain')
+      const raw = e.dataTransfer.getData(TREE_DRAG_MIME) || e.dataTransfer.getData('text/plain')
       if (!raw) return null
       return JSON.parse(raw) as DragPayload
     } catch {
@@ -228,7 +234,7 @@ export function NavTree() {
   }
 
   const onDragStart = (e: React.DragEvent, payload: DragPayload) => {
-    e.dataTransfer.setData('application/x-beedocs-tree', JSON.stringify(payload))
+    e.dataTransfer.setData(TREE_DRAG_MIME, JSON.stringify(payload))
     e.dataTransfer.setData('text/plain', JSON.stringify(payload))
     e.dataTransfer.effectAllowed = 'move'
   }
@@ -951,7 +957,12 @@ function BookNode({
         // shelf rows, a page payload only by book and folder rows.
         draggable={canWrite}
         onDragStart={(e) =>
-          onDragStart(e, { type: 'book', bookId: book.id, shelfId: book.shelfId ?? null })
+          onDragStart(e, {
+            type: 'book',
+            bookId: book.id,
+            shelfId: book.shelfId ?? null,
+            title: book.title,
+          })
         }
         onContextMenu={(e) =>
           openMenu(e, {
@@ -1270,6 +1281,7 @@ function PageRow({
             pageId: page.id,
             bookId,
             chapterId: page.chapterId ?? null,
+            title: page.title,
           })
         }
         onContextMenu={(e) =>

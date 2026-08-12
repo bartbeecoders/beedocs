@@ -19,10 +19,16 @@ import {
   insertMarkdownAt,
   isImageFile,
   markdownImageSnippet,
-  splitTextWithImages,
   textOffsetFromPointer,
   type UploadedImage,
 } from '../media/imageIntake'
+import {
+  insertInlineMarkdownAt,
+  isTreeDrag,
+  markdownLinkForTreePayload,
+  parseTreeDrag,
+} from '../markdownLinks'
+import { splitTextWithImagesAndTables } from '../markdownTable'
 import {
   collectDataFilesFromDataTransfer,
   dataFenceLangForFile,
@@ -41,6 +47,7 @@ import { useWorkspace } from '../workspace/WorkspaceContext'
 import { AiAssistBar, AiAssistField } from './AiAssist'
 import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
 import { FreeDrawCanvas } from './FreeDrawCanvas'
+import { MarkdownTableEditor } from './MarkdownTableEditor'
 import { MediaEmbed, parseMediaFenceBody } from './media/MediaEmbed'
 import { SyncedTextarea } from './SyncedText'
 
@@ -140,6 +147,8 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
   const [busy, setBusy] = useState(false)
   const [insertError, setInsertError] = useState<string | null>(null)
   const [dropHint, setDropHint] = useState<string | null>(null)
+  /** A page/book is being dragged over the editor from the library tree. */
+  const [linkDragging, setLinkDragging] = useState(false)
   const { renameInTree } = useWorkspace()
 
   useEffect(() => {
@@ -496,7 +505,87 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
     return () => el.removeEventListener('drop', onDrop)
   }, [insertAt])
 
-  const removeImageFromSegment = useCallback(
+  /**
+   * Drop a page or book dragged from the library tree — inserts a Markdown
+   * link to it. A link is inline content, so a drop into a text section lands
+   * at the pointer's line inside the prose rather than as a block of its own;
+   * gaps and the document end still get their own paragraph.
+   */
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+
+    const onDragOver = (e: DragEvent) => {
+      if (!isTreeDrag(e.dataTransfer)) return
+      // Without preventDefault the browser refuses the drop outright.
+      e.preventDefault()
+      // Must stay within the tree drag's effectAllowed ('move') or the drop is cancelled.
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+      setLinkDragging(true)
+      setDropHint('Drop to insert a link to that document')
+    }
+
+    const onDrop = (e: DragEvent) => {
+      if (!isTreeDrag(e.dataTransfer)) return
+      e.preventDefault()
+      e.stopPropagation()
+      setLinkDragging(false)
+      setDropHint(null)
+
+      const payload = parseTreeDrag(e.dataTransfer)
+      const snippet = payload ? markdownLinkForTreePayload(payload) : null
+      if (!snippet) return // e.g. a folder — nothing to link to
+
+      const slotEl =
+        (e.target instanceof Element ? e.target : null)?.closest?.('[data-drop-slot]') ??
+        document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-drop-slot]')
+      if (slotEl) {
+        const slot = slotEl.getAttribute('data-drop-slot') || ''
+        if (slot.startsWith('before:')) {
+          const idx = Number(slot.slice('before:'.length))
+          insertAt(Number.isFinite(idx) ? idx : 'end', [{ type: 'text', text: `\n\n${snippet}\n\n` }])
+          return
+        }
+        if (slot.startsWith('segment:')) {
+          const idx = Number(slot.slice('segment:'.length))
+          const seg = segmentsRef.current[idx]
+          if (Number.isFinite(idx) && seg?.type === 'text') {
+            const ta =
+              slotEl instanceof HTMLTextAreaElement
+                ? slotEl
+                : (slotEl.querySelector('textarea') as HTMLTextAreaElement | null)
+            const offset = ta ? textOffsetFromPointer(ta, e.clientY) : seg.text.length
+            const text = insertInlineMarkdownAt(seg.text, offset, snippet)
+            emit(
+              segmentsRef.current.map((s, i) =>
+                i === idx ? keepBlockId(s, { type: 'text', text }) : s,
+              ),
+            )
+            return
+          }
+        }
+      }
+      insertAt('end', [{ type: 'text', text: `\n\n${snippet}\n\n` }])
+    }
+
+    // dragend fires on the tree row that started the drag, wherever it ended.
+    const onDragEnd = () => {
+      setLinkDragging(false)
+      setDropHint(null)
+    }
+
+    el.addEventListener('dragover', onDragOver)
+    el.addEventListener('drop', onDrop)
+    document.addEventListener('dragend', onDragEnd, true)
+    return () => {
+      el.removeEventListener('dragover', onDragOver)
+      el.removeEventListener('drop', onDrop)
+      document.removeEventListener('dragend', onDragEnd, true)
+    }
+  }, [emit, insertAt])
+
+  /** Remove one embedded piece (image or table) from a text segment by its raw Markdown. */
+  const removePieceFromSegment = useCallback(
     (segmentIndex: number, raw: string) => {
       const list = segmentsRef.current
       const seg = list[segmentIndex]
@@ -526,7 +615,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
           Uploading image…
         </div>
       )}
-      {dragging && dropHint && (
+      {(dragging || linkDragging) && dropHint && (
         <div className="image-drop-hint" aria-live="polite">
           {dropHint}
         </div>
@@ -542,9 +631,11 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       <AiAssistBar />
       <p className="hybrid-hint muted sm">
         Drop or paste images <strong>where you want them</strong> — they preview in edit mode. Use Add for
-        sections, diagrams, <strong>PDF</strong>, and <strong>3D models</strong> (or drop <code>.pdf</code> /{' '}
+        sections, <strong>tables</strong> (edited as a grid — add/remove rows and columns in place),
+        diagrams, <strong>PDF</strong>, and <strong>3D models</strong> (or drop <code>.pdf</code> /{' '}
         <code>.glb</code> / <code>.obj</code> files). Dropping <code>.json</code> / <code>.xml</code> inlines
-        the file as a code block you can reformat.
+        the file as a code block you can reformat. Drag a <strong>page or book from the library</strong>{' '}
+        into a section to insert a link to it.
       </p>
 
       <InsertGap
@@ -582,10 +673,10 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
               value={seg.text}
               pageContext={content}
               placeholder={index === 0 ? placeholder : 'Continue Markdown…'}
-              dragging={dragging}
+              dragging={dragging || linkDragging}
               onChange={(text) => updateSegment(index, { type: 'text', text })}
               onBlur={normalizeBlocks}
-              onRemoveImage={(raw) => removeImageFromSegment(index, raw)}
+              onRemovePiece={(raw) => removePieceFromSegment(index, raw)}
             />
           ) : isMediaFenceLang(seg.lang) ? (
             <MediaFenceBlock
@@ -798,8 +889,9 @@ function mergeAdjacentText(segments: ContentSegment[]): ContentSegment[] {
 }
 
 /**
- * Text segment with markdown images shown as previews between editable text pieces.
- * Underlying storage remains a single text string with ![alt](url) syntax.
+ * Text segment with markdown images shown as previews — and markdown tables as
+ * an editable grid designer — between editable text pieces. Underlying storage
+ * remains a single text string with ![alt](url) / pipe-table syntax.
  */
 function RichTextBlock({
   segmentIndex,
@@ -807,7 +899,7 @@ function RichTextBlock({
   pageContext,
   onChange,
   onBlur,
-  onRemoveImage,
+  onRemovePiece,
   placeholder,
   dragging,
 }: {
@@ -818,11 +910,12 @@ function RichTextBlock({
   onChange: (v: string) => void
   /** Editing finished — the editor re-cuts blocks at any newly typed heading. */
   onBlur?: () => void
-  onRemoveImage: (raw: string) => void
+  /** Remove an embedded image or table by its raw Markdown. */
+  onRemovePiece: (raw: string) => void
   placeholder?: string
   dragging: boolean
 }) {
-  const pieces = splitTextWithImages(value)
+  const pieces = splitTextWithImagesAndTables(value)
 
   // Latest text this block knows about — edits compose off this rather than off
   // `value`, which is still catching up while the user types.
@@ -833,9 +926,20 @@ function RichTextBlock({
 
   // Rebuild full text when a piece changes
   const updatePieceText = (pieceIndex: number, nextText: string) => {
-    const next = splitTextWithImages(textRef.current).map((p, i) => {
+    const next = splitTextWithImagesAndTables(textRef.current).map((p, i) => {
       if (i !== pieceIndex) return p
       return { kind: 'text' as const, text: nextText }
+    })
+    const joined = next.map((p) => (p.kind === 'text' ? p.text : p.raw)).join('')
+    textRef.current = joined
+    onChange(joined)
+  }
+
+  // Swap a table piece's raw markdown for the designer's re-serialized version.
+  const updatePieceRaw = (pieceIndex: number, nextRaw: string) => {
+    const next = splitTextWithImagesAndTables(textRef.current).map((p, i) => {
+      if (i !== pieceIndex || p.kind !== 'table') return p
+      return { kind: 'table' as const, raw: nextRaw }
     })
     const joined = next.map((p) => (p.kind === 'text' ? p.text : p.raw)).join('')
     textRef.current = joined
@@ -884,12 +988,22 @@ function RichTextBlock({
                 <button
                   type="button"
                   className="btn ghost sm danger"
-                  onClick={() => onRemoveImage(p.raw)}
+                  onClick={() => onRemovePiece(p.raw)}
                 >
                   Remove
                 </button>
               </figcaption>
             </figure>
+          )
+        }
+        if (p.kind === 'table') {
+          return (
+            <MarkdownTableEditor
+              key={`tbl-${i}`}
+              raw={p.raw}
+              onChange={(nextRaw) => updatePieceRaw(i, nextRaw)}
+              onRemove={() => onRemovePiece(p.raw)}
+            />
           )
         }
         if (!p.text && i > 0 && i < pieces.length - 1) return null

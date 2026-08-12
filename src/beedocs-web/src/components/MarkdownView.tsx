@@ -18,6 +18,7 @@ import mermaid from 'mermaid'
 import { api } from '../api'
 import { withApiBase } from '../basePath'
 import { replaceFenceBody, splitMarkdownSegments } from '../markdownFences'
+import { isInternalDocHref } from '../markdownLinks'
 import { outlineId } from '../pageOutline'
 import { highlightCode, resolveLanguage } from '../syntaxHighlight'
 import { DataTree } from './DataTree'
@@ -574,6 +575,22 @@ export const MarkdownView = memo(function MarkdownView({
       return {
       img({ src, alt, ...props }: ComponentProps<'img'>) {
         return <img src={src ? withApiBase(src) : src} alt={alt ?? ''} {...props} />
+      },
+      // Links to other documents (dragged in from the library tree) go through
+      // the router: a plain <a> would reload the whole app and lose the basename.
+      a({ href, children, ...props }: ComponentProps<'a'>) {
+        if (isInternalDocHref(href)) {
+          return (
+            <Link to={href} className="doc-link" {...props}>
+              {children}
+            </Link>
+          )
+        }
+        return (
+          <a href={href} {...props}>
+            {children}
+          </a>
+        )
       },
       h1: heading('h1'),
       h2: heading('h2'),

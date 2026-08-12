@@ -65,3 +65,19 @@ Security on items (shelves/books/pages)
 
 Add the ability to use Book Shelves
 - bool shelves can contain books (level above books)
+
+
+## Table designer
+Implement in the markdown sections a more UI friendly markdown table designer.
+Allow the user to:
+- add rows 
+- remove rows
+- add columns
+- remove columns
+Looks good, can you add drag and drop to move rows and columns
+
+maybe look at this project https://github.com/Roelanb/d3-excelgrid and see if you can turn the
+
+
+Add the ability to add links to other documents. 
+User should be able to drag a page from the library onto a section which should add a link in the target document.

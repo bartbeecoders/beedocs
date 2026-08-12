@@ -5009,3 +5009,182 @@ html[data-theme='high-contrast'] {
     display: none;
   }
 }
+
+/* ==========================================================================
+   Markdown table designer — grid editing over a pipe table in a text segment
+   ========================================================================== */
+
+.md-table-editor {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  overflow: hidden;
+  margin: 0.5rem 0;
+}
+
+.md-table-scroll {
+  padding: 0.55rem;
+  overflow-x: auto;
+}
+
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.md-table th,
+.md-table td {
+  border: 1px solid var(--border);
+  padding: 0;
+}
+
+.md-table th {
+  background: var(--bg-soft);
+}
+
+.md-table input {
+  width: 100%;
+  min-width: 5.5rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  padding: 0.38rem 0.5rem;
+  outline: none;
+}
+
+.md-table th input {
+  font-weight: 600;
+}
+
+.md-table input:focus {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.md-table-headcell {
+  display: flex;
+  align-items: center;
+}
+
+.md-table-headcell input {
+  flex: 1;
+  min-width: 4.5rem;
+}
+
+/* Row/column removal buttons live outside the table frame proper. */
+.md-table th.md-table-rowctl,
+.md-table td.md-table-rowctl {
+  border: none;
+  background: transparent;
+  width: 1.8rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.md-table-x {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.15rem 0.32rem;
+  border-radius: 4px;
+}
+
+.md-table-x:hover:not(:disabled) {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.md-table-x:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* The remove-column button only matters when the header is being worked on. */
+.md-table thead .md-table-x {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.md-table thead th:hover .md-table-x,
+.md-table thead .md-table-x:focus-visible {
+  opacity: 1;
+}
+
+/* Reorder grips: revealed by hovering the row / header cell they move. */
+.md-table-grip {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: grab;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0.15rem 0.25rem;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.md-table-grip:active {
+  cursor: grabbing;
+}
+
+.md-table-grip:hover {
+  color: var(--text);
+  background: var(--bg-soft);
+}
+
+.md-table thead th:hover .md-table-grip,
+.md-table tbody tr:hover .md-table-grip,
+.md-table-grip:focus-visible {
+  opacity: 1;
+}
+
+/* The dragged row's / column's cells ghost while the drag is live. */
+.md-table tr.is-drag-source > td,
+.md-table th.is-drag-source,
+.md-table td.is-drag-source {
+  opacity: 0.4;
+}
+
+/* Drop indicators mark the gap the drop would land in. Box-shadow rather than
+   border: collapsed table borders shift the layout when their width changes. */
+.md-table th.is-col-gap-before,
+.md-table td.is-col-gap-before {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.md-table th.is-col-gap-after,
+.md-table td.is-col-gap-after {
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+
+.md-table tr.is-row-gap-before > td:not(.md-table-rowctl) {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.md-table tr.is-row-gap-after > td:not(.md-table-rowctl) {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.md-table-footer {
+  display: flex;
+  gap: 0.4rem;
+  padding-top: 0.45rem;
+}
+
+/* Links to other BeeDocs documents (dragged in from the library tree). */
+.markdown-body .doc-link {
+  font-weight: 500;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.markdown-body .doc-link::before {
+  content: '📄\00a0';
+  font-size: 0.85em;
+}
