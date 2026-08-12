@@ -17,16 +17,22 @@ data:
   # Optional: protect /api/v1 (external publish API). Prefer a Secret in production.
   # BeeDocs__ApiKey: ""
 
-  # Sign-in. Off by default: this instance is fronted by Cloudflare Access, which
-  # already decides who reaches it. Turn it on to get per-person accounts and
-  # roles (admin / editor / viewer) on top of that — see Docs/USERS-AND-ROLES.md.
+  # Sign-in. On for this instance: Cloudflare Access decides who reaches it,
+  # these accounts decide who may write once they are here (admin / editor /
+  # viewer) — see Docs/USERS-AND-ROLES.md. It lives here rather than in
+  # appsettings.json so the login wall is a property of the deployment, not of
+  # the image.
+  BeeDocs__Auth__Enabled: "true"
+  BeeDocs__Auth__SessionHours: "168"
+  # BeeDocs__Auth__SecureCookie is deliberately left unset. Cloudflare
+  # terminates TLS and forwards plain HTTP, so the flag follows a request that
+  # does not look secure — but the browser still speaks HTTPS to Cloudflare, so
+  # the cookie survives, and leaving it off keeps the plain-HTTP NodePort
+  # usable for debugging. Set it to "true" once nothing reaches the NodePort.
   #
-  # Two things to set at the same time:
-  #   * BeeDocs__ApiKey — the MCP sidecar below has no cookie, so without a key
-  #     every one of its calls to the API becomes a 401.
-  #   * BeeDocs__Auth__SecureCookie — Cloudflare terminates TLS and forwards
-  #     plain HTTP, so the request does not look secure to Kestrel and the flag
-  #     would otherwise be left off.
-  # BeeDocs__Auth__Enabled: "true"
-  # BeeDocs__Auth__SecureCookie: "true"
-  # BeeDocs__Auth__SessionHours: "168"
+  # Still missing: BeeDocs__ApiKey. The MCP sidecar has no session cookie, so
+  # with sign-in on every call it makes to the API is a 401 until the key is
+  # set here (or, better, from a Secret) and passed to the sidecar as
+  # BEEDOCS_API_KEY — see the commented block in deployment.yaml. Setting it
+  # also turns the LLM writing help off in the UI, which is why it is a
+  # separate decision.
