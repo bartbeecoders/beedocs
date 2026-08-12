@@ -9,3 +9,5 @@ Add the capability for user management and roles
 Add a book owner field
 Add a page owner field (defaults from book)
 Keep on each page a history table, date/time changed, user who changed it
+
+
