@@ -30,6 +30,7 @@ Directory.CreateDirectory(uploadsRoot);
 builder.Services.AddSingleton(new StorageOptions(uploadsRoot));
 builder.Services.Configure<ApiKeyOptions>(builder.Configuration.GetSection(ApiKeyOptions.SectionName));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
+builder.Services.AddSingleton<ApiKeySettingsService>();
 builder.Services.AddSingleton<ApiKeyEndpointFilter>();
 builder.Services.AddSingleton<RequestAuthenticator>();
 
@@ -201,26 +202,32 @@ var appVersion = (Assembly.GetExecutingAssembly()
         ?? "0.0.0")
     .Split('+')[0];
 
-var configuredApiKey = app.Configuration["BeeDocs:ApiKey"];
-if (string.IsNullOrWhiteSpace(configuredApiKey))
+// The effective key is the one saved on the Settings page, else BeeDocs:ApiKey
+// from configuration — see ApiKeySettingsService. The schema is ensured above,
+// so the stored value is readable here.
+var apiKeyStatus = await app.Services.GetRequiredService<ApiKeySettingsService>().GetStatusAsync();
+if (!apiKeyStatus.HasKey)
 {
     app.Logger.LogWarning(
-        "BeeDocs:ApiKey is not set — /api/v1 is open without authentication. " +
-        "Set BeeDocs__ApiKey (or BeeDocs:ApiKey) before exposing the API to other apps.");
+        "No API key is configured — /api/v1 is open without authentication. " +
+        "Set one in Settings → API access, or via BeeDocs__ApiKey (or BeeDocs:ApiKey).");
 }
 else
 {
-    app.Logger.LogInformation("BeeDocs:ApiKey is configured — /api/v1 requires Bearer or X-Api-Key.");
+    app.Logger.LogInformation(
+        "An API key is configured (from {Source}) — /api/v1 requires Bearer or X-Api-Key.",
+        apiKeyStatus.Source);
 }
 
 // A stored provider key turns /api/llm into something that spends real money.
-// Without BeeDocs:ApiKey, anyone who can reach this port can spend it.
-if (string.IsNullOrWhiteSpace(configuredApiKey)
+// Without an API key, anyone who can reach this port can spend it.
+if (!apiKeyStatus.HasKey
     && await app.Services.GetRequiredService<ILlmProviderService>().AnyKeyStoredAsync())
 {
     app.Logger.LogWarning(
-        "An LLM provider has a stored API key but BeeDocs:ApiKey is not set — /api/llm is unauthenticated, " +
-        "so anyone who can reach this port can spend that key. Set BeeDocs__ApiKey (or BeeDocs:ApiKey).");
+        "An LLM provider has a stored API key but no publish API key is configured — /api/llm is " +
+        "unauthenticated, so anyone who can reach this port can spend that key. " +
+        "Set one in Settings → API access, or via BeeDocs__ApiKey (or BeeDocs:ApiKey).");
 }
 
 var authOptions = app.Services.GetRequiredService<IOptions<AuthOptions>>().Value;
@@ -233,12 +240,12 @@ if (authOptions.Enabled)
     // MCP and every publishing app reach /api with no cookie. With sign-in on and
     // no key configured they get a 401 on the next request they make, which reads
     // as "the server broke" rather than "the server now wants credentials".
-    if (string.IsNullOrWhiteSpace(configuredApiKey))
+    if (!apiKeyStatus.HasKey)
     {
         app.Logger.LogWarning(
-            "Sign-in is enabled but BeeDocs:ApiKey is not set — non-browser clients (the MCP server, " +
-            "publishing apps) cannot authenticate and will receive 401. Set BeeDocs__ApiKey and pass it " +
-            "as BEEDOCS_API_KEY to BeeDocs.Mcp.");
+            "Sign-in is enabled but no API key is configured — non-browser clients (the MCP server, " +
+            "publishing apps) cannot authenticate and will receive 401. Set one in Settings → API access " +
+            "(or via BeeDocs__ApiKey) and pass it as BEEDOCS_API_KEY to BeeDocs.Mcp.");
     }
 }
 
@@ -830,6 +837,21 @@ api.MapDelete("/collections/{id}", async (string id, IShapeCollectionService col
     return ok ? Results.NoContent() : Results.NotFound();
 });
 
+// --- Instance settings ---
+// The publish API key is a credential, so reading its status is as much an admin
+// question as changing it — same rule as the LLM provider list. The key itself
+// is never returned; SetAsync takes effect immediately (no restart), and an
+// empty value clears the stored key so a configured BeeDocs:ApiKey applies again.
+var settingsAdmin = api.MapGroup("/settings")
+    .WithMetadata(RequireRole.Admin)
+    .WithTags("Settings");
+
+settingsAdmin.MapGet("/api-key", async (ApiKeySettingsService apiKeys, CancellationToken ct) =>
+    Results.Ok(await apiKeys.GetStatusAsync(ct)));
+
+settingsAdmin.MapPut("/api-key", async (UpdateApiKeyRequest body, ApiKeySettingsService apiKeys, CancellationToken ct) =>
+    Results.Ok(await apiKeys.SetAsync(body.ApiKey, ct)));
+
 // --- LLM providers & completion ---
 // Behind the same key as /api/v1, and not optional: a completion spends the user's
 // money, so an unauthenticated /api/llm on a reachable port is a bill waiting to
@@ -1330,6 +1352,8 @@ v1.MapPut("/publish", async (PublishDocumentRequest body, IDocumentService docs,
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["page.content"] = ["Page content is required."] });
     if (body.Folder is not null && string.IsNullOrWhiteSpace(body.Folder.Title))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["folder.title"] = ["Folder title is required when a folder is specified."] });
+    if (body.Shelf is not null && string.IsNullOrWhiteSpace(body.Shelf.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["shelf.title"] = ["Shelf title is required when a shelf is specified."] });
 
     try
     {

@@ -1612,6 +1612,45 @@ select:focus {
   border-radius: 5px;
 }
 
+/* Same grid lines as the table designer, so a page reads like its editor.
+   The --tbl-* vars have no value by default; the bee-tbl--* theme classes
+   (defined next to the designer styles) set them on the <table>. */
+.markdown-body table {
+  border-collapse: collapse;
+  margin: 0.85rem 0;
+  font-size: 0.9rem;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  color: var(--tbl-text, inherit);
+}
+
+.markdown-body table th,
+.markdown-body table td {
+  border: 1px solid var(--tbl-border, var(--border));
+  border-bottom-color: var(--tbl-border-h, var(--tbl-border, var(--border)));
+  padding: 0.38rem 0.6rem;
+  vertical-align: top;
+}
+
+.markdown-body table th {
+  background: var(--cell-bg, var(--tbl-head-bg, var(--bg-soft)));
+  color: var(--cell-text, var(--tbl-head-text, inherit));
+  font-weight: 600;
+  text-align: left;
+}
+
+/* --cell-bg/--cell-text come from a bee-cell--* class on the cell itself, so a
+   styled cell wins over the theme's striping without any specificity fight. */
+.markdown-body table td {
+  background: var(--cell-bg, var(--tbl-cell-bg, transparent));
+  color: var(--cell-text, inherit);
+}
+
+.markdown-body table tbody tr:nth-child(even) td {
+  background: var(--cell-bg, var(--tbl-alt-bg, var(--tbl-cell-bg, transparent)));
+}
+
 .mermaid-block {
   overflow: auto;
   padding: 0.65rem;
@@ -5252,11 +5291,17 @@ html[data-theme='high-contrast'] {
    ========================================================================== */
 
 .md-table-editor {
+  /* Anchor for the cell-style popover. No overflow:hidden — it would clip the
+     popover — so the chrome bar rounds its own top corners below. */
+  position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-elevated);
-  overflow: hidden;
   margin: 0.5rem 0;
+}
+
+.md-table-editor > .hybrid-fence-chrome {
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
 }
 
 .md-table-scroll {
@@ -5271,12 +5316,23 @@ html[data-theme='high-contrast'] {
 
 .md-table th,
 .md-table td {
-  border: 1px solid var(--border);
+  border: 1px solid var(--tbl-border, var(--border));
+  border-bottom-color: var(--tbl-border-h, var(--tbl-border, var(--border)));
   padding: 0;
 }
 
 .md-table th {
-  background: var(--bg-soft);
+  background: var(--cell-bg, var(--tbl-head-bg, var(--bg-soft)));
+}
+
+/* :where keeps the stripe at (0,2,1) so the later drag/link highlights still win. */
+.md-table td:not(.md-table-rowctl) {
+  position: relative; /* anchors the cell-style button */
+  background: var(--cell-bg, var(--tbl-cell-bg, transparent));
+}
+
+.md-table :where(tbody tr:nth-child(even)) td:not(.md-table-rowctl) {
+  background: var(--cell-bg, var(--tbl-alt-bg, var(--tbl-cell-bg, transparent)));
 }
 
 .md-table input {
@@ -5284,7 +5340,7 @@ html[data-theme='high-contrast'] {
   min-width: 5.5rem;
   border: none;
   background: transparent;
-  color: var(--text);
+  color: var(--cell-text, var(--tbl-text, var(--text)));
   font: inherit;
   font-size: 0.86rem;
   line-height: 1.4;
@@ -5294,6 +5350,93 @@ html[data-theme='high-contrast'] {
 
 .md-table th input {
   font-weight: 600;
+  color: var(--cell-text, var(--tbl-head-text, var(--tbl-text, var(--text))));
+}
+
+/* The cell whose style popover is open. */
+.md-table th.is-style-target,
+.md-table td.is-style-target {
+  outline: 1px dashed var(--border-strong);
+  outline-offset: -2px;
+}
+
+/* Per-cell style button: a small dot in the cell's corner, shown on hover.
+   It reads the cell's own --cell-bg, so a styled cell's dot carries its tint. */
+.md-table-stylebtn {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--cell-bg, var(--bg-elevated));
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+/* Header cells lay out as a flex row, so the button sits in flow there. */
+.md-table-headcell .md-table-stylebtn {
+  position: static;
+  transform: none;
+  flex: none;
+}
+
+.md-table th:hover .md-table-stylebtn,
+.md-table td:hover .md-table-stylebtn,
+.md-table-stylebtn:focus-visible,
+.md-table .is-style-target .md-table-stylebtn {
+  opacity: 1;
+}
+
+.md-table-stylebtn:hover {
+  border-color: var(--accent);
+}
+
+/* The style popover itself: one swatch per cell style. */
+.md-table-stylepop {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+}
+
+.md-table-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--cell-bg, transparent);
+  cursor: pointer;
+  padding: 0;
+}
+
+.md-table-swatch:hover {
+  border-color: var(--accent);
+}
+
+/* "None": an empty swatch with a strike-through. */
+.md-table-swatch--none {
+  background: linear-gradient(
+    135deg,
+    transparent 44%,
+    var(--border-strong) 46%,
+    var(--border-strong) 54%,
+    transparent 56%
+  );
+}
+
+.md-table-swatch.is-current {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .md-table input:focus {
@@ -5408,10 +5551,111 @@ html[data-theme='high-contrast'] {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
+/* A library-tree item dragged over a cell: this cell will receive the link. */
+.md-table th.is-link-target,
+.md-table td.is-link-target {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 .md-table-footer {
   display: flex;
   gap: 0.4rem;
   padding-top: 0.45rem;
+}
+
+/* Theme picker in the table chrome. */
+.md-table-theme {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.15rem 0.3rem;
+  cursor: pointer;
+}
+
+/* ── Table themes ──
+   Chosen in the table designer, persisted as `<!-- bee-table: theme=x -->`
+   above the pipe table (invisible to any other Markdown renderer). Each class
+   only sets --tbl-* vars, which the designer grid (.md-table) and the rendered
+   page (.markdown-body table) both read; export/pdf.ts carries its own
+   print-friendly variants. The fixed hues are mixed with theme vars so they
+   track light/dark mode. */
+.bee-tbl--striped {
+  --tbl-alt-bg: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.bee-tbl--minimal {
+  --tbl-border: transparent;
+  --tbl-border-h: var(--border);
+  --tbl-head-bg: transparent;
+}
+
+.bee-tbl--ocean {
+  --tbl-hue: #4a90d9;
+}
+
+.bee-tbl--forest {
+  --tbl-hue: #43a06c;
+}
+
+.bee-tbl--sunset {
+  --tbl-hue: #df8f3d;
+}
+
+.bee-tbl--ocean,
+.bee-tbl--forest,
+.bee-tbl--sunset {
+  --tbl-border: color-mix(in srgb, var(--tbl-hue) 38%, var(--border));
+  --tbl-head-bg: color-mix(in srgb, var(--tbl-hue) 24%, var(--bg-elevated));
+  --tbl-head-text: color-mix(in srgb, var(--tbl-hue) 45%, var(--text));
+  --tbl-alt-bg: color-mix(in srgb, var(--tbl-hue) 7%, transparent);
+}
+
+.bee-tbl--contrast {
+  --tbl-border: var(--border-strong);
+  --tbl-head-bg: color-mix(in srgb, var(--text) 85%, var(--bg));
+  --tbl-head-text: var(--bg-elevated);
+  --tbl-alt-bg: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+/* ── Per-cell styles ──
+   `bee-cell--*` classes on one th/td, persisted as `cells=` refs in the same
+   bee-table marker. They only set --cell-bg/--cell-text, which sit first in
+   every fallback chain above — so a styled cell wins over theme colors. */
+.bee-cell--accent {
+  --cell-hue: var(--accent);
+}
+
+.bee-cell--info {
+  --cell-hue: #4a90d9;
+}
+
+.bee-cell--ok {
+  --cell-hue: #43a06c;
+}
+
+.bee-cell--warn {
+  --cell-hue: #df8f3d;
+}
+
+.bee-cell--danger {
+  --cell-hue: #d95757;
+}
+
+.bee-cell--accent,
+.bee-cell--info,
+.bee-cell--ok,
+.bee-cell--warn,
+.bee-cell--danger {
+  --cell-bg: color-mix(in srgb, var(--cell-hue) 18%, transparent);
+  --cell-text: color-mix(in srgb, var(--cell-hue) 55%, var(--text));
+}
+
+.bee-cell--muted {
+  --cell-bg: color-mix(in srgb, var(--muted) 12%, transparent);
+  --cell-text: var(--muted);
 }
 
 /* Links to other BeeDocs documents (dragged in from the library tree). */

@@ -557,3 +557,15 @@ export type LlmCompleteResponse = {
   completionTokens: number | null
   elapsedMs: number
 }
+
+/**
+ * Status of the shared publish API key (/api/v1, /api/llm, non-browser sign-in).
+ * The key itself is never returned — only whether one exists, where it comes
+ * from ("settings" = stored via the Settings page, "config" = BeeDocs__ApiKey
+ * fallback), and its last four characters.
+ */
+export type ApiKeyStatus = {
+  hasKey: boolean
+  source: 'settings' | 'config' | null
+  keyHint: string | null
+}

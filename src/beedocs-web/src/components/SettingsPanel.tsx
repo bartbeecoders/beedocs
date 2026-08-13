@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { THEMES, useTheme, type ThemeId } from '../theme'
 import { loadPaneLayout, savePaneLayout } from '../workspace/layoutPrefs'
 import { useAuth } from '../auth/AuthContext'
+import { ApiKeyPanel } from './ApiKeyPanel'
 import { LlmProviders } from './LlmProviders'
 import { UsersPanel } from './UsersPanel'
 import '../styles/llm-providers.css'
@@ -118,6 +119,15 @@ export function SettingsPanel({ onResetPanes }: Props) {
         <h2>Users &amp; roles</h2>
         <UsersPanel />
       </section>
+
+      {/* The publish API key is a credential — the API answers only to admins,
+          so showing the section to an editor would just render a 403. */}
+      {canManageUsers && (
+        <section className="settings-section">
+          <h2>API access</h2>
+          <ApiKeyPanel />
+        </section>
+      )}
 
       {/* Provider rows hold a paid credential, so the API refuses to list them
           for anyone but an admin — showing the section to an editor would only

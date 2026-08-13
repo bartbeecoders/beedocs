@@ -56,11 +56,13 @@ Add standard shapes (seperate collection) for the basic MS Azure components:
 https://learn.microsoft.com/en-us/azure/architecture/icons/
 
 
-Better table handling – table designer
-Excel integration
-Book Shelves
-User groups
-Security on items (shelves/books/pages)
+[x] Better table handling – table designer
+[x] Excel integration
+[x] Book Shelves
+[ ] User groups
+[ ] Security on items (shelves/books/pages)
+
+Draw table lines on the table preview.
 
 
 Add the ability to use Book Shelves
@@ -81,3 +83,5 @@ maybe look at this project https://github.com/Roelanb/d3-excelgrid and see if yo
 
 Add the ability to add links to other documents. 
 User should be able to drag a page from the library onto a section which should add a link in the target document.
+
+It is difficult to drag and drop a link to a page in a table cell. Improve that.

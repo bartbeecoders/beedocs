@@ -27,11 +27,16 @@ Re-running the same publish call **updates** the page (idempotent by slug).
 
 ## Authentication
 
-Optional shared secret, configured on the API:
+Optional shared secret. An admin sets or rotates it at runtime on the workspace's
+**Settings → API access** page — it takes effect immediately, is stored write-only
+(only the last four characters remain visible), and never requires a restart.
+Configuration remains as a fallback for deployments that manage the key outside
+the app:
 
-| Config | Env var | Purpose |
-|--------|---------|---------|
-| `BeeDocs:ApiKey` | `BeeDocs__ApiKey` | When set, every `/api/v1` request must authenticate |
+| Source | Where | Precedence |
+|--------|-------|------------|
+| Settings page | Stored in the database, editable at runtime (admin only) | Wins when set |
+| `BeeDocs:ApiKey` / env `BeeDocs__ApiKey` | Server configuration | Fallback when nothing is stored |
 
 Send either:
 
@@ -45,8 +50,13 @@ or
 X-Api-Key: <api-key>
 ```
 
-- **Unset / empty** — `/api/v1` is open (local dev). The API logs a warning at startup.
-- **Set** — missing or wrong key → `401 Unauthorized`.
+- **No key anywhere** — `/api/v1` is open (local dev). The API logs a warning at startup.
+- **Key configured** — missing or wrong key → `401 Unauthorized`.
+
+The same key is how non-browser clients (the MCP server, publishing apps)
+authenticate against `/api/*` when sign-in (`BeeDocs:Auth:Enabled`) is on — with
+sign-in on and **no** key configured, those clients cannot authenticate at all
+and every call they make is a 401.
 
 `/api/health` stays open and does not require a key.
 
@@ -74,6 +84,10 @@ curl -sS -X PUT "http://localhost:5080/api/v1/publish" \
     "folder": {
       "title": "Gateways",
       "slug": "gateways"
+    },
+    "shelf": {
+      "title": "Edge Services",
+      "slug": "edge-services"
     }
   }'
 ```
@@ -82,6 +96,12 @@ curl -sS -X PUT "http://localhost:5080/api/v1/publish" \
 of the book — matched by slug and **created automatically when missing** (an existing
 folder is used as-is; its title is not renamed). When omitted, an existing page keeps
 its current folder and a new page lands at the book root.
+
+`shelf` is optional and follows the same rules one level up: when present, the
+book is placed on that shelf — matched by slug and **created automatically when
+missing** (an existing shelf is used as-is; its title is not renamed). When
+omitted, an existing book stays wherever it already sits and a new book lands at
+the library root.
 
 Response (`201` when something was created, `200` when both already existed):
 
@@ -162,11 +182,13 @@ All fields optional. On create, missing `title` defaults to the path slug.
 **Response:** `{ "item": { …book }, "created": true|false }`  
 `201 Created` when new, `200 OK` when updated.
 
-A book may sit on a **shelf** — the grouping level above books. Shelves are not
-part of the publish surface: republishing over a book never moves it, and a book
-created here lands at the library root. Shelves are managed through the id-based
-API instead (`/api/shelves`, and `shelfId` on `POST`/`PUT /api/books/{id}`),
-which is also what the workspace UI and the MCP server use.
+A book may sit on a **shelf** — the grouping level above books. This slug-based
+book route never moves a book: republishing leaves its shelf untouched, and a
+book created here lands at the library root. To shelve a book from the publish
+surface, pass `shelf` on `PUT /api/v1/publish` (see the quick start); full shelf
+management lives on the id-based API (`/api/shelves`, and `shelfId` on
+`POST`/`PUT /api/books/{id}`), which is also what the workspace UI and the MCP
+server use.
 
 ### Pages
 
@@ -196,10 +218,11 @@ which is also what the workspace UI and the MCP server use.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `PUT` | `/api/v1/publish` | Ensure book (+ optional folder) + write page (idempotent) |
+| `PUT` | `/api/v1/publish` | Ensure book (+ optional folder, + optional shelf) + write page (idempotent) |
 
 See [Quick start](#quick-start--one-shot-publish). The response echoes `folder`
-(and `folderCreated`) when the request specified one.
+(and `folderCreated`) and `shelf` (and `shelfCreated`) when the request
+specified them.
 
 ### Search
 

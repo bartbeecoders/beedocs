@@ -176,6 +176,19 @@ public sealed record PageHistoryDto(
     IReadOnlyList<PageHistoryEntryDto> Entries
 );
 
+// --- Instance settings (/api/settings) ---
+
+/// <summary>
+/// Status of the shared publish API key. The key itself is never returned —
+/// only whether one exists, where it comes from, and its last four characters.
+/// </summary>
+/// <param name="Source"><c>settings</c> (stored, editable at runtime), <c>config</c>
+/// (BeeDocs:ApiKey fallback), or null when no key is configured.</param>
+public sealed record ApiKeyStatusDto(bool HasKey, string? Source, string? KeyHint);
+
+/// <summary>Null or empty clears the stored key (a configured fallback then applies again).</summary>
+public sealed record UpdateApiKeyRequest(string? ApiKey);
+
 // --- External publish API (slug-based, /api/v1) ---
 
 /// <summary>Create or update a book addressed by slug.</summary>
@@ -197,14 +210,16 @@ public sealed record UpsertPageRequest(
 
 /// <summary>
 /// One-shot publish: ensure a book exists and write a Markdown page into it,
-/// optionally inside a folder (chapter) of the book.
-/// Ideal for apps that push generated configuration docs.
+/// optionally inside a folder (chapter) of the book, and optionally place the
+/// book on a shelf. Ideal for apps that push generated configuration docs.
 /// </summary>
 public sealed record PublishDocumentRequest(
     [property: Required] PublishBookPart Book,
     [property: Required] PublishPagePart Page,
     /// <summary>Optional folder inside the book the page is placed in (created when missing).</summary>
-    PublishFolderPart? Folder = null
+    PublishFolderPart? Folder = null,
+    /// <summary>Optional shelf the book is placed on (created when missing).</summary>
+    PublishShelfPart? Shelf = null
 );
 
 public sealed record PublishBookPart(
@@ -230,6 +245,13 @@ public sealed record PublishFolderPart(
     string? Slug
 );
 
+/// <summary>Shelf the book sits on, matched by slug and created when missing.</summary>
+public sealed record PublishShelfPart(
+    [property: Required, MinLength(1)] string Title,
+    /// <summary>Stable id. Defaults to a slug of <see cref="Title"/>.</summary>
+    string? Slug
+);
+
 public sealed record PublishDocumentResult(
     BookDto Book,
     PageDto Page,
@@ -237,7 +259,10 @@ public sealed record PublishDocumentResult(
     bool PageCreated,
     /// <summary>The folder the page was placed in, when the request specified one.</summary>
     ChapterDto? Folder = null,
-    bool FolderCreated = false
+    bool FolderCreated = false,
+    /// <summary>The shelf the book was placed on, when the request specified one.</summary>
+    ShelfDto? Shelf = null,
+    bool ShelfCreated = false
 );
 
 public sealed record UpsertResult<T>(T Item, bool Created);

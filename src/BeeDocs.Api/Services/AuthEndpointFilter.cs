@@ -42,7 +42,7 @@ public static class AuthHttpContextExtensions
 /// </summary>
 public sealed class RequestAuthenticator(
     IOptions<AuthOptions> authOptions,
-    IOptions<ApiKeyOptions> apiKeyOptions,
+    ApiKeySettingsService apiKeys,
     IUserService users)
 {
     public bool Enabled => authOptions.Value.Enabled;
@@ -54,9 +54,8 @@ public sealed class RequestAuthenticator(
         // The API key first: it is how MCP and publishing apps reach an instance
         // that has sign-in switched on, and it authenticates a machine, not a
         // person — so it gets admin authority and no profile.
-        var expected = apiKeyOptions.Value.ApiKey?.Trim();
-        if (!string.IsNullOrEmpty(expected) && TryGetApiKey(http.Request, out var provided)
-            && FixedTimeEquals(provided, expected))
+        if (TryGetApiKey(http.Request, out var provided)
+            && await apiKeys.MatchesAsync(provided, http.RequestAborted))
         {
             return CurrentUser.ApiKey;
         }
@@ -90,12 +89,6 @@ public sealed class RequestAuthenticator(
 
         return false;
     }
-
-    /// <summary>Returns false for a length mismatch rather than throwing, so it is safe on attacker-chosen input.</summary>
-    private static bool FixedTimeEquals(string a, string b) =>
-        System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
-            System.Text.Encoding.UTF8.GetBytes(a),
-            System.Text.Encoding.UTF8.GetBytes(b));
 }
 
 /// <summary>

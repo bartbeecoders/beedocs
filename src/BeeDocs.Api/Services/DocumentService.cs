@@ -771,6 +771,46 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
             bookSlug,
             new UpsertBookRequest(request.Book.Title, request.Book.Description, SortOrder: null),
             ct);
+        var book = bookResult.Item;
+
+        // Optional shelf: match by slug, create when missing, and move the book onto
+        // it. An existing shelf is used as-is (its title is not renamed by a publish).
+        // Omitting the shelf leaves the book wherever it already sits — same
+        // "absent means untouched" rule the folder uses for the page.
+        ShelfDto? shelf = null;
+        var shelfCreated = false;
+        if (request.Shelf is not null)
+        {
+            if (string.IsNullOrWhiteSpace(request.Shelf.Title))
+                throw new ArgumentException("Shelf title is required when a shelf is specified.", nameof(request));
+
+            var shelfSlug = string.IsNullOrWhiteSpace(request.Shelf.Slug)
+                ? SlugHelper.Slugify(request.Shelf.Title)
+                : SlugHelper.Slugify(request.Shelf.Slug);
+
+            shelf = await GetShelfBySlugAsync(shelfSlug, ct);
+            if (shelf is null)
+            {
+                shelf = await CreateShelfAsync(
+                    new CreateShelfRequest(request.Shelf.Title.Trim(), Description: null, Slug: shelfSlug),
+                    ct);
+                shelfCreated = true;
+            }
+
+            if (!string.Equals(book.ShelfId, shelf.Id, StringComparison.Ordinal))
+            {
+                book = await UpdateBookAsync(
+                    book.Id,
+                    new UpdateBookRequest(
+                        Title: book.Title,
+                        Description: null,
+                        Slug: null,
+                        SortOrder: null,
+                        OwnerId: null,
+                        ShelfId: shelf.Id),
+                    ct) ?? book;
+            }
+        }
 
         // Optional folder (chapter): match by slug within the book, create when missing.
         // An existing folder is used as-is (its title is not renamed by a publish).
@@ -785,13 +825,13 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
                 ? SlugHelper.Slugify(request.Folder.Title)
                 : SlugHelper.Slugify(request.Folder.Slug);
 
-            var chapters = await ListChaptersAsync(bookResult.Item.Id, ct);
+            var chapters = await ListChaptersAsync(book.Id, ct);
             folder = chapters.FirstOrDefault(c =>
                 string.Equals(c.Slug, folderSlug, StringComparison.OrdinalIgnoreCase));
             if (folder is null)
             {
                 folder = await CreateChapterAsync(
-                    bookResult.Item.Id,
+                    book.Id,
                     new CreateChapterRequest(request.Folder.Title.Trim(), folderSlug, SortOrder: null),
                     ct);
                 folderCreated = true;
@@ -799,19 +839,21 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         }
 
         var pageResult = await UpsertPageBySlugAsync(
-            bookResult.Item.Id,
+            book.Id,
             pageSlug,
             new UpsertPageRequest(request.Page.Title, request.Page.Content, request.Page.SortOrder),
             folder?.Id,
             ct);
 
         return new PublishDocumentResult(
-            Book: bookResult.Item,
+            Book: book,
             Page: pageResult.Item,
             BookCreated: bookResult.Created,
             PageCreated: pageResult.Created,
             Folder: folder,
-            FolderCreated: folderCreated);
+            FolderCreated: folderCreated,
+            Shelf: shelf,
+            ShelfCreated: shelfCreated);
     }
 
     public async Task<PageHistoryDto?> GetPageHistoryAsync(

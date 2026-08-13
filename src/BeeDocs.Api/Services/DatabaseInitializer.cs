@@ -127,6 +127,16 @@ public static class DatabaseInitializer
               updated_at TEXT NOT NULL
             );
 
+            -- Instance settings an admin can change at runtime from the Settings
+            -- page — one row per key. The /api/v1 publish key lives here (its
+            -- value is write-only, same rule as llm_provider.api_key); the
+            -- BeeDocs:ApiKey configuration value is only a fallback.
+            CREATE TABLE IF NOT EXISTS app_setting (
+              key TEXT PRIMARY KEY NOT NULL,
+              value TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
             -- Accounts. password_hash is write-only in the same sense as
             -- llm_provider.api_key: UserService selects it to verify one login and
             -- no DTO carries it. The table exists whether or not sign-in is

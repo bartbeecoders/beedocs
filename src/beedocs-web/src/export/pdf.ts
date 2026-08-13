@@ -3,6 +3,7 @@ import { api } from '../api'
 import { withApiBase } from '../basePath'
 import { excelGridToHtml } from '../excelgrid/model'
 import { freeDrawToSvg } from '../freedraw/model'
+import { cellStyleClass, parseTableMarker, tableThemeClass, type TableMarker } from '../markdownTable'
 import type { Chapter, Page } from '../types'
 import { beeDiagramToSvg } from './beeDiagramSvg'
 
@@ -241,6 +242,7 @@ function renderProse(text: string): string {
   let inOl = false
   let inTable = false
   let tableRows: string[][] = []
+  let tableMarker: TableMarker | null = null
 
   const closeLists = () => {
     if (inUl) {
@@ -253,22 +255,30 @@ function renderProse(text: string): string {
     }
   }
   const flushTable = () => {
+    const marker = tableMarker
+    tableMarker = null
     if (!inTable || tableRows.length === 0) {
       inTable = false
       tableRows = []
       return
     }
+    const themeCls = tableThemeClass(marker?.theme)
+    const cellAttr = (row: number | 'h', col: number): string => {
+      const ref = marker?.cells.find((x) => x.row === row && x.col === col)
+      const cls = ref ? cellStyleClass(ref.style) : ''
+      return cls ? ` class="${cls}"` : ''
+    }
     const [header, ...rest] = tableRows
     // skip separator row |---|
     const body = rest.filter((r) => !r.every((c) => /^:?-+:?$/.test(c.trim())))
-    out.push('<table><thead><tr>')
-    for (const c of header) out.push(`<th>${inlineMd(c.trim())}</th>`)
+    out.push(`<table${themeCls ? ` class="${themeCls}"` : ''}><thead><tr>`)
+    header.forEach((c, ci) => out.push(`<th${cellAttr('h', ci)}>${inlineMd(c.trim())}</th>`))
     out.push('</tr></thead><tbody>')
-    for (const row of body) {
+    body.forEach((row, ri) => {
       out.push('<tr>')
-      for (const c of row) out.push(`<td>${inlineMd(c.trim())}</td>`)
+      row.forEach((c, ci) => out.push(`<td${cellAttr(ri, ci)}>${inlineMd(c.trim())}</td>`))
       out.push('</tr>')
-    }
+    })
     out.push('</tbody></table>')
     inTable = false
     tableRows = []
@@ -277,6 +287,16 @@ function renderProse(text: string): string {
   while (i < lines.length) {
     const line = lines[i]
     const trimmed = line.trim()
+
+    // A table style marker styles the table that follows; it renders as nothing.
+    const marker = parseTableMarker(trimmed)
+    if (marker != null) {
+      closeLists()
+      flushTable()
+      tableMarker = marker
+      i++
+      continue
+    }
 
     if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
       closeLists()
@@ -486,6 +506,33 @@ const PRINT_CSS = `
     text-align: left;
   }
   .export-page-body th { background: #f4f4f5; }
+  /* Table themes — fixed light colors for print (screen uses the --tbl-* vars).
+     Stripe tails sit in :where so the later .bee-cell-- rules can override them. */
+  .export-page-body .bee-tbl--striped :where(tbody tr:nth-child(even) td) { background: #f4f4f2; }
+  .export-page-body .bee-tbl--minimal th, .export-page-body .bee-tbl--minimal td {
+    border: none;
+    border-bottom: 1px solid #ccc;
+  }
+  .export-page-body .bee-tbl--minimal th { background: transparent; }
+  .export-page-body .bee-tbl--ocean th, .export-page-body .bee-tbl--ocean td { border-color: #b9d2ee; }
+  .export-page-body .bee-tbl--ocean th { background: #dbe9f9; color: #23486e; }
+  .export-page-body .bee-tbl--ocean :where(tbody tr:nth-child(even) td) { background: #f1f7fd; }
+  .export-page-body .bee-tbl--forest th, .export-page-body .bee-tbl--forest td { border-color: #bcdccb; }
+  .export-page-body .bee-tbl--forest th { background: #dcefe4; color: #245c40; }
+  .export-page-body .bee-tbl--forest :where(tbody tr:nth-child(even) td) { background: #f2faf5; }
+  .export-page-body .bee-tbl--sunset th, .export-page-body .bee-tbl--sunset td { border-color: #ecd0a9; }
+  .export-page-body .bee-tbl--sunset th { background: #f8e8d2; color: #7a4c14; }
+  .export-page-body .bee-tbl--sunset :where(tbody tr:nth-child(even) td) { background: #fdf6ec; }
+  .export-page-body .bee-tbl--contrast th, .export-page-body .bee-tbl--contrast td { border-color: #9a9aa0; }
+  .export-page-body .bee-tbl--contrast th { background: #3a3a3f; color: #ffffff; }
+  .export-page-body .bee-tbl--contrast :where(tbody tr:nth-child(even) td) { background: #f0f0f1; }
+  /* Per-cell styles — after the themes so they win on both th and td. */
+  .export-page-body th.bee-cell--accent, .export-page-body td.bee-cell--accent { background: #f8eed3; color: #7c5a07; }
+  .export-page-body th.bee-cell--info, .export-page-body td.bee-cell--info { background: #e1edf9; color: #23486e; }
+  .export-page-body th.bee-cell--ok, .export-page-body td.bee-cell--ok { background: #e0f1e8; color: #245c40; }
+  .export-page-body th.bee-cell--warn, .export-page-body td.bee-cell--warn { background: #f9ecd9; color: #7a4c14; }
+  .export-page-body th.bee-cell--danger, .export-page-body td.bee-cell--danger { background: #f9e2e2; color: #8c2626; }
+  .export-page-body th.bee-cell--muted, .export-page-body td.bee-cell--muted { background: #ededee; color: #666666; }
   .export-mermaid, .export-diagram {
     margin: 1em 0;
     page-break-inside: avoid;

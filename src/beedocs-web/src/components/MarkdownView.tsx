@@ -19,6 +19,7 @@ import { api } from '../api'
 import { withApiBase } from '../basePath'
 import { replaceFenceBody, splitMarkdownSegments } from '../markdownFences'
 import { isInternalDocHref } from '../markdownLinks'
+import { remarkTableThemes } from '../markdownTable'
 import { outlineId } from '../pageOutline'
 import { highlightCode, resolveLanguage } from '../syntaxHighlight'
 import { DataTree } from './DataTree'
@@ -38,7 +39,7 @@ mermaid.initialize({
 })
 
 /** Module scope: a fresh array each render would defeat react-markdown's own memoization. */
-const REMARK_PLUGINS = [remarkGfm]
+const REMARK_PLUGINS = [remarkGfm, remarkTableThemes]
 
 /** Fence labels that get the collapsible tree instead of a flat code block. */
 function dataTreeLang(lang: string | undefined): 'json' | 'xml' | null {

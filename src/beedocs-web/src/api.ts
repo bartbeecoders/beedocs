@@ -1,4 +1,5 @@
 import type {
+  ApiKeyStatus,
   AuthState,
   Book,
   Chapter,
@@ -453,6 +454,18 @@ export const api = {
     }),
   deleteLlmProvider: (id: string) =>
     request<void>(`/api/llm/providers/${id}`, { method: 'DELETE' }),
+
+  /**
+   * The shared publish API key (admin-only). Write-only like provider keys: the
+   * API returns hasKey/source/keyHint, never the key. An empty string clears the
+   * stored key, after which a configured BeeDocs__ApiKey (if any) applies again.
+   */
+  getApiKeyStatus: () => request<ApiKeyStatus>('/api/settings/api-key'),
+  setApiKey: (apiKey: string) =>
+    request<ApiKeyStatus>('/api/settings/api-key', {
+      method: 'PUT',
+      body: JSON.stringify({ apiKey }),
+    }),
 
   /**
    * Move a provider to the front of the sort order and enable it. One atomic
