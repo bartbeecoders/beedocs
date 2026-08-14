@@ -14,6 +14,12 @@ public sealed class Shelf
     public string Slug { get; set; } = string.Empty;
     public int SortOrder { get; set; }
     /// <summary>
+    /// When true, <c>/bookshelf-serve/{slug}</c> is a public website even if
+    /// sign-in is on. Unpublished shelves are still readable there by anyone who
+    /// can already read the workspace (signed-in preview, or an open instance).
+    /// </summary>
+    public bool Published { get; set; }
+    /// <summary>
     /// <see cref="User.Id"/> of the account responsible for this shelf, or null
     /// when nobody was identified. Like every other owner, it grants nothing —
     /// permissions stay role-based.

@@ -4,12 +4,14 @@ namespace BeeDocs.Api.Models;
 
 /// <param name="OwnerId">Account responsible for the shelf, or null when nobody was identified.</param>
 /// <param name="BookCount">Books currently on the shelf.</param>
+/// <param name="Published">True when <c>/bookshelf-serve/{slug}</c> is a public website.</param>
 public sealed record ShelfDto(
     string Id,
     string Title,
     string? Description,
     string Slug,
     int SortOrder,
+    bool Published,
     string? OwnerId,
     string? OwnerName,
     int BookCount,
@@ -18,21 +20,25 @@ public sealed record ShelfDto(
 );
 
 /// <param name="OwnerId">Omit to take the caller as owner.</param>
+/// <param name="Published">Serve this shelf as a public website. Default false.</param>
 public sealed record CreateShelfRequest(
     [property: Required, MinLength(1)] string Title,
     string? Description,
     string? Slug,
-    string? OwnerId = null
+    string? OwnerId = null,
+    bool? Published = null
 );
 
 /// <param name="Description">null leaves it untouched; "" clears it.</param>
 /// <param name="OwnerId">null leaves the owner untouched; "" clears it; anything else replaces it.</param>
+/// <param name="Published">null leaves it untouched.</param>
 public sealed record UpdateShelfRequest(
     [property: Required, MinLength(1)] string Title,
     string? Description,
     string? Slug,
     int? SortOrder,
-    string? OwnerId = null
+    string? OwnerId = null,
+    bool? Published = null
 );
 
 /// <param name="ShelfId">The shelf this book sits on, or null when it sits at the library root.</param>
@@ -371,6 +377,68 @@ public sealed record SearchStatusDto(
     int Folders,
     int Shelves,
     DateTimeOffset? LastIndexedAt
+);
+
+// --- Bookshelf website (GET /api/bookshelf-serve/{name}) ---
+
+/// <summary>
+/// One shelf served as a standalone website: the shelf itself plus every book,
+/// folder and page on it. Page bodies are fetched separately so the nav tree
+/// stays a cheap first paint.
+/// </summary>
+public sealed record BookshelfSiteDto(
+    BookshelfSiteShelfDto Shelf,
+    IReadOnlyList<BookshelfSiteBookDto> Books
+);
+
+public sealed record BookshelfSiteShelfDto(
+    string Id,
+    string Title,
+    string? Description,
+    string Slug,
+    bool Published,
+    int BookCount
+);
+
+public sealed record BookshelfSiteBookDto(
+    string Id,
+    string Title,
+    string? Description,
+    string Slug,
+    int SortOrder,
+    IReadOnlyList<BookshelfSiteChapterDto> Chapters,
+    IReadOnlyList<BookshelfSitePageDto> Pages
+);
+
+public sealed record BookshelfSiteChapterDto(
+    string Id,
+    string Title,
+    string Slug,
+    int SortOrder,
+    IReadOnlyList<BookshelfSitePageDto> Pages
+);
+
+public sealed record BookshelfSitePageDto(
+    string Id,
+    string Title,
+    string Slug,
+    int SortOrder,
+    DateTimeOffset UpdatedAt
+);
+
+/// <summary>A page as the website reader sees it — body included, no owner fields.</summary>
+public sealed record BookshelfSitePageContentDto(
+    string Id,
+    string Title,
+    string Slug,
+    string Content,
+    string BookId,
+    string BookSlug,
+    string BookTitle,
+    string? ChapterId,
+    string? ChapterSlug,
+    string? ChapterTitle,
+    DateTimeOffset UpdatedAt
 );
 
 // --- LLM providers & completion ---

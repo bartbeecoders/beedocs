@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
+import { withBase } from '../basePath'
+import { bookshelfSitePath } from '../markdownLinks'
 import { exportBookToPdf, exportPageToPdf } from '../export/pdf'
 import { ImportDialog } from './ImportDialog'
 import type { ExportFormat } from '../types'
@@ -15,6 +17,7 @@ type CtxMenu =
       kind: 'shelf'
       shelfId: string
       title: string
+      slug: string
       x: number
       y: number
     }
@@ -484,6 +487,13 @@ export function NavTree() {
                   setMenu(null)
                 }}
               />
+              <MenuItem
+                label="Open as website"
+                onClick={() => {
+                  window.open(withBase(bookshelfSitePath(menu.slug)), '_blank', 'noopener')
+                  setMenu(null)
+                }}
+              />
               <div className="tree-context-sep" />
               <MenuItem
                 label="Delete shelf"
@@ -831,6 +841,7 @@ function ShelfNode({
             kind: 'shelf',
             shelfId: shelf.id,
             title: shelf.title,
+            slug: shelf.slug,
             x: e.clientX,
             y: e.clientY,
           })
@@ -857,6 +868,11 @@ function ShelfNode({
         >
           <span className="tree-icon">📚</span>
           <span className="tree-text">{shelf.title}</span>
+          {shelf.published && (
+            <span className="tree-site-badge" title="Served as a website">
+              web
+            </span>
+          )}
           <span className="muted sm">({books.length})</span>
         </NavLink>
       </div>

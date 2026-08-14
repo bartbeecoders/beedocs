@@ -24,6 +24,9 @@ public static class DatabaseInitializer
               description TEXT,
               slug TEXT NOT NULL UNIQUE,
               sort_order INTEGER NOT NULL DEFAULT 0,
+              -- 1 = /bookshelf-serve/{slug} is a public website. Default off so
+              -- flipping Auth:Enabled does not suddenly publish every shelf.
+              published INTEGER NOT NULL DEFAULT 0,
               owner_id TEXT,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
@@ -219,6 +222,8 @@ public static class DatabaseInitializer
         // NULL is "at the library root", which is where every book in an existing
         // database already is — so the migration needs no backfill.
         await AddColumnIfMissingAsync(connection, "book", "shelf_id", "TEXT", ct);
+        await AddColumnIfMissingAsync(
+            connection, "shelf", "published", "INTEGER NOT NULL DEFAULT 0", ct);
         await AddColumnIfMissingAsync(connection, "page", "owner_id", "TEXT", ct);
         await AddColumnIfMissingAsync(connection, "page_revision", "changed_by", "TEXT", ct);
         await AddColumnIfMissingAsync(connection, "page_revision", "changed_by_name", "TEXT", ct);

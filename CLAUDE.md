@@ -104,7 +104,9 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `book.shelf_id`, so a book sits on at most one shelf and a book with no shelf
   sits at the library root — which is where every book was before the feature, so
   the migration needs no backfill. A shelf holds no content, so `DeleteShelfAsync`
-  clears `shelf_id` on its books instead of cascading. `UpdateBookRequest` follows
+  clears `shelf_id` on its books instead of cascading. `shelf.published` serves
+  that shelf as a reader website at `/bookshelf-serve/{slug}`
+  (`GET /api/bookshelf-serve/{name}`). `UpdateBookRequest` follows
   one convention for all three optional fields (`ShelfId`, `OwnerId`,
   `Description`): **null leaves it alone, `""` clears it** — the UI sends partial
   updates, and reading an omitted field as "clear it" is how assigning an owner

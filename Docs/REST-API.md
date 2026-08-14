@@ -281,6 +281,33 @@ surface) report and repair it.
 
 ---
 
+## Bookshelf websites
+
+A shelf can be served as a standalone reader site at
+`/bookshelf-serve/{slug}` (the title also works — it is slugified). The UI is
+read-only: books, folders and pages from that shelf only.
+
+`shelf.published` controls whether the site is world-readable when sign-in is
+on. Unpublished shelves still preview at the same URL for anyone who can
+already read the workspace. When sign-in is off, every shelf URL works.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/bookshelf-serve/{name}` | Site tree (shelf + books + folders + page titles) |
+| `GET` | `/api/bookshelf-serve/{name}/pages/{bookSlug}/{pageSlug}` | Page body |
+| `GET` | `/api/bookshelf-serve/{name}/diagrams/{id}` | Diagram, if it belongs to a book on the shelf |
+| `GET` | `/api/bookshelf-serve/{name}/search?q=` | Full-text search scoped to the shelf |
+
+These routes are anonymous. An unpublished shelf answers `404` to a visitor
+with no session (and does not leak that the slug exists). Publishing at least
+one shelf also lets anonymous `GET /uploads` succeed, because page Markdown
+embeds those URLs.
+
+Set `published` on `POST /api/shelves` or `PUT /api/shelves/{id}` (`null` on
+update leaves it alone).
+
+---
+
 ## Slugs
 
 Slugs are stable addresses for re-publishes:

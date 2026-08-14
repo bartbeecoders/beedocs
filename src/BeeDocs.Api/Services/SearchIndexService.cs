@@ -26,6 +26,7 @@ public sealed record SearchQuery(
     int Limit = 20,
     int Offset = 0,
     string? BookId = null,
+    string? ShelfId = null,
     IReadOnlyList<string>? Kinds = null,
     bool Prefix = true
 );
@@ -553,6 +554,11 @@ public sealed partial class SearchIndexService(
         if (!string.IsNullOrWhiteSpace(query.BookId))
             sb.Append(" AND d.book_id = $book_id");
 
+        // A shelf site search is "everything filed on this shelf": pages/diagrams/
+        // folders/books whose book sits there, plus the shelf document itself.
+        if (!string.IsNullOrWhiteSpace(query.ShelfId))
+            sb.Append(" AND (d.book_id IN (SELECT id FROM book WHERE shelf_id = $shelf_id) OR (d.kind = 'shelf' AND d.entity_id = $shelf_id))");
+
         kinds = (query.Kinds ?? [])
             .Where(k => !string.IsNullOrWhiteSpace(k))
             .Select(k => k.Trim().ToLowerInvariant())
@@ -571,6 +577,8 @@ public sealed partial class SearchIndexService(
     {
         if (!string.IsNullOrWhiteSpace(query.BookId))
             SqliteHelpers.Add(cmd, "$book_id", query.BookId);
+        if (!string.IsNullOrWhiteSpace(query.ShelfId))
+            SqliteHelpers.Add(cmd, "$shelf_id", query.ShelfId);
         for (var i = 0; i < kinds.Count; i++)
             SqliteHelpers.Add(cmd, $"$kind{i}", kinds[i]);
     }

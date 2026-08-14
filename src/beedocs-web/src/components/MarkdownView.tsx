@@ -19,6 +19,7 @@ import { api } from '../api'
 import { withApiBase } from '../basePath'
 import { replaceFenceBody, splitMarkdownSegments } from '../markdownFences'
 import { isInternalDocHref } from '../markdownLinks'
+import { useMarkdownSite } from '../site/markdownSite'
 import { remarkTableThemes } from '../markdownTable'
 import { outlineId } from '../pageOutline'
 import { highlightCode, resolveLanguage } from '../syntaxHighlight'
@@ -375,12 +376,13 @@ function InlineBeeDiagramRefEditor({
   const latestSource = useRef<string>('')
   const titleRef = useRef<string | null>(null)
   const id = diagramId.trim().split(/\s+/)[0] ?? ''
+  const site = useMarkdownSite()
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
       try {
-        const d = await api.getDiagram(id)
+        const d = site.getDiagram ? await site.getDiagram(id) : await api.getDiagram(id)
         if (cancelled) return
         setTitle(d.title)
         titleRef.current = d.title
@@ -396,8 +398,8 @@ function InlineBeeDiagramRefEditor({
       cancelled = true
       if (saveTimer.current) clearTimeout(saveTimer.current)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per id
-  }, [id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per id / loader
+  }, [id, site.getDiagram])
 
   const persist = useCallback(async (nextSource: string) => {
     const t = titleRef.current
@@ -533,6 +535,7 @@ export const MarkdownView = memo(function MarkdownView({
   onContentChange,
   bookId,
 }: MarkdownViewProps) {
+  const site = useMarkdownSite()
   const contentRef = useRef(content)
   contentRef.current = content
 
@@ -636,9 +639,10 @@ export const MarkdownView = memo(function MarkdownView({
       // Links to other documents (dragged in from the library tree) go through
       // the router: a plain <a> would reload the whole app and lose the basename.
       a({ href, children, ...props }: ComponentProps<'a'>) {
-        if (isInternalDocHref(href)) {
+        const dest = href && site.resolveHref ? site.resolveHref(href) : href
+        if (isInternalDocHref(dest)) {
           return (
-            <Link to={href} className="doc-link" {...props}>
+            <Link to={dest} className="doc-link" {...props}>
               {children}
             </Link>
           )
@@ -834,6 +838,7 @@ export const MarkdownView = memo(function MarkdownView({
       openKeys,
       outlineTargets,
       setBeeDraft,
+      site,
       toggleKey,
       wrapOutline,
     ],

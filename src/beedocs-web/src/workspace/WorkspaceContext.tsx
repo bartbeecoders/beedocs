@@ -63,6 +63,8 @@ type WorkspaceCtx = {
   /** The shelf goes; its books return to the library root. */
   deleteShelf: (shelfId: string) => Promise<void>
   renameShelf: (shelfId: string, title: string) => Promise<void>
+  /** Publish (or unpublish) the shelf as a website at /bookshelf-serve/{slug}. */
+  setShelfPublished: (shelfId: string, published: boolean) => Promise<void>
   /** Move a book onto a shelf, or to the library root when `shelfId` is null. */
   moveBookToShelf: (bookId: string, shelfId: string | null) => Promise<void>
   deletePage: (pageId: string, bookId: string) => Promise<void>
@@ -335,6 +337,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       prev.map((b) => (b.shelfId === shelfId ? { ...b, shelfTitle: updated.title } : b)),
     )
   }, [])
+
+  const setShelfPublished = useCallback(async (shelfId: string, published: boolean) => {
+    const current = shelves.find((s) => s.id === shelfId)
+    if (!current) return
+    const updated = await api.updateShelf(shelfId, { title: current.title, published })
+    setShelves((prev) =>
+      prev.map((s) => (s.id === shelfId ? { ...updated, expanded: s.expanded } : s)),
+    )
+  }, [shelves])
 
   const deleteShelf = useCallback(async (shelfId: string) => {
     await api.deleteShelf(shelfId)
@@ -632,6 +643,7 @@ graph LR
       deleteBook,
       deleteShelf,
       renameShelf,
+      setShelfPublished,
       moveBookToShelf,
       deletePage,
       deleteFolder,
@@ -662,6 +674,7 @@ graph LR
       deleteBook,
       deleteShelf,
       renameShelf,
+      setShelfPublished,
       moveBookToShelf,
       deletePage,
       deleteFolder,

@@ -120,6 +120,15 @@ and diagram editors (viewers get the rendered document and a *Read-only* chip),
 drag-to-reorder in the tree. That is cosmetic; the API refuses the calls whether
 or not the button was drawn.
 
+### Published bookshelf websites
+
+`/bookshelf-serve/{slug}` is a reader site for one shelf. When sign-in is off
+it is just another URL for content that is already public. When sign-in is on,
+only a shelf with `published: true` is readable without a session — unpublished
+shelves 404 for anonymous visitors, and still preview for anyone who is signed
+in. Publishing at least one shelf opens anonymous `GET` of `/uploads` so images
+in those pages actually load; turning every shelf off restores the upload gate.
+
 ### Guard rails
 
 The last enabled admin cannot be demoted, disabled, or deleted — losing it locks

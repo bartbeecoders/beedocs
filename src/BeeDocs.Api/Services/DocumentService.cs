@@ -18,6 +18,22 @@ public interface IDocumentService
     /// <summary>Books on one shelf, in the same order the library lists them.</summary>
     Task<IReadOnlyList<BookDto>> ListShelfBooksAsync(string shelfId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Resolve a shelf for <c>/bookshelf-serve/{name}</c>: slug first (title
+    /// works too — it is slugified), then a raw id. Null when nothing matches.
+    /// </summary>
+    Task<ShelfDto?> ResolveShelfForSiteAsync(string name, CancellationToken ct = default);
+
+    /// <summary>Nav tree for the shelf website: books, folders, page titles. Null if the shelf is missing.</summary>
+    Task<BookshelfSiteDto?> GetBookshelfSiteAsync(string name, CancellationToken ct = default);
+
+    /// <summary>One page on the shelf website. Null if the shelf, book, or page is missing or the book is not on that shelf.</summary>
+    Task<BookshelfSitePageContentDto?> GetBookshelfSitePageAsync(
+        string name, string bookSlug, string pageSlug, CancellationToken ct = default);
+
+    /// <summary>True when at least one shelf is published as a public website.</summary>
+    Task<bool> HasPublishedShelfAsync(CancellationToken ct = default);
+
     Task<IReadOnlyList<BookDto>> ListBooksAsync(CancellationToken ct = default);
     Task<BookDto?> GetBookAsync(string id, CancellationToken ct = default);
     Task<BookDto?> GetBookBySlugAsync(string slug, CancellationToken ct = default);
@@ -79,7 +95,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
     /// count is the one fact a shelf has that is worth showing next to its title.
     /// </summary>
     private const string ShelfSelect = """
-        SELECT s.id, s.title, s.description, s.slug, s.sort_order, s.owner_id,
+        SELECT s.id, s.title, s.description, s.slug, s.sort_order, s.published, s.owner_id,
                s.created_at, s.updated_at,
                COALESCE(NULLIF(TRIM(u.display_name), ''), u.username) AS owner_name,
                (SELECT COUNT(*) FROM book b WHERE b.shelf_id = s.id) AS book_count
@@ -151,6 +167,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
                 ? await UniqueShelfSlugAsync(conn, SlugHelper.Slugify(request.Title), ct)
                 : SlugHelper.Slugify(request.Slug),
             SortOrder = 0,
+            Published = request.Published ?? false,
             OwnerId = NormalizeOwnerId(request.OwnerId) ?? actor.Id,
             CreatedAt = now,
             UpdatedAt = now,
@@ -158,14 +175,15 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO shelf (id, title, description, slug, sort_order, owner_id, created_at, updated_at)
-            VALUES ($id, $title, $description, $slug, $sort_order, $owner_id, $created_at, $updated_at)
+            INSERT INTO shelf (id, title, description, slug, sort_order, published, owner_id, created_at, updated_at)
+            VALUES ($id, $title, $description, $slug, $sort_order, $published, $owner_id, $created_at, $updated_at)
             """;
         SqliteHelpers.Add(cmd, "$id", shelf.Id);
         SqliteHelpers.Add(cmd, "$title", shelf.Title);
         SqliteHelpers.Add(cmd, "$description", shelf.Description);
         SqliteHelpers.Add(cmd, "$slug", shelf.Slug);
         SqliteHelpers.Add(cmd, "$sort_order", shelf.SortOrder);
+        SqliteHelpers.Add(cmd, "$published", shelf.Published ? 1 : 0);
         SqliteHelpers.Add(cmd, "$owner_id", shelf.OwnerId);
         SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(shelf.CreatedAt));
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(shelf.UpdatedAt));
@@ -188,6 +206,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
             existing.Slug = SlugHelper.Slugify(request.Slug);
         if (request.SortOrder is int order)
             existing.SortOrder = order;
+        if (request.Published is bool published)
+            existing.Published = published;
         // null leaves the owner alone, "" clears it. Anything else replaces it.
         if (request.OwnerId is not null)
             existing.OwnerId = NormalizeOwnerId(request.OwnerId);
@@ -196,7 +216,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             UPDATE shelf SET title = $title, description = $description, slug = $slug,
-              sort_order = $sort_order, owner_id = $owner_id, updated_at = $updated_at
+              sort_order = $sort_order, published = $published, owner_id = $owner_id,
+              updated_at = $updated_at
             WHERE id = $id
             """;
         SqliteHelpers.Add(cmd, "$id", existing.Id);
@@ -204,6 +225,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         SqliteHelpers.Add(cmd, "$description", existing.Description);
         SqliteHelpers.Add(cmd, "$slug", existing.Slug);
         SqliteHelpers.Add(cmd, "$sort_order", existing.SortOrder);
+        SqliteHelpers.Add(cmd, "$published", existing.Published ? 1 : 0);
         SqliteHelpers.Add(cmd, "$owner_id", existing.OwnerId);
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
@@ -245,6 +267,106 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         while (await reader.ReadAsync(ct))
             list.Add(ReadBookDto(reader));
         return list;
+    }
+
+    public async Task<ShelfDto?> ResolveShelfForSiteAsync(string name, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        var trimmed = name.Trim();
+        return await GetShelfBySlugAsync(trimmed, ct) ?? await GetShelfAsync(trimmed, ct);
+    }
+
+    public async Task<BookshelfSiteDto?> GetBookshelfSiteAsync(string name, CancellationToken ct = default)
+    {
+        var shelf = await ResolveShelfForSiteAsync(name, ct);
+        if (shelf is null) return null;
+
+        var books = await ListShelfBooksAsync(shelf.Id, ct);
+        var bookIds = books.Select(b => b.Id).ToList();
+        var chapters = await ListChaptersForBooksAsync(bookIds, ct);
+        var pages = await ListPageSummariesForBooksAsync(bookIds, ct);
+
+        var chaptersByBook = chapters.ToLookup(c => c.BookId, StringComparer.Ordinal);
+        var pagesByBook = pages.ToLookup(p => p.BookId, StringComparer.Ordinal);
+
+        var siteBooks = books.Select(book =>
+        {
+            var bookPages = pagesByBook[book.Id].ToList();
+            var bookChapters = chaptersByBook[book.Id]
+                .Select(ch => new BookshelfSiteChapterDto(
+                    ch.Id,
+                    ch.Title,
+                    ch.Slug,
+                    ch.SortOrder,
+                    bookPages
+                        .Where(p => p.ChapterId == ch.Id)
+                        .Select(ToSitePage)
+                        .ToList()))
+                .ToList();
+            var rootPages = bookPages
+                .Where(p => string.IsNullOrEmpty(p.ChapterId))
+                .Select(ToSitePage)
+                .ToList();
+            return new BookshelfSiteBookDto(
+                book.Id,
+                book.Title,
+                book.Description,
+                book.Slug,
+                book.SortOrder,
+                bookChapters,
+                rootPages);
+        }).ToList();
+
+        return new BookshelfSiteDto(
+            new BookshelfSiteShelfDto(
+                shelf.Id, shelf.Title, shelf.Description, shelf.Slug, shelf.Published, shelf.BookCount),
+            siteBooks);
+    }
+
+    public async Task<BookshelfSitePageContentDto?> GetBookshelfSitePageAsync(
+        string name, string bookSlug, string pageSlug, CancellationToken ct = default)
+    {
+        var shelf = await ResolveShelfForSiteAsync(name, ct);
+        if (shelf is null) return null;
+
+        var book = await GetBookBySlugAsync(bookSlug, ct);
+        if (book is null || !string.Equals(book.ShelfId, shelf.Id, StringComparison.Ordinal))
+            return null;
+
+        var page = await GetPageBySlugAsync(book.Id, pageSlug, ct);
+        if (page is null) return null;
+
+        string? chapterSlug = null;
+        string? chapterTitle = null;
+        if (!string.IsNullOrEmpty(page.ChapterId))
+        {
+            await using var conn = await db.OpenConnectionAsync(ct);
+            var chapter = await SelectChapterAsync(conn, page.ChapterId, ct);
+            chapterSlug = chapter?.Slug;
+            chapterTitle = chapter?.Title;
+        }
+
+        return new BookshelfSitePageContentDto(
+            page.Id,
+            page.Title,
+            page.Slug,
+            page.Content,
+            book.Id,
+            book.Slug,
+            book.Title,
+            page.ChapterId,
+            chapterSlug,
+            chapterTitle,
+            page.UpdatedAt);
+    }
+
+    public async Task<bool> HasPublishedShelfAsync(CancellationToken ct = default)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT 1 FROM shelf WHERE published = 1 LIMIT 1";
+        var value = await cmd.ExecuteScalarAsync(ct);
+        return value is not null && value is not DBNull;
     }
 
     public async Task<IReadOnlyList<BookDto>> ListBooksAsync(CancellationToken ct = default)
@@ -1077,7 +1199,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, title, description, slug, sort_order, owner_id, created_at, updated_at
+            SELECT id, title, description, slug, sort_order, published, owner_id, created_at, updated_at
             FROM shelf WHERE id = $id LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$id", id);
@@ -1090,9 +1212,10 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
             Description = SqliteHelpers.GetNullableString(reader, 2),
             Slug = reader.GetString(3),
             SortOrder = reader.GetInt32(4),
-            OwnerId = SqliteHelpers.GetNullableString(reader, 5),
-            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 6),
-            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 7),
+            Published = ReadFlag(reader, 5),
+            OwnerId = SqliteHelpers.GetNullableString(reader, 6),
+            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 7),
+            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 8),
         };
     }
 
@@ -1224,6 +1347,75 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
     private static DateTimeOffset Coalesce(DateTimeOffset value) =>
         value == default ? DateTimeOffset.UtcNow : value;
 
+    private static bool ReadFlag(SqliteDataReader reader, int ordinal) =>
+        !reader.IsDBNull(ordinal) && reader.GetInt32(ordinal) != 0;
+
+    private static BookshelfSitePageDto ToSitePage(PageSummaryDto p) =>
+        new(p.Id, p.Title, p.Slug, p.SortOrder, p.UpdatedAt);
+
+    private async Task<List<ChapterDto>> ListChaptersForBooksAsync(
+        IReadOnlyList<string> bookIds, CancellationToken ct)
+    {
+        var list = new List<ChapterDto>();
+        if (bookIds.Count == 0) return list;
+
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        var names = bookIds.Select((_, i) => $"$b{i}").ToArray();
+        cmd.CommandText = $"""
+            SELECT id, book_id, title, slug, sort_order, created_at, updated_at
+            FROM chapter
+            WHERE book_id IN ({string.Join(", ", names)})
+            ORDER BY sort_order, title COLLATE NOCASE
+            """;
+        for (var i = 0; i < bookIds.Count; i++)
+            SqliteHelpers.Add(cmd, names[i], bookIds[i]);
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            list.Add(ReadChapterDto(reader));
+        return list;
+    }
+
+    private async Task<List<PageSummaryDto>> ListPageSummariesForBooksAsync(
+        IReadOnlyList<string> bookIds, CancellationToken ct)
+    {
+        var list = new List<PageSummaryDto>();
+        if (bookIds.Count == 0) return list;
+
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        var names = bookIds.Select((_, i) => $"$b{i}").ToArray();
+        cmd.CommandText = $"""
+            SELECT p.id, p.book_id, p.chapter_id, p.title, p.slug, p.sort_order, p.version,
+                   p.owner_id, p.updated_at,
+                   COALESCE(NULLIF(TRIM(u.display_name), ''), u.username) AS owner_name
+            FROM page p
+            LEFT JOIN app_user u ON u.id = p.owner_id
+            WHERE p.book_id IN ({string.Join(", ", names)})
+            ORDER BY p.sort_order, p.title COLLATE NOCASE
+            """;
+        for (var i = 0; i < bookIds.Count; i++)
+            SqliteHelpers.Add(cmd, names[i], bookIds[i]);
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            list.Add(new PageSummaryDto(
+                Id: reader.GetString(0),
+                BookId: reader.GetString(1),
+                ChapterId: SqliteHelpers.GetNullableString(reader, 2),
+                Title: reader.GetString(3),
+                Slug: reader.GetString(4),
+                SortOrder: reader.GetInt32(5),
+                Version: reader.GetInt32(6),
+                OwnerId: SqliteHelpers.GetNullableString(reader, 7),
+                OwnerName: SqliteHelpers.GetNullableString(reader, 9),
+                UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 8))));
+        }
+        return list;
+    }
+
     /// <summary>Reads a row shaped by <see cref="BookSelect"/>.</summary>
     private static BookDto ReadBookDto(SqliteDataReader reader) => new(
         Id: reader.GetString(0),
@@ -1245,11 +1437,12 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         Description: SqliteHelpers.GetNullableString(reader, 2),
         Slug: reader.GetString(3),
         SortOrder: reader.GetInt32(4),
-        OwnerId: SqliteHelpers.GetNullableString(reader, 5),
-        CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 6)),
-        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 7)),
-        OwnerName: SqliteHelpers.GetNullableString(reader, 8),
-        BookCount: reader.GetInt32(9));
+        Published: ReadFlag(reader, 5),
+        OwnerId: SqliteHelpers.GetNullableString(reader, 6),
+        CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 7)),
+        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 8)),
+        OwnerName: SqliteHelpers.GetNullableString(reader, 9),
+        BookCount: reader.GetInt32(10));
 
     /// <summary>Reads a row shaped by <see cref="PageSelect"/>.</summary>
     private static PageDto ReadPageDto(SqliteDataReader reader) => new(
@@ -1296,6 +1489,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         Description: s.Description,
         Slug: s.Slug,
         SortOrder: s.SortOrder,
+        Published: s.Published,
         OwnerId: s.OwnerId,
         OwnerName: ownerName,
         BookCount: bookCount,

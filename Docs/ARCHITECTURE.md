@@ -28,6 +28,11 @@ shelf sits at the library root, which is where every book was before shelves
 existed. A shelf holds no content of its own, so deleting one returns its books
 to the root rather than cascading into them.
 
+A shelf can also be served as a standalone website at
+`/bookshelf-serve/{slug}` — a reader-only UI over that shelf's books and
+pages, backed by `/api/bookshelf-serve/{name}`. `shelf.published` makes that
+site world-readable when sign-in is on.
+
 Every request through `/api` (and `/uploads`) passes one endpoint filter that
 resolves the caller — a session cookie, the shared `BeeDocs:ApiKey` for machines,
 or nobody — and checks its role. The filter is inert until

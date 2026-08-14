@@ -85,3 +85,7 @@ Add the ability to add links to other documents.
 User should be able to drag a page from the library onto a section which should add a link in the target document.
 
 It is difficult to drag and drop a link to a page in a table cell. Improve that.
+
+Add the ability to sserver bookshelves as web sited.
+
+.../bookshelf-serve/{{bookshelfname}}  --> servess all the books and pages in a seperate website

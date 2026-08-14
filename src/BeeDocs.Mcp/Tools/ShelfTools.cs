@@ -31,26 +31,30 @@ public sealed class ShelfTools(BeeDocsApiClient client)
         ToolHelpers.RunAsync(async () => ToolHelpers.Json(await client.ListShelfBooksAsync(shelfId, ct)));
 
     [McpServerTool(Name = "beedocs_create_shelf", Title = "Create shelf"),
-     Description("Create a shelf to group books under. Books are then filed on it with beedocs_move_book_to_shelf or by passing shelfId to beedocs_create_book.")]
+     Description("Create a shelf to group books under. Books are then filed on it with beedocs_move_book_to_shelf or by passing shelfId to beedocs_create_book. Set published to serve it as a website at /bookshelf-serve/{slug}.")]
     public Task<string> CreateShelf(
         [Description("Shelf name")] string title,
         [Description("Optional description")] string? description = null,
         [Description("Optional URL slug (auto-generated if omitted)")] string? slug = null,
+        [Description("When true, /bookshelf-serve/{slug} is a public website even if sign-in is on.")]
+        bool? published = null,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
-            ToolHelpers.Json(await client.CreateShelfAsync(new { title, description, slug }, ct)));
+            ToolHelpers.Json(await client.CreateShelfAsync(new { title, description, slug, published }, ct)));
 
     [McpServerTool(Name = "beedocs_update_shelf", Title = "Update shelf"),
-     Description("Update a shelf's title, description, slug, or sort order.")]
+     Description("Update a shelf's title, description, slug, sort order, or whether it is served as a public website at /bookshelf-serve/{slug}.")]
     public Task<string> UpdateShelf(
         string shelfId,
         string title,
         string? description = null,
         string? slug = null,
         int? sortOrder = null,
+        [Description("When true, /bookshelf-serve/{slug} is a public website even if sign-in is on. Omit to leave as-is.")]
+        bool? published = null,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
-            ToolHelpers.Json(await client.UpdateShelfAsync(shelfId, new { title, description, slug, sortOrder }, ct)));
+            ToolHelpers.Json(await client.UpdateShelfAsync(shelfId, new { title, description, slug, sortOrder, published }, ct)));
 
     [McpServerTool(Name = "beedocs_delete_shelf", Title = "Delete shelf"),
      Description("Delete a shelf. Its books are kept and return to the library root — no content is lost.")]

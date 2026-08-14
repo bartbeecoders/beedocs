@@ -127,14 +127,30 @@ app.UseWhen(
         }
 
         var caller = await authenticator.ResolveAsync(ctx);
-        if (caller is null)
+        if (caller is not null)
         {
-            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            ctx.SetCurrentUser(caller);
+            await next(ctx);
             return;
         }
 
-        ctx.SetCurrentUser(caller);
-        await next(ctx);
+        // A published bookshelf website embeds /uploads URLs in its Markdown.
+        // Gating every file while that site is world-readable would leave it
+        // full of broken images. Only GET/HEAD are opened, and only while at
+        // least one shelf is published — turning every shelf off restores the
+        // gate. Upload ids are unguessable; this does not list the directory.
+        var isRead = HttpMethods.IsGet(ctx.Request.Method) || HttpMethods.IsHead(ctx.Request.Method);
+        if (isRead)
+        {
+            var docs = ctx.RequestServices.GetRequiredService<IDocumentService>();
+            if (await docs.HasPublishedShelfAsync(ctx.RequestAborted))
+            {
+                await next(ctx);
+                return;
+            }
+        }
+
+        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
     }));
 
 // Serve the uploads directory resolved above.
@@ -600,6 +616,157 @@ api.MapDelete("/shelves/{id}", async (string id, IDocumentService docs, Cancella
     var ok = await docs.DeleteShelfAsync(id, ct);
     return ok ? Results.NoContent() : Results.NotFound();
 });
+
+// --- Bookshelf websites ---
+// A published shelf is served at /bookshelf-serve/{slug} as a reader-only site.
+// These endpoints are AllowAnonymous so a visitor with no cookie can load a
+// published shelf; unpublished shelves 404 for anonymous callers (and still
+// work as a preview for anyone already allowed to read the workspace).
+var bookshelfServe = api.MapGroup("/bookshelf-serve")
+    .WithMetadata(new AllowAnonymousEndpoint())
+    .WithTags("BookshelfSite");
+
+bookshelfServe.MapGet("/{name}", async (
+    string name,
+    IDocumentService docs,
+    RequestAuthenticator authenticator,
+    HttpContext http,
+    CancellationToken ct) =>
+{
+    var (site, error) = await OpenBookshelfSiteAsync(name, docs, authenticator, http, ct);
+    return error ?? Results.Ok(site);
+});
+
+bookshelfServe.MapGet("/{name}/pages/{bookSlug}/{pageSlug}", async (
+    string name,
+    string bookSlug,
+    string pageSlug,
+    IDocumentService docs,
+    RequestAuthenticator authenticator,
+    HttpContext http,
+    CancellationToken ct) =>
+{
+    var (site, error) = await OpenBookshelfSiteAsync(name, docs, authenticator, http, ct);
+    if (error is not null) return error;
+
+    var page = await docs.GetBookshelfSitePageAsync(name, bookSlug, pageSlug, ct);
+    return page is null ? Results.NotFound() : Results.Ok(page);
+});
+
+bookshelfServe.MapGet("/{name}/diagrams/{id}", async (
+    string name,
+    string id,
+    IDocumentService docs,
+    IDiagramService diagrams,
+    RequestAuthenticator authenticator,
+    HttpContext http,
+    CancellationToken ct) =>
+{
+    var (site, error) = await OpenBookshelfSiteAsync(name, docs, authenticator, http, ct);
+    if (error is not null) return error;
+
+    var diagram = await diagrams.GetAsync(id, ct);
+    if (diagram is null) return Results.NotFound();
+
+    var book = site!.Books.FirstOrDefault(b => b.Id == diagram.BookId);
+    return book is null ? Results.NotFound() : Results.Ok(diagram);
+});
+
+bookshelfServe.MapGet("/{name}/search", async (
+    string name,
+    string? q,
+    int? limit,
+    int? offset,
+    string? kinds,
+    bool? prefix,
+    IDocumentService docs,
+    ISearchIndexService search,
+    RequestAuthenticator authenticator,
+    HttpContext http,
+    CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(q))
+        return Results.BadRequest(new { error = "Query parameter 'q' is required." });
+
+    var (site, error) = await OpenBookshelfSiteAsync(name, docs, authenticator, http, ct);
+    if (error is not null) return error;
+
+    var result = await search.SearchAsync(new SearchQuery(
+        Text: q,
+        Limit: limit ?? 20,
+        Offset: offset ?? 0,
+        ShelfId: site!.Shelf.Id,
+        Kinds: ParseKinds(kinds) ?? ["page", "book", "folder"],
+        Prefix: prefix ?? true), ct);
+
+    return Results.Ok(RewriteSiteSearch(site, result));
+});
+
+static async Task<(BookshelfSiteDto? Site, IResult? Error)> OpenBookshelfSiteAsync(
+    string name,
+    IDocumentService docs,
+    RequestAuthenticator authenticator,
+    HttpContext http,
+    CancellationToken ct)
+{
+    var site = await docs.GetBookshelfSiteAsync(name, ct);
+    if (site is null) return (null, Results.NotFound());
+
+    if (!authenticator.Enabled)
+    {
+        http.SetCurrentUser(CurrentUser.Open);
+        return (site, null);
+    }
+
+    var caller = await authenticator.ResolveAsync(http);
+    if (caller is not null)
+    {
+        http.SetCurrentUser(caller);
+        return (site, null);
+    }
+
+    // Anonymous: only a published shelf is a website. 404 rather than 401 so
+    // we do not leak that the slug exists, and so the SPA's global 401 handler
+    // does not yank a visitor toward the login screen.
+    if (!site.Shelf.Published)
+        return (null, Results.NotFound());
+
+    return (site, null);
+}
+
+static SearchResponseDto RewriteSiteSearch(BookshelfSiteDto site, SearchResponseDto raw)
+{
+    var pageUrls = new Dictionary<string, string>(StringComparer.Ordinal);
+    var bookUrls = new Dictionary<string, string>(StringComparer.Ordinal);
+    var home = $"/bookshelf-serve/{site.Shelf.Slug}";
+
+    foreach (var book in site.Books)
+    {
+        var bookUrl = $"{home}/{book.Slug}";
+        bookUrls[book.Id] = bookUrl;
+        foreach (var page in book.Pages)
+            pageUrls[page.Id] = $"{bookUrl}/{page.Slug}";
+        foreach (var chapter in book.Chapters)
+        {
+            foreach (var page in chapter.Pages)
+                pageUrls[page.Id] = $"{bookUrl}/{page.Slug}";
+        }
+    }
+
+    var hits = raw.Hits.Select(h => h with
+    {
+        Url = h.Kind switch
+        {
+            "page" when pageUrls.TryGetValue(h.Id, out var pageUrl) => pageUrl,
+            "book" when bookUrls.TryGetValue(h.Id, out var bookUrl) => bookUrl,
+            "folder" when h.BookId is not null && bookUrls.TryGetValue(h.BookId, out var bookUrl) => bookUrl,
+            "shelf" => home,
+            _ => h.Url,
+        },
+    }).ToList();
+
+    return raw with { Hits = hits };
+}
 
 // --- Books ---
 api.MapGet("/books", async (IDocumentService docs, CancellationToken ct) =>

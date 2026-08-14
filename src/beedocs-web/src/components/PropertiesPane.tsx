@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 import { api } from '../api'
+import { withBase } from '../basePath'
+import { bookshelfSitePath } from '../markdownLinks'
 import { useAuth } from '../auth/AuthContext'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { PageEditorState } from './PageCanvas'
@@ -17,8 +19,8 @@ type Props = {
 
 export function PropertiesPane({ pageState, diagramState, view }: Props) {
   const { bookId, shelfId } = useParams()
-  const { canWrite } = useAuth()
-  const { books, shelves } = useWorkspace()
+  const { canWrite, authEnabled } = useAuth()
+  const { books, shelves, setShelfPublished } = useWorkspace()
   const book = books.find((b) => b.id === bookId)
   const shelf = shelves.find((s) => s.id === shelfId)
 
@@ -231,6 +233,37 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
             ownerId={shelf.ownerId ?? ''}
             ownerName={shelf.ownerName}
           />
+        </Field>
+        <Field label="Website">
+          <div className="shelf-site-props">
+            <label className="check-row">
+              <input
+                type="checkbox"
+                checked={!!shelf.published}
+                disabled={!canWrite}
+                onChange={(e) => void setShelfPublished(shelf.id, e.target.checked)}
+              />
+              <span>
+                Serve as a public website
+                <span className="muted sm" style={{ display: 'block' }}>
+                  {withBase(bookshelfSitePath(shelf.slug))}
+                  {authEnabled
+                    ? shelf.published
+                      ? ' — visitors do not need to sign in.'
+                      : ' — unpublished; only people who can already read the workspace can preview it.'
+                    : ' — this instance is open, so the URL already works.'}
+                </span>
+              </span>
+            </label>
+            <a
+              className="btn ghost sm"
+              href={withBase(bookshelfSitePath(shelf.slug))}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open website
+            </a>
+          </div>
         </Field>
         <p className="muted sm">
           A shelf groups books; it holds no pages of its own. Deleting it keeps every book —

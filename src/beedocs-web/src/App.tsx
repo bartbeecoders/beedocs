@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext'
 import { WorkspaceShell } from './components/WorkspaceShell'
 import { LoginScreen } from './components/LoginScreen'
 import { SetupScreen } from './components/SetupScreen'
+import { BookshelfSite } from './site/BookshelfSite'
 import { api } from './api'
 import { getRouterBasename } from './basePath'
 import './styles/users.css'
@@ -75,18 +76,28 @@ const router = createBrowserRouter(
     {
       element: (
         <AuthProvider>
-          <AuthGate />
+          <Outlet />
         </AuthProvider>
       ),
       children: [
-        { path: '/', element: <WorkspaceShell /> },
-        { path: '/settings', element: <WorkspaceShell /> },
-        { path: '/help', element: <WorkspaceShell /> },
-        { path: '/shelves/:shelfId', element: <WorkspaceShell /> },
-        { path: '/books/:bookId', element: <WorkspaceShell /> },
-        { path: '/books/:bookId/pages/:pageId', element: <WorkspaceShell /> },
-        { path: '/books/:bookId/diagrams/:diagramId', element: <WorkspaceShell /> },
-        { path: '*', element: <Navigate to="/" replace /> },
+        // Reader websites sit outside AuthGate: a published shelf is a public
+        // site, and the API 404s unpublished ones for anonymous visitors.
+        { path: '/bookshelf-serve/:shelfName', element: <BookshelfSite /> },
+        { path: '/bookshelf-serve/:shelfName/:bookSlug', element: <BookshelfSite /> },
+        { path: '/bookshelf-serve/:shelfName/:bookSlug/:pageSlug', element: <BookshelfSite /> },
+        {
+          element: <AuthGate />,
+          children: [
+            { path: '/', element: <WorkspaceShell /> },
+            { path: '/settings', element: <WorkspaceShell /> },
+            { path: '/help', element: <WorkspaceShell /> },
+            { path: '/shelves/:shelfId', element: <WorkspaceShell /> },
+            { path: '/books/:bookId', element: <WorkspaceShell /> },
+            { path: '/books/:bookId/pages/:pageId', element: <WorkspaceShell /> },
+            { path: '/books/:bookId/diagrams/:diagramId', element: <WorkspaceShell /> },
+            { path: '*', element: <Navigate to="/" replace /> },
+          ],
+        },
       ],
     },
   ],

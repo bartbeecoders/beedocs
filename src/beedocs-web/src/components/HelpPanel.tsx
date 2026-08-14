@@ -124,9 +124,12 @@ export function HelpPanel() {
         <h2>Workspace basics</h2>
         <ul className="help-list">
           <li>
-            <strong>Left pane</strong> — the library tree: books, folders, pages and diagrams.
-            Right-click (or use the ⋯ menu) to create, rename, move and delete. Drag pages between
-            folders.
+            <strong>Left pane</strong> — the library tree: shelves, books, folders, pages and
+            diagrams. Right-click (or use the ⋯ menu) to create, rename, move and delete. Drag pages
+            between folders. A shelf can be served as its own website at{' '}
+            <code>/bookshelf-serve/&lt;slug&gt;</code> — toggle <strong>Serve as a public
+            website</strong> in the shelf properties, then open it from the toolbar or the tree
+            menu.
           </li>
           <li>
             <strong>Search</strong> — <kbd>Ctrl</kbd>+<kbd>K</kbd> (or the header button) searches

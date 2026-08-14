@@ -47,7 +47,15 @@ export function markdownLinkForTreePayload(p: TreeDragPayload): string | null {
 
 /** Hrefs the SPA router owns — rendered as client-side navigation, not a reload. */
 export function isInternalDocHref(href: string | undefined): href is string {
-  return !!href && /^\/(books|shelves)\//.test(href)
+  return !!href && /^\/(books|shelves|bookshelf-serve)\//.test(href)
+}
+
+/** Path of a published (or preview) bookshelf website. */
+export function bookshelfSitePath(shelfSlug: string, bookSlug?: string, pageSlug?: string): string {
+  let path = `/bookshelf-serve/${encodeURIComponent(shelfSlug)}`
+  if (bookSlug) path += `/${encodeURIComponent(bookSlug)}`
+  if (pageSlug) path += `/${encodeURIComponent(pageSlug)}`
+  return path
 }
 
 /**

@@ -1,5 +1,7 @@
 import { Children, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { withBase } from '../basePath'
+import { bookshelfSitePath } from '../markdownLinks'
 import { useAuth } from '../auth/AuthContext'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
@@ -347,6 +349,21 @@ export function WorkspaceToolbar({
                 Open shelf
               </button>
             )}
+            {(() => {
+              const shelf = shelves.find((s) => s.id === context.shelfId)
+              if (!shelf) return null
+              return (
+                <a
+                  className="btn ghost sm"
+                  href={withBase(bookshelfSitePath(shelf.slug))}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open this shelf as a website"
+                >
+                  Open website
+                </a>
+              )
+            })()}
           </Group>
           <span className="ws-toolbar-spacer" />
           {canWrite && (

@@ -29,6 +29,8 @@ import type {
   SearchStatus,
   ShapeCollection,
   Shelf,
+  BookshelfSite,
+  BookshelfSitePage,
 } from './types'
 import { withApiBase } from './basePath'
 
@@ -246,8 +248,13 @@ export const api = {
   listShelves: () => request<Shelf[]>('/api/shelves'),
   getShelf: (id: string) => request<Shelf>(`/api/shelves/${id}`),
   listShelfBooks: (id: string) => request<Book[]>(`/api/shelves/${id}/books`),
-  createShelf: (body: { title: string; description?: string; slug?: string; ownerId?: string }) =>
-    request<Shelf>('/api/shelves', { method: 'POST', body: JSON.stringify(body) }),
+  createShelf: (body: {
+    title: string
+    description?: string
+    slug?: string
+    ownerId?: string
+    published?: boolean
+  }) => request<Shelf>('/api/shelves', { method: 'POST', body: JSON.stringify(body) }),
   updateShelf: (
     id: string,
     body: {
@@ -257,9 +264,38 @@ export const api = {
       sortOrder?: number
       /** Omit to leave the owner alone; "" clears it. */
       ownerId?: string | null
+      /** Omit to leave publish state alone. */
+      published?: boolean
     },
   ) => request<Shelf>(`/api/shelves/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteShelf: (id: string) => request<void>(`/api/shelves/${id}`, { method: 'DELETE' }),
+
+  /**
+   * Reader website for one shelf. Anonymous when the shelf is published (or
+   * when sign-in is off); unpublished shelves 404 for visitors with no session.
+   */
+  getBookshelfSite: (name: string) =>
+    request<BookshelfSite>(`/api/bookshelf-serve/${encodeURIComponent(name)}`),
+  getBookshelfSitePage: (name: string, bookSlug: string, pageSlug: string) =>
+    request<BookshelfSitePage>(
+      `/api/bookshelf-serve/${encodeURIComponent(name)}/pages/${encodeURIComponent(bookSlug)}/${encodeURIComponent(pageSlug)}`,
+    ),
+  getBookshelfSiteDiagram: (name: string, diagramId: string) =>
+    request<Diagram>(
+      `/api/bookshelf-serve/${encodeURIComponent(name)}/diagrams/${encodeURIComponent(diagramId)}`,
+    ),
+  searchBookshelfSite: (
+    name: string,
+    query: string,
+    options: { limit?: number; signal?: AbortSignal } = {},
+  ) => {
+    const params = new URLSearchParams({ q: query })
+    if (options.limit != null) params.set('limit', String(options.limit))
+    return request<SearchResponse>(
+      `/api/bookshelf-serve/${encodeURIComponent(name)}/search?${params}`,
+      { signal: options.signal },
+    )
+  },
 
   listBooks: () => request<Book[]>('/api/books'),
   getBook: (id: string) => request<Book>(`/api/books/${id}`),

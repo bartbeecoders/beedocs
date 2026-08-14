@@ -5,6 +5,8 @@ import { useAuth } from '../auth/AuthContext'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { loadPaneLayout, savePaneLayout, type PaneLayout } from '../workspace/layoutPrefs'
 import { api } from '../api'
+import { withBase } from '../basePath'
+import { bookshelfSitePath } from '../markdownLinks'
 import { NavTree } from './NavTree'
 import { ResizablePane } from './ResizablePane'
 import { PageCanvas, type PageEditorState } from './PageCanvas'
@@ -372,6 +374,13 @@ function ShelfOverview({ shelfId }: { shelfId: string }) {
         <h1>📚 {shelf.title}</h1>
       </div>
       {shelf.description && <p className="muted lead">{shelf.description}</p>}
+      <p className="muted sm">
+        Website:{' '}
+        <a href={withBase(bookshelfSitePath(shelf.slug))} target="_blank" rel="noreferrer">
+          {withBase(bookshelfSitePath(shelf.slug))}
+        </a>
+        {shelf.published ? ' · published' : ' · unpublished preview'}
+      </p>
       <div className="overview-stats">
         <div className="stat">
           <span className="stat-value">{shelved.length}</span>
@@ -399,13 +408,16 @@ function ShelfOverview({ shelfId }: { shelfId: string }) {
         </p>
       )}
 
-      {canWrite && (
-        <div className="row" style={{ gap: '0.5rem', marginTop: '1rem' }}>
-          <button type="button" className="btn primary sm" onClick={() => setPrompt(true)}>
+      <div className="row" style={{ gap: '0.5rem', marginTop: '1rem' }}>
+        <a className="btn primary sm" href={withBase(bookshelfSitePath(shelf.slug))} target="_blank" rel="noreferrer">
+          Open website
+        </a>
+        {canWrite && (
+          <button type="button" className="btn sm" onClick={() => setPrompt(true)}>
             New book on this shelf
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       <NamePromptDialog
         open={prompt}

@@ -46,8 +46,8 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_list_shelves` | — | List all shelves (with `bookCount`) |
 | `beedocs_get_shelf` | `shelfId` | Get shelf |
 | `beedocs_list_shelf_books` | `shelfId` | Books filed on one shelf |
-| `beedocs_create_shelf` | `title`, `description?`, `slug?` | Create shelf |
-| `beedocs_update_shelf` | `shelfId`, `title`, `description?`, `slug?`, `sortOrder?` | Rename / reorder shelf |
+| `beedocs_create_shelf` | `title`, `description?`, `slug?`, `published?` | Create shelf (optionally as a public website) |
+| `beedocs_update_shelf` | `shelfId`, `title`, `description?`, `slug?`, `sortOrder?`, `published?` | Rename / reorder shelf, or publish it as `/bookshelf-serve/{slug}` |
 | `beedocs_delete_shelf` | `shelfId` | Delete shelf (books kept, moved to library root) |
 | `beedocs_move_book_to_shelf` | `bookId`, `shelfId?` | File a book on a shelf; omit `shelfId` to move it to the root |
 

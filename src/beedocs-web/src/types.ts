@@ -8,6 +8,12 @@ export type Shelf = {
   description?: string | null
   slug: string
   sortOrder: number
+  /**
+   * When true, `/bookshelf-serve/{slug}` is a public website even if sign-in
+   * is on. Unpublished shelves are still previewable by anyone who can already
+   * read the workspace.
+   */
+  published: boolean
   /** Account responsible for the shelf. Null when nobody was identified. */
   ownerId?: string | null
   ownerName?: string | null
@@ -128,6 +134,62 @@ export type SearchResponse = {
   offset: number
   engine: 'fts5' | 'like'
   hits: SearchHit[]
+}
+
+/** One shelf served as a standalone website. Page bodies are fetched separately. */
+export type BookshelfSite = {
+  shelf: BookshelfSiteShelf
+  books: BookshelfSiteBook[]
+}
+
+export type BookshelfSiteShelf = {
+  id: string
+  title: string
+  description?: string | null
+  slug: string
+  published: boolean
+  bookCount: number
+}
+
+export type BookshelfSiteBook = {
+  id: string
+  title: string
+  description?: string | null
+  slug: string
+  sortOrder: number
+  chapters: BookshelfSiteChapter[]
+  /** Pages sitting on the book root (not in a folder). */
+  pages: BookshelfSitePageSummary[]
+}
+
+export type BookshelfSiteChapter = {
+  id: string
+  title: string
+  slug: string
+  sortOrder: number
+  pages: BookshelfSitePageSummary[]
+}
+
+export type BookshelfSitePageSummary = {
+  id: string
+  title: string
+  slug: string
+  sortOrder: number
+  updatedAt: string
+}
+
+export type BookshelfSitePage = {
+  id: string
+  title: string
+  slug: string
+  content: string
+  bookId: string
+  bookSlug: string
+  bookTitle: string
+  chapterId?: string | null
+  chapterSlug?: string | null
+  chapterTitle?: string | null
+  updatedAt: string
 }
 
 export type SearchStatus = {
