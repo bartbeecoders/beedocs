@@ -86,6 +86,7 @@ const router = createBrowserRouter(
         { path: '/books/:bookId', element: <WorkspaceShell /> },
         { path: '/books/:bookId/pages/:pageId', element: <WorkspaceShell /> },
         { path: '/books/:bookId/diagrams/:diagramId', element: <WorkspaceShell /> },
+        { path: '/books/:bookId/slides/:deckId', element: <WorkspaceShell /> },
         { path: '*', element: <Navigate to="/" replace /> },
       ],
     },

@@ -370,7 +370,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         var existing = await SelectBookAsync(conn, id, ct);
         if (existing is null) return false;
 
-        // Cascade pages, chapters, diagrams and book-scoped shape collections.
+        // Cascade pages, chapters, diagrams, slide decks and book-scoped shape
+        // collections.
         await using (var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct))
         {
             // Revisions first: they are addressed by page id, so deleting the
@@ -383,6 +384,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
             // Diagrams were missed here, so deleting a book used to strand them: no
             // longer reachable through any book, but still in the table.
             await ExecAsync(conn, tx, "DELETE FROM diagram WHERE book_id = $id", ("$id", id), ct);
+            await ExecAsync(conn, tx, "DELETE FROM slide_deck WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx,
                 "DELETE FROM shape_collection WHERE book_id IS NOT NULL AND book_id != '' AND book_id = $id",
                 ("$id", id), ct);

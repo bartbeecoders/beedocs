@@ -94,12 +94,14 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
 - **BeeDocs.Api** is a single-file minimal-API (`Program.cs`) mapping `/api/shelves`,
   `/api/books`,
   `/api/books/{id}/chapters`, `/api/books/{id}/pages`, `/api/pages/{id}`,
-  `/api/books/{id}/diagrams`, `/api/diagrams/{id}`, `/api/uploads`, `/api/search`,
+  `/api/books/{id}/diagrams`, `/api/diagrams/{id}`, `/api/books/{id}/slides`,
+  `/api/slides/{id}`, `/api/uploads`, `/api/search`,
   `/api/auth/*`, `/api/users/*`, plus `/api/health` and `/api/version`.
   Business logic lives in `Services/`
-  (`DocumentService` for shelves/books/chapters/pages, `DiagramService` for diagrams);
+  (`DocumentService` for shelves/books/chapters/pages, `DiagramService` for
+  diagrams, `SlideDeckService` for slide decks);
   entities are in `Models/Entities.cs` (`Shelf`, `Book`, `Chapter`, `Page`,
-  `PageRevision`, `Diagram` — plain POCOs with string ids).
+  `PageRevision`, `Diagram`, `SlideDeck` — plain POCOs with string ids).
 - **Shelves** are the level above books: `shelf` rows plus a nullable
   `book.shelf_id`, so a book sits on at most one shelf and a book with no shelf
   sits at the library root — which is where every book was before the feature, so
@@ -153,6 +155,18 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `src/BeeDocs.Mcp/diagram-catalog.json`, which the MCP server embeds — so a new
   shape reaches AI agents without a second edit. Regenerate + `dotnet build`
   BeeDocs.Mcp after touching those files.
+- **Slides** are PowerPoint-style presentations stored one JSON document per
+  deck (`slide_deck` table, same storage shape as `diagram`): an ordered list of
+  slides, each an ordered list of positioned elements, where **element array
+  order is z-order**. The schema's one source of truth is
+  `src/beedocs-web/src/slides/slideModel.ts` — the server stores the document
+  verbatim and reads only element text + notes (search) and the slide count
+  (tree badge), so new element fields need no server change. The designer
+  (`slides/SlideEditor.tsx`: filmstrip · canvas · format panel) and the
+  full-screen presenter (`slides/SlidePresenter.tsx`) share one renderer
+  (`slides/SlideView.tsx`), so a deck looks identical everywhere. Read-only
+  accounts get a slide list plus Present — presenting is deliberately not a
+  write affordance. See `Docs/SLIDES.md`.
 - **Ownership & page history** — `book.owner_id` / `page.owner_id` name the
   account answerable for a document (a page inherits its book's owner at
   creation, falling back to its creator); neither grants any permission, which
@@ -235,6 +249,7 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/MCP-HOSTING.md` — running the MCP server on K3S behind Cloudflare Access.
 - `Docs/MCP-TOOLS.md` — full MCP tool/resource/prompt catalog.
 - `Docs/DIAGRAM-STUDIO.md` — BeeDiagram Studio editor interactions and JSON format.
+- `Docs/SLIDES.md` — slide decks: document format, designer, presentation mode.
 - `Docs/USERS-AND-ROLES.md` — accounts, roles, sessions, and the opt-in sign-in wall.
 - `Docs/LLM-PROVIDERS.md` — LLM providers, key storage, and the `/api/llm` security trade-off.
 - `Vibecoding/Instructions.md` — product goals/vision behind the MVP.

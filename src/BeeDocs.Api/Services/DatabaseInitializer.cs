@@ -102,6 +102,17 @@ public static class DatabaseInitializer
               updated_at TEXT NOT NULL
             );
 
+            -- Slide decks (presentations). One JSON document per deck, same
+            -- storage shape as diagram.source.
+            CREATE TABLE IF NOT EXISTS slide_deck (
+              id TEXT PRIMARY KEY NOT NULL,
+              book_id TEXT NOT NULL,
+              title TEXT NOT NULL,
+              source TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS shape_collection (
               id TEXT PRIMARY KEY NOT NULL,
               book_id TEXT,
@@ -176,6 +187,7 @@ public static class DatabaseInitializer
             CREATE INDEX IF NOT EXISTS idx_chapter_book ON chapter(book_id);
             CREATE INDEX IF NOT EXISTS idx_diagram_book ON diagram(book_id);
             CREATE INDEX IF NOT EXISTS idx_diagram_page ON diagram(page_id);
+            CREATE INDEX IF NOT EXISTS idx_slide_deck_book ON slide_deck(book_id);
             CREATE INDEX IF NOT EXISTS idx_shape_collection_book ON shape_collection(book_id);
             CREATE INDEX IF NOT EXISTS idx_page_revision_page ON page_revision(page_id);
 
@@ -308,6 +320,19 @@ public static class DatabaseInitializer
         CREATE TRIGGER IF NOT EXISTS trg_diagram_search_delete AFTER DELETE ON diagram BEGIN
           INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
           VALUES ('diagram', old.id, 'delete', datetime('now'));
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_slide_deck_search_insert AFTER INSERT ON slide_deck BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('slides', new.id, 'upsert', datetime('now'));
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_slide_deck_search_update AFTER UPDATE ON slide_deck BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('slides', new.id, 'upsert', datetime('now'));
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_slide_deck_search_delete AFTER DELETE ON slide_deck BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('slides', old.id, 'delete', datetime('now'));
         END;
 
         CREATE TRIGGER IF NOT EXISTS trg_book_search_insert AFTER INSERT ON book BEGIN

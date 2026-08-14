@@ -8,7 +8,7 @@ import { useAuth } from '../auth/AuthContext'
 import { TREE_DRAG_MIME } from '../markdownLinks'
 import { useWorkspace, type TreeBook, type TreeShelf } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
-import type { Chapter, DiagramSummary, PageSummary } from '../types'
+import type { Chapter, DiagramSummary, PageSummary, SlideDeckSummary } from '../types'
 
 type CtxMenu =
   | {
@@ -51,6 +51,14 @@ type CtxMenu =
       x: number
       y: number
     }
+  | {
+      kind: 'slides'
+      bookId: string
+      deckId: string
+      title: string
+      x: number
+      y: number
+    }
 
 /**
  * Tree drags double as "insert a link" drops in the page editor
@@ -65,6 +73,7 @@ type DragPayload =
 type Creating =
   | { bookId: string; kind: 'page'; chapterId?: string | null }
   | { bookId: string; kind: 'diagram' }
+  | { bookId: string; kind: 'slides' }
   | { bookId: string; kind: 'folder' }
 
 export function NavTree() {
@@ -81,6 +90,7 @@ export function NavTree() {
     createPage,
     createFolder,
     createDiagram,
+    createSlideDeck,
     deleteBook,
     deleteShelf,
     renameShelf,
@@ -88,6 +98,7 @@ export function NavTree() {
     deletePage,
     deleteFolder,
     deleteDiagram,
+    deleteSlideDeck,
     renameFolder,
     movePage,
     toggleFolder,
@@ -215,6 +226,11 @@ export function NavTree() {
       await createFolder(bookId, childTitle.trim())
       setChildTitle('')
       setCreatingIn(null)
+    } else if (kind === 'slides') {
+      const deck = await createSlideDeck(bookId, childTitle.trim())
+      setChildTitle('')
+      setCreatingIn(null)
+      void navigate(`/books/${bookId}/slides/${deck.id}`)
     } else {
       const diagram = await createDiagram(bookId, childTitle.trim())
       setChildTitle('')
@@ -531,6 +547,14 @@ export function NavTree() {
                   setMenu(null)
                 }}
               />
+              <MenuItem
+                label="New slides"
+                write
+                onClick={() => {
+                  setCreatingIn({ bookId: menu.bookId, kind: 'slides' })
+                  setMenu(null)
+                }}
+              />
               <div className="tree-context-sep" />
               <ExportItems
                 busy={busyExport}
@@ -680,6 +704,33 @@ export function NavTree() {
                   if (confirm(`Delete diagram “${menu.title}”?`)) {
                     void deleteDiagram(menu.diagramId, menu.bookId).then(() => {
                       if (params.diagramId === menu.diagramId)
+                        void navigate(`/books/${menu.bookId}`)
+                    })
+                  }
+                  setMenu(null)
+                }}
+              />
+            </>
+          )}
+          {menu.kind === 'slides' && (
+            <>
+              <div className="tree-context-heading">🎞️ {menu.title}</div>
+              <MenuItem
+                label="Open"
+                onClick={() => {
+                  void navigate(`/books/${menu.bookId}/slides/${menu.deckId}`)
+                  setMenu(null)
+                }}
+              />
+              <div className="tree-context-sep" />
+              <MenuItem
+                label="Delete slides"
+                write
+                danger
+                onClick={() => {
+                  if (confirm(`Delete slide deck “${menu.title}”?`)) {
+                    void deleteSlideDeck(menu.deckId, menu.bookId).then(() => {
+                      if (params.deckId === menu.deckId)
                         void navigate(`/books/${menu.bookId}`)
                     })
                   }
@@ -1017,7 +1068,9 @@ function BookNode({
                       ? 'Page title'
                       : creatingIn.kind === 'folder'
                         ? 'Folder name'
-                        : 'Diagram title'
+                        : creatingIn.kind === 'slides'
+                          ? 'Presentation title'
+                          : 'Diagram title'
                   }
                 />
                 <button type="submit" className="btn primary sm">
@@ -1086,9 +1139,27 @@ function BookNode({
             />
           ))}
 
+          {book.slideDecks.length > 0 && <li className="tree-group-label">Slides</li>}
+          {book.slideDecks.map((d) => (
+            <SlideDeckRow
+              key={d.id}
+              bookId={book.id}
+              deck={d}
+              active={
+                params.deckId === d.id ||
+                (selection.kind === 'slides' && selection.deckId === d.id)
+              }
+              openMenu={openMenu}
+              onSelect={() =>
+                setSelection({ kind: 'slides', bookId: book.id, deckId: d.id })
+              }
+            />
+          ))}
+
           {!book.loading &&
             book.pages.length === 0 &&
             book.diagrams.length === 0 &&
+            book.slideDecks.length === 0 &&
             book.chapters.length === 0 &&
             creatingIn?.bookId !== book.id && (
               <li className="muted sm tree-empty">
@@ -1315,6 +1386,48 @@ function PageRow({
         onDragLeave={() => setDragOver(null)}
         onDrop={(e) => void dropReorderPage(bookId, page, 'after', e)}
       />
+    </li>
+  )
+}
+
+function SlideDeckRow({
+  bookId,
+  deck,
+  active,
+  openMenu,
+  onSelect,
+}: {
+  bookId: string
+  deck: SlideDeckSummary
+  active: boolean
+  openMenu: (e: React.MouseEvent, next: CtxMenu) => void
+  onSelect: () => void
+}) {
+  return (
+    <li>
+      <div
+        className={`tree-row child ${active ? 'active' : ''}`}
+        onContextMenu={(e) =>
+          openMenu(e, {
+            kind: 'slides',
+            bookId,
+            deckId: deck.id,
+            title: deck.title,
+            x: e.clientX,
+            y: e.clientY,
+          })
+        }
+      >
+        <NavLink
+          to={`/books/${bookId}/slides/${deck.id}`}
+          className="tree-label"
+          onClick={onSelect}
+        >
+          <span className="tree-icon">🎞️</span>
+          <span className="tree-text">{deck.title}</span>
+          <span className="muted sm">({deck.slideCount})</span>
+        </NavLink>
+      </div>
     </li>
   )
 }

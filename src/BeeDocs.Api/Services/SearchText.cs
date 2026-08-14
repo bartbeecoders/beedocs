@@ -76,6 +76,55 @@ public static class SearchText
         return Normalize(LooksLikeJson(source) ? DiagramLabels(source) : source);
     }
 
+    /// <summary>
+    /// Plain text for a stored slide deck document: the text every element shows
+    /// plus each slide's speaker notes. Geometry and styling stay out — matching
+    /// on "#ffffff" or "fontSize" would be noise, not search.
+    /// </summary>
+    public static string FromSlideDeckSource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source) || !LooksLikeJson(source)) return "";
+        try
+        {
+            using var doc = JsonDocument.Parse(source);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return "";
+            if (!doc.RootElement.TryGetProperty("slides", out var slides)
+                || slides.ValueKind != JsonValueKind.Array)
+            {
+                return "";
+            }
+
+            var sb = new StringBuilder();
+            foreach (var slide in slides.EnumerateArray())
+            {
+                if (slide.ValueKind != JsonValueKind.Object) continue;
+                if (slide.TryGetProperty("elements", out var elements)
+                    && elements.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var element in elements.EnumerateArray())
+                    {
+                        if (element.ValueKind == JsonValueKind.Object
+                            && element.TryGetProperty("text", out var text)
+                            && text.ValueKind == JsonValueKind.String)
+                        {
+                            Append(sb, text.GetString());
+                        }
+                    }
+                }
+                if (slide.TryGetProperty("notes", out var notes)
+                    && notes.ValueKind == JsonValueKind.String)
+                {
+                    Append(sb, notes.GetString());
+                }
+            }
+            return Normalize(sb.ToString());
+        }
+        catch (JsonException)
+        {
+            return "";
+        }
+    }
+
     private static string FromFence(string language, string body)
     {
         var lang = (language ?? "").Trim();

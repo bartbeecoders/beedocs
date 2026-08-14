@@ -55,6 +55,7 @@ builder.Services.AddSingleton<IUserService>(sp =>
 });
 builder.Services.AddSingleton<IDocumentService, DocumentService>();
 builder.Services.AddSingleton<IDiagramService, DiagramService>();
+builder.Services.AddSingleton<ISlideDeckService, SlideDeckService>();
 builder.Services.AddSingleton<IShapeCollectionService, ShapeCollectionService>();
 builder.Services.AddSingleton<IExportService, ExportService>();
 builder.Services.AddSingleton<IImportService, ImportService>();
@@ -776,6 +777,47 @@ api.MapPut("/diagrams/{id}", async (string id, UpdateDiagramRequest body, IDiagr
 api.MapDelete("/diagrams/{id}", async (string id, IDiagramService diagrams, CancellationToken ct) =>
 {
     var ok = await diagrams.DeleteAsync(id, ct);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
+// --- Slide decks (presentations) ---
+api.MapGet("/books/{bookId}/slides", async (string bookId, ISlideDeckService slides, CancellationToken ct) =>
+    Results.Ok(await slides.ListByBookAsync(bookId, ct)));
+
+api.MapPost("/books/{bookId}/slides", async (string bookId, CreateSlideDeckRequest body, ISlideDeckService slides, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    try
+    {
+        var created = await slides.CreateAsync(bookId, body, ct);
+        return Results.Created($"/api/slides/{created.Id}", created);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+
+api.MapGet("/slides/{id}", async (string id, ISlideDeckService slides, CancellationToken ct) =>
+{
+    var deck = await slides.GetAsync(id, ct);
+    return deck is null ? Results.NotFound() : Results.Ok(deck);
+});
+
+api.MapPut("/slides/{id}", async (string id, UpdateSlideDeckRequest body, ISlideDeckService slides, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    var updated = await slides.UpdateAsync(id, body, ct);
+    return updated is null ? Results.NotFound() : Results.Ok(updated);
+});
+
+api.MapDelete("/slides/{id}", async (string id, ISlideDeckService slides, CancellationToken ct) =>
+{
+    var ok = await slides.DeleteAsync(id, ct);
     return ok ? Results.NoContent() : Results.NotFound();
 });
 

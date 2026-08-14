@@ -29,6 +29,8 @@ import type {
   SearchStatus,
   ShapeCollection,
   Shelf,
+  SlideDeck,
+  SlideDeckSummary,
 } from './types'
 import { withApiBase } from './basePath'
 
@@ -353,6 +355,18 @@ export const api = {
     body: { title: string; kind?: string; source?: string; pageId?: string | null },
   ) => request<Diagram>(`/api/diagrams/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteDiagram: (id: string) => request<void>(`/api/diagrams/${id}`, { method: 'DELETE' }),
+
+  /** Slide decks (presentations). `source` is the JSON slide document. */
+  listSlideDecks: (bookId: string) => request<SlideDeckSummary[]>(`/api/books/${bookId}/slides`),
+  getSlideDeck: (id: string) => request<SlideDeck>(`/api/slides/${id}`),
+  createSlideDeck: (bookId: string, body: { title: string; source?: string }) =>
+    request<SlideDeck>(`/api/books/${bookId}/slides`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateSlideDeck: (id: string, body: { title: string; source?: string }) =>
+    request<SlideDeck>(`/api/slides/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteSlideDeck: (id: string) => request<void>(`/api/slides/${id}`, { method: 'DELETE' }),
 
   /** Book-scoped collections only. */
   listShapeCollections: (bookId: string) =>

@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
+import type { SlideEditorState } from './SlideCanvas'
 import { OwnerField } from './OwnerField'
 import { PageHistoryPanel } from './PageHistoryPanel'
 import { SyncedInput } from './SyncedText'
@@ -12,10 +13,11 @@ import { SyncedInput } from './SyncedText'
 type Props = {
   pageState: PageEditorState | null
   diagramState: DiagramEditorState | null
-  view: 'welcome' | 'shelf' | 'book' | 'page' | 'diagram' | 'settings' | 'help'
+  slideState: SlideEditorState | null
+  view: 'welcome' | 'shelf' | 'book' | 'page' | 'diagram' | 'slides' | 'settings' | 'help'
 }
 
-export function PropertiesPane({ pageState, diagramState, view }: Props) {
+export function PropertiesPane({ pageState, diagramState, slideState, view }: Props) {
   const { bookId, shelfId } = useParams()
   const { canWrite } = useAuth()
   const { books, shelves } = useWorkspace()
@@ -206,6 +208,59 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
     )
   }
 
+  if (view === 'slides' && slideState) {
+    const d = slideState.deck
+    return (
+      <div className="props-pane">
+        <h3>Slides</h3>
+        <Field label="Title">
+          {canWrite ? (
+            <SyncedInput value={slideState.title} onValueChange={slideState.setTitle} />
+          ) : (
+            <span>{slideState.title}</span>
+          )}
+        </Field>
+        <Field label="Slides">
+          <span>{slideState.slideCount}</span>
+        </Field>
+        <Field label="Updated">
+          <span className="sm">{d ? new Date(d.updatedAt).toLocaleString() : '—'}</span>
+        </Field>
+        <div className="props-actions">
+          <button type="button" className="btn primary sm" onClick={() => slideState.present()}>
+            ▶ Present
+          </button>
+          {canWrite && (
+            <>
+              <button
+                type="button"
+                className="btn primary sm"
+                disabled={slideState.saving || !slideState.dirty}
+                onClick={() => void slideState.save()}
+              >
+                {slideState.saving ? 'Saving…' : 'Save slides'}
+              </button>
+              <button
+                type="button"
+                className="btn danger ghost sm"
+                onClick={() => void slideState.deleteDeck()}
+              >
+                Delete
+              </button>
+            </>
+          )}
+        </div>
+        <div className="props-hint">
+          <h4>Presenting</h4>
+          <p className="muted sm">
+            Arrow keys or click to advance, right-click to go back, <strong>Esc</strong> to end.
+            Presenting starts from the selected slide.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   if (view === 'shelf' && shelf) {
     return (
       <div className="props-pane">
@@ -263,6 +318,9 @@ export function PropertiesPane({ pageState, diagramState, view }: Props) {
         </Field>
         <Field label="Diagrams">
           <span>{book.diagrams.length}</span>
+        </Field>
+        <Field label="Slide decks">
+          <span>{book.slideDecks.length}</span>
         </Field>
         <Field label="Owner">
           <BookOwnerField bookId={book.id} title={book.title} ownerId={book.ownerId ?? ''} ownerName={book.ownerName} />

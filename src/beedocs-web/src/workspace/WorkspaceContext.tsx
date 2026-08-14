@@ -9,7 +9,8 @@ import {
   type ReactNode,
 } from 'react'
 import { api } from '../api'
-import type { Book, Chapter, DiagramSummary, PageSummary, Shelf } from '../types'
+import type { Book, Chapter, DiagramSummary, PageSummary, Shelf, SlideDeckSummary } from '../types'
+import { starterDeckSource } from '../slides/slideModel'
 import {
   selectionEquals,
   selectionFromRoute,
@@ -22,6 +23,7 @@ export type { TreeSelection } from './selection'
 export type TreeBook = Book & {
   pages: PageSummary[]
   diagrams: DiagramSummary[]
+  slideDecks: SlideDeckSummary[]
   chapters: Chapter[]
   expanded: boolean
   /** Expanded folder (chapter) ids within this book */
@@ -59,6 +61,8 @@ type WorkspaceCtx = {
   createPage: (bookId: string, title: string, chapterId?: string | null) => Promise<PageSummary>
   createFolder: (bookId: string, title: string) => Promise<Chapter>
   createDiagram: (bookId: string, title: string) => Promise<DiagramSummary>
+  /** Starts from a title slide carrying the deck's name. */
+  createSlideDeck: (bookId: string, title: string) => Promise<SlideDeckSummary>
   deleteBook: (bookId: string) => Promise<void>
   /** The shelf goes; its books return to the library root. */
   deleteShelf: (shelfId: string) => Promise<void>
@@ -68,6 +72,7 @@ type WorkspaceCtx = {
   deletePage: (pageId: string, bookId: string) => Promise<void>
   deleteFolder: (chapterId: string, bookId: string) => Promise<void>
   deleteDiagram: (diagramId: string, bookId: string) => Promise<void>
+  deleteSlideDeck: (deckId: string, bookId: string) => Promise<void>
   renameFolder: (chapterId: string, bookId: string, title: string) => Promise<void>
   /** Move page into folder (or root) and/or reorder among siblings */
   movePage: (args: {
@@ -136,7 +141,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const syncSelectionFromRoute = useCallback((params: RouteSelectionParams) => {
-    const key = `${params.view ?? ''}|${params.bookId ?? ''}|${params.pageId ?? ''}|${params.diagramId ?? ''}`
+    const key = `${params.view ?? ''}|${params.bookId ?? ''}|${params.pageId ?? ''}|${params.diagramId ?? ''}|${params.deckId ?? ''}`
     // Same route: keep tree-only selections (folders) that have no route of their own.
     if (lastRouteKeyRef.current === key) return
     lastRouteKeyRef.current = key
@@ -145,12 +150,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const loadChildren = async (bookId: string) => {
-    const [pages, diagrams, chapters] = await Promise.all([
+    const [pages, diagrams, slideDecks, chapters] = await Promise.all([
       api.listPages(bookId),
       api.listDiagrams(bookId),
+      api.listSlideDecks(bookId),
       api.listChapters(bookId),
     ])
-    return { pages, diagrams, chapters }
+    return { pages, diagrams, slideDecks, chapters }
   }
 
   const refreshTree = useCallback(async () => {
@@ -168,6 +174,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               ...b,
               pages: [],
               diagrams: [],
+              slideDecks: [],
               chapters: [],
               expanded: false,
               expandedFolders: new Set<string>(),
@@ -188,6 +195,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               ...b,
               pages: [],
               diagrams: [],
+              slideDecks: [],
               chapters: [],
               expanded: true,
               expandedFolders: new Set<string>(),
@@ -296,6 +304,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           ...book,
           pages: [],
           diagrams: [],
+          slideDecks: [],
           chapters: [],
           expanded: false,
           expandedFolders: new Set(),
@@ -465,6 +474,33 @@ graph LR
     return diagram
   }, [])
 
+  const createSlideDeck = useCallback(async (bookId: string, title: string) => {
+    const deck = await api.createSlideDeck(bookId, {
+      title,
+      source: starterDeckSource(title),
+    })
+    const summary: SlideDeckSummary = {
+      id: deck.id,
+      bookId: deck.bookId,
+      title: deck.title,
+      slideCount: 1,
+      updatedAt: deck.updatedAt,
+    }
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.id === bookId
+          ? {
+              ...b,
+              expanded: true,
+              slideDecks: [summary, ...b.slideDecks],
+            }
+          : b,
+      ),
+    )
+    setExpandedIds((s) => new Set(s).add(bookId))
+    return summary
+  }, [])
+
   const deleteBook = useCallback(
     async (bookId: string) => {
       const shelfId = books.find((b) => b.id === bookId)?.shelfId ?? null
@@ -517,6 +553,17 @@ graph LR
       prev.map((b) =>
         b.id === bookId
           ? { ...b, diagrams: b.diagrams.filter((d) => d.id !== diagramId) }
+          : b,
+      ),
+    )
+  }, [])
+
+  const deleteSlideDeck = useCallback(async (deckId: string, bookId: string) => {
+    await api.deleteSlideDeck(deckId)
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.id === bookId
+          ? { ...b, slideDecks: b.slideDecks.filter((d) => d.id !== deckId) }
           : b,
       ),
     )
@@ -629,6 +676,7 @@ graph LR
       createPage,
       createFolder,
       createDiagram,
+      createSlideDeck,
       deleteBook,
       deleteShelf,
       renameShelf,
@@ -636,6 +684,7 @@ graph LR
       deletePage,
       deleteFolder,
       deleteDiagram,
+      deleteSlideDeck,
       renameFolder,
       movePage,
       reorderFolder,
@@ -659,6 +708,7 @@ graph LR
       createPage,
       createFolder,
       createDiagram,
+      createSlideDeck,
       deleteBook,
       deleteShelf,
       renameShelf,
@@ -666,6 +716,7 @@ graph LR
       deletePage,
       deleteFolder,
       deleteDiagram,
+      deleteSlideDeck,
       renameFolder,
       movePage,
       reorderFolder,

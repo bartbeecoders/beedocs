@@ -28,6 +28,10 @@ shelf sits at the library root, which is where every book was before shelves
 existed. A shelf holds no content of its own, so deleting one returns its books
 to the root rather than cascading into them.
 
+Besides pages, a book also holds **diagrams** (BeeDiagram/Mermaid documents) and
+**slide decks** (PowerPoint-style presentations with a designer and a
+full-screen presentation mode — see [SLIDES.md](./SLIDES.md)).
+
 Every request through `/api` (and `/uploads`) passes one endpoint filter that
 resolves the caller — a session cookie, the shared `BeeDocs:ApiKey` for machines,
 or nobody — and checks its role. The filter is inert until
