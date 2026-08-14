@@ -104,7 +104,7 @@ export type PageHistory = {
 /** Server-rendered export formats. PDF is produced in the browser instead. */
 export type ExportFormat = 'archive' | 'markdown' | 'docx'
 
-export type SearchKind = 'page' | 'diagram' | 'book' | 'folder' | 'shelf'
+export type SearchKind = 'page' | 'diagram' | 'slides' | 'book' | 'folder' | 'shelf'
 
 /** Sentinels the API wraps matched terms in. Never present in stored content. */
 export const HIGHLIGHT_OPEN = '\ue000'
@@ -198,6 +198,7 @@ export type SearchStatus = {
   pending: number
   pages: number
   diagrams: number
+  slideDecks: number
   books: number
   folders: number
   shelves: number
@@ -271,6 +272,29 @@ export type DiagramSummary = {
 export type Diagram = DiagramSummary & {
   source: string
   createdAt: string
+}
+
+/**
+ * A PowerPoint-style presentation stored in a book next to pages and diagrams.
+ * `source` is a JSON slide document — see slides/slideModel.ts for the schema.
+ */
+export type SlideDeckSummary = {
+  id: string
+  bookId: string
+  title: string
+  /** Slides in the deck, counted server-side from the stored document. */
+  slideCount: number
+  updatedAt: string
+}
+
+/** The full deck. No `slideCount` — the client holding `source` can count for itself. */
+export type SlideDeck = {
+  id: string
+  bookId: string
+  title: string
+  source: string
+  createdAt: string
+  updatedAt: string
 }
 
 export type BeeNodeType = 'box' | 'person' | 'system' | 'database' | 'note' | 'image'

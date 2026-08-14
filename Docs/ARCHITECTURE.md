@@ -33,6 +33,10 @@ A shelf can also be served as a standalone website at
 pages, backed by `/api/bookshelf-serve/{name}`. `shelf.published` makes that
 site world-readable when sign-in is on.
 
+Besides pages, a book also holds **diagrams** (BeeDiagram/Mermaid documents) and
+**slide decks** (PowerPoint-style presentations with a designer and a
+full-screen presentation mode — see [SLIDES.md](./SLIDES.md)).
+
 Every request through `/api` (and `/uploads`) passes one endpoint filter that
 resolves the caller — a session cookie, the shared `BeeDocs:ApiKey` for machines,
 or nobody — and checks its role. The filter is inert until

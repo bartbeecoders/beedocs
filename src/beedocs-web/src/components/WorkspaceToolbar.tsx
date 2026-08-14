@@ -10,6 +10,7 @@ import { ImportDialog } from './ImportDialog'
 import { NamePromptDialog } from './NamePromptDialog'
 import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
+import type { SlideEditorState } from './SlideCanvas'
 
 export type WorkspaceView =
   | 'welcome'
@@ -17,6 +18,7 @@ export type WorkspaceView =
   | 'book'
   | 'page'
   | 'diagram'
+  | 'slides'
   | 'settings'
   | 'help'
 
@@ -26,8 +28,10 @@ type Props = {
   bookId?: string
   pageId?: string
   diagramId?: string
+  deckId?: string
   pageState?: PageEditorState | null
   diagramState?: DiagramEditorState | null
+  slideState?: SlideEditorState | null
 }
 
 type NamePrompt = {
@@ -119,6 +123,13 @@ const ICONS = {
       <path d="M5.5 5.1 10.2 5.6M5.2 5.6 7.2 10.2M11 6.2 9 10.2" stroke="currentColor" strokeWidth="1.25" />
     </Icon>
   ),
+  slides: (
+    <Icon>
+      <rect x="2.2" y="3" width="11.6" height="8" rx="1" stroke="currentColor" strokeWidth="1.35" />
+      <path d="M8 11v2.4M5.6 14.2l2.4-.8 2.4.8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M4.6 5.4h4.5M4.6 7.4h6.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </Icon>
+  ),
   settings: (
     <Icon>
       <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.35" />
@@ -154,8 +165,10 @@ export function WorkspaceToolbar({
   bookId,
   pageId,
   diagramId,
+  deckId,
   pageState,
   diagramState,
+  slideState,
 }: Props) {
   const {
     books,
@@ -169,10 +182,12 @@ export function WorkspaceToolbar({
     createPage,
     createFolder,
     createDiagram,
+    createSlideDeck,
     deleteBook,
     deletePage,
     deleteFolder,
     deleteDiagram,
+    deleteSlideDeck,
     renameFolder,
     movePage,
     refreshTree,
@@ -186,8 +201,19 @@ export function WorkspaceToolbar({
   const [namePrompt, setNamePrompt] = useState<NamePrompt | null>(null)
 
   const context = useMemo(
-    () => resolveToolbarContext(view, selection, books, shelves, shelfId, bookId, pageId, diagramId),
-    [view, selection, books, shelves, shelfId, bookId, pageId, diagramId],
+    () =>
+      resolveToolbarContext(
+        view,
+        selection,
+        books,
+        shelves,
+        shelfId,
+        bookId,
+        pageId,
+        diagramId,
+        deckId,
+      ),
+    [view, selection, books, shelves, shelfId, bookId, pageId, diagramId, deckId],
   )
 
   if (view === 'settings' || view === 'help') {
@@ -449,6 +475,24 @@ export function WorkspaceToolbar({
                 >
                   New diagram
                 </button>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: 'New slides',
+                      label: 'Presentation title',
+                      placeholder: 'e.g. Architecture review',
+                      confirmLabel: 'Create slides',
+                      run: async (title) => {
+                        const d = await createSlideDeck(context.bookId, title)
+                        void navigate(`/books/${context.bookId}/slides/${d.id}`)
+                      },
+                    })
+                  }
+                >
+                  New slides
+                </button>
               </Group>
               <Sep />
             </>
@@ -686,6 +730,58 @@ export function WorkspaceToolbar({
         </>
       )}
 
+      {context.kind === 'slides' && (
+        <>
+          <Group>
+            {(view !== 'slides' || deckId !== context.deckId) && (
+              <button
+                type="button"
+                className="btn primary sm"
+                onClick={() =>
+                  void navigate(`/books/${context.bookId}/slides/${context.deckId}`)
+                }
+              >
+                Open
+              </button>
+            )}
+            {view === 'slides' && deckId === context.deckId && slideState && (
+              <button
+                type="button"
+                className="btn primary sm"
+                onClick={() => slideState.present()}
+                title="Start the presentation"
+              >
+                ▶ Present
+              </button>
+            )}
+          </Group>
+          {slideState?.dirty && (
+            <>
+              <Sep />
+              <span className="ws-toolbar-status muted sm">Unsaved changes</span>
+            </>
+          )}
+          <span className="ws-toolbar-spacer" />
+          {canWrite && (
+            <Group>
+              <button
+                type="button"
+                className="btn ghost danger sm"
+                onClick={() => {
+                  if (!confirm(`Delete slide deck “${context.title}”?`)) return
+                  void deleteSlideDeck(context.deckId, context.bookId).then(() => {
+                    setSelection({ kind: 'book', bookId: context.bookId })
+                    if (deckId === context.deckId) void navigate(`/books/${context.bookId}`)
+                  })
+                }}
+              >
+                Delete slides
+              </button>
+            </Group>
+          )}
+        </>
+      )}
+
       {importOpen && (
         <ImportDialog
           defaultTargetBookId={importOpen.targetBookId}
@@ -714,6 +810,7 @@ type BookLike = {
   title: string
   pages: { id: string; title: string; chapterId?: string | null }[]
   diagrams: { id: string; title: string }[]
+  slideDecks: { id: string; title: string }[]
   chapters: { id: string; title: string }[]
 }
 
@@ -760,6 +857,14 @@ type ToolbarContext =
       diagramId: string
       dirtyHint?: string
     }
+  | {
+      kind: 'slides'
+      icon: ReactNode
+      title: string
+      bookId: string
+      deckId: string
+      dirtyHint?: string
+    }
 
 /**
  * Prefer explicit tree selection (esp. folders); fall back to route params.
@@ -773,6 +878,7 @@ function resolveToolbarContext(
   bookId?: string,
   pageId?: string,
   diagramId?: string,
+  deckId?: string,
 ): ToolbarContext {
   if (selection.kind === 'folder') {
     const book = books.find((b) => b.id === selection.bookId)
@@ -812,6 +918,20 @@ function resolveToolbarContext(
       title: diagram?.title ?? 'Diagram',
       bookId: bId,
       diagramId: dId,
+    }
+  }
+
+  if (selection.kind === 'slides' || (view === 'slides' && bookId && deckId)) {
+    const bId = selection.kind === 'slides' ? selection.bookId : bookId!
+    const dId = selection.kind === 'slides' ? selection.deckId : deckId!
+    const book = books.find((b) => b.id === bId)
+    const deck = book?.slideDecks.find((d) => d.id === dId)
+    return {
+      kind: 'slides',
+      icon: ICONS.slides,
+      title: deck?.title ?? 'Slides',
+      bookId: bId,
+      deckId: dId,
     }
   }
 

@@ -13,6 +13,7 @@ import {
 const KIND_GROUPS: { kind: SearchKind; label: string }[] = [
   { kind: 'page', label: 'Pages' },
   { kind: 'diagram', label: 'Diagrams' },
+  { kind: 'slides', label: 'Slides' },
   { kind: 'book', label: 'Books' },
   { kind: 'folder', label: 'Folders' },
   { kind: 'shelf', label: 'Shelves' },
@@ -21,6 +22,7 @@ const KIND_GROUPS: { kind: SearchKind; label: string }[] = [
 const KIND_ICON: Record<SearchKind, string> = {
   page: '\u{1F4C4}',
   diagram: '\u2B21',
+  slides: '\u{1F39E}\uFE0F',
   book: '\u{1F4D8}',
   folder: '\u{1F4C1}',
   shelf: '\u{1F4DA}',

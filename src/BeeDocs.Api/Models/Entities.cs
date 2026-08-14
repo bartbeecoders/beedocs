@@ -144,6 +144,25 @@ public sealed class Diagram
 }
 
 /// <summary>
+/// A PowerPoint-style presentation: an ordered set of slides stored as one JSON
+/// document. Lives in a book next to pages and diagrams.
+/// </summary>
+public sealed class SlideDeck
+{
+    public string Id { get; set; } = string.Empty;
+    /// <summary>Owning book (required for library listing).</summary>
+    public string BookId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    /// <summary>
+    /// JSON document: <c>{"version":1,"size":{…},"theme":{…},"slides":[…]}</c> —
+    /// see <c>src/beedocs-web/src/slides/slideModel.ts</c> for the schema.
+    /// </summary>
+    public string Source { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
 /// A configured OpenAI-compatible chat endpoint. Every supported provider speaks
 /// the same wire format, so only the base URL and the auth differ.
 /// </summary>

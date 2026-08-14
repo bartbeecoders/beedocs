@@ -307,6 +307,37 @@ public sealed record UpdateDiagramRequest(
     string? PageId
 );
 
+public sealed record SlideDeckDto(
+    string Id,
+    string BookId,
+    string Title,
+    /// <summary>JSON slide document — see src/beedocs-web/src/slides/slideModel.ts.</summary>
+    string Source,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="SlideCount">Slides in the deck, counted from the stored document.</param>
+public sealed record SlideDeckSummaryDto(
+    string Id,
+    string BookId,
+    string Title,
+    int SlideCount,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="Source">Omit to start with a single blank slide.</param>
+public sealed record CreateSlideDeckRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Source
+);
+
+/// <param name="Source">null leaves the stored document untouched.</param>
+public sealed record UpdateSlideDeckRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Source
+);
+
 public sealed record ShapeCollectionDto(
     string Id,
     /// <summary>Owning book, or null when the collection is app-wide.</summary>
@@ -338,7 +369,7 @@ public sealed record UpdateShapeCollectionRequest(
     string? Source
 );
 
-/// <param name="Kind">shelf, book, folder, page or diagram.</param>
+/// <param name="Kind">shelf, book, folder, page, diagram or slides.</param>
 /// <param name="Snippet">Matching excerpt. Matched terms are wrapped in U+E000/U+E001.</param>
 /// <param name="Url">Workspace route for the hit.</param>
 /// <param name="Score">bm25 rank — lower is a better match.</param>
@@ -373,6 +404,7 @@ public sealed record SearchStatusDto(
     int Pending,
     int Pages,
     int Diagrams,
+    int SlideDecks,
     int Books,
     int Folders,
     int Shelves,

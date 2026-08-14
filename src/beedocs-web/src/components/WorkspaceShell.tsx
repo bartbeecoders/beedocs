@@ -11,6 +11,7 @@ import { NavTree } from './NavTree'
 import { ResizablePane } from './ResizablePane'
 import { PageCanvas, type PageEditorState } from './PageCanvas'
 import { DiagramCanvas, type DiagramEditorState } from './DiagramCanvas'
+import { SlideCanvas, type SlideEditorState } from './SlideCanvas'
 import { PropertiesPane } from './PropertiesPane'
 import { SettingsPanel } from './SettingsPanel'
 import { HelpPanel } from './HelpPanel'
@@ -27,6 +28,7 @@ export function WorkspaceShell() {
   const [layout, setLayout] = useState<PaneLayout>(() => loadPaneLayout())
   const [pageState, setPageState] = useState<PageEditorState | null>(null)
   const [diagramState, setDiagramState] = useState<DiagramEditorState | null>(null)
+  const [slideState, setSlideState] = useState<SlideEditorState | null>(null)
   const [version, setVersion] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
 
@@ -63,10 +65,18 @@ export function WorkspaceShell() {
     if (location.pathname.startsWith('/help')) return 'help' as const
     if (params.pageId) return 'page' as const
     if (params.diagramId) return 'diagram' as const
+    if (params.deckId) return 'slides' as const
     if (params.bookId) return 'book' as const
     if (params.shelfId) return 'shelf' as const
     return 'welcome' as const
-  }, [location.pathname, params.shelfId, params.bookId, params.pageId, params.diagramId])
+  }, [
+    location.pathname,
+    params.shelfId,
+    params.bookId,
+    params.pageId,
+    params.diagramId,
+    params.deckId,
+  ])
 
   // Keep toolbar selection aligned with the route (folders stick until route changes).
   useEffect(() => {
@@ -76,6 +86,7 @@ export function WorkspaceShell() {
       bookId: params.bookId,
       pageId: params.pageId,
       diagramId: params.diagramId,
+      deckId: params.deckId,
     })
   }, [
     view,
@@ -83,6 +94,7 @@ export function WorkspaceShell() {
     params.bookId,
     params.pageId,
     params.diagramId,
+    params.deckId,
     syncSelectionFromRoute,
   ])
 
@@ -117,6 +129,9 @@ export function WorkspaceShell() {
       } else if (params.diagramId) {
         const diagram = book.diagrams.find((d) => d.id === params.diagramId)
         crumbs.push({ label: diagram?.title ?? diagramState?.title ?? 'Diagram' })
+      } else if (params.deckId) {
+        const deck = book.slideDecks.find((d) => d.id === params.deckId)
+        crumbs.push({ label: deck?.title ?? slideState?.title ?? 'Slides' })
       }
     }
     return crumbs
@@ -128,8 +143,10 @@ export function WorkspaceShell() {
     params.bookId,
     params.pageId,
     params.diagramId,
+    params.deckId,
     pageState?.title,
     diagramState?.title,
+    slideState?.title,
   ])
 
   return (
@@ -189,8 +206,10 @@ export function WorkspaceShell() {
         bookId={params.bookId}
         pageId={params.pageId}
         diagramId={params.diagramId}
+        deckId={params.deckId}
         pageState={pageState}
         diagramState={diagramState}
+        slideState={slideState}
       />
 
       <div className="ws-body">
@@ -224,6 +243,7 @@ export function WorkspaceShell() {
           {view === 'book' && <BookOverview bookId={params.bookId!} />}
           {view === 'page' && <PageCanvas onStateChange={setPageState} />}
           {view === 'diagram' && <DiagramCanvas onStateChange={setDiagramState} />}
+          {view === 'slides' && <SlideCanvas onStateChange={setSlideState} />}
         </main>
 
         <ResizablePane
@@ -236,7 +256,12 @@ export function WorkspaceShell() {
           onResize={(rightWidth) => patchLayout({ rightWidth })}
           onToggle={() => patchLayout({ rightCollapsed: !layout.rightCollapsed })}
         >
-          <PropertiesPane pageState={pageState} diagramState={diagramState} view={view} />
+          <PropertiesPane
+            pageState={pageState}
+            diagramState={diagramState}
+            slideState={slideState}
+            view={view}
+          />
         </ResizablePane>
       </div>
 
@@ -438,9 +463,9 @@ function ShelfOverview({ shelfId }: { shelfId: string }) {
 function BookOverview({ bookId }: { bookId: string }) {
   const navigate = useNavigate()
   const { canWrite } = useAuth()
-  const { books, createPage, createDiagram } = useWorkspace()
+  const { books, createPage, createDiagram, createSlideDeck } = useWorkspace()
   const book = books.find((b) => b.id === bookId)
-  const [prompt, setPrompt] = useState<'page' | 'diagram' | null>(null)
+  const [prompt, setPrompt] = useState<'page' | 'diagram' | 'slides' | null>(null)
 
   if (!book) {
     return <div className="canvas-message muted">Loading book…</div>
@@ -462,6 +487,10 @@ function BookOverview({ bookId }: { bookId: string }) {
           <span className="stat-value">{book.diagrams.length}</span>
           <span className="stat-label">Diagrams</span>
         </div>
+        <div className="stat">
+          <span className="stat-value">{book.slideDecks.length}</span>
+          <span className="stat-label">Slide decks</span>
+        </div>
       </div>
       <p className="muted">
         Choose a page or diagram from the tree to open it in the editor. Properties appear on the
@@ -474,6 +503,9 @@ function BookOverview({ bookId }: { bookId: string }) {
           </button>
           <button type="button" className="btn sm" onClick={() => setPrompt('diagram')}>
             New diagram
+          </button>
+          <button type="button" className="btn sm" onClick={() => setPrompt('slides')}>
+            New slides
           </button>
         </div>
       )}
@@ -499,6 +531,18 @@ function BookOverview({ bookId }: { bookId: string }) {
         onSubmit={async (title) => {
           const d = await createDiagram(bookId, title)
           void navigate(`/books/${bookId}/diagrams/${d.id}`)
+        }}
+        onClose={() => setPrompt(null)}
+      />
+      <NamePromptDialog
+        open={prompt === 'slides'}
+        title="New slides"
+        label="Presentation title"
+        placeholder="e.g. Architecture review"
+        confirmLabel="Create slides"
+        onSubmit={async (title) => {
+          const d = await createSlideDeck(bookId, title)
+          void navigate(`/books/${bookId}/slides/${d.id}`)
         }}
         onClose={() => setPrompt(null)}
       />

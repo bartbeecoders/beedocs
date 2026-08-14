@@ -1,7 +1,7 @@
 /**
  * Lightweight library selection for the contextual workspace toolbar.
- * Route params drive page/diagram/book selection; folders only exist in the tree
- * (no route), so they rely on explicit setSelection from NavTree clicks.
+ * Route params drive page/diagram/slides/book selection; folders only exist in
+ * the tree (no route), so they rely on explicit setSelection from NavTree clicks.
  */
 
 export type TreeSelection =
@@ -11,12 +11,14 @@ export type TreeSelection =
   | { kind: 'folder'; bookId: string; chapterId: string }
   | { kind: 'page'; bookId: string; pageId: string }
   | { kind: 'diagram'; bookId: string; diagramId: string }
+  | { kind: 'slides'; bookId: string; deckId: string }
 
 export type RouteSelectionParams = {
   shelfId?: string
   bookId?: string
   pageId?: string
   diagramId?: string
+  deckId?: string
   /** 'settings' | 'help' | other workspace views — clears structural selection */
   view?: string
 }
@@ -34,6 +36,9 @@ export function selectionFromRoute(params: RouteSelectionParams): TreeSelection 
   }
   if (params.bookId && params.diagramId) {
     return { kind: 'diagram', bookId: params.bookId, diagramId: params.diagramId }
+  }
+  if (params.bookId && params.deckId) {
+    return { kind: 'slides', bookId: params.bookId, deckId: params.deckId }
   }
   if (params.bookId) {
     return { kind: 'book', bookId: params.bookId }
@@ -60,5 +65,7 @@ export function selectionEquals(a: TreeSelection, b: TreeSelection): boolean {
       return (
         b.kind === 'diagram' && a.bookId === b.bookId && a.diagramId === b.diagramId
       )
+    case 'slides':
+      return b.kind === 'slides' && a.bookId === b.bookId && a.deckId === b.deckId
   }
 }

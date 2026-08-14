@@ -32,7 +32,7 @@ public sealed record SearchQuery(
 );
 
 /// <summary>
-/// Full-text search over shelves, books, folders, pages and diagrams.
+/// Full-text search over shelves, books, folders, pages, diagrams and slide decks.
 ///
 /// The index is a plain <c>search_doc</c> table holding extracted text, with an
 /// FTS5 table mirroring it for matching and ranking. Writes never go through this
@@ -179,6 +179,12 @@ public sealed partial class SearchIndexService(
             WHERE d.id IS NULL OR d.updated_at <> x.updated_at;
 
             INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+            SELECT 'slides', s.id, 'upsert', datetime('now')
+            FROM slide_deck s
+            LEFT JOIN search_doc d ON d.kind = 'slides' AND d.entity_id = s.id
+            WHERE d.id IS NULL OR d.updated_at <> s.updated_at;
+
+            INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
             SELECT 'book', b.id, 'upsert', datetime('now')
             FROM book b
             LEFT JOIN search_doc d ON d.kind = 'book' AND d.entity_id = b.id
@@ -201,6 +207,7 @@ public sealed partial class SearchIndexService(
             FROM search_doc d
             WHERE (d.kind = 'page'    AND NOT EXISTS (SELECT 1 FROM page    WHERE id = d.entity_id))
                OR (d.kind = 'diagram' AND NOT EXISTS (SELECT 1 FROM diagram WHERE id = d.entity_id))
+               OR (d.kind = 'slides'  AND NOT EXISTS (SELECT 1 FROM slide_deck WHERE id = d.entity_id))
                OR (d.kind = 'book'    AND NOT EXISTS (SELECT 1 FROM book    WHERE id = d.entity_id))
                OR (d.kind = 'folder'  AND NOT EXISTS (SELECT 1 FROM chapter WHERE id = d.entity_id))
                OR (d.kind = 'shelf'   AND NOT EXISTS (SELECT 1 FROM shelf   WHERE id = d.entity_id));
@@ -287,6 +294,7 @@ public sealed partial class SearchIndexService(
         {
             "page" => "SELECT title, content, book_id, chapter_id, updated_at FROM page WHERE id = $id",
             "diagram" => "SELECT title, source, book_id, kind, updated_at FROM diagram WHERE id = $id",
+            "slides" => "SELECT title, source, book_id, updated_at FROM slide_deck WHERE id = $id",
             "book" => "SELECT title, description, updated_at FROM book WHERE id = $id",
             "folder" => "SELECT title, book_id, updated_at FROM chapter WHERE id = $id",
             "shelf" => "SELECT title, description, updated_at FROM shelf WHERE id = $id",
@@ -317,6 +325,14 @@ public sealed partial class SearchIndexService(
                     SqliteHelpers.GetNullableString(reader, 3),
                     SqliteHelpers.GetNullableString(reader, 1)),
                 reader.GetString(4)),
+
+            "slides" => new IndexDoc(
+                kind, id,
+                SqliteHelpers.GetNullableString(reader, 2),
+                null,
+                reader.GetString(0),
+                SearchText.FromSlideDeckSource(SqliteHelpers.GetNullableString(reader, 1)),
+                reader.GetString(3)),
 
             "book" => new IndexDoc(
                 kind, id, id, null,
@@ -536,6 +552,7 @@ public sealed partial class SearchIndexService(
     {
         "page" when bookId is not null => $"/books/{bookId}/pages/{entityId}",
         "diagram" when bookId is not null => $"/books/{bookId}/diagrams/{entityId}",
+        "slides" when bookId is not null => $"/books/{bookId}/slides/{entityId}",
         "folder" when bookId is not null => $"/books/{bookId}",
         "book" => $"/books/{entityId}",
         "shelf" => $"/shelves/{entityId}",
@@ -684,6 +701,7 @@ public sealed partial class SearchIndexService(
               (SELECT COUNT(*) FROM search_queue),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'page'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'diagram'),
+              (SELECT COUNT(*) FROM search_doc WHERE kind = 'slides'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'book'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'folder'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'shelf'),
@@ -691,9 +709,9 @@ public sealed partial class SearchIndexService(
             """;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))
-            return new SearchStatusDto(_fts ? "fts5" : "like", 0, 0, 0, 0, 0, 0, 0, null);
+            return new SearchStatusDto(_fts ? "fts5" : "like", 0, 0, 0, 0, 0, 0, 0, 0, null);
 
-        var lastIndexed = SqliteHelpers.GetNullableString(reader, 7) is { } raw
+        var lastIndexed = SqliteHelpers.GetNullableString(reader, 8) is { } raw
             && DateTimeOffset.TryParse(raw, out var parsed)
                 ? parsed
                 : (DateTimeOffset?)null;
@@ -704,9 +722,10 @@ public sealed partial class SearchIndexService(
             Pending: reader.GetInt32(1),
             Pages: reader.GetInt32(2),
             Diagrams: reader.GetInt32(3),
-            Books: reader.GetInt32(4),
-            Folders: reader.GetInt32(5),
-            Shelves: reader.GetInt32(6),
+            SlideDecks: reader.GetInt32(4),
+            Books: reader.GetInt32(5),
+            Folders: reader.GetInt32(6),
+            Shelves: reader.GetInt32(7),
             LastIndexedAt: lastIndexed);
     }
 }
