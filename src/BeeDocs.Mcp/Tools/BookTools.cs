@@ -56,16 +56,17 @@ public sealed class BookTools(BeeDocsApiClient client)
         });
 
     [McpServerTool(Name = "beedocs_get_book_tree", Title = "Get book tree"),
-     Description("Return folders (chapters) and pages grouped for tree navigation (root pages + per-folder pages + diagrams).")]
+     Description("Return folders (chapters) and pages grouped for tree navigation (root pages + per-folder pages + diagrams + slide decks).")]
     public Task<string> GetBookTree(string bookId, CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () => ToolHelpers.Json(await BuildTreeAsync(client, bookId, ct)));
 
     [McpServerTool(Name = "beedocs_export_book", Title = "Export book (structured)"),
-     Description("Export one book with chapters, full pages, and diagrams as JSON. Prefer this before generating PDF/HTML offline.")]
+     Description("Export one book with chapters, full pages, diagrams, and slide decks as JSON. Prefer this before generating PDF/HTML offline.")]
     public Task<string> ExportBook(
         string bookId,
         [Description("Default true")] bool includePageContent = true,
         [Description("Default true")] bool includeDiagramSource = true,
+        [Description("Default true")] bool includeSlideSource = true,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
         {
@@ -94,6 +95,15 @@ public sealed class BookTools(BeeDocsApiClient client)
                     : d);
             }
 
+            var slideDecksSummary = await client.ListSlideDecksAsync(bookId, ct);
+            var slideDecks = new List<JsonElement>();
+            foreach (var s in slideDecksSummary.EnumerateArray())
+            {
+                slideDecks.Add(includeSlideSource
+                    ? await client.GetSlideDeckAsync(BeeDocsApiClient.Prop(s, "id"), ct)
+                    : s);
+            }
+
             return ToolHelpers.Json(new
             {
                 exportedAt = DateTimeOffset.UtcNow.ToString("O"),
@@ -101,6 +111,7 @@ public sealed class BookTools(BeeDocsApiClient client)
                 chapters,
                 pages,
                 diagrams,
+                slideDecks,
                 note = "Open the book in the BeeDocs UI and use Export PDF for a browser print-to-PDF. This tool returns structured content for agents.",
             });
         });
@@ -111,7 +122,8 @@ public sealed class BookTools(BeeDocsApiClient client)
         var chaptersTask = client.ListChaptersAsync(bookId, ct);
         var pagesTask = client.ListPagesAsync(bookId, ct);
         var diagramsTask = client.ListDiagramsAsync(bookId, ct);
-        await Task.WhenAll(bookTask, chaptersTask, pagesTask, diagramsTask);
+        var slideDecksTask = client.ListSlideDecksAsync(bookId, ct);
+        await Task.WhenAll(bookTask, chaptersTask, pagesTask, diagramsTask, slideDecksTask);
 
         var book = await bookTask;
         var chapters = (await chaptersTask).EnumerateArray()
@@ -141,6 +153,7 @@ public sealed class BookTools(BeeDocsApiClient client)
             folders,
             rootPages = sortedPages.Where(p => string.IsNullOrEmpty(BeeDocsApiClient.PropStringOrNull(p, "chapterId"))).ToList(),
             diagrams = await diagramsTask,
+            slideDecks = await slideDecksTask,
         };
     }
 }

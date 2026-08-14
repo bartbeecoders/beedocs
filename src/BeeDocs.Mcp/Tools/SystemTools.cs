@@ -29,7 +29,7 @@ public sealed class SystemTools(BeeDocsApiClient client)
     public string GetApiInfo() => ToolHelpers.Json(new
     {
         apiBaseUrl = client.BaseUrl,
-        entities = new[] { "shelf", "book", "chapter (folder)", "page", "diagram", "upload" },
+        entities = new[] { "shelf", "book", "chapter (folder)", "page", "diagram", "slide deck", "upload" },
         hierarchy = "shelf → book → chapter (folder) → page. Only the book level is required: "
             + "a book sits on at most one shelf, and an unshelved book sits at the library root.",
         diagramKinds = new[] { "beediagram", "mermaid", "c4", "plantuml" },
@@ -91,11 +91,18 @@ public sealed class SystemTools(BeeDocsApiClient client)
             excelgrid = "```excelgrid\\n{\"version\":1,\"rowCount\":16,\"colCount\":8,\"cells\":[{\"r\":0,\"c\":0,\"v\":\"Item\"}]}\\n```",
             image = "![alt](/uploads/...)",
         },
+        slides = new
+        {
+            model = "A deck is ordered slides of positioned elements (text/shape/image) on a 1280×720 canvas; element array order is z-order.",
+            shapes = new[] { "rect", "rounded", "ellipse", "triangle", "diamond", "star", "arrow", "line" },
+            tools = "beedocs_create_slide_deck_with_slides / beedocs_update_slide_deck_slides (structured), or raw JSON via beedocs_create_slide_deck",
+        },
         capabilities = new
         {
             folders = "chapters group pages; beedocs_create_chapter / update / delete / move_page",
             images = "beedocs_upload_image then embed Markdown or image nodes",
             diagrams = "beedocs_list_diagram_shapes for the shape/Azure-stencil catalog, then beedocs_create_beediagram_with_nodes / beedocs_update_beediagram_nodes",
+            slides = "beedocs_create_slide_deck_with_slides for presentations; present from the UI at /books/{bookId}/slides/{deckId}",
             export = "beedocs_export_book or beedocs_export_library_snapshot",
         },
         suggestedWorkflow = new[]

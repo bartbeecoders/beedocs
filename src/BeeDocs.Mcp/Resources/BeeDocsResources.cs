@@ -41,7 +41,7 @@ public sealed class BeeDocsResources(BeeDocsApiClient client)
     }
 
     [McpServerResource(UriTemplate = "beedocs://books/{bookId}/tree", Name = "beedocs-book-tree", MimeType = "application/json")]
-    [Description("Folders with nested pages, root pages, and diagrams.")]
+    [Description("Folders with nested pages, root pages, diagrams, and slide decks.")]
     public async Task<TextResourceContents> BookTree(string bookId, CancellationToken ct = default)
     {
         var tree = await BookTools.BuildTreeAsync(client, bookId, ct);
@@ -76,6 +76,14 @@ public sealed class BeeDocsResources(BeeDocsApiClient client)
     {
         var diagram = await client.GetDiagramAsync(diagramId, ct);
         return Text($"beedocs://diagrams/{diagramId}", diagram);
+    }
+
+    [McpServerResource(UriTemplate = "beedocs://slides/{deckId}", Name = "beedocs-slide-deck", MimeType = "application/json")]
+    [Description("Full slide deck including its JSON document.")]
+    public async Task<TextResourceContents> SlideDeck(string deckId, CancellationToken ct = default)
+    {
+        var deck = await client.GetSlideDeckAsync(deckId, ct);
+        return Text($"beedocs://slides/{deckId}", deck);
     }
 
     private static TextResourceContents Text(string uri, System.Text.Json.JsonElement data) => new()

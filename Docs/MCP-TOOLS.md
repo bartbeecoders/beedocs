@@ -23,7 +23,7 @@ says rather than what it is called.
 
 | Tool | Args | Description |
 |------|------|-------------|
-| `beedocs_search` | `query`, `limit?`, `offset?`, `bookId?`, `kinds?` | Search shelves, books, folders, pages and diagram labels |
+| `beedocs_search` | `query`, `limit?`, `offset?`, `bookId?`, `kinds?` | Search shelves, books, folders, pages, diagram labels and slide text/notes |
 | `beedocs_search_status` | — | Engine, document counts by kind, queued changes |
 | `beedocs_reindex` | — | Rebuild the index from stored documents (recovery only) |
 
@@ -60,8 +60,8 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_create_book` | `title`, `description?`, `slug?`, `shelfId?` | Create book (optionally on a shelf) |
 | `beedocs_update_book` | `bookId`, `title`, `description?`, `slug?`, `sortOrder?`, `shelfId?` | Update book (omitted fields are left alone; `shelfId: ""` unshelves) |
 | `beedocs_delete_book` | `bookId` | Delete book (+ cascade pages/chapters) |
-| `beedocs_get_book_tree` | `bookId` | Folders + root pages + diagrams tree |
-| `beedocs_export_book` | `bookId`, `includePageContent?`, `includeDiagramSource?` | Structured export of one book |
+| `beedocs_get_book_tree` | `bookId` | Folders + root pages + diagrams + slide decks tree |
+| `beedocs_export_book` | `bookId`, `includePageContent?`, `includeDiagramSource?`, `includeSlideSource?` | Structured export of one book |
 
 ### Chapters (folders)
 
@@ -135,6 +135,36 @@ Typical Azure flow: `beedocs_list_diagram_shapes` (`section="azure"`, plus
 `shape="container"` boundary nodes and `shape="azure"` + `icon` service nodes
 linked by `parentId` → `beedocs_embed_diagram_in_page`.
 
+### Slides
+
+| Tool | Args | Description |
+|------|------|-------------|
+| `beedocs_list_slide_decks` | `bookId` | Deck summaries incl. `slideCount` |
+| `beedocs_get_slide_deck` | `deckId` | Full deck + JSON document |
+| `beedocs_create_slide_deck` | `bookId`, `title`, `source?` | Raw JSON create; omit `source` for one blank slide |
+| `beedocs_update_slide_deck` | `deckId`, `title?`, `source?` | Update title and/or document (null keeps current) |
+| `beedocs_delete_slide_deck` | `deckId` | Delete deck |
+| `beedocs_create_slide_deck_with_slides` | `bookId`, `title`, `slides[]`, `theme?` | Structured create — validated slides/elements |
+| `beedocs_update_slide_deck_slides` | `deckId`, `slides[]`, `title?`, `theme?` | Replace slides with the same structured model |
+
+#### Structured slides
+
+Each slide is `{ id?, background?, notes?, elements[] }` on a 1280×720 canvas;
+**element array order is z-order** (later draws on top). Elements:
+
+| Element field | Notes |
+|---------------|-------|
+| `kind` | `text` (default) \| `shape` \| `image` |
+| `x`/`y`, `w`/`h` | Slide coordinates; unplaced elements stack downwards |
+| `text`, `fontSize`, `bold`, `italic`, `underline`, `align`, `valign`, `color` | Text content and styling — also the label inside a shape |
+| `shape` | `rect` (default) \| `rounded` \| `ellipse` \| `triangle` \| `diamond` \| `star` \| `arrow` \| `line` |
+| `fill`, `stroke`, `strokeWidth`, `opacity`, `rotation` | Shape appearance |
+| `imageUrl` | Required for `kind=image` — an `/uploads/…` URL from `beedocs_upload_image` |
+
+Deck-wide `theme` sets `background`, `color`, `accent`, `fontFamily`; slide
+`notes` are speaker notes (indexed for search, never rendered). The full
+document format is documented in [SLIDES.md](./SLIDES.md).
+
 ### Library
 
 | Tool | Args | Description |
@@ -159,10 +189,11 @@ linked by `parentId` → `beedocs_embed_diagram_in_page`.
 | `beedocs://books/{bookId}` | Book metadata |
 | `beedocs://books/{bookId}/pages` | Page summaries |
 | `beedocs://books/{bookId}/chapters` | Folder list |
-| `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams |
+| `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams + slide decks |
 | `beedocs://pages/{pageId}` | Full page |
 | `beedocs://diagram/catalog` | Every shape, Azure stencil, palette group, anchor, route and arrow head |
 | `beedocs://diagrams/{diagramId}` | Full diagram |
+| `beedocs://slides/{deckId}` | Full slide deck |
 
 ---
 

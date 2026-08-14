@@ -104,6 +104,21 @@ public sealed class BeeDocsApiClient(HttpClient http)
     public Task DeleteDiagramAsync(string id, CancellationToken ct = default)
         => SendAsync(HttpMethod.Delete, $"/api/diagrams/{Uri.EscapeDataString(id)}", null, ct);
 
+    public Task<JsonElement> ListSlideDecksAsync(string bookId, CancellationToken ct = default)
+        => GetAsync($"/api/books/{Uri.EscapeDataString(bookId)}/slides", ct);
+
+    public Task<JsonElement> GetSlideDeckAsync(string id, CancellationToken ct = default)
+        => GetAsync($"/api/slides/{Uri.EscapeDataString(id)}", ct);
+
+    public Task<JsonElement> CreateSlideDeckAsync(string bookId, object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Post, $"/api/books/{Uri.EscapeDataString(bookId)}/slides", body, ct);
+
+    public Task<JsonElement> UpdateSlideDeckAsync(string id, object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Put, $"/api/slides/{Uri.EscapeDataString(id)}", body, ct);
+
+    public Task DeleteSlideDeckAsync(string id, CancellationToken ct = default)
+        => SendAsync(HttpMethod.Delete, $"/api/slides/{Uri.EscapeDataString(id)}", null, ct);
+
     public async Task<JsonElement> UploadImageAsync(
         string base64,
         string fileName,

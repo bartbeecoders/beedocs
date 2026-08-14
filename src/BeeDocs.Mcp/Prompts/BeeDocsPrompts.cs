@@ -57,6 +57,30 @@ public sealed class BeeDocsPrompts
         return new ChatMessage(ChatRole.User, text);
     }
 
+    [McpServerPrompt(Name = "beedocs_create_presentation", Title = "Create a slide presentation"),
+     Description("Create a PowerPoint-style slide deck in a book, optionally sourced from existing pages.")]
+    public static ChatMessage CreatePresentation(
+        string bookId,
+        string deckTitle,
+        [Description("What the presentation should cover (topics, audience, existing pages to draw from)")] string description)
+    {
+        var text = string.Join('\n',
+            $"Create slide deck \"{deckTitle}\" in BeeDocs book {bookId}.",
+            "",
+            "1. If the deck should summarise existing content, read it first (beedocs_get_book_tree,",
+            "   beedocs_get_page) so slides reflect what the book actually says.",
+            "2. beedocs_create_slide_deck_with_slides with structured slides on a 1280×720 canvas:",
+            "   a title slide, then one idea per slide — a heading (fontSize ~44, bold) plus a few",
+            "   short bullet lines (fontSize ~24), not paragraphs. Put detail in each slide's notes.",
+            "3. Shapes (rect/rounded/ellipse/arrow/…) make simple visuals; element order is z-order.",
+            "   Images need an /uploads/… URL from beedocs_upload_image.",
+            "4. Return the deck's workspace URL so the author can open the designer and present.",
+            "",
+            "Presentation intent:",
+            description);
+        return new ChatMessage(ChatRole.User, text);
+    }
+
     [McpServerPrompt(Name = "beedocs_write_runbook_page", Title = "Write an ops runbook page"),
      Description("Create or update a runbook-style Markdown page in a book.")]
     public static ChatMessage WriteRunbookPage(string bookId, string topic)
