@@ -54,6 +54,12 @@
   position: relative;
 }
 
+/* Same menu, anchored to the right edge — for buttons at a toolbar's end. */
+.slide-shape-popover.slide-export-popover {
+  left: auto;
+  right: 0;
+}
+
 .slide-shape-popover {
   position: absolute;
   top: calc(100% + 4px);

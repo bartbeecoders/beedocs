@@ -327,14 +327,44 @@ public sealed record SlideDeckSummaryDto(
 );
 
 /// <param name="Source">Omit to start with a single blank slide.</param>
+/// <param name="TemplateId">Start from a saved template; ignored when <paramref name="Source"/> is given.</param>
 public sealed record CreateSlideDeckRequest(
     [property: Required, MinLength(1)] string Title,
-    string? Source
+    string? Source,
+    string? TemplateId = null
 );
 
 /// <param name="Source">null leaves the stored document untouched.</param>
 public sealed record UpdateSlideDeckRequest(
     [property: Required, MinLength(1)] string Title,
+    string? Source
+);
+
+public sealed record SlideTemplateDto(
+    string Id,
+    string Name,
+    /// <summary>Deck JSON document — same schema as <see cref="SlideDeckDto.Source"/>.</summary>
+    string Source,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="SlideCount">Slides in the template, counted from the stored document.</param>
+public sealed record SlideTemplateSummaryDto(
+    string Id,
+    string Name,
+    int SlideCount,
+    DateTimeOffset UpdatedAt
+);
+
+public sealed record CreateSlideTemplateRequest(
+    [property: Required, MinLength(1)] string Name,
+    [property: Required, MinLength(1)] string Source
+);
+
+/// <param name="Source">null keeps the stored layout (rename only).</param>
+public sealed record UpdateSlideTemplateRequest(
+    [property: Required, MinLength(1)] string Name,
     string? Source
 );
 

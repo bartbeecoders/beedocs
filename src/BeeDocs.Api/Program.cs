@@ -56,6 +56,8 @@ builder.Services.AddSingleton<IUserService>(sp =>
 builder.Services.AddSingleton<IDocumentService, DocumentService>();
 builder.Services.AddSingleton<IDiagramService, DiagramService>();
 builder.Services.AddSingleton<ISlideDeckService, SlideDeckService>();
+builder.Services.AddSingleton<ISlideTemplateService, SlideTemplateService>();
+builder.Services.AddSingleton<SlideDeckPptxExporter>();
 builder.Services.AddSingleton<IShapeCollectionService, ShapeCollectionService>();
 builder.Services.AddSingleton<IExportService, ExportService>();
 builder.Services.AddSingleton<IImportService, ImportService>();
@@ -951,10 +953,19 @@ api.MapDelete("/diagrams/{id}", async (string id, IDiagramService diagrams, Canc
 api.MapGet("/books/{bookId}/slides", async (string bookId, ISlideDeckService slides, CancellationToken ct) =>
     Results.Ok(await slides.ListByBookAsync(bookId, ct)));
 
-api.MapPost("/books/{bookId}/slides", async (string bookId, CreateSlideDeckRequest body, ISlideDeckService slides, CancellationToken ct) =>
+api.MapPost("/books/{bookId}/slides", async (string bookId, CreateSlideDeckRequest body, ISlideDeckService slides, ISlideTemplateService templates, CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(body.Title))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    // A template only seeds a deck that brings no document of its own.
+    if (string.IsNullOrWhiteSpace(body.Source) && !string.IsNullOrWhiteSpace(body.TemplateId))
+    {
+        var template = await templates.GetAsync(body.TemplateId, ct);
+        if (template is null)
+            return Results.ValidationProblem(new Dictionary<string, string[]> { ["templateId"] = [$"Template '{body.TemplateId}' not found."] });
+        body = body with { Source = template.Source };
+    }
 
     try
     {
@@ -985,6 +996,56 @@ api.MapPut("/slides/{id}", async (string id, UpdateSlideDeckRequest body, ISlide
 api.MapDelete("/slides/{id}", async (string id, ISlideDeckService slides, CancellationToken ct) =>
 {
     var ok = await slides.DeleteAsync(id, ct);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
+// One exporter serves both office targets: Google Slides imports .pptx
+// natively, so "export for Google Slides" is this same file.
+api.MapGet("/slides/{id}/export/pptx", async (string id, ISlideDeckService slides, SlideDeckPptxExporter exporter, CancellationToken ct) =>
+{
+    var deck = await slides.GetAsync(id, ct);
+    if (deck is null) return Results.NotFound();
+
+    var safeTitle = string.Join("_", deck.Title.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries)).Trim();
+    return Results.File(
+        exporter.Export(deck),
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        (string.IsNullOrEmpty(safeTitle) ? "presentation" : safeTitle) + ".pptx");
+});
+
+// --- Slide templates (app-wide reusable deck layouts) ---
+api.MapGet("/slide-templates", async (ISlideTemplateService templates, CancellationToken ct) =>
+    Results.Ok(await templates.ListAsync(ct)));
+
+api.MapPost("/slide-templates", async (CreateSlideTemplateRequest body, ISlideTemplateService templates, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Name))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = ["Name is required."] });
+    if (string.IsNullOrWhiteSpace(body.Source))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["source"] = ["Source is required — save a deck's document as the template."] });
+
+    var created = await templates.CreateAsync(body, ct);
+    return Results.Created($"/api/slide-templates/{created.Id}", created);
+});
+
+api.MapGet("/slide-templates/{id}", async (string id, ISlideTemplateService templates, CancellationToken ct) =>
+{
+    var template = await templates.GetAsync(id, ct);
+    return template is null ? Results.NotFound() : Results.Ok(template);
+});
+
+api.MapPut("/slide-templates/{id}", async (string id, UpdateSlideTemplateRequest body, ISlideTemplateService templates, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Name))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = ["Name is required."] });
+
+    var updated = await templates.UpdateAsync(id, body, ct);
+    return updated is null ? Results.NotFound() : Results.Ok(updated);
+});
+
+api.MapDelete("/slide-templates/{id}", async (string id, ISlideTemplateService templates, CancellationToken ct) =>
+{
+    var ok = await templates.DeleteAsync(id, ct);
     return ok ? Results.NoContent() : Results.NotFound();
 });
 

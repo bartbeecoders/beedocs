@@ -103,6 +103,41 @@ Navigation: arrow keys / Space / Enter / PageUp·Down / Home / End, click to
 advance, right-click to go back, **Esc** to end. A hover HUD bottom-right shows
 `current / total` with prev/next/exit buttons.
 
+## Templates
+
+A deck can be saved as an app-wide **template** (`slide_template` table — just a
+name plus the same JSON document, no book): toolbar → *Save as template*. The
+*New slides* dialog then offers every template next to *Blank deck*; creating
+from one copies the template's document into the new deck
+(`POST /api/books/{id}/slides` with `templateId`), so later edits to either
+never affect the other. Templates are deliberately not search-indexed —
+they're scaffolding, not content.
+
+```
+GET    /api/slide-templates          → SlideTemplateSummary[] (includes slideCount)
+POST   /api/slide-templates          { name, source }  → SlideTemplate
+GET    /api/slide-templates/{id}     → SlideTemplate
+PUT    /api/slide-templates/{id}     { name, source? } → SlideTemplate (null source = rename only)
+DELETE /api/slide-templates/{id}
+```
+
+## Export (PowerPoint / Google Slides)
+
+`GET /api/slides/{id}/export/pptx` renders the deck server-side as a real
+OOXML PowerPoint file (`SlideDeckPptxExporter` — hand-built parts over
+`System.IO.Compression`, no Office SDK). The 1280×720 canvas maps exactly onto
+the 16:9 slide (9525 EMU/px), element order stays z-order, and text (font size,
+bold/italic/underline, alignment, colour), all eight shapes, fills, outlines,
+opacity, rotation and `/uploads` images carry over. External image URLs and
+speaker notes are not exported.
+
+The toolbar's *Export* menu offers **PowerPoint (.pptx)** and **Google
+Slides** — the same file either way, since Google Slides imports .pptx
+natively; the Google item additionally opens Google Slides where the file can
+be imported via *File → Open → Upload*. A true "create in the user's Google
+account" flow would need per-user Google OAuth, which a self-hosted instance
+deliberately avoids.
+
 ## Search
 
 Slide decks are indexed by the same trigger + queue pipeline as everything else

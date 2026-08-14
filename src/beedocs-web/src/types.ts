@@ -297,6 +297,23 @@ export type SlideDeck = {
   updatedAt: string
 }
 
+/** App-wide reusable deck layout, listed when creating a new deck. */
+export type SlideTemplateSummary = {
+  id: string
+  name: string
+  slideCount: number
+  updatedAt: string
+}
+
+export type SlideTemplate = {
+  id: string
+  name: string
+  /** Deck JSON document, same schema as {@link SlideDeck.source}. */
+  source: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type BeeNodeType = 'box' | 'person' | 'system' | 'database' | 'note' | 'image'
 
 /**

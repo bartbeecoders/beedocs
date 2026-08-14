@@ -116,6 +116,17 @@ public static class DatabaseInitializer
               updated_at TEXT NOT NULL
             );
 
+            -- Slide deck templates. App-wide (no book_id): a layout saved from
+            -- one deck is meant to seed decks in any book. Not search-indexed —
+            -- templates are scaffolding, not content someone looks for by text.
+            CREATE TABLE IF NOT EXISTS slide_template (
+              id TEXT PRIMARY KEY NOT NULL,
+              name TEXT NOT NULL,
+              source TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS shape_collection (
               id TEXT PRIMARY KEY NOT NULL,
               book_id TEXT,

@@ -10,6 +10,7 @@ import { parseDeck } from '../slides/slideModel'
 import { SlideEditor } from '../slides/SlideEditor'
 import { SlidePresenter } from '../slides/SlidePresenter'
 import { SlideScaled } from '../slides/SlideView'
+import { NamePromptDialog } from './NamePromptDialog'
 import '../styles/slides.css'
 
 export type SlideEditorState = {
@@ -51,6 +52,8 @@ export function SlideCanvas({ onStateChange }: Props) {
   const [dirty, setDirty] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [presentFrom, setPresentFrom] = useState<number | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
+  const [templatePromptOpen, setTemplatePromptOpen] = useState(false)
 
   const titleRef = useRef(title)
   const sourceRef = useRef(source)
@@ -170,6 +173,26 @@ export function SlideCanvas({ onStateChange }: Props) {
     void navigate(`/books/${bookId}`)
   }, [deleteFromTree, bookId, navigate])
 
+  /**
+   * Both menu items download the same server-rendered .pptx — Google Slides
+   * imports it natively — so "Google Slides" also opens the import surface.
+   * Unsaved edits are flushed first: the server renders the stored document.
+   */
+  const exportPptx = useCallback(
+    async (target: 'powerpoint' | 'google') => {
+      setExportOpen(false)
+      if (dirtyRef.current && canWrite) await save()
+      const a = document.createElement('a')
+      a.href = api.slideDeckPptxUrl(deckIdRef.current)
+      a.download = ''
+      a.click()
+      if (target === 'google') {
+        window.open('https://docs.google.com/presentation/u/0/', '_blank', 'noopener')
+      }
+    },
+    [canWrite, save],
+  )
+
   const parsed = parseDeck(source)
 
   useEffect(() => {
@@ -245,6 +268,49 @@ export function SlideCanvas({ onStateChange }: Props) {
           </div>
         </div>
         <div className="toolbar-group">
+          {canWrite && (
+            <button
+              type="button"
+              className="btn ghost sm"
+              onClick={() => setTemplatePromptOpen(true)}
+              title="Save this deck's slides as a reusable layout for new decks"
+            >
+              Save as template
+            </button>
+          )}
+          <div className="slide-shape-menu">
+            <button
+              type="button"
+              className="btn ghost sm"
+              onClick={() => setExportOpen((v) => !v)}
+              aria-expanded={exportOpen}
+            >
+              Export ▾
+            </button>
+            {exportOpen && (
+              <div
+                className="slide-shape-popover slide-export-popover"
+                onMouseLeave={() => setExportOpen(false)}
+              >
+                <button
+                  type="button"
+                  className="slide-shape-item"
+                  onClick={() => void exportPptx('powerpoint')}
+                  title="Download as a PowerPoint file"
+                >
+                  PowerPoint (.pptx)
+                </button>
+                <button
+                  type="button"
+                  className="slide-shape-item"
+                  onClick={() => void exportPptx('google')}
+                  title="Downloads the .pptx and opens Google Slides — import it there via File → Open → Upload"
+                >
+                  Google Slides
+                </button>
+              </div>
+            )}
+          </div>
           {!canWrite && (
             <>
               <button
@@ -303,6 +369,19 @@ export function SlideCanvas({ onStateChange }: Props) {
           onClose={() => setPresentFrom(null)}
         />
       )}
+
+      <NamePromptDialog
+        open={templatePromptOpen}
+        title="Save as template"
+        label="Template name"
+        placeholder="e.g. Company pitch layout"
+        defaultValue={title}
+        confirmLabel="Save template"
+        onSubmit={async (name) => {
+          await api.createSlideTemplate({ name, source: sourceRef.current })
+        }}
+        onClose={() => setTemplatePromptOpen(false)}
+      />
     </div>
   )
 }

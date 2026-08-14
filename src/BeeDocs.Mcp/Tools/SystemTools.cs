@@ -96,6 +96,8 @@ public sealed class SystemTools(BeeDocsApiClient client)
             model = "A deck is ordered slides of positioned elements (text/shape/image) on a 1280×720 canvas; element array order is z-order.",
             shapes = new[] { "rect", "rounded", "ellipse", "triangle", "diamond", "star", "arrow", "line" },
             tools = "beedocs_create_slide_deck_with_slides / beedocs_update_slide_deck_slides (structured), or raw JSON via beedocs_create_slide_deck",
+            templates = "beedocs_list_slide_templates → templateId on create; beedocs_save_slide_template stores a deck's layout app-wide",
+            export = "beedocs_export_slide_deck_pptx returns a base64 .pptx (also the Google Slides import path)",
         },
         capabilities = new
         {

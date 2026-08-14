@@ -141,11 +141,15 @@ linked by `parentId` → `beedocs_embed_diagram_in_page`.
 |------|------|-------------|
 | `beedocs_list_slide_decks` | `bookId` | Deck summaries incl. `slideCount` |
 | `beedocs_get_slide_deck` | `deckId` | Full deck + JSON document |
-| `beedocs_create_slide_deck` | `bookId`, `title`, `source?` | Raw JSON create; omit `source` for one blank slide |
+| `beedocs_create_slide_deck` | `bookId`, `title`, `source?`, `templateId?` | Raw JSON create; omit both for one blank slide, or start from a template |
 | `beedocs_update_slide_deck` | `deckId`, `title?`, `source?` | Update title and/or document (null keeps current) |
 | `beedocs_delete_slide_deck` | `deckId` | Delete deck |
 | `beedocs_create_slide_deck_with_slides` | `bookId`, `title`, `slides[]`, `theme?` | Structured create — validated slides/elements |
 | `beedocs_update_slide_deck_slides` | `deckId`, `slides[]`, `title?`, `theme?` | Replace slides with the same structured model |
+| `beedocs_list_slide_templates` | — | App-wide reusable layouts with slide counts |
+| `beedocs_save_slide_template` | `name`, `deckId?` **or** `source?` | Save a deck's layout (or a raw document) as a template |
+| `beedocs_delete_slide_template` | `templateId` | Delete a template (existing decks unaffected) |
+| `beedocs_export_slide_deck_pptx` | `deckId` | Base64 .pptx — opens in PowerPoint and imports into Google Slides |
 
 #### Structured slides
 

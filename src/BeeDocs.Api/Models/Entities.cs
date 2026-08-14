@@ -163,6 +163,20 @@ public sealed class SlideDeck
 }
 
 /// <summary>
+/// A reusable slide-deck layout: the same JSON document a deck stores, saved
+/// app-wide under a name so any book can start a new deck from it.
+/// </summary>
+public sealed class SlideTemplate
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    /// <summary>Deck JSON document, same schema as <see cref="SlideDeck.Source"/>.</summary>
+    public string Source { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
 /// A configured OpenAI-compatible chat endpoint. Every supported provider speaks
 /// the same wire format, so only the base URL and the auth differ.
 /// </summary>

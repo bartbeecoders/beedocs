@@ -33,6 +33,8 @@ import type {
   BookshelfSitePage,
   SlideDeck,
   SlideDeckSummary,
+  SlideTemplate,
+  SlideTemplateSummary,
 } from './types'
 import { withApiBase } from './basePath'
 
@@ -395,7 +397,7 @@ export const api = {
   /** Slide decks (presentations). `source` is the JSON slide document. */
   listSlideDecks: (bookId: string) => request<SlideDeckSummary[]>(`/api/books/${bookId}/slides`),
   getSlideDeck: (id: string) => request<SlideDeck>(`/api/slides/${id}`),
-  createSlideDeck: (bookId: string, body: { title: string; source?: string }) =>
+  createSlideDeck: (bookId: string, body: { title: string; source?: string; templateId?: string }) =>
     request<SlideDeck>(`/api/books/${bookId}/slides`, {
       method: 'POST',
       body: JSON.stringify(body),
@@ -403,6 +405,24 @@ export const api = {
   updateSlideDeck: (id: string, body: { title: string; source?: string }) =>
     request<SlideDeck>(`/api/slides/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteSlideDeck: (id: string) => request<void>(`/api/slides/${id}`, { method: 'DELETE' }),
+  /**
+   * Server-rendered PowerPoint download. The same file imports into Google
+   * Slides (Drive converts .pptx), so both export flows point here.
+   */
+  slideDeckPptxUrl: (id: string) => withApiBase(`/api/slides/${id}/export/pptx`),
+
+  /** Slide deck templates — app-wide layouts a new deck can start from. */
+  listSlideTemplates: () => request<SlideTemplateSummary[]>('/api/slide-templates'),
+  getSlideTemplate: (id: string) => request<SlideTemplate>(`/api/slide-templates/${id}`),
+  createSlideTemplate: (body: { name: string; source: string }) =>
+    request<SlideTemplate>('/api/slide-templates', { method: 'POST', body: JSON.stringify(body) }),
+  updateSlideTemplate: (id: string, body: { name: string; source?: string }) =>
+    request<SlideTemplate>(`/api/slide-templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteSlideTemplate: (id: string) =>
+    request<void>(`/api/slide-templates/${id}`, { method: 'DELETE' }),
 
   /** Book-scoped collections only. */
   listShapeCollections: (bookId: string) =>

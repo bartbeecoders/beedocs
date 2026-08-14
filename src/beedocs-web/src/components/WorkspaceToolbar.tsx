@@ -1,5 +1,6 @@
 import { Children, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { api } from '../api'
 import { withBase } from '../basePath'
 import { bookshelfSitePath } from '../markdownLinks'
 import { useAuth } from '../auth/AuthContext'
@@ -7,7 +8,7 @@ import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
 import { ExportMenu } from './ExportMenu'
 import { ImportDialog } from './ImportDialog'
-import { NamePromptDialog } from './NamePromptDialog'
+import { NamePromptDialog, type NamePromptSelect } from './NamePromptDialog'
 import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
 import type { SlideEditorState } from './SlideCanvas'
@@ -40,7 +41,8 @@ type NamePrompt = {
   placeholder?: string
   defaultValue?: string
   confirmLabel: string
-  run: (value: string) => Promise<void>
+  select?: NamePromptSelect
+  run: (value: string, selected?: string) => Promise<void>
 }
 
 function Sep() {
@@ -479,16 +481,33 @@ export function WorkspaceToolbar({
                   type="button"
                   className="btn ghost sm"
                   onClick={() =>
-                    setNamePrompt({
-                      title: 'New slides',
-                      label: 'Presentation title',
-                      placeholder: 'e.g. Architecture review',
-                      confirmLabel: 'Create slides',
-                      run: async (title) => {
-                        const d = await createSlideDeck(context.bookId, title)
-                        void navigate(`/books/${context.bookId}/slides/${d.id}`)
-                      },
-                    })
+                    void (async () => {
+                      // Offer saved layouts alongside the blank deck. A failed
+                      // fetch degrades to the plain title prompt.
+                      const templates = await api.listSlideTemplates().catch(() => [])
+                      setNamePrompt({
+                        title: 'New slides',
+                        label: 'Presentation title',
+                        placeholder: 'e.g. Architecture review',
+                        confirmLabel: 'Create slides',
+                        select: templates.length
+                          ? {
+                              label: 'Template',
+                              options: [
+                                { value: '', label: 'Blank deck' },
+                                ...templates.map((t) => ({
+                                  value: t.id,
+                                  label: `${t.name} (${t.slideCount} slide${t.slideCount === 1 ? '' : 's'})`,
+                                })),
+                              ],
+                            }
+                          : undefined,
+                        run: async (title, templateId) => {
+                          const d = await createSlideDeck(context.bookId, title, templateId)
+                          void navigate(`/books/${context.bookId}/slides/${d.id}`)
+                        },
+                      })
+                    })()
                   }
                 >
                   New slides
@@ -795,9 +814,10 @@ export function WorkspaceToolbar({
         placeholder={namePrompt?.placeholder}
         defaultValue={namePrompt?.defaultValue}
         confirmLabel={namePrompt?.confirmLabel}
-        onSubmit={async (value) => {
+        select={namePrompt?.select}
+        onSubmit={async (value, selected) => {
           if (!namePrompt) return
-          await namePrompt.run(value)
+          await namePrompt.run(value, selected)
         }}
         onClose={() => setNamePrompt(null)}
       />

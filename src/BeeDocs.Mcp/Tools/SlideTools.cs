@@ -26,17 +26,18 @@ public sealed class SlideTools(BeeDocsApiClient client)
         ToolHelpers.RunAsync(async () => ToolHelpers.Json(await client.GetSlideDeckAsync(deckId, ct)));
 
     [McpServerTool(Name = "beedocs_create_slide_deck", Title = "Create slide deck"),
-     Description("Create a slide deck in a book from a raw JSON document. Omit source to start with one blank 16:9 slide. " +
+     Description("Create a slide deck in a book from a raw JSON document or a saved template. Omit both to start with one blank 16:9 slide. " +
                  "Prefer beedocs_create_slide_deck_with_slides for structured, validated input. " + SchemaHint)]
     public Task<string> CreateSlideDeck(
         string bookId,
         string title,
         [Description("Deck JSON document; omit for a single blank slide")] string? source = null,
+        [Description("Start from a saved template (see beedocs_list_slide_templates); ignored when source is given")] string? templateId = null,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
         {
             EnsureParses(source);
-            return ToolHelpers.Json(await client.CreateSlideDeckAsync(bookId, new { title, source }, ct));
+            return ToolHelpers.Json(await client.CreateSlideDeckAsync(bookId, new { title, source, templateId }, ct));
         });
 
     [McpServerTool(Name = "beedocs_update_slide_deck", Title = "Update slide deck"),
@@ -131,6 +132,65 @@ public sealed class SlideTools(BeeDocsApiClient client)
                     source,
                 },
                 ct));
+        });
+
+    [McpServerTool(Name = "beedocs_list_slide_templates", Title = "List slide templates", ReadOnly = true),
+     Description("List app-wide slide deck templates (reusable layouts) with slide counts. Use an id as templateId when creating a deck.")]
+    public Task<string> ListSlideTemplates(CancellationToken ct = default) =>
+        ToolHelpers.RunAsync(async () => ToolHelpers.Json(await client.ListSlideTemplatesAsync(ct)));
+
+    [McpServerTool(Name = "beedocs_save_slide_template", Title = "Save slide template"),
+     Description("Save a reusable deck layout, either from an existing deck (deckId) or from a raw deck JSON document (source). Exactly one of the two is required.")]
+    public Task<string> SaveSlideTemplate(
+        [Description("Template name shown in the new-deck picker")] string name,
+        [Description("Deck to copy the layout from")] string? deckId = null,
+        [Description("Deck JSON document to store directly")] string? source = null,
+        CancellationToken ct = default) =>
+        ToolHelpers.RunAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(deckId) == string.IsNullOrWhiteSpace(source))
+            {
+                throw new ModelContextProtocol.McpException(
+                    "Provide exactly one of deckId (copy an existing deck's layout) or source (a deck JSON document).");
+            }
+
+            var src = source;
+            if (src is null)
+            {
+                var deck = await client.GetSlideDeckAsync(deckId!, ct);
+                src = BeeDocsApiClient.Prop(deck, "source");
+            }
+            else
+            {
+                EnsureParses(src);
+            }
+
+            return ToolHelpers.Json(await client.CreateSlideTemplateAsync(new { name, source = src }, ct));
+        });
+
+    [McpServerTool(Name = "beedocs_delete_slide_template", Title = "Delete slide template", Destructive = true),
+     Description("Permanently delete a slide deck template by id. Decks already created from it are unaffected.")]
+    public Task<string> DeleteSlideTemplate(string templateId, CancellationToken ct = default) =>
+        ToolHelpers.RunAsync(async () =>
+        {
+            await client.DeleteSlideTemplateAsync(templateId, ct);
+            return ToolHelpers.Json(new { deleted = true, templateId });
+        });
+
+    [McpServerTool(Name = "beedocs_export_slide_deck_pptx", Title = "Export slide deck as PowerPoint", ReadOnly = true),
+     Description("Render a slide deck as a PowerPoint file and return it base64-encoded. The same .pptx imports into Google Slides (Drive converts it natively). Decode and write the bytes to <fileName>.")]
+    public Task<string> ExportSlideDeckPptx(string deckId, CancellationToken ct = default) =>
+        ToolHelpers.RunAsync(async () =>
+        {
+            var deck = await client.GetSlideDeckAsync(deckId, ct);
+            var bytes = await client.ExportSlideDeckPptxAsync(deckId, ct);
+            return ToolHelpers.Json(new
+            {
+                fileName = BeeDocsApiClient.Prop(deck, "title") + ".pptx",
+                contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                sizeBytes = bytes.Length,
+                base64 = Convert.ToBase64String(bytes),
+            });
         });
 
     private static void EnsureParses(string? source)

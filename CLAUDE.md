@@ -168,7 +168,11 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   full-screen presenter (`slides/SlidePresenter.tsx`) share one renderer
   (`slides/SlideView.tsx`), so a deck looks identical everywhere. Read-only
   accounts get a slide list plus Present — presenting is deliberately not a
-  write affordance. See `Docs/SLIDES.md`.
+  write affordance. A deck can be saved as an app-wide **template**
+  (`slide_template`, copied on create via `CreateSlideDeckRequest.TemplateId`)
+  and exported as a real PowerPoint file (`SlideDeckPptxExporter`, hand-built
+  OOXML at `GET /api/slides/{id}/export/pptx`) — the same .pptx is the Google
+  Slides path, since Slides imports it natively. See `Docs/SLIDES.md`.
 - **Ownership & page history** — `book.owner_id` / `page.owner_id` name the
   account answerable for a document (a page inherits its book's owner at
   creation, falling back to its creator); neither grants any permission, which

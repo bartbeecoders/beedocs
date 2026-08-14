@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { api } from '../api'
 import type { Book, Chapter, DiagramSummary, PageSummary, Shelf, SlideDeckSummary } from '../types'
-import { starterDeckSource } from '../slides/slideModel'
+import { parseDeck, starterDeckSource } from '../slides/slideModel'
 import {
   selectionEquals,
   selectionFromRoute,
@@ -62,7 +62,7 @@ type WorkspaceCtx = {
   createFolder: (bookId: string, title: string) => Promise<Chapter>
   createDiagram: (bookId: string, title: string) => Promise<DiagramSummary>
   /** Starts from a title slide carrying the deck's name. */
-  createSlideDeck: (bookId: string, title: string) => Promise<SlideDeckSummary>
+  createSlideDeck: (bookId: string, title: string, templateId?: string) => Promise<SlideDeckSummary>
   deleteBook: (bookId: string) => Promise<void>
   /** The shelf goes; its books return to the library root. */
   deleteShelf: (shelfId: string) => Promise<void>
@@ -485,16 +485,18 @@ graph LR
     return diagram
   }, [])
 
-  const createSlideDeck = useCallback(async (bookId: string, title: string) => {
-    const deck = await api.createSlideDeck(bookId, {
-      title,
-      source: starterDeckSource(title),
-    })
+  const createSlideDeck = useCallback(async (bookId: string, title: string, templateId?: string) => {
+    // A template brings its own document; otherwise start from the titled
+    // starter deck rather than the server's blank slide.
+    const deck = await api.createSlideDeck(
+      bookId,
+      templateId ? { title, templateId } : { title, source: starterDeckSource(title) },
+    )
     const summary: SlideDeckSummary = {
       id: deck.id,
       bookId: deck.bookId,
       title: deck.title,
-      slideCount: 1,
+      slideCount: parseDeck(deck.source).slides.length,
       updatedAt: deck.updatedAt,
     }
     setBooks((prev) =>

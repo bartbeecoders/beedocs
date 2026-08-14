@@ -119,6 +119,34 @@ public sealed class BeeDocsApiClient(HttpClient http)
     public Task DeleteSlideDeckAsync(string id, CancellationToken ct = default)
         => SendAsync(HttpMethod.Delete, $"/api/slides/{Uri.EscapeDataString(id)}", null, ct);
 
+    public async Task<byte[]> ExportSlideDeckPptxAsync(string id, CancellationToken ct = default)
+    {
+        var path = $"/api/slides/{Uri.EscapeDataString(id)}/export/pptx";
+        using var response = await http.GetAsync(path, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var text = await response.Content.ReadAsStringAsync(ct);
+            throw new BeeDocsApiException(
+                $"BeeDocs API GET {path} failed: {(int)response.StatusCode} {response.ReasonPhrase}",
+                (int)response.StatusCode,
+                text);
+        }
+
+        return await response.Content.ReadAsByteArrayAsync(ct);
+    }
+
+    public Task<JsonElement> ListSlideTemplatesAsync(CancellationToken ct = default)
+        => GetAsync("/api/slide-templates", ct);
+
+    public Task<JsonElement> GetSlideTemplateAsync(string id, CancellationToken ct = default)
+        => GetAsync($"/api/slide-templates/{Uri.EscapeDataString(id)}", ct);
+
+    public Task<JsonElement> CreateSlideTemplateAsync(object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Post, "/api/slide-templates", body, ct);
+
+    public Task DeleteSlideTemplateAsync(string id, CancellationToken ct = default)
+        => SendAsync(HttpMethod.Delete, $"/api/slide-templates/{Uri.EscapeDataString(id)}", null, ct);
+
     public async Task<JsonElement> UploadImageAsync(
         string base64,
         string fileName,

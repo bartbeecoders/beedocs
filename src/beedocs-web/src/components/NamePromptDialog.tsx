@@ -1,5 +1,11 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
+export type NamePromptSelect = {
+  label: string
+  options: Array<{ value: string; label: string }>
+  defaultValue?: string
+}
+
 export type NamePromptDialogProps = {
   open: boolean
   title: string
@@ -7,7 +13,9 @@ export type NamePromptDialogProps = {
   placeholder?: string
   defaultValue?: string
   confirmLabel?: string
-  onSubmit: (value: string) => void | Promise<void>
+  /** Optional secondary choice (e.g. a template) rendered under the name field. */
+  select?: NamePromptSelect
+  onSubmit: (value: string, selected?: string) => void | Promise<void>
   onClose: () => void
 }
 
@@ -21,18 +29,21 @@ export function NamePromptDialog({
   placeholder,
   defaultValue = '',
   confirmLabel = 'Create',
+  select,
   onSubmit,
   onClose,
 }: NamePromptDialogProps) {
   const titleId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
   const [value, setValue] = useState(defaultValue)
+  const [selected, setSelected] = useState(select?.defaultValue ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
     setValue(defaultValue)
+    setSelected(select?.defaultValue ?? '')
     setBusy(false)
     setError(null)
     const t = window.setTimeout(() => {
@@ -40,7 +51,7 @@ export function NamePromptDialog({
       inputRef.current?.select()
     }, 0)
     return () => window.clearTimeout(t)
-  }, [open, defaultValue])
+  }, [open, defaultValue, select?.defaultValue])
 
   useEffect(() => {
     if (!open) return
@@ -60,7 +71,7 @@ export function NamePromptDialog({
     setBusy(true)
     setError(null)
     try {
-      await onSubmit(trimmed)
+      await onSubmit(trimmed, selected || undefined)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -103,6 +114,22 @@ export function NamePromptDialog({
               autoComplete="off"
             />
           </label>
+          {select && (
+            <label className="field">
+              <span className="field-label">{select.label}</span>
+              <select
+                value={selected}
+                onChange={(e) => setSelected(e.target.value)}
+                disabled={busy}
+              >
+                {select.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {error && <div className="banner error compact">{error}</div>}
         </div>
         <footer className="modal-footer">
