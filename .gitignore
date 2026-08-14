@@ -69,3 +69,6 @@ scripts/.logs/
 
 # --- Azure deploy (Terraform state, tfvars, build output) ---
 azure-deploy/
+
+# Claude Code worktrees are local scratch checkouts, never repo content
+.claude/worktrees/
