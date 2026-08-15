@@ -391,6 +391,7 @@ select {
 
 .ws-toolbar-context--library .ws-toolbar-context-icon,
 .ws-toolbar-context--settings .ws-toolbar-context-icon,
+.ws-toolbar-context--users .ws-toolbar-context-icon,
 .ws-toolbar-context--help .ws-toolbar-context-icon {
   background: color-mix(in srgb, var(--muted) 12%, transparent);
   color: var(--muted);
@@ -2328,6 +2329,27 @@ select:focus {
   gap: 0.4rem;
 }
 
+/* Change-tracking controls: toggle, copy cap, and their hints. */
+.props-tracking {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.props-tracking p {
+  margin: 0;
+}
+
+.props-tracking-limit {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.props-tracking-limit input {
+  width: 4.5rem;
+}
+
 .props-hint h4 {
   margin: 0 0 0.35rem;
   font-size: 0.82rem;
@@ -4198,6 +4220,11 @@ select:focus {
   max-height: none;
 }
 
+/* Document viewers (an old page version) need reading width, not form width. */
+.modal.modal--wide {
+  width: min(860px, 100%);
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -5686,4 +5713,214 @@ html[data-theme='high-contrast'] {
 .markdown-body .doc-link::before {
   content: '📄\00a0';
   font-size: 0.85em;
+}
+
+/* --- Statistics page --- */
+
+/* Series colors validated (CVD + contrast) against the light and dark surfaces;
+   dark themes share one stepped pair via the data-scheme stamp. */
+:root {
+  --chart-created: #2a78d6;
+  --chart-updated: #e05e2a;
+}
+html[data-scheme='dark'] {
+  --chart-created: #3987e5;
+  --chart-updated: #d95926;
+}
+
+.stats-page {
+  max-width: 860px;
+}
+
+.stats-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.75rem;
+}
+
+.stats-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.stats-tile-value {
+  font-size: 1.5rem;
+  font-weight: 650;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-tile-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.stats-tile-detail {
+  line-height: 1.35;
+}
+
+.stats-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.stats-chart-head h3,
+.settings-section > h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.stats-window {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.stats-legend {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.82rem;
+}
+
+.stats-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.stats-legend-max {
+  margin-left: auto;
+}
+
+.stats-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.stats-swatch.created {
+  background: var(--chart-created);
+}
+
+.stats-swatch.updated {
+  background: var(--chart-updated);
+}
+
+.stats-chart {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  height: 160px;
+  padding: 0.25rem 0 0;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.stats-day {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 0;
+  border-radius: 4px 4px 0 0;
+}
+
+.stats-day.hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.stats-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 100%;
+  max-width: 18px;
+  height: 100%;
+  padding: 0 2px;
+}
+
+.stats-bar {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+}
+
+.stats-bar.created {
+  background: var(--chart-created);
+}
+
+.stats-bar.updated {
+  background: var(--chart-updated);
+}
+
+.stats-tooltip {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.stats-tooltip .stats-swatch {
+  margin-right: 0.3rem;
+}
+
+.stats-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.3rem;
+}
+
+.stats-table-wrap {
+  overflow-x: auto;
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.87rem;
+}
+
+.stats-table th,
+.stats-table td {
+  padding: 0.45rem 0.75rem 0.45rem 0;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats-table th {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stats-table th.num,
+.stats-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-generated {
+  margin-top: 1.25rem;
 }

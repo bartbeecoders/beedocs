@@ -71,6 +71,11 @@ public static class DatabaseInitializer
               version INTEGER NOT NULL DEFAULT 1,
               -- Defaults from the owning book when the page is created.
               owner_id TEXT,
+              -- Change tracking, settable only by the page's owner or an admin:
+              -- while on, old versions stay retrievable in full, capped at
+              -- max_revisions copies (0 = unlimited).
+              track_changes INTEGER NOT NULL DEFAULT 0,
+              max_revisions INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -248,6 +253,12 @@ public static class DatabaseInitializer
         await AddColumnIfMissingAsync(
             connection, "shelf", "published", "INTEGER NOT NULL DEFAULT 0", ct);
         await AddColumnIfMissingAsync(connection, "page", "owner_id", "TEXT", ct);
+        // Off and unlimited: exactly how every page behaved before the feature,
+        // so the migration needs no backfill.
+        await AddColumnIfMissingAsync(
+            connection, "page", "track_changes", "INTEGER NOT NULL DEFAULT 0", ct);
+        await AddColumnIfMissingAsync(
+            connection, "page", "max_revisions", "INTEGER NOT NULL DEFAULT 0", ct);
         await AddColumnIfMissingAsync(connection, "page_revision", "changed_by", "TEXT", ct);
         await AddColumnIfMissingAsync(connection, "page_revision", "changed_by_name", "TEXT", ct);
         // 'legacy', not 'updated', on the migration path only. Rows written before

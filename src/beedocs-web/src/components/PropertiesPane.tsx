@@ -16,12 +16,22 @@ type Props = {
   pageState: PageEditorState | null
   diagramState: DiagramEditorState | null
   slideState: SlideEditorState | null
-  view: 'welcome' | 'shelf' | 'book' | 'page' | 'diagram' | 'slides' | 'settings' | 'help'
+  view:
+    | 'welcome'
+    | 'shelf'
+    | 'book'
+    | 'page'
+    | 'diagram'
+    | 'slides'
+    | 'settings'
+    | 'users'
+    | 'stats'
+    | 'help'
 }
 
 export function PropertiesPane({ pageState, diagramState, slideState, view }: Props) {
   const { bookId, shelfId } = useParams()
-  const { canWrite, authEnabled } = useAuth()
+  const { canWrite, authEnabled, canManageUsers, user } = useAuth()
   const { books, shelves, setShelfPublished } = useWorkspace()
   const book = books.find((b) => b.id === bookId)
   const shelf = shelves.find((s) => s.id === shelfId)
@@ -63,8 +73,39 @@ export function PropertiesPane({ pageState, diagramState, slideState, view }: Pr
     )
   }
 
+  if (view === 'users') {
+    return (
+      <div className="props-pane">
+        <h3>Users</h3>
+        <p className="muted sm">
+          Accounts and roles are managed in the center panel. Only admins can make changes; your
+          own password lives in Settings.
+        </p>
+      </div>
+    )
+  }
+
+  if (view === 'stats') {
+    return (
+      <div className="props-pane">
+        <h3>Statistics</h3>
+        <p className="muted sm">
+          Instance-wide totals and activity. Per-book numbers live on each book&apos;s overview
+          page; page-level history is in the History list of each page.
+        </p>
+      </div>
+    )
+  }
+
   if (view === 'page' && pageState) {
     const p = pageState.page
+    // Mirrors the server rule: tracking settings belong to the page's owner or
+    // an admin (which, with sign-in off, is everyone). Gated on the *saved*
+    // owner — assigning yourself in the same edit doesn't grant it early.
+    // canWrite too: a viewer who owns a page still cannot save one, and the
+    // controls only take effect through a save.
+    const canConfigureTracking =
+      canWrite && (canManageUsers || (!!user?.id && user.id === (p?.ownerId ?? null)))
     return (
       <div className="props-pane">
         <h3>Page</h3>
@@ -95,6 +136,46 @@ export function PropertiesPane({ pageState, diagramState, slideState, view }: Pr
           <Field label="Last changed by">
             <span className="sm">{p.updatedByName}</span>
           </Field>
+        )}
+        {canConfigureTracking ? (
+          <Field label="Track changes">
+            <div className="props-tracking">
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={pageState.trackChanges}
+                  onChange={(e) => pageState.setTrackChanges(e.target.checked)}
+                />
+                <span className="sm">Keep every saved version</span>
+              </label>
+              {pageState.trackChanges && (
+                <label className="props-tracking-limit">
+                  <span className="sm">Copies to keep</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={pageState.maxRevisions}
+                    onChange={(e) => {
+                      const n = Math.floor(Number(e.target.value))
+                      pageState.setMaxRevisions(Number.isFinite(n) && n > 0 ? n : 0)
+                    }}
+                  />
+                  <span className="muted sm">0 = unlimited</span>
+                </label>
+              )}
+              <p className="muted sm">Applies when you save the page.</p>
+            </div>
+          </Field>
+        ) : (
+          p?.trackChanges && (
+            <Field label="Track changes">
+              <span className="sm">
+                On{p.maxRevisions > 0 ? ` · keeps ${p.maxRevisions} copies` : ' · unlimited copies'}
+                <span className="muted sm"> — only the owner can change this</span>
+              </span>
+            </Field>
+          )
         )}
         <div className="props-hint">
           <h4>History</h4>

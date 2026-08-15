@@ -488,3 +488,62 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* A row whose kept copy can be pulled up: same layout, but a real button. */
+.page-history-open {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.page-history-open:hover .page-history-version {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  color: var(--text);
+}
+
+.page-history-open:hover .page-history-who {
+  text-decoration: underline;
+}
+
+/* --- App menu (Users / Statistics / Help / Settings dropdown) --- */
+
+.ws-app-menu {
+  position: relative;
+}
+
+.ws-app-menu-caret {
+  margin-left: 0.3rem;
+  font-size: 0.7em;
+}
+
+.ws-app-menu-popover {
+  gap: 0.15rem;
+  padding: 0.4rem;
+}
+
+.ws-app-menu-item {
+  display: block;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.88rem;
+}
+
+.ws-app-menu-item:hover {
+  background: var(--bg-soft);
+}
+
+.ws-app-menu-item.active {
+  background: var(--tree-active);
+  font-weight: 600;
+}

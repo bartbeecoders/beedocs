@@ -14,6 +14,8 @@ import { DiagramCanvas, type DiagramEditorState } from './DiagramCanvas'
 import { SlideCanvas, type SlideEditorState } from './SlideCanvas'
 import { PropertiesPane } from './PropertiesPane'
 import { SettingsPanel } from './SettingsPanel'
+import { UsersPage } from './UsersPage'
+import { StatsPage } from './StatsPage'
 import { HelpPanel } from './HelpPanel'
 import { ExportMenu } from './ExportMenu'
 import { WorkspaceToolbar } from './WorkspaceToolbar'
@@ -62,6 +64,8 @@ export function WorkspaceShell() {
 
   const view = useMemo(() => {
     if (location.pathname.startsWith('/settings')) return 'settings' as const
+    if (location.pathname.startsWith('/users')) return 'users' as const
+    if (location.pathname.startsWith('/stats')) return 'stats' as const
     if (location.pathname.startsWith('/help')) return 'help' as const
     if (params.pageId) return 'page' as const
     if (params.diagramId) return 'diagram' as const
@@ -113,6 +117,8 @@ export function WorkspaceShell() {
 
   const breadcrumb = useMemo(() => {
     if (view === 'settings') return [{ label: 'Settings' }]
+    if (view === 'users') return [{ label: 'Users' }]
+    if (view === 'stats') return [{ label: 'Statistics' }]
     if (view === 'help') return [{ label: 'About & Help' }]
     const book = books.find((b) => b.id === params.bookId)
     const crumbs: { label: string; to?: string }[] = [{ label: 'Library', to: '/' }]
@@ -188,15 +194,7 @@ export function WorkspaceShell() {
             {themeDef.label}
           </span>
           <UserMenu />
-          <Link to="/help" className={`btn ghost sm ${view === 'help' ? 'active-nav' : ''}`}>
-            Help
-          </Link>
-          <Link
-            to="/settings"
-            className={`btn ghost sm ${view === 'settings' ? 'active-nav' : ''}`}
-          >
-            Settings
-          </Link>
+          <AppMenu view={view} />
         </div>
       </header>
 
@@ -237,6 +235,8 @@ export function WorkspaceShell() {
               }
             />
           )}
+          {view === 'users' && <UsersPage />}
+          {view === 'stats' && <StatsPage />}
           {view === 'help' && <HelpPanel />}
           {view === 'welcome' && <WelcomeCanvas />}
           {view === 'shelf' && <ShelfOverview shelfId={params.shelfId!} />}
@@ -274,6 +274,76 @@ const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
   editor: 'Editor',
   viewer: 'Viewer',
+}
+
+/**
+ * The header's utility pages (Users, Statistics, Help, Settings) behind one
+ * dropdown — four standalone buttons were crowding out the things used all day.
+ * Role gating is per item, so the menu itself always exists: Users is admin-only
+ * and pointless with sign-in off; Statistics is useful with sign-in off too —
+ * every visitor is effectively an admin there — so canManageUsers alone gates it.
+ */
+function AppMenu({ view }: { view: string }) {
+  const { authEnabled, canManageUsers } = useAuth()
+  const [open, setOpen] = useState(false)
+
+  // Click-outside and Escape, because the popover has no backdrop to catch either.
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.ws-app-menu')) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const items = [
+    ...(authEnabled && canManageUsers ? [{ to: '/users', view: 'users', label: 'Users' }] : []),
+    ...(canManageUsers ? [{ to: '/stats', view: 'stats', label: 'Statistics' }] : []),
+    { to: '/help', view: 'help', label: 'About & Help' },
+    { to: '/settings', view: 'settings', label: 'Settings' },
+  ]
+  const onOne = items.some((item) => item.view === view)
+
+  return (
+    <div className="ws-app-menu">
+      <button
+        type="button"
+        className={`btn ghost sm ${onOne ? 'active-nav' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        title="Users, statistics, help and settings"
+      >
+        Menu
+        <span className="ws-app-menu-caret" aria-hidden>
+          ▾
+        </span>
+      </button>
+
+      {open && (
+        <nav className="ws-user-popover ws-app-menu-popover" aria-label="Workspace pages">
+          {items.map((item) => (
+            <Link
+              key={item.view}
+              to={item.to}
+              className={`ws-app-menu-item ${view === item.view ? 'active' : ''}`}
+              onClick={() => setOpen(false)}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      )}
+    </div>
+  )
 }
 
 /**

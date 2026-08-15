@@ -90,6 +90,8 @@ const router = createBrowserRouter(
           children: [
             { path: '/', element: <WorkspaceShell /> },
             { path: '/settings', element: <WorkspaceShell /> },
+            { path: '/users', element: <WorkspaceShell /> },
+            { path: '/stats', element: <WorkspaceShell /> },
             { path: '/help', element: <WorkspaceShell /> },
             { path: '/shelves/:shelfId', element: <WorkspaceShell /> },
             { path: '/books/:bookId', element: <WorkspaceShell /> },

@@ -233,6 +233,14 @@ version — the log holds the state each change *left behind*, so reading it nee
 no off-by-one. Each entry also stores the title and full content at that version,
 which is what a future restore or diff would run on.
 
+An entry marks a *sitting*, not a save: the editor auto-saves every couple of
+seconds while someone types, so consecutive saves by the same author within five
+minutes of each other fold into the newest entry rather than each becoming one.
+The folded entry keeps mirroring the live page and its timestamp moves with the
+last save. A fresh entry starts once the author has left the page alone for five
+minutes — or when someone else saves in between, so no one's change is ever
+folded into another author's entry.
+
 The author's display name is captured at the time of the change, so the log still
 reads correctly after the account is renamed or deleted. `changedById` is null,
 and `changedByName` reads `"API key"`, for changes made by a machine; both are
@@ -248,6 +256,30 @@ itself — with no author, because there genuinely is no record of one. The firs
 real save after upgrading starts the log properly.
 
 Deleting a page (or a book) deletes its history with it.
+
+### Change tracking: pulling old versions back up
+
+The log's *metadata* is always on. What is opt-in is **change tracking** — making
+each kept copy retrievable in full:
+
+- `trackChanges` (bool) and `maxRevisions` (int, `0` = unlimited) live on the
+  page and ride the normal `PUT /api/pages/{id}` save. Null leaves either
+  untouched; an actual **change** to them is accepted only from the page's owner
+  or an admin (403 otherwise). An editor saving content while echoing the current
+  values sails through — the gate is on the change, not the field.
+- While tracking is on, `GET /api/pages/{id}/revisions/{revisionId}` (ids come
+  from the history listing) returns the full document at that version — title,
+  content, author, timestamp. With tracking off it 404s: the rows may still
+  exist as the change log, but exposing their content is exactly what the
+  owner's toggle grants.
+- `maxRevisions` caps the stored copies: on every save, only the newest N
+  revision rows survive (the newest mirrors the live page, so `1` keeps just
+  that). `0` keeps everything, which is also the behaviour whenever tracking is
+  off.
+- The history payload carries `trackChanges`/`maxRevisions`, which is how the
+  UI knows to make log entries clickable. In the workspace, the toggle sits in
+  the page's properties pane (visible to the owner and admins) and old versions
+  open read-only from the History list.
 
 ## The API
 
@@ -274,6 +306,10 @@ Accounts — **admin only**, reads included:
 | `PUT /api/users/{id}` | Update — every field optional, omitted means unchanged |
 | `DELETE /api/users/{id}` | Delete |
 | `POST /api/users/{id}/password` | Admin reset. Omit `password` to have one generated and returned once |
+
+`GET /api/stats` (the `/stats` page: document counts, storage, per-day activity,
+per-author change totals) is admin-only for the same reason the account list is:
+its author list is a register of who works on what.
 
 `/api/health` and `/api/version` stay anonymous: a readiness probe that needs a
 session reports the wrong thing.

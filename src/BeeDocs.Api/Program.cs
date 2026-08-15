@@ -62,6 +62,7 @@ builder.Services.AddSingleton<IShapeCollectionService, ShapeCollectionService>()
 builder.Services.AddSingleton<IExportService, ExportService>();
 builder.Services.AddSingleton<IImportService, ImportService>();
 builder.Services.AddSingleton<ISearchIndexService, SearchIndexService>();
+builder.Services.AddSingleton<IStatsService, StatsService>();
 builder.Services.AddSingleton<ILlmProviderService, LlmProviderService>();
 builder.Services.AddSingleton<ILlmClient, LlmClient>();
 
@@ -437,6 +438,14 @@ auth.MapPost("/password", async (
 // --- User management (admin only) ---
 // Admin for reads as well as writes: the list is who can reach this instance and
 // with what authority, which is not something an editor needs to enumerate.
+// Instance-wide statistics. Admin because the per-author activity list is a
+// register of who works on what — the same sensitivity as the user list. With
+// sign-in off the filter is inert and the page is simply open, like the rest.
+api.MapGet("/stats", async (int? days, IStatsService stats, CancellationToken ct) =>
+        Results.Ok(await stats.GetStatsAsync(days ?? 30, ct)))
+    .WithMetadata(RequireRole.Admin)
+    .WithTags("Stats");
+
 // Naming an account is not managing one: an editor has to be able to see who
 // they are handing a book to. Deliberately outside the admin group below, and
 // deliberately thinner than UserDto — id, name and role, enabled accounts only.
@@ -887,8 +896,23 @@ api.MapPut("/pages/{id}", async (string id, UpdatePageRequest body, IDocumentSer
     if (string.IsNullOrWhiteSpace(body.Title))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
 
-    var updated = await docs.UpdatePageAsync(id, body, ct);
-    return updated is null ? Results.NotFound() : Results.Ok(updated);
+    try
+    {
+        var updated = await docs.UpdatePageAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["maxRevisions"] = [e.Message] });
+    }
+    // Tracking settings are owner-gated inside the service — the endpoint filter
+    // only knows roles, and "owner of this page" is not a role.
+    catch (UnauthorizedAccessException e)
+    {
+        return Results.Json(
+            new { error = "Forbidden", message = e.Message },
+            statusCode: StatusCodes.Status403Forbidden);
+    }
 });
 
 // Who changed this page, and when. Newest first; the first entry matches the
@@ -897,6 +921,14 @@ api.MapGet("/pages/{id}/history", async (string id, int? limit, IDocumentService
 {
     var history = await docs.GetPageHistoryAsync(id, limit ?? 100, ct);
     return history is null ? Results.NotFound() : Results.Ok(history);
+});
+
+// One kept copy of the page, in full — 404 unless the page has change tracking
+// switched on (the owner's toggle is what makes old versions retrievable).
+api.MapGet("/pages/{id}/revisions/{revisionId}", async (string id, string revisionId, IDocumentService docs, CancellationToken ct) =>
+{
+    var revision = await docs.GetPageRevisionAsync(id, revisionId, ct);
+    return revision is null ? Results.NotFound() : Results.Ok(revision);
 });
 
 api.MapDelete("/pages/{id}", async (string id, IDocumentService docs, CancellationToken ct) =>

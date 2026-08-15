@@ -27,6 +27,13 @@ export type PageEditorState = {
    * are one save and one history entry, not two.
    */
   ownerId: string
+  /**
+   * Change tracking, rides the same save as everything else. The server only
+   * accepts a *change* to these from the page's owner or an admin.
+   */
+  trackChanges: boolean
+  /** Stored copies to keep while tracking. 0 = unlimited. */
+  maxRevisions: number
   dirty: boolean
   saving: boolean
   error: string | null
@@ -34,6 +41,8 @@ export type PageEditorState = {
   setTitle: (v: string) => void
   setContent: (v: string) => void
   setOwnerId: (v: string) => void
+  setTrackChanges: (v: boolean) => void
+  setMaxRevisions: (v: number) => void
   setMode: (m: PageViewMode) => void
   save: () => Promise<void>
   deletePage: () => Promise<void>
@@ -54,6 +63,8 @@ export function PageCanvas({ onStateChange }: Props) {
   const [content, setContent] = useState('')
   /** "" means unassigned — the same thing the API takes to clear an owner. */
   const [ownerId, setOwnerId] = useState('')
+  const [trackChanges, setTrackChanges] = useState(false)
+  const [maxRevisions, setMaxRevisions] = useState(0)
   const [chosenMode, setModeState] = useState<PageViewMode>(() =>
     loadPageViewMode(pageId) ?? (showPreviewDefault ? 'split' : 'edit'),
   )
@@ -70,6 +81,8 @@ export function PageCanvas({ onStateChange }: Props) {
   const titleRef = useRef(title)
   const contentRef = useRef(content)
   const ownerRef = useRef(ownerId)
+  const trackChangesRef = useRef(trackChanges)
+  const maxRevisionsRef = useRef(maxRevisions)
   const dirtyRef = useRef(dirty)
   const pageIdRef = useRef(pageId)
   const savingRef = useRef(false)
@@ -81,6 +94,8 @@ export function PageCanvas({ onStateChange }: Props) {
   titleRef.current = title
   contentRef.current = content
   ownerRef.current = ownerId
+  trackChangesRef.current = trackChanges
+  maxRevisionsRef.current = maxRevisions
   dirtyRef.current = dirty
   pageIdRef.current = pageId
 
@@ -106,6 +121,8 @@ export function PageCanvas({ onStateChange }: Props) {
         title: titleRef.current,
         content: contentRef.current,
         ownerId: ownerRef.current,
+        trackChanges: trackChangesRef.current,
+        maxRevisions: maxRevisionsRef.current,
       }
       void api.updatePage(id, payload).catch(() => {
         /* best-effort flush */
@@ -127,6 +144,8 @@ export function PageCanvas({ onStateChange }: Props) {
         setTitle(p.title)
         setContent(p.content)
         setOwnerId(p.ownerId ?? '')
+        setTrackChanges(p.trackChanges)
+        setMaxRevisions(p.maxRevisions)
         treeTitleRef.current = p.title
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
@@ -145,6 +164,10 @@ export function PageCanvas({ onStateChange }: Props) {
       title: titleRef.current,
       content: contentRef.current,
       ownerId: ownerRef.current,
+      // Echoing the stored values is always allowed; the server gates only an
+      // actual change, and only the owner/admin controls can produce one.
+      trackChanges: trackChangesRef.current,
+      maxRevisions: maxRevisionsRef.current,
     }
     savingRef.current = true
     setSaving(true)
@@ -211,6 +234,8 @@ export function PageCanvas({ onStateChange }: Props) {
       title,
       content,
       ownerId,
+      trackChanges,
+      maxRevisions,
       dirty,
       saving,
       error,
@@ -227,12 +252,20 @@ export function PageCanvas({ onStateChange }: Props) {
         setOwnerId(v)
         setDirty(true)
       },
+      setTrackChanges: (v) => {
+        setTrackChanges(v)
+        setDirty(true)
+      },
+      setMaxRevisions: (v) => {
+        setMaxRevisions(v)
+        setDirty(true)
+      },
       setMode,
       save,
       deletePage: remove,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, title, content, ownerId, dirty, saving, error, mode, save])
+  }, [page, title, content, ownerId, trackChanges, maxRevisions, dirty, saving, error, mode, save])
 
   useEffect(() => {
     return () => onStateChange?.(null)

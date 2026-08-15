@@ -118,6 +118,8 @@ public sealed record PageSummaryDto(
 
 /// <param name="OwnerId">Account responsible for the page. Inherited from the book on create.</param>
 /// <param name="UpdatedById">Who made the most recent change. Null on pages last changed before history was recorded.</param>
+/// <param name="TrackChanges">Owner-controlled: while true, old versions can be pulled back up in full.</param>
+/// <param name="MaxRevisions">Stored copies to keep while tracking. 0 = unlimited.</param>
 public sealed record PageDto(
     string Id,
     string BookId,
@@ -131,6 +133,8 @@ public sealed record PageDto(
     string? OwnerName,
     string? UpdatedById,
     string? UpdatedByName,
+    bool TrackChanges,
+    int MaxRevisions,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
 );
@@ -146,13 +150,17 @@ public sealed record CreatePageRequest(
 );
 
 /// <param name="OwnerId">null leaves the owner untouched; "" clears it; anything else replaces it.</param>
+/// <param name="TrackChanges">null leaves it untouched. Changing it needs the page's owner or an admin.</param>
+/// <param name="MaxRevisions">null leaves it untouched; 0 = unlimited. Changing it needs the page's owner or an admin.</param>
 public sealed record UpdatePageRequest(
     [property: Required, MinLength(1)] string Title,
     string? Slug,
     string? Content,
     string? ChapterId,
     int? SortOrder,
-    string? OwnerId = null
+    string? OwnerId = null,
+    bool? TrackChanges = null,
+    int? MaxRevisions = null
 );
 
 /// <summary>
@@ -175,11 +183,33 @@ public sealed record PageHistoryEntryDto(
     bool IsCurrent
 );
 
+/// <param name="TrackChanges">While true, each entry's full document can be fetched via /pages/{id}/revisions/{revisionId}.</param>
+/// <param name="MaxRevisions">Stored copies kept while tracking. 0 = unlimited.</param>
 public sealed record PageHistoryDto(
     string PageId,
     string Title,
     int Version,
+    bool TrackChanges,
+    int MaxRevisions,
     IReadOnlyList<PageHistoryEntryDto> Entries
+);
+
+/// <summary>
+/// One kept copy of a page, in full — what "pull up an old version" returns.
+/// Served only while the page has change tracking switched on.
+/// </summary>
+/// <param name="IsCurrent">True when this copy matches the page's live version.</param>
+public sealed record PageRevisionDto(
+    string Id,
+    string PageId,
+    int Version,
+    string Title,
+    string Content,
+    string ChangeKind,
+    string? ChangedById,
+    string? ChangedByName,
+    DateTimeOffset ChangedAt,
+    bool IsCurrent
 );
 
 // --- Instance settings (/api/settings) ---
@@ -712,4 +742,58 @@ public sealed record AuthStateDto(
     UserDto? User,
     AuthPermissionsDto Permissions,
     bool SetupRequired
+);
+
+/// <summary>How many of each thing the library holds. Total counts content documents (pages + diagrams + slide decks), not the containers around them.</summary>
+public sealed record DocumentCountsDto(
+    int Shelves,
+    int Books,
+    int Chapters,
+    int Pages,
+    int Diagrams,
+    int SlideDecks,
+    int Total
+);
+
+/// <param name="ContentBytes">Live document text: page Markdown plus diagram and slide-deck JSON.</param>
+/// <param name="RevisionBytes">The page change log — every kept copy, the price of history.</param>
+/// <param name="DatabaseBytes">The SQLite files on disk (main + WAL), everything included.</param>
+/// <param name="UploadsBytes">Uploaded images and other files under /uploads.</param>
+public sealed record StorageStatsDto(
+    long ContentBytes,
+    long RevisionBytes,
+    long DatabaseBytes,
+    long UploadsBytes
+);
+
+/// <param name="Day">UTC calendar date, yyyy-MM-dd.</param>
+/// <param name="Created">Documents (pages, diagrams, slide decks) created that day.</param>
+/// <param name="Updated">Documents changed that day — from the page change log, so one per page per sitting; diagrams and slide decks contribute only their latest update.</param>
+public sealed record DailyActivityDto(
+    string Day,
+    int Created,
+    int Updated
+);
+
+/// <summary>One author from the page change log, deleted accounts and machine callers included.</summary>
+/// <param name="UserId">Null for changes made anonymously or with the API key.</param>
+/// <param name="Changes">Change-log entries by this author, all time. Rapid auto-saves coalesce, so this counts sittings, not keystrokes.</param>
+/// <param name="ChangesInWindow">Entries inside the stats window — the "active lately" number.</param>
+public sealed record UserActivityDto(
+    string? UserId,
+    string Name,
+    int Changes,
+    int PagesTouched,
+    int ChangesInWindow,
+    DateTimeOffset LastActiveAt
+);
+
+/// <summary>The Statistics page in one payload: counts, storage, a per-day activity series, and per-author change totals.</summary>
+public sealed record InstanceStatsDto(
+    DocumentCountsDto Documents,
+    StorageStatsDto Storage,
+    int WindowDays,
+    IReadOnlyList<DailyActivityDto> Activity,
+    IReadOnlyList<UserActivityDto> Users,
+    DateTimeOffset GeneratedAt
 );

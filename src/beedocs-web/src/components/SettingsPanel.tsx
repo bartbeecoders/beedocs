@@ -116,7 +116,7 @@ export function SettingsPanel({ onResetPanes }: Props) {
       </section>
 
       <section className="settings-section">
-        <h2>Users &amp; roles</h2>
+        <h2>Your account</h2>
         <UsersPanel />
       </section>
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import type { PageHistory, PageHistoryEntry } from '../types'
+import type { PageHistory, PageHistoryEntry, PageRevision } from '../types'
+import { MarkdownView } from './MarkdownView'
 
 type Props = {
   pageId: string
@@ -41,11 +42,14 @@ function whoChanged(entry: PageHistoryEntry): string {
 
 /**
  * The page's change log: who changed it and when, newest first. Lives in the
- * properties pane beside the page's other facts.
+ * properties pane beside the page's other facts. When the page's owner has
+ * change tracking switched on, each kept copy can be pulled up in full.
  */
 export function PageHistoryPanel({ pageId, version }: Props) {
   const [history, setHistory] = useState<PageHistory | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Entry whose full document is open in the viewer. */
+  const [viewing, setViewing] = useState<PageHistoryEntry | null>(null)
 
   useEffect(() => {
     if (!pageId) return
@@ -81,24 +85,133 @@ export function PageHistoryPanel({ pageId, version }: Props) {
     return <p className="muted sm">No changes recorded yet.</p>
   }
 
+  // The synthetic "current:" entry has no revision row behind it, and the
+  // current entry is just the live page — the viewer earns its keep on the
+  // older copies.
+  const canView = (entry: PageHistoryEntry) =>
+    history.trackChanges && !entry.isCurrent && !entry.id.startsWith('current:')
+
   return (
-    <ol className="page-history">
-      {history.entries.map((entry) => (
-        <li key={entry.id} className={`page-history-row${entry.isCurrent ? ' current' : ''}`}>
-          <span className="page-history-version" title={`Version ${entry.version}`}>
-            v{entry.version}
-          </span>
-          <span className="page-history-body">
-            <span className="page-history-who">{whoChanged(entry)}</span>
-            <span className="muted sm">
-              {entry.changeKind === 'created' ? 'created' : 'changed'}{' '}
-              <time dateTime={entry.changedAt} title={new Date(entry.changedAt).toLocaleString()}>
-                {formatChangedAt(entry.changedAt)}
-              </time>
-            </span>
-          </span>
-        </li>
-      ))}
-    </ol>
+    <>
+      <ol className="page-history">
+        {history.entries.map((entry) => {
+          const row = (
+            <>
+              <span className="page-history-version" title={`Version ${entry.version}`}>
+                v{entry.version}
+              </span>
+              <span className="page-history-body">
+                <span className="page-history-who">{whoChanged(entry)}</span>
+                <span className="muted sm">
+                  {entry.changeKind === 'created' ? 'created' : 'changed'}{' '}
+                  <time dateTime={entry.changedAt} title={new Date(entry.changedAt).toLocaleString()}>
+                    {formatChangedAt(entry.changedAt)}
+                  </time>
+                </span>
+              </span>
+            </>
+          )
+          return (
+            <li key={entry.id} className={`page-history-row${entry.isCurrent ? ' current' : ''}`}>
+              {canView(entry) ? (
+                <button
+                  type="button"
+                  className="page-history-open"
+                  onClick={() => setViewing(entry)}
+                  title="View this version"
+                >
+                  {row}
+                </button>
+              ) : (
+                row
+              )}
+            </li>
+          )
+        })}
+      </ol>
+      {history.trackChanges && history.entries.some(canView) && (
+        <p className="muted sm">Tracking is on — click a version to view that copy.</p>
+      )}
+      {viewing && (
+        <RevisionViewer pageId={pageId} entry={viewing} onClose={() => setViewing(null)} />
+      )}
+    </>
+  )
+}
+
+/**
+ * A kept copy of the page, pulled up in full and rendered read-only. Fetched on
+ * open rather than with the log: content is the heavy part, and most visits to
+ * the history never open one.
+ */
+function RevisionViewer({
+  pageId,
+  entry,
+  onClose,
+}: {
+  pageId: string
+  entry: PageHistoryEntry
+  onClose: () => void
+}) {
+  const [revision, setRevision] = useState<PageRevision | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .getPageRevision(pageId, entry.id)
+      .then((r) => {
+        if (!cancelled) setRevision(r)
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [pageId, entry.id])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Page version ${entry.version}`}
+    >
+      <div className="modal modal--wide">
+        <header className="modal-header">
+          <h2>
+            v{entry.version} · {revision?.title ?? entry.title}
+          </h2>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </header>
+        <div className="modal-body">
+          <p className="muted sm revision-meta">
+            {whoChanged(entry)} · {new Date(entry.changedAt).toLocaleString()} — read-only copy; the
+            live page is unaffected.
+          </p>
+          {error && (
+            <p className="users-error" role="alert">
+              {error}
+            </p>
+          )}
+          {!revision && !error && <p className="muted sm">Loading version…</p>}
+          {revision && <MarkdownView content={revision.content} />}
+        </div>
+      </div>
+    </div>
   )
 }

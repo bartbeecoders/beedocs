@@ -96,7 +96,7 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `/api/books/{id}/chapters`, `/api/books/{id}/pages`, `/api/pages/{id}`,
   `/api/books/{id}/diagrams`, `/api/diagrams/{id}`, `/api/books/{id}/slides`,
   `/api/slides/{id}`, `/api/uploads`, `/api/search`,
-  `/api/auth/*`, `/api/users/*`, plus `/api/health` and `/api/version`.
+  `/api/auth/*`, `/api/users/*`, `/api/stats`, plus `/api/health` and `/api/version`.
   Business logic lives in `Services/`
   (`DocumentService` for shelves/books/chapters/pages, `DiagramService` for
   diagrams, `SlideDeckService` for slide decks);
@@ -180,13 +180,22 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   per change holding the state the page was *left in*, plus `changed_by` and a
   `changed_by_name` snapshot that survives a rename or a deleted account. The
   newest row therefore mirrors the live page, which is where `PageDto`'s
-  `updatedByName` comes from — no extra column. Served by
+  `updatedByName` comes from — no extra column. Consecutive saves by the same
+  author within a 5-minute sliding window coalesce into that newest row
+  (`WriteUpdatedRevisionAsync`) — auto-save fires every 1.5s while someone
+  types, so without this every keystroke burst would become its own tracked
+  copy; a row marks a sitting, not a save. Served by
   `GET /api/pages/{id}/history` and rendered in the properties pane.
   `ICurrentUserAccessor` is how the singleton `DocumentService` reaches the acting
   user without an actor parameter on every method of four interfaces.
   Rows written before the log existed are labelled `change_kind = 'legacy'` by the
   migration rather than reinterpreted — they hold the state a page moved *away*
-  from. New columns reach existing databases through `AddColumnIfMissingAsync` in
+  from. **Change tracking** (`page.track_changes` + `page.max_revisions`, both on
+  `PUT /api/pages/{id}`) is the owner-gated layer on top: only the page's owner or
+  an admin may *change* the two fields (echoing current values is always fine, so
+  editors' saves pass), and while on, `GET /api/pages/{id}/revisions/{revisionId}`
+  serves any kept copy in full (404 while off) and each save prunes the log to the
+  newest `max_revisions` rows (0 = unlimited). New columns reach existing databases through `AddColumnIfMissingAsync` in
   `DatabaseInitializer`; `CREATE TABLE IF NOT EXISTS` alone would skip them.
   See `Docs/USERS-AND-ROLES.md`.
 - **Users & roles** (`Services/UserService.cs`, `PasswordHasher.cs`,
@@ -202,7 +211,8 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   endpoint filter and the `/uploads` middleware (static files answer before any
   endpoint filter, so gating pages without gating uploads would be no gate at
   all). The default rule is read-for-everyone / write-for-editors; only
-  `/api/users` and the LLM provider routes carry `RequireRole.Admin` metadata.
+  `/api/users`, `/api/stats` (its per-author activity list is a register of who
+  works on what) and the LLM provider routes carry `RequireRole.Admin` metadata.
   `BeeDocs:ApiKey` authenticates a *machine* (MCP, publishing apps) as admin —
   MCP passes it via `BEEDOCS_API_KEY`. Nothing is seeded: an empty `app_user`
   table means the instance is *unclaimed*, and `POST /api/auth/setup`

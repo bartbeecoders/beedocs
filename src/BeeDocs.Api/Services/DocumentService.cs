@@ -72,6 +72,13 @@ public interface IDocumentService
     /// it and when. Null when the page does not exist.
     /// </summary>
     Task<PageHistoryDto?> GetPageHistoryAsync(string id, int limit = 100, CancellationToken ct = default);
+
+    /// <summary>
+    /// One kept copy of a page, in full. Null when the page or revision is
+    /// unknown — or when the page does not have change tracking switched on,
+    /// which is the owner's call to make.
+    /// </summary>
+    Task<PageRevisionDto?> GetPageRevisionAsync(string pageId, string revisionId, CancellationToken ct = default);
 }
 
 public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAccessor currentUser) : IDocumentService
@@ -112,7 +119,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         SELECT p.id, p.book_id, p.chapter_id, p.title, p.slug, p.content, p.sort_order, p.version,
                p.owner_id, p.created_at, p.updated_at,
                COALESCE(NULLIF(TRIM(uo.display_name), ''), uo.username) AS owner_name,
-               r.changed_by, r.changed_by_name
+               r.changed_by, r.changed_by_name,
+               p.track_changes, p.max_revisions
         FROM page p
         LEFT JOIN app_user uo ON uo.id = p.owner_id
         LEFT JOIN page_revision r ON r.page_id = p.id AND r.version = p.version
@@ -764,6 +772,26 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         var existing = await SelectPageAsync(conn, id, ct);
         if (existing is null) return null;
 
+        var actor = currentUser.Current;
+
+        // Tracking settings belong to the page's owner (or an admin) — an editor
+        // saving content must not be able to switch a page's version-keeping off
+        // on the way. Null means untouched, so callers that don't know about the
+        // fields (upsert, publish, older clients) sail through; only an actual
+        // *change* is gated.
+        if (request.MaxRevisions is < 0)
+            throw new ArgumentException("maxRevisions must be 0 (unlimited) or a positive number.");
+        var wantsTrackingChange =
+            (request.TrackChanges is bool tc && tc != existing.TrackChanges)
+            || (request.MaxRevisions is int mr && mr != existing.MaxRevisions);
+        if (wantsTrackingChange)
+        {
+            var isOwner = actor.Id is not null && actor.Id == existing.OwnerId;
+            if (!isOwner && !actor.IsAdmin)
+                throw new UnauthorizedAccessException(
+                    "Only the page's owner or an admin can change its tracking settings.");
+        }
+
         await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
 
         existing.Title = request.Title.Trim();
@@ -777,6 +805,10 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
             existing.SortOrder = order;
         if (request.OwnerId is not null)
             existing.OwnerId = NormalizeOwnerId(request.OwnerId);
+        if (request.TrackChanges is bool trackChanges)
+            existing.TrackChanges = trackChanges;
+        if (request.MaxRevisions is int maxRevisions)
+            existing.MaxRevisions = maxRevisions;
         existing.Version += 1;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -785,7 +817,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
             cmd.Transaction = tx;
             cmd.CommandText = """
                 UPDATE page SET title = $title, slug = $slug, content = $content, chapter_id = $chapter_id,
-                  sort_order = $sort_order, version = $version, owner_id = $owner_id, updated_at = $updated_at
+                  sort_order = $sort_order, version = $version, owner_id = $owner_id,
+                  track_changes = $track_changes, max_revisions = $max_revisions, updated_at = $updated_at
                 WHERE id = $id
                 """;
             SqliteHelpers.Add(cmd, "$id", existing.Id);
@@ -796,14 +829,16 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
             SqliteHelpers.Add(cmd, "$sort_order", existing.SortOrder);
             SqliteHelpers.Add(cmd, "$version", existing.Version);
             SqliteHelpers.Add(cmd, "$owner_id", existing.OwnerId);
+            SqliteHelpers.Add(cmd, "$track_changes", existing.TrackChanges ? 1 : 0);
+            SqliteHelpers.Add(cmd, "$max_revisions", existing.MaxRevisions);
             SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
             await cmd.ExecuteNonQueryAsync(ct);
         }
 
         // Logged *after* the write and holding the new state, so the newest entry
         // always mirrors the live page and reading the log needs no off-by-one.
-        var actor = currentUser.Current;
-        await InsertRevisionAsync(conn, tx, existing, PageChangeKinds.Updated, actor, existing.UpdatedAt, ct);
+        await WriteUpdatedRevisionAsync(conn, tx, existing, actor, existing.UpdatedAt, ct);
+        await PruneRevisionsAsync(conn, tx, existing, ct);
 
         await tx.CommitAsync(ct);
         return ToDto(existing, await OwnerNameAsync(conn, existing.OwnerId, ct), actor.Id, actor.Name);
@@ -1037,7 +1072,128 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
                 IsCurrent: true));
         }
 
-        return new PageHistoryDto(page.Id, page.Title, page.Version, entries);
+        return new PageHistoryDto(
+            page.Id, page.Title, page.Version, page.TrackChanges, page.MaxRevisions, entries);
+    }
+
+    public async Task<PageRevisionDto?> GetPageRevisionAsync(
+        string pageId,
+        string revisionId,
+        CancellationToken ct = default)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var page = await SelectPageAsync(conn, pageId, ct);
+        // Old copies are served only while the owner has tracking switched on —
+        // the rows may exist either way (they are also the change log), but
+        // exposing their content is exactly what the toggle grants.
+        if (page is null || !page.TrackChanges) return null;
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, version, title, content, changed_by, changed_by_name, change_kind, created_at
+            FROM page_revision
+            WHERE id = $id AND page_id = $page_id
+            LIMIT 1
+            """;
+        SqliteHelpers.Add(cmd, "$id", revisionId);
+        SqliteHelpers.Add(cmd, "$page_id", page.Id);
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+
+        var version = reader.GetInt32(1);
+        return new PageRevisionDto(
+            Id: reader.GetString(0),
+            PageId: page.Id,
+            Version: version,
+            Title: reader.GetString(2),
+            Content: reader.GetString(3),
+            ChangedById: SqliteHelpers.GetNullableString(reader, 4),
+            ChangedByName: SqliteHelpers.GetNullableString(reader, 5),
+            ChangeKind: reader.IsDBNull(6) ? PageChangeKinds.Updated : reader.GetString(6),
+            ChangedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 7)),
+            IsCurrent: version == page.Version);
+    }
+
+    /// <summary>
+    /// Enforce the page's copy cap: with tracking on and a limit set, only the
+    /// newest <see cref="Page.MaxRevisions"/> rows survive a save (the newest row
+    /// mirrors the live page, so a limit of 1 keeps just that). With tracking off
+    /// or the limit at 0 the whole log is kept, exactly as before the feature.
+    /// </summary>
+    private static async Task PruneRevisionsAsync(
+        SqliteConnection conn,
+        SqliteTransaction? tx,
+        Page page,
+        CancellationToken ct)
+    {
+        if (!page.TrackChanges || page.MaxRevisions <= 0) return;
+
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            DELETE FROM page_revision
+            WHERE page_id = $page_id AND id NOT IN (
+              SELECT id FROM page_revision
+              WHERE page_id = $page_id
+              ORDER BY version DESC, created_at DESC
+              LIMIT $keep)
+            """;
+        SqliteHelpers.Add(cmd, "$page_id", page.Id);
+        SqliteHelpers.Add(cmd, "$keep", page.MaxRevisions);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// Sliding idle window within which consecutive saves by the same author fold
+    /// into the newest log entry instead of adding one each. Auto-save writes
+    /// every couple of seconds while someone types, and without this every burst
+    /// would become its own tracked copy. A fresh entry starts once the author
+    /// has left the page alone this long — or someone else saves in between.
+    /// </summary>
+    private static readonly TimeSpan RevisionCoalesceWindow = TimeSpan.FromMinutes(5);
+
+    private static async Task WriteUpdatedRevisionAsync(
+        SqliteConnection conn,
+        SqliteTransaction? tx,
+        Page page,
+        CurrentActor actor,
+        DateTimeOffset changedAt,
+        CancellationToken ct)
+    {
+        // Fold this save into the newest entry when it is the same author still
+        // in the same sitting: the row keeps mirroring the live page, it just
+        // stops multiplying. `IS` rather than `=` so two anonymous saves (null
+        // changed_by) also match. Only 'updated' rows coalesce — the 'created'
+        // entry stays the pristine first version, and a save right after an
+        // idle gap (or by someone else) falls through to a plain insert, which
+        // is what preserves the state the previous sitting left behind.
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = """
+                UPDATE page_revision
+                SET version = $version, title = $title, content = $content,
+                    changed_by_name = $changed_by_name, created_at = $created_at
+                WHERE id = (SELECT id FROM page_revision WHERE page_id = $page_id
+                            ORDER BY version DESC, created_at DESC LIMIT 1)
+                  AND change_kind = $change_kind
+                  AND changed_by IS $changed_by
+                  AND created_at >= $cutoff
+                """;
+            SqliteHelpers.Add(cmd, "$page_id", page.Id);
+            SqliteHelpers.Add(cmd, "$version", page.Version);
+            SqliteHelpers.Add(cmd, "$title", page.Title);
+            SqliteHelpers.Add(cmd, "$content", page.Content);
+            SqliteHelpers.Add(cmd, "$changed_by", actor.Id);
+            SqliteHelpers.Add(cmd, "$changed_by_name", actor.Name);
+            SqliteHelpers.Add(cmd, "$change_kind", PageChangeKinds.Updated);
+            SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(changedAt));
+            SqliteHelpers.Add(cmd, "$cutoff", SqliteHelpers.FormatTimestamp(changedAt - RevisionCoalesceWindow));
+            if (await cmd.ExecuteNonQueryAsync(ct) > 0) return;
+        }
+
+        await InsertRevisionAsync(conn, tx, page, PageChangeKinds.Updated, actor, changedAt, ct);
     }
 
     private static async Task InsertRevisionAsync(
@@ -1156,8 +1312,10 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         await using var cmd = conn.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = """
-            INSERT INTO page (id, book_id, chapter_id, title, slug, content, sort_order, version, owner_id, created_at, updated_at)
-            VALUES ($id, $book_id, $chapter_id, $title, $slug, $content, $sort_order, $version, $owner_id, $created_at, $updated_at)
+            INSERT INTO page (id, book_id, chapter_id, title, slug, content, sort_order, version, owner_id,
+              track_changes, max_revisions, created_at, updated_at)
+            VALUES ($id, $book_id, $chapter_id, $title, $slug, $content, $sort_order, $version, $owner_id,
+              $track_changes, $max_revisions, $created_at, $updated_at)
             """;
         SqliteHelpers.Add(cmd, "$id", page.Id);
         SqliteHelpers.Add(cmd, "$book_id", page.BookId);
@@ -1168,6 +1326,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         SqliteHelpers.Add(cmd, "$sort_order", page.SortOrder);
         SqliteHelpers.Add(cmd, "$version", page.Version);
         SqliteHelpers.Add(cmd, "$owner_id", page.OwnerId);
+        SqliteHelpers.Add(cmd, "$track_changes", page.TrackChanges ? 1 : 0);
+        SqliteHelpers.Add(cmd, "$max_revisions", page.MaxRevisions);
         SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(page.CreatedAt));
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(page.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
@@ -1247,7 +1407,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, book_id, chapter_id, title, slug, content, sort_order, version, owner_id, created_at, updated_at
+            SELECT id, book_id, chapter_id, title, slug, content, sort_order, version, owner_id, created_at, updated_at,
+                   track_changes, max_revisions
             FROM page WHERE id = $id LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$id", id);
@@ -1269,6 +1430,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         OwnerId = SqliteHelpers.GetNullableString(reader, 8),
         CreatedAt = SqliteHelpers.ReadTimestamp(reader, 9),
         UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 10),
+        TrackChanges = ReadFlag(reader, 11),
+        MaxRevisions = reader.GetInt32(12),
     };
 
     private static async Task<string> UniqueShelfSlugAsync(SqliteConnection conn, string baseSlug, CancellationToken ct)
@@ -1461,7 +1624,9 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 10)),
         OwnerName: SqliteHelpers.GetNullableString(reader, 11),
         UpdatedById: SqliteHelpers.GetNullableString(reader, 12),
-        UpdatedByName: SqliteHelpers.GetNullableString(reader, 13));
+        UpdatedByName: SqliteHelpers.GetNullableString(reader, 13),
+        TrackChanges: ReadFlag(reader, 14),
+        MaxRevisions: reader.GetInt32(15));
 
     private static ChapterDto ReadChapterDto(SqliteDataReader reader) => new(
         Id: reader.GetString(0),
@@ -1520,6 +1685,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         OwnerName: ownerName,
         UpdatedById: updatedById,
         UpdatedByName: updatedByName,
+        TrackChanges: p.TrackChanges,
+        MaxRevisions: p.MaxRevisions,
         CreatedAt: Coalesce(p.CreatedAt),
         UpdatedAt: Coalesce(p.UpdatedAt));
 }

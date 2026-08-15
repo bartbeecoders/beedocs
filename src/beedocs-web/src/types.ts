@@ -70,6 +70,10 @@ export type Page = PageSummary & {
   /** Who made the most recent change. Null on pages last written before history existed. */
   updatedById?: string | null
   updatedByName?: string | null
+  /** Owner-controlled: while true, old versions can be pulled back up in full. */
+  trackChanges: boolean
+  /** Stored copies to keep while tracking. 0 = unlimited. */
+  maxRevisions: number
   createdAt: string
 }
 
@@ -97,8 +101,27 @@ export type PageHistory = {
   pageId: string
   title: string
   version: number
+  /** While true, each entry's full document can be fetched and viewed. */
+  trackChanges: boolean
+  /** Stored copies kept while tracking. 0 = unlimited. */
+  maxRevisions: number
   /** Newest first. */
   entries: PageHistoryEntry[]
+}
+
+/** One kept copy of a page, in full — served only while tracking is on. */
+export type PageRevision = {
+  id: string
+  pageId: string
+  version: number
+  title: string
+  content: string
+  changeKind: PageChangeKind
+  changedById: string | null
+  changedByName: string | null
+  changedAt: string
+  /** True when this copy matches the page's live version. */
+  isCurrent: boolean
 }
 
 /** Server-rendered export formats. PDF is produced in the browser instead. */
@@ -671,4 +694,55 @@ export type ApiKeyStatus = {
   hasKey: boolean
   source: 'settings' | 'config' | null
   keyHint: string | null
+}
+
+/** Instance-wide numbers for the Statistics page (GET /api/stats). */
+export type DocumentCounts = {
+  shelves: number
+  books: number
+  chapters: number
+  pages: number
+  diagrams: number
+  slideDecks: number
+  /** Content documents only: pages + diagrams + slide decks. */
+  total: number
+}
+
+export type StorageStats = {
+  /** Live document text: page Markdown plus diagram and slide-deck JSON. */
+  contentBytes: number
+  /** The page change log — every kept copy, the price of history. */
+  revisionBytes: number
+  /** The SQLite files on disk (main + WAL). */
+  databaseBytes: number
+  /** Uploaded images and other files under /uploads. */
+  uploadsBytes: number
+}
+
+export type DailyActivity = {
+  /** UTC calendar date, yyyy-MM-dd. */
+  day: string
+  created: number
+  updated: number
+}
+
+export type UserActivity = {
+  /** Null for changes made anonymously or with the API key. */
+  userId: string | null
+  name: string
+  /** Change-log entries, all time — sittings, not keystrokes (auto-saves coalesce). */
+  changes: number
+  pagesTouched: number
+  /** Entries inside the stats window — the "active lately" number. */
+  changesInWindow: number
+  lastActiveAt: string
+}
+
+export type InstanceStats = {
+  documents: DocumentCounts
+  storage: StorageStats
+  windowDays: number
+  activity: DailyActivity[]
+  users: UserActivity[]
+  generatedAt: string
 }

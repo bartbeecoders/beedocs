@@ -14,6 +14,7 @@ import type {
   ImportNameMode,
   ImportPreview,
   ImportResult,
+  InstanceStats,
   CreateLlmProviderRequest,
   LlmCompleteRequest,
   LlmCompleteResponse,
@@ -23,6 +24,7 @@ import type {
   UpdateLlmProviderRequest,
   Page,
   PageHistory,
+  PageRevision,
   PageSummary,
   SearchKind,
   SearchResponse,
@@ -156,6 +158,9 @@ async function request<T>(path: string, init?: RequestInitWithTimeout): Promise<
 
 export const api = {
   getVersion: () => request<{ version: string }>('/api/version'),
+  /** Admin-only while sign-in is on — 403s for other roles, like /api/users. */
+  getStats: (days?: number) =>
+    request<InstanceStats>(`/api/stats${days ? `?days=${days}` : ''}`),
   getHealth: () => request<{ status: string; service?: string; version?: string }>('/api/health'),
 
   /**
@@ -366,6 +371,10 @@ export const api = {
       sortOrder?: number
       /** Omit to leave the owner alone; "" clears it. */
       ownerId?: string | null
+      /** Omit to leave tracking alone. Changing it needs the page's owner or an admin. */
+      trackChanges?: boolean
+      /** Omit to leave the cap alone; 0 = unlimited. Same owner/admin gate. */
+      maxRevisions?: number
     },
   ) => request<Page>(`/api/pages/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deletePage: (id: string) => request<void>(`/api/pages/${id}`, { method: 'DELETE' }),
@@ -376,6 +385,14 @@ export const api = {
    */
   getPageHistory: (id: string, limit?: number) =>
     request<PageHistory>(`/api/pages/${id}/history${limit ? `?limit=${limit}` : ''}`),
+
+  /**
+   * One kept copy of the page, in full. 404s unless the page has change
+   * tracking switched on — old versions are retrievable only while the owner
+   * keeps that enabled.
+   */
+  getPageRevision: (pageId: string, revisionId: string) =>
+    request<PageRevision>(`/api/pages/${pageId}/revisions/${revisionId}`),
 
   listDiagrams: (bookId: string) => request<DiagramSummary[]>(`/api/books/${bookId}/diagrams`),
   listPageDiagrams: (pageId: string) => request<DiagramSummary[]>(`/api/pages/${pageId}/diagrams`),

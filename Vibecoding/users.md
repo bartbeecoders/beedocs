@@ -11,3 +11,5 @@ Add a page owner field (defaults from book)
 Keep on each page a history table, date/time changed, user who changed it
 
 
+Add a seperate users management page.
+Only admins can manage users.

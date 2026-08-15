@@ -80,6 +80,17 @@ public sealed class Page
     /// to the owning book's owner when the page is created.
     /// </summary>
     public string? OwnerId { get; set; }
+    /// <summary>
+    /// When true, each saved version of the page can be pulled back up in full
+    /// (title + content) from its change log. Only the page's owner or an admin
+    /// may flip this or <see cref="MaxRevisions"/>.
+    /// </summary>
+    public bool TrackChanges { get; set; }
+    /// <summary>
+    /// How many stored copies to keep while <see cref="TrackChanges"/> is on.
+    /// 0 means unlimited. Older revision rows beyond the limit are pruned on save.
+    /// </summary>
+    public int MaxRevisions { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

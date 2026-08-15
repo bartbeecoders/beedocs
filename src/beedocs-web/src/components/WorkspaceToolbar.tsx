@@ -21,6 +21,8 @@ export type WorkspaceView =
   | 'diagram'
   | 'slides'
   | 'settings'
+  | 'users'
+  | 'stats'
   | 'help'
 
 type Props = {
@@ -143,6 +145,34 @@ const ICONS = {
       />
     </Icon>
   ),
+  users: (
+    <Icon>
+      <circle cx="5.8" cy="5.4" r="2.1" stroke="currentColor" strokeWidth="1.35" />
+      <path
+        d="M2.4 13.2c.3-2.3 1.7-3.5 3.4-3.5s3.1 1.2 3.4 3.5"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+      />
+      <circle cx="11.2" cy="6" r="1.7" stroke="currentColor" strokeWidth="1.25" />
+      <path
+        d="M10.8 9.8c1.6.2 2.5 1.2 2.8 2.9"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
+    </Icon>
+  ),
+  stats: (
+    <Icon>
+      <path
+        d="M3 13.2V9.4M6.4 13.2V5.6M9.8 13.2V7.5M13.2 13.2V3.4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </Icon>
+  ),
   help: (
     <Icon>
       <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.35" />
@@ -218,17 +248,22 @@ export function WorkspaceToolbar({
     [view, selection, books, shelves, shelfId, bookId, pageId, diagramId, deckId],
   )
 
-  if (view === 'settings' || view === 'help') {
-    const metaKind = view === 'settings' ? 'settings' : 'help'
+  if (view === 'settings' || view === 'users' || view === 'stats' || view === 'help') {
+    const meta =
+      view === 'settings'
+        ? { icon: ICONS.settings, label: 'Settings' }
+        : view === 'users'
+          ? { icon: ICONS.users, label: 'Users' }
+          : view === 'stats'
+            ? { icon: ICONS.stats, label: 'Statistics' }
+            : { icon: ICONS.help, label: 'About & Help' }
     return (
       <div className="ws-toolbar" role="toolbar" aria-label="Workspace actions">
-        <div className={`ws-toolbar-context ws-toolbar-context--${metaKind}`}>
+        <div className={`ws-toolbar-context ws-toolbar-context--${view}`}>
           <span className="ws-toolbar-context-icon" aria-hidden>
-            {view === 'settings' ? ICONS.settings : ICONS.help}
+            {meta.icon}
           </span>
-          <span className="ws-toolbar-context-label">
-            {view === 'settings' ? 'Settings' : 'About & Help'}
-          </span>
+          <span className="ws-toolbar-context-label">{meta.label}</span>
         </div>
         <Sep />
         <Group>

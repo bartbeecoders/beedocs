@@ -89,3 +89,5 @@ It is difficult to drag and drop a link to a page in a table cell. Improve that.
 Add the ability to sserver bookshelves as web sited.
 
 .../bookshelf-serve/{{bookshelfname}}  --> servess all the books and pages in a seperate website
+
+Put the link buttons of Users, Stats, Help and settings into a dropdown menu.

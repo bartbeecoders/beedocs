@@ -7,9 +7,14 @@ namespace BeeDocs.Api.Services;
 /// than inventing an author.
 /// </summary>
 /// <param name="Name">Display name captured at the time of the change.</param>
-public sealed record CurrentActor(string? Id, string? Name)
+/// <param name="IsAdmin">
+/// Whether the caller carries admin authority — a signed-in admin, the API key,
+/// or anyone at all when sign-in is off. Owner-gated settings (page change
+/// tracking) accept the owner or this.
+/// </param>
+public sealed record CurrentActor(string? Id, string? Name, bool IsAdmin = false)
 {
-    /// <summary>Sign-in is off, or nothing identified the caller.</summary>
+    /// <summary>Nothing identified the caller — outside a request entirely.</summary>
     public static readonly CurrentActor Unknown = new(null, null);
 }
 
@@ -48,9 +53,14 @@ public sealed class HttpCurrentUserAccessor(IHttpContextAccessor accessor) : ICu
             {
                 // A person. Prefer the display name; the username is what they typed.
                 "session" when caller.User is { } user =>
-                    new CurrentActor(user.Id, string.IsNullOrWhiteSpace(user.DisplayName) ? user.Username : user.DisplayName),
+                    new CurrentActor(
+                        user.Id,
+                        string.IsNullOrWhiteSpace(user.DisplayName) ? user.Username : user.DisplayName,
+                        caller.CanManageUsers),
                 // A machine holding BeeDocs:ApiKey — real, attributable, but not an account.
-                "apiKey" => new CurrentActor(null, "API key"),
+                "apiKey" => new CurrentActor(null, "API key", IsAdmin: true),
+                // Sign-in is off: unidentified but unrestricted, like everywhere else.
+                "open" => new CurrentActor(null, null, IsAdmin: true),
                 _ => CurrentActor.Unknown,
             };
         }
