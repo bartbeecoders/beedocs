@@ -23,7 +23,7 @@ public sealed class BeeDocsPrompts
             "   - System Context (C4 L1)",
             "   - Containers (C4 L2)",
             "   - Deployment / network notes",
-            "4. Create diagrams with beedocs_create_beediagram_with_nodes or beedocs_create_diagram (kind mermaid/c4).",
+            "4. Create diagrams with beedocs_create_beediagram_with_nodes or beedocs_create_diagram (kind isometric/mermaid/c4).",
             "5. Embed diagrams into pages with beedocs_embed_diagram_in_page.",
             "6. Prefer clear Markdown headings, bullet lists, and Mermaid where helpful.",
             string.IsNullOrEmpty(context) ? "" : $"\nAdditional context:\n{context}");

@@ -285,7 +285,7 @@ export type ShapeCollection = {
   updatedAt: string
 }
 
-export type DiagramKind = 'beediagram' | 'mermaid' | 'plantuml' | 'c4'
+export type DiagramKind = 'beediagram' | 'isometric' | 'mermaid' | 'plantuml' | 'c4'
 
 export type DiagramSummary = {
   id: string

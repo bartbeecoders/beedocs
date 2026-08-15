@@ -158,6 +158,8 @@ public sealed class DocxWriter(Func<string, DocxImage?>? imageResolver = null)
             "plantuml" => "PlantUML diagram (source)",
             "beediagram" => "BeeDiagram (source)",
             "beediagram-ref" => "BeeDiagram reference",
+            "isometric" => "Isometric diagram (source)",
+            "isometric-ref" => "Isometric diagram reference",
             _ => null,
         };
 

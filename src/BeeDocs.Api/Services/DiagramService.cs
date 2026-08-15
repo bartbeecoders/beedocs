@@ -18,6 +18,11 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
     public static string DefaultBeeDiagramSource { get; } =
         """{"version":1,"nodes":[],"edges":[],"viewport":{"x":0,"y":0,"zoom":1}}""";
 
+    // Native isometric document: items on integer tile coordinates, connectors
+    // between them, floor zones and free-standing text labels.
+    public static string DefaultIsometricSource { get; } =
+        """{"version":1,"items":[],"connectors":[],"zones":[],"texts":[],"viewport":{"x":0,"y":0,"zoom":1}}""";
+
     public async Task<IReadOnlyList<DiagramSummaryDto>> ListByBookAsync(string bookId, CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
@@ -76,7 +81,12 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
         var kind = NormalizeKind(request.Kind);
         var now = DateTimeOffset.UtcNow;
         var body = string.IsNullOrWhiteSpace(request.Source)
-            ? (kind == "beediagram" ? DefaultBeeDiagramSource : string.Empty)
+            ? kind switch
+            {
+                "beediagram" => DefaultBeeDiagramSource,
+                "isometric" => DefaultIsometricSource,
+                _ => string.Empty,
+            }
             : request.Source;
 
         var diagram = new Diagram
@@ -213,7 +223,7 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
         var k = (kind ?? "beediagram").Trim().ToLowerInvariant();
         return k switch
         {
-            "beediagram" or "mermaid" or "plantuml" or "c4" => k,
+            "beediagram" or "isometric" or "mermaid" or "plantuml" or "c4" => k,
             _ => "beediagram"
         };
     }

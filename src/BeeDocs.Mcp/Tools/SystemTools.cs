@@ -32,7 +32,21 @@ public sealed class SystemTools(BeeDocsApiClient client)
         entities = new[] { "shelf", "book", "chapter (folder)", "page", "diagram", "slide deck", "upload" },
         hierarchy = "shelf → book → chapter (folder) → page. Only the book level is required: "
             + "a book sits on at most one shelf, and an unshelved book sits at the library root.",
-        diagramKinds = new[] { "beediagram", "mermaid", "c4", "plantuml" },
+        diagramKinds = new[] { "beediagram", "isometric", "mermaid", "c4", "plantuml" },
+        isometric = new
+        {
+            what = "BeeDocs' native isometric (2:1 dimetric) diagram: items sit on integer tile coordinates of an infinite iso grid.",
+            sourceShape = "{ version:1, items:[{id,x,y,shape,label?,color?}], connectors:[{id,from,to,label?,color?,dashed?}], zones:[{id,x1,y1,x2,y2,label?,color?}], texts:[{id,x,y,text}], viewport:{x,y,zoom} }",
+            shapes = new[]
+            {
+                "block", "platform", "server", "server-rack", "vm", "lambda",
+                "database", "storage", "queue", "cache",
+                "cloud", "globe", "router", "switch", "firewall", "load-balancer",
+                "user", "users", "building", "laptop", "desktop", "mobile", "lock", "gear",
+            },
+            notes = "x/y are integer tiles (x to the lower-right, y to the lower-left); connectors route between item tiles; zones are floor rectangles from (x1,y1) to (x2,y2) inclusive; color is any #hex, shading is derived automatically.",
+            embed = "```isometric-ref\\nDIAGRAM_ID\\n```",
+        },
         beediagramNodeTypes = DiagramCatalog.NodeTypes,
         beediagramShapes = DiagramCatalog.Shapes,
         beediagramAzureStencils = new
@@ -87,6 +101,7 @@ public sealed class SystemTools(BeeDocsApiClient client)
         {
             mermaid = "```mermaid\\n...\\n```",
             beediagramRef = "```beediagram-ref\\nDIAGRAM_ID\\n```",
+            isometricRef = "```isometric-ref\\nDIAGRAM_ID\\n```",
             beediagramInline = "```beediagram\\n{json}\\n```",
             excelgrid = "```excelgrid\\n{\"version\":1,\"rowCount\":16,\"colCount\":8,\"cells\":[{\"r\":0,\"c\":0,\"v\":\"Item\"}]}\\n```",
             image = "![alt](/uploads/...)",

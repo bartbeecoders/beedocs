@@ -98,7 +98,7 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_list_diagrams` | `bookId` | List diagrams in book |
 | `beedocs_list_page_diagrams` | `pageId` | Diagrams linked to page |
 | `beedocs_get_diagram` | `diagramId` | Full diagram + source |
-| `beedocs_create_diagram` | `bookId`, `title`, `kind?`, `source?`, `pageId?` | Create (`beediagram` \| `mermaid` \| `c4` \| `plantuml`) |
+| `beedocs_create_diagram` | `bookId`, `title`, `kind?`, `source?`, `pageId?` | Create (`beediagram` \| `isometric` \| `mermaid` \| `c4` \| `plantuml`) |
 | `beedocs_update_diagram` | `diagramId`, `title`, `kind?`, `source?`, `pageId?` | Update diagram |
 | `beedocs_delete_diagram` | `diagramId` | Delete diagram |
 | `beedocs_list_diagram_shapes` | `section?`, `azureCategory?`, `query?` | The shape catalog: studio shapes, **Azure stencils**, palette groups, anchors, routes, arrow heads |

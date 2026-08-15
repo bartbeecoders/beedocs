@@ -6,6 +6,7 @@ import { freeDrawToSvg } from '../freedraw/model'
 import { cellStyleClass, parseTableMarker, tableThemeClass, type TableMarker } from '../markdownTable'
 import type { Chapter, Page } from '../types'
 import { beeDiagramToSvg } from './beeDiagramSvg'
+import { isoDiagramToSvg } from '../isometric/isoSvg'
 
 export type ExportProgress = (message: string) => void
 
@@ -219,6 +220,17 @@ async function renderFence(
       return `<div class="export-error">Missing diagram ${esc(id)}</div>`
     }
     return beeDiagramToSvg(d.source, d.title)
+  }
+  if (lang === 'isometric') {
+    return isoDiagramToSvg(body)
+  }
+  if (lang === 'isometric-ref') {
+    const id = body.trim().split(/\s+/)[0] ?? ''
+    const d = await resolveDiagram(id)
+    if (!d.source) {
+      return `<div class="export-error">Missing diagram ${esc(id)}</div>`
+    }
+    return isoDiagramToSvg(d.source, d.title)
   }
   if (lang === 'freedraw' || lang === 'sketch') {
     return freeDrawToSvg(body)

@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { BeeDiagramWorkbench } from '../components/BeeDiagramWorkbench'
 import { MarkdownView } from '../components/MarkdownView'
 import type { Diagram } from '../types'
+
+const IsometricEditor = lazy(() => import('../isometric/IsometricEditor'))
 
 export function DiagramEditorPage() {
   const { bookId = '', diagramId = '' } = useParams()
@@ -54,8 +56,8 @@ export function DiagramEditorPage() {
   }
 
   const embedSnippet =
-    kind === 'beediagram'
-      ? `\`\`\`beediagram-ref\n${diagramId}\n\`\`\``
+    kind === 'beediagram' || kind === 'isometric'
+      ? `\`\`\`${kind === 'isometric' ? 'isometric-ref' : 'beediagram-ref'}\n${diagramId}\n\`\`\``
       : `\`\`\`${kind === 'c4' ? 'mermaid' : kind}\n${source}\n\`\`\``
 
   if (!diagram && !error) return <p className="muted">Loading diagram…</p>
@@ -92,6 +94,7 @@ export function DiagramEditorPage() {
             aria-label="Diagram kind"
           >
             <option value="beediagram">BeeDiagram (canvas)</option>
+            <option value="isometric">Isometric</option>
             <option value="mermaid">Mermaid source</option>
             <option value="c4">C4 (Mermaid)</option>
           </select>
@@ -125,6 +128,18 @@ export function DiagramEditorPage() {
             setDirty(true)
           }}
         />
+      ) : kind === 'isometric' ? (
+        <Suspense fallback={<p className="muted">Loading isometric editor…</p>}>
+          <IsometricEditor
+            key={diagramId}
+            source={source}
+            title={title}
+            onChange={(s) => {
+              setSource(s)
+              setDirty(true)
+            }}
+          />
+        </Suspense>
       ) : (
         <div className="editor-panes mode-split">
           <textarea

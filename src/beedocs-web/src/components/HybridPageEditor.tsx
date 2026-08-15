@@ -7,6 +7,7 @@ import { useImageIntake, type ImageIntakeContext } from '../hooks/useImageIntake
 import {
   isExcelGridFenceLang,
   isFreedrawFenceLang,
+  isIsometricFenceLang,
   isMediaFenceLang,
   isVisualFenceLang,
   joinMarkdownSegments,
@@ -54,6 +55,7 @@ import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
 import { ExcelGridCanvas } from './ExcelGridCanvas'
 import { FreeDrawCanvas } from './FreeDrawCanvas'
 import { MarkdownTableEditor } from './MarkdownTableEditor'
+import { IsometricRefBlock } from './MarkdownView'
 import { MediaEmbed, parseMediaFenceBody } from './media/MediaEmbed'
 import { SyncedTextarea } from './SyncedText'
 
@@ -759,6 +761,12 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             <ExcelGridFenceBlock
               segment={seg}
               onBodyChange={(body) => updateFenceBody(index, body)}
+              onRemove={() => removeSegment(index)}
+            />
+          ) : isIsometricFenceLang(seg.lang) ? (
+            <IsometricFenceBlock
+              segment={seg}
+              bookId={bookId}
               onRemove={() => removeSegment(index)}
             />
           ) : isVisualFenceLang(seg.lang) ? (
@@ -1508,6 +1516,36 @@ function ExcelGridFenceBlock({
       </div>
       <div className="hybrid-visual-body hybrid-visual-body--excelgrid">
         <ExcelGridCanvas source={segment.body} onChange={onBodyChange} compact />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * ```isometric-ref block in the hybrid editor: the isometric diagram itself is
+ * explorable here, but edited on its own page — the isometric workspace is a
+ * full-screen editor, not an inline widget.
+ */
+function IsometricFenceBlock({
+  segment,
+  bookId,
+  onRemove,
+}: {
+  segment: FenceSegment
+  bookId?: string
+  onRemove: () => void
+}) {
+  return (
+    <div className="hybrid-visual-diagram">
+      <div className="hybrid-fence-chrome">
+        <span className="inline-diagram-badge">Isometric</span>
+        <span className="hybrid-fence-title">Isometric diagram · stored in this book</span>
+        <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+          Remove
+        </button>
+      </div>
+      <div className="hybrid-visual-body">
+        <IsometricRefBlock diagramId={segment.body} bookId={bookId} showOpenLink />
       </div>
     </div>
   )

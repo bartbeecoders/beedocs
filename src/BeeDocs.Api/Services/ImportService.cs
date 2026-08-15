@@ -39,7 +39,7 @@ public sealed partial class ImportService(
     [GeneratedRegex(@"^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?", RegexOptions.Multiline)]
     private static partial Regex FrontMatterRegex();
 
-    [GeneratedRegex(@"^```beediagram-ref[ \t]*\r?\n([\s\S]*?)^```", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^```(?:beediagram|isometric)-ref[ \t]*\r?\n([\s\S]*?)^```", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
     private static partial Regex DiagramRefRegex();
 
     // --- Parsing (shared by inspect and import) ---
@@ -234,7 +234,7 @@ public sealed partial class ImportService(
         if (manifest.Pages.Any(p => DiagramRefRegex().IsMatch(p.Content)))
         {
             warnings.Add(
-                "Some pages reference stored diagrams (beediagram-ref). Markdown files do not carry them — " +
+                "Some pages reference stored diagrams (beediagram-ref / isometric-ref). Markdown files do not carry them — " +
                 "those blocks will show as missing. Use a .beedocs archive to move diagrams.");
         }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAutoSave } from '../hooks/useAutoSave'
@@ -9,6 +9,12 @@ import type { Diagram } from '../types'
 import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
 import { BeeDiagramView } from './BeeDiagramView'
 import { MarkdownView } from './MarkdownView'
+
+// Kept lazy so pages that never open an isometric diagram don't load its editor.
+const IsometricEditor = lazy(() => import('../isometric/IsometricEditor'))
+const IsometricView = lazy(() => import('../isometric/IsometricView'))
+
+const isometricLoading = <div className="canvas-message muted">Loading isometric editor…</div>
 
 export type DiagramEditorState = {
   diagram: Diagram | null
@@ -171,8 +177,8 @@ export function DiagramCanvas({ onStateChange }: Props) {
   }
 
   const embedSnippet =
-    kind === 'beediagram'
-      ? `\`\`\`beediagram-ref\n${diagramId}\n\`\`\``
+    kind === 'beediagram' || kind === 'isometric'
+      ? `\`\`\`${kind === 'isometric' ? 'isometric-ref' : 'beediagram-ref'}\n${diagramId}\n\`\`\``
       : `\`\`\`${kind === 'c4' ? 'mermaid' : kind}\n${source}\n\`\`\``
 
   useEffect(() => {
@@ -265,6 +271,7 @@ export function DiagramCanvas({ onStateChange }: Props) {
                 aria-label="Diagram kind"
               >
                 <option value="beediagram">BeeDiagram</option>
+                <option value="isometric">Isometric</option>
                 <option value="mermaid">Mermaid</option>
                 <option value="c4">C4 (Mermaid)</option>
               </select>
@@ -291,6 +298,10 @@ export function DiagramCanvas({ onStateChange }: Props) {
         <div className="editor-preview diagram-readonly">
           {kind === 'beediagram' ? (
             <BeeDiagramView source={source} />
+          ) : kind === 'isometric' ? (
+            <Suspense fallback={isometricLoading}>
+              <IsometricView source={source} title={title} />
+            </Suspense>
           ) : (
             <MarkdownView content={'```mermaid\n' + source + '\n```'} />
           )}
@@ -304,6 +315,19 @@ export function DiagramCanvas({ onStateChange }: Props) {
             setDirty(true)
           }}
         />
+      ) : kind === 'isometric' ? (
+        <Suspense fallback={isometricLoading}>
+          <IsometricEditor
+            // Remount per document so undo history never crosses diagrams.
+            key={diagramId}
+            source={source}
+            title={title}
+            onChange={(s) => {
+              setSource(s)
+              setDirty(true)
+            }}
+          />
+        </Suspense>
       ) : (
         <div className="editor-panes mode-split">
           <textarea

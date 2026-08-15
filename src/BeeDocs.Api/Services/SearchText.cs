@@ -16,9 +16,9 @@ namespace BeeDocs.Api.Services;
 /// </summary>
 public static class SearchText
 {
-    /// <summary>Fence languages whose body is a BeeDiagram JSON document.</summary>
+    /// <summary>Fence languages whose body is a diagram JSON document (or a ref id).</summary>
     private static readonly HashSet<string> DiagramFences =
-        new(StringComparer.OrdinalIgnoreCase) { "beediagram", "beediagram-ref" };
+        new(StringComparer.OrdinalIgnoreCase) { "beediagram", "beediagram-ref", "isometric", "isometric-ref" };
 
     /// <summary>Fence languages whose body is an embed descriptor, not prose.</summary>
     private static readonly HashSet<string> MediaFences =
@@ -150,7 +150,10 @@ public static class SearchText
         return body;
     }
 
-    /// <summary>Pull node/edge labels out of a BeeDiagram JSON document.</summary>
+    /// <summary>
+    /// Pull labels out of a diagram JSON document: node/edge labels for
+    /// BeeDiagram; item/connector/zone labels and text blocks for isometric.
+    /// </summary>
     private static string DiagramLabels(string json)
     {
         try
@@ -159,7 +162,7 @@ public static class SearchText
             if (doc.RootElement.ValueKind != JsonValueKind.Object) return "";
 
             var sb = new StringBuilder();
-            foreach (var collection in new[] { "nodes", "edges" })
+            foreach (var collection in new[] { "nodes", "edges", "items", "connectors", "zones", "texts" })
             {
                 if (!doc.RootElement.TryGetProperty(collection, out var items)) continue;
                 if (items.ValueKind != JsonValueKind.Array) continue;

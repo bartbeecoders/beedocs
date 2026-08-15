@@ -78,8 +78,8 @@ public sealed partial class ExportService(
             var full = await diagrams.GetAsync(summary.Id, ct);
             if (full is not null) pageDiagrams.Add(full);
         }
-        // beediagram-ref fences can point at book-level diagrams that are not
-        // attached to this page; pull those in too so the export stands alone.
+        // beediagram-ref / isometric-ref fences can point at book-level diagrams
+        // not attached to this page; pull those in too so the export stands alone.
         foreach (var refId in ReferencedDiagramIds(page.Content))
         {
             if (pageDiagrams.Any(d => d.Id == refId)) continue;
@@ -149,7 +149,7 @@ public sealed partial class ExportService(
     {
         foreach (Match m in Regex.Matches(
             content ?? string.Empty,
-            @"^```beediagram-ref[ \t]*\n([\s\S]*?)^```",
+            @"^```(?:beediagram|isometric)-ref[ \t]*\n([\s\S]*?)^```",
             RegexOptions.Multiline | RegexOptions.IgnoreCase))
         {
             var id = m.Groups[1].Value.Trim().Split('\n')[0].Trim();

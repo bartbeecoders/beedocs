@@ -1,6 +1,8 @@
 import {
   createContext,
+  lazy,
   memo,
+  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -31,6 +33,9 @@ import { ExcelGridView } from './ExcelGridView'
 import { FreeDrawCanvas } from './FreeDrawCanvas'
 import { FreeDrawView } from './FreeDrawView'
 import { MediaEmbed } from './media/MediaEmbed'
+
+// Lazy so only pages that actually embed an isometric diagram load its module.
+const IsometricView = lazy(() => import('../isometric/IsometricView'))
 
 mermaid.initialize({
   startOnLoad: false,
@@ -483,6 +488,73 @@ function InlineBeeDiagramRefEditor({
 }
 
 /**
+ * Rendered ```isometric-ref entity embed: the referenced isometric diagram,
+ * explorable (pan/zoom) but not editable inline — the isometric editor is a
+ * whole workspace of its own, so editing happens on the diagram's page,
+ * reachable via the link in the chrome.
+ */
+export function IsometricRefBlock({
+  diagramId,
+  bookId,
+  showOpenLink,
+}: {
+  diagramId: string
+  bookId?: string
+  showOpenLink: boolean
+}) {
+  const [title, setTitle] = useState<string | null>(null)
+  const [source, setSource] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const id = diagramId.trim().split(/\s+/)[0] ?? ''
+  const { getDiagram } = useMarkdownSite()
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const d = getDiagram ? await getDiagram(id) : await api.getDiagram(id)
+        if (cancelled) return
+        setTitle(d.title)
+        setSource(d.source)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [id, getDiagram])
+
+  if (error) {
+    return (
+      <div className="banner error">
+        Diagram {id}: {error}
+      </div>
+    )
+  }
+  if (source === null) return <p className="muted">Loading diagram…</p>
+
+  const openHref = bookId ? `/books/${bookId}/diagrams/${id}` : undefined
+  return (
+    <figure className="bee-embed isometric-embed">
+      {(title || (showOpenLink && openHref)) && (
+        <figcaption className="meta isometric-embed-caption">
+          <span>{title}</span>
+          {showOpenLink && openHref && (
+            <Link className="btn ghost sm" to={openHref}>
+              Open in editor
+            </Link>
+          )}
+        </figcaption>
+      )}
+      <Suspense fallback={<p className="muted">Loading isometric diagram…</p>}>
+        <IsometricView source={source} title={title ?? ''} />
+      </Suspense>
+    </figure>
+  )
+}
+
+/**
  * A fenced code block, coloured when its language is one we have a grammar for.
  *
  * The highlighted markup comes from highlight.js, which escapes every character
@@ -777,6 +849,28 @@ export const MarkdownView = memo(function MarkdownView({
             <figure className="excelgrid-embed">
               <ExcelGridView source={code} />
             </figure>,
+          )
+        }
+
+        if (lang === 'isometric') {
+          const idx = nextIndex('isometric')
+          return wrapOutline(
+            'isometric',
+            idx,
+            <figure className="bee-embed isometric-embed">
+              <Suspense fallback={<p className="muted">Loading isometric diagram…</p>}>
+                <IsometricView source={code} />
+              </Suspense>
+            </figure>,
+          )
+        }
+
+        if (lang === 'isometric-ref') {
+          const idx = nextIndex('isometric-ref')
+          return wrapOutline(
+            'isometric-ref',
+            idx,
+            <IsometricRefBlock diagramId={code} bookId={bookId} showOpenLink={editable} />,
           )
         }
 

@@ -75,7 +75,7 @@ type DragPayload =
 
 type Creating =
   | { bookId: string; kind: 'page'; chapterId?: string | null }
-  | { bookId: string; kind: 'diagram' }
+  | { bookId: string; kind: 'diagram'; diagramKind?: 'beediagram' | 'isometric' }
   | { bookId: string; kind: 'slides' }
   | { bookId: string; kind: 'folder' }
 
@@ -235,7 +235,7 @@ export function NavTree() {
       setCreatingIn(null)
       void navigate(`/books/${bookId}/slides/${deck.id}`)
     } else {
-      const diagram = await createDiagram(bookId, childTitle.trim())
+      const diagram = await createDiagram(bookId, childTitle.trim(), creatingIn.diagramKind)
       setChildTitle('')
       setCreatingIn(null)
       void navigate(`/books/${bookId}/diagrams/${diagram.id}`)
@@ -554,6 +554,14 @@ export function NavTree() {
                 write
                 onClick={() => {
                   setCreatingIn({ bookId: menu.bookId, kind: 'diagram' })
+                  setMenu(null)
+                }}
+              />
+              <MenuItem
+                label="New isometric diagram"
+                write
+                onClick={() => {
+                  setCreatingIn({ bookId: menu.bookId, kind: 'diagram', diagramKind: 'isometric' })
                   setMenu(null)
                 }}
               />
@@ -1481,7 +1489,7 @@ function DiagramRow({
           className="tree-label"
           onClick={onSelect}
         >
-          <span className="tree-icon">⬡</span>
+          <span className="tree-icon">{diagram.kind === 'isometric' ? '⬢' : '⬡'}</span>
           <span className="tree-text">{diagram.title}</span>
         </NavLink>
       </div>

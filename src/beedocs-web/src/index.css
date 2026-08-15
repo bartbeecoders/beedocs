@@ -3075,6 +3075,167 @@ select:focus {
   margin: 0.85rem 0;
 }
 
+/* ===== Isometric diagrams (native editor, studio chrome) ===== */
+/* The editor reuses the bee-studio layout classes; these cover what is
+   specific to the isometric canvas. */
+.iso-canvas-wrap {
+  position: relative;
+}
+
+/* The canvas is always the studio's white sheet, so the inks are fixed
+   colours rather than theme variables — same rule the studio follows. */
+.iso-grid line {
+  stroke: #dfe3ea;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.iso-item-label,
+.iso-connector-label,
+.iso-zone-label,
+.iso-text {
+  fill: #30363d;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 3.5px;
+  stroke-linejoin: round;
+  user-select: none;
+  pointer-events: none;
+}
+
+.iso-connector-label {
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.iso-zone-label {
+  text-anchor: middle;
+  font-size: 13px;
+}
+
+.iso-text {
+  font-size: 15px;
+}
+
+.iso-selection-tile {
+  fill: var(--accent);
+  fill-opacity: 0.14;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+}
+
+.iso-selection-outline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.iso-connector-selected {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 6;
+  opacity: 0.35;
+}
+
+.iso-zone-handle {
+  fill: #ffffff;
+  stroke: var(--accent);
+  stroke-width: 2;
+  cursor: nwse-resize;
+}
+
+.iso-text-selected {
+  stroke: var(--accent);
+  stroke-width: 1.4;
+  stroke-dasharray: 4 3;
+}
+
+.iso-connect-arrow {
+  cursor: crosshair;
+}
+
+.iso-connect-arrow path {
+  fill: var(--accent);
+  opacity: 0.85;
+}
+
+.iso-connect-arrow:hover path {
+  opacity: 1;
+  transform: scale(1.25);
+}
+
+.iso-connect-preview line {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+.iso-connect-target {
+  fill: var(--accent);
+  fill-opacity: 0.1;
+  stroke: var(--accent);
+  stroke-dasharray: 5 4;
+  pointer-events: none;
+}
+
+.iso-connect-target.is-item {
+  fill-opacity: 0.24;
+  stroke-dasharray: none;
+}
+
+.iso-marquee {
+  fill: var(--accent);
+  fill-opacity: 0.08;
+  stroke: var(--accent);
+  stroke-dasharray: 5 4;
+  pointer-events: none;
+}
+
+.iso-label-input {
+  text-align: center;
+}
+
+.iso-empty-hint {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  color: var(--muted, #7a8494);
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+
+/* Read-only embeds: a fixed-height explorable window instead of a flex fill. */
+.iso-view {
+  display: flex;
+  height: 420px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.iso-view .iso-canvas-wrap {
+  flex: 1;
+}
+
+.isometric-embed-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+/* Full-page read-only view (viewer accounts): use the canvas column height. */
+.diagram-readonly .iso-view {
+  height: min(72vh, 720px);
+}
+
 .stack {
   display: grid;
   gap: 0.55rem;

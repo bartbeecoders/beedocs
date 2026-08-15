@@ -181,6 +181,24 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `src/BeeDocs.Mcp/diagram-catalog.json`, which the MCP server embeds — so a new
   shape reaches AI agents without a second edit. Regenerate + `dotnet build`
   BeeDocs.Mcp after touching those files.
+- **Isometric diagrams** (`kind: "isometric"`) are a second from-scratch editor
+  in `src/beedocs-web/src/isometric/` — no third-party diagram library. The
+  document is a tile grid in 2:1 dimetric projection: `items` on integer tile
+  coordinates, `connectors` between items, `zones` (floor rectangles) and
+  `texts`, all in one JSON source (`isoModel.ts`). Shapes are hand-drawn
+  primitive lists in `isoShapes.ts` with the three face shades derived from one
+  base colour; `isoRender.ts` holds the world-space geometry shared by the
+  editor canvas, the read-only view and `isoSvg.ts` — which is why isometric
+  fences render for real in PDF export. The editor deliberately mirrors the
+  BeeDiagram Studio: same controller shape (`useIsoController` ≈
+  `useStudioController`), same `studio-*` CSS classes on a fixed-white canvas,
+  same mouse/keyboard verbs (palette click-cascade/drag, marquee, space-pan,
+  Ctrl+wheel zoom, hover-to-connect arrows where a *click* makes a connected
+  copy, F2/type-to-edit labels, undo/redo/clipboard). Entry points are lazy
+  (`IsometricEditor` / `IsometricView`, ~15 kB chunk); pages embed via
+  ```` ```isometric-ref ```` fences (explorable read-only, editing on the
+  diagram's own page). The shape id list is duplicated in
+  `BeeDocs.Mcp/Tools/SystemTools.cs` for agents — keep the two in sync.
 - **Slides** are PowerPoint-style presentations stored one JSON document per
   deck (`slide_deck` table, same storage shape as `diagram`): an ordered list of
   slides, each an ordered list of positioned elements, where **element array

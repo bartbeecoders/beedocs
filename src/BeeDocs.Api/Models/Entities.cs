@@ -167,10 +167,11 @@ public sealed class Diagram
     /// <summary>Optional page this diagram is primarily attached to.</summary>
     public string? PageId { get; set; }
     public string Title { get; set; } = string.Empty;
-    /// <summary>beediagram | mermaid | plantuml | c4</summary>
+    /// <summary>beediagram | isometric | mermaid | plantuml | c4</summary>
     public string Kind { get; set; } = "beediagram";
     /// <summary>
     /// Payload: for <c>beediagram</c>, JSON document (nodes/edges/viewport);
+    /// for <c>isometric</c>, the tile-grid JSON (items/connectors/zones/texts);
     /// for mermaid/c4/plantuml, the text source.
     /// </summary>
     public string Source { get; set; } = string.Empty;

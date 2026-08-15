@@ -23,12 +23,12 @@ public sealed class DiagramTools(BeeDocsApiClient client)
         ToolHelpers.RunAsync(async () => ToolHelpers.Json(await client.GetDiagramAsync(diagramId, ct)));
 
     [McpServerTool(Name = "beedocs_create_diagram", Title = "Create diagram"),
-     Description("Create a diagram in a book. kind: beediagram (JSON canvas), mermaid, c4, or plantuml. For beediagram, source is JSON with nodes/edges.")]
+     Description("Create a diagram in a book. kind: beediagram (JSON canvas), isometric (tile-grid JSON — see beedocs_get_api_info), mermaid, c4, or plantuml. For beediagram, source is JSON with nodes/edges; for isometric, JSON with items/connectors/zones/texts.")]
     public Task<string> CreateDiagram(
         string bookId,
         string title,
         [Description("Default beediagram")] string? kind = null,
-        [Description("Diagram payload (JSON string for beediagram, text for mermaid/c4)")] string? source = null,
+        [Description("Diagram payload (JSON string for beediagram/isometric, text for mermaid/c4)")] string? source = null,
         [Description("Optional page to attach the diagram to")] string? pageId = null,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
@@ -37,6 +37,7 @@ public sealed class DiagramTools(BeeDocsApiClient client)
             var src = source ?? k switch
             {
                 "beediagram" => ToolHelpers.EmptyBeeDiagram,
+                "isometric" => ToolHelpers.EmptyIsometric,
                 "mermaid" or "c4" => "graph TD\n  A[Start] --> B[End]",
                 _ => "",
             };
@@ -350,6 +351,7 @@ public sealed class DiagramTools(BeeDocsApiClient client)
             var block = kind switch
             {
                 "beediagram" => $"```beediagram-ref\n{diagramId}\n```",
+                "isometric" => $"```isometric-ref\n{diagramId}\n```",
                 "mermaid" or "c4" => $"```mermaid\n{source}\n```",
                 _ => $"```{kind}\n{source}\n```",
             };

@@ -248,6 +248,7 @@ export function PropertiesPane({ pageState, diagramState, slideState, view }: Pr
               onChange={(e) => diagramState.setKind(e.target.value)}
             >
               <option value="beediagram">BeeDiagram</option>
+              <option value="isometric">Isometric</option>
               <option value="mermaid">Mermaid</option>
               <option value="c4">C4 (Mermaid)</option>
             </select>

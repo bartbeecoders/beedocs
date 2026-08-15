@@ -60,7 +60,7 @@ type WorkspaceCtx = {
   createShelf: (title: string, description?: string) => Promise<Shelf>
   createPage: (bookId: string, title: string, chapterId?: string | null) => Promise<PageSummary>
   createFolder: (bookId: string, title: string) => Promise<Chapter>
-  createDiagram: (bookId: string, title: string) => Promise<DiagramSummary>
+  createDiagram: (bookId: string, title: string, kind?: string) => Promise<DiagramSummary>
   /** Starts from a title slide carrying the deck's name. */
   createSlideDeck: (bookId: string, title: string, templateId?: string) => Promise<SlideDeckSummary>
   deleteBook: (bookId: string) => Promise<void>
@@ -468,8 +468,8 @@ graph LR
     return chapter
   }, [])
 
-  const createDiagram = useCallback(async (bookId: string, title: string) => {
-    const diagram = await api.createDiagram(bookId, { title, kind: 'beediagram' })
+  const createDiagram = useCallback(async (bookId: string, title: string, kind = 'beediagram') => {
+    const diagram = await api.createDiagram(bookId, { title, kind })
     setBooks((prev) =>
       prev.map((b) =>
         b.id === bookId

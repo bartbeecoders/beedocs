@@ -8,6 +8,9 @@ internal static class ToolHelpers
     public const string EmptyBeeDiagram =
         """{"version":1,"nodes":[],"edges":[],"viewport":{"x":0,"y":0,"zoom":1}}""";
 
+    public const string EmptyIsometric =
+        """{"version":1,"items":[],"connectors":[],"zones":[],"texts":[],"viewport":{"x":0,"y":0,"zoom":1}}""";
+
     public static string Json(object value) => BeeDocsApiClient.Pretty(value);
 
     public static string Json(JsonElement value) => BeeDocsApiClient.Pretty(value);
