@@ -264,15 +264,29 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
     return () => ro.disconnect()
   }, [])
 
-  // First open of an empty-viewport document: put the origin tile mid-view.
+  // First open: fit existing content into view (the editor never writes the
+  // viewport back, so stored documents carry the server default of 0,0). An
+  // empty document instead gets the origin tile mid-view.
   const centeredOnce = useRef(false)
+  const fitOnOpenRef = useRef<() => void>(() => {})
   useEffect(() => {
-    if (centeredOnce.current || doc.viewport) return
+    if (centeredOnce.current) return
     const el = wrapRef.current
     if (!el || el.clientWidth === 0) return
+    const vp = doc.viewport
+    if (vp && (vp.x !== 0 || vp.y !== 0 || vp.zoom !== 1)) {
+      // A deliberate stored viewport (e.g. an imported document) wins.
+      centeredOnce.current = true
+      return
+    }
     centeredOnce.current = true
-    setViewport({ x: el.clientWidth / 2, y: el.clientHeight / 2.6, zoom: 1 })
-  }, [doc.viewport, setViewport, size])
+    const d = ctrl.docRef.current
+    if (d.items.length + d.zones.length + d.texts.length > 0) {
+      fitOnOpenRef.current()
+    } else {
+      setViewport({ x: el.clientWidth / 2, y: el.clientHeight / 2.6, zoom: 1 })
+    }
+  }, [ctrl.docRef, doc.viewport, setViewport, size])
 
   // ── Coordinate helpers ─────────────────────────────────────────────────────
 
@@ -335,6 +349,7 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
       y: rect.height / 2 - (bounds.y + bounds.h / 2) * zoom,
     })
   }, [ctrl.docRef, setViewport])
+  fitOnOpenRef.current = zoomToFit
 
   // ── Label editing ──────────────────────────────────────────────────────────
 

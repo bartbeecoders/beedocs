@@ -197,8 +197,10 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   copy, F2/type-to-edit labels, undo/redo/clipboard). Entry points are lazy
   (`IsometricEditor` / `IsometricView`, ~15 kB chunk); pages embed via
   ```` ```isometric-ref ```` fences (explorable read-only, editing on the
-  diagram's own page). The shape id list is duplicated in
-  `BeeDocs.Mcp/Tools/SystemTools.cs` for agents — keep the two in sync.
+  diagram's own page). Agents build these with
+  `beedocs_create_isometric_with_items` / `beedocs_update_isometric_items`
+  (`BeeDocs.Mcp/Tools/IsometricTools.cs`); the shape id list is duplicated
+  there in `IsometricCatalog` — keep it in sync with `isoShapes.ts`.
 - **Slides** are PowerPoint-style presentations stored one JSON document per
   deck (`slide_deck` table, same storage shape as `diagram`): an ordered list of
   slides, each an ordered list of positioned elements, where **element array

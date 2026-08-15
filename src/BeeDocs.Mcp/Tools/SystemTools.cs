@@ -36,14 +36,9 @@ public sealed class SystemTools(BeeDocsApiClient client)
         isometric = new
         {
             what = "BeeDocs' native isometric (2:1 dimetric) diagram: items sit on integer tile coordinates of an infinite iso grid.",
+            tools = "beedocs_create_isometric_with_items / beedocs_update_isometric_items (structured), or raw JSON via beedocs_create_diagram",
             sourceShape = "{ version:1, items:[{id,x,y,shape,label?,color?}], connectors:[{id,from,to,label?,color?,dashed?}], zones:[{id,x1,y1,x2,y2,label?,color?}], texts:[{id,x,y,text}], viewport:{x,y,zoom} }",
-            shapes = new[]
-            {
-                "block", "platform", "server", "server-rack", "vm", "lambda",
-                "database", "storage", "queue", "cache",
-                "cloud", "globe", "router", "switch", "firewall", "load-balancer",
-                "user", "users", "building", "laptop", "desktop", "mobile", "lock", "gear",
-            },
+            shapes = IsometricCatalog.Shapes,
             notes = "x/y are integer tiles (x to the lower-right, y to the lower-left); connectors route between item tiles; zones are floor rectangles from (x1,y1) to (x2,y2) inclusive; color is any #hex, shading is derived automatically.",
             embed = "```isometric-ref\\nDIAGRAM_ID\\n```",
         },
@@ -118,7 +113,7 @@ public sealed class SystemTools(BeeDocsApiClient client)
         {
             folders = "chapters group pages; beedocs_create_chapter / update / delete / move_page",
             images = "beedocs_upload_image then embed Markdown or image nodes",
-            diagrams = "beedocs_list_diagram_shapes for the shape/Azure-stencil catalog, then beedocs_create_beediagram_with_nodes / beedocs_update_beediagram_nodes",
+            diagrams = "beedocs_list_diagram_shapes for the shape/Azure-stencil catalog, then beedocs_create_beediagram_with_nodes / beedocs_update_beediagram_nodes; isometric views via beedocs_create_isometric_with_items",
             slides = "beedocs_create_slide_deck_with_slides for presentations; present from the UI at /books/{bookId}/slides/{deckId}",
             export = "beedocs_export_book or beedocs_export_library_snapshot",
         },
@@ -126,7 +121,7 @@ public sealed class SystemTools(BeeDocsApiClient client)
         {
             "beedocs_list_books → pick or beedocs_create_book",
             "beedocs_create_chapter for folders, beedocs_create_page with chapterId",
-            "beedocs_list_diagram_shapes → beedocs_create_beediagram_with_nodes (or beedocs_create_diagram for mermaid/c4)",
+            "beedocs_list_diagram_shapes → beedocs_create_beediagram_with_nodes (beedocs_create_isometric_with_items for an isometric view, beedocs_create_diagram for mermaid/c4)",
             "beedocs_embed_diagram_in_page or beedocs_upload_image + append",
             "beedocs_export_book for structured content / UI Export PDF for print",
         },

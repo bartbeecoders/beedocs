@@ -104,6 +104,8 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_list_diagram_shapes` | `section?`, `azureCategory?`, `query?` | The shape catalog: studio shapes, **Azure stencils**, palette groups, anchors, routes, arrow heads |
 | `beedocs_create_beediagram_with_nodes` | `bookId`, `title`, `nodes[]`, `edges[]?`, `pageId?` | Structured BeeDiagram — full studio model (see below) |
 | `beedocs_update_beediagram_nodes` | `diagramId`, `nodes[]`, `edges[]?`, `title?` | Replace an existing canvas with the same structured model |
+| `beedocs_create_isometric_with_items` | `bookId`, `title`, `items[]`, `connectors[]?`, `zones[]?`, `texts[]?`, `pageId?` | Structured isometric diagram (see below) |
+| `beedocs_update_isometric_items` | `diagramId`, `items[]`, `connectors[]?`, `zones[]?`, `texts[]?`, `title?` | Replace an isometric diagram with the same structured model |
 | `beedocs_embed_diagram_in_page` | `pageId`, `diagramId`, `heading?` | Append embed fence to page |
 
 #### Structured BeeDiagram nodes and edges
@@ -134,6 +136,32 @@ Typical Azure flow: `beedocs_list_diagram_shapes` (`section="azure"`, plus
 `azureCategory` or `query`) → `beedocs_create_beediagram_with_nodes` with
 `shape="container"` boundary nodes and `shape="azure"` + `icon` service nodes
 linked by `parentId` → `beedocs_embed_diagram_in_page`.
+
+#### Structured isometric items
+
+`beedocs_create_isometric_with_items` / `beedocs_update_isometric_items` build
+`kind=isometric` diagrams — the tile-grid editor in 2:1 dimetric projection.
+Items sit one per integer tile: `x` runs to the lower-right on screen, `y` to
+the lower-left. Shape ids and the raw document schema are served by
+`beedocs_get_api_info` under `isometric`.
+
+| Item field | Notes |
+|------------|-------|
+| `shape` | `server`, `server-rack`, `vm`, `lambda`, `database`, `storage`, `queue`, `cache`, `cloud`, `globe`, `router`, `switch`, `firewall`, `load-balancer`, `user`, `users`, `building`, `laptop`, `desktop`, `mobile`, `lock`, `gear`, `block`, `platform` |
+| `x` / `y` | Integer tile; omit both to auto-place on a spread grid |
+| `label` | Rendered under the shape |
+| `color` | Base `#hex`; the three face shades are derived from it |
+
+| Other input | Fields |
+|-------------|--------|
+| `connectors[]` | `from`, `to` (item ids), `label?`, `color?`, `dashed?` — routed L-shaped between tiles, arrow at `to` |
+| `zones[]` | `x1`, `y1`, `x2`, `y2` (inclusive tile rectangle), `label?`, `color?` — a tinted floor area behind the items |
+| `texts[]` | `x`, `y`, `text` — free-standing labels |
+
+Unknown shape ids and connectors naming missing items are rejected with an
+error listing the valid values, so a wrong guess costs one round trip. Pages
+embed the result with ```` ```isometric-ref\nDIAGRAM_ID\n``` ```` (also what
+`beedocs_embed_diagram_in_page` emits for this kind).
 
 ### Slides
 
