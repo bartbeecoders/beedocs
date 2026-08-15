@@ -4,8 +4,10 @@ import { loadPaneLayout, savePaneLayout } from '../workspace/layoutPrefs'
 import { useAuth } from '../auth/AuthContext'
 import { ApiKeyPanel } from './ApiKeyPanel'
 import { LlmProviders } from './LlmProviders'
+import { StorageProviders } from './StorageProviders'
 import { UsersPanel } from './UsersPanel'
 import '../styles/llm-providers.css'
+import '../styles/storage-providers.css'
 import '../styles/users.css'
 
 type Props = {
@@ -136,6 +138,14 @@ export function SettingsPanel({ onResetPanes }: Props) {
         <section className="settings-section">
           <h2>AI providers</h2>
           <LlmProviders />
+        </section>
+      )}
+
+      {/* Cloud credentials again — admin-only for the same reason. */}
+      {canManageUsers && (
+        <section className="settings-section">
+          <h2>Storage providers</h2>
+          <StorageProviders />
         </section>
       )}
 

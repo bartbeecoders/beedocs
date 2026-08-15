@@ -53,6 +53,15 @@ builder.Services.AddSingleton<IUserService>(sp =>
         SessionLifetime = auth.SessionLifetime,
     };
 });
+// Shelf content offloading: provider rows (secrets included) are owned by
+// StorageProviderService; the router turns a provider id into a live client;
+// the resolver is what the domain services read/write bodies through; the
+// mover relocates a whole shelf or book between backends.
+builder.Services.AddSingleton<IStorageProviderService, StorageProviderService>();
+builder.Services.AddSingleton<ContentStoreRouter>();
+builder.Services.AddSingleton<ContentResolver>();
+builder.Services.AddSingleton<ShelfContentMover>();
+builder.Services.AddSingleton<GoogleOAuthService>();
 builder.Services.AddSingleton<IDocumentService, DocumentService>();
 builder.Services.AddSingleton<IDiagramService, DiagramService>();
 builder.Services.AddSingleton<ISlideDeckService, SlideDeckService>();
@@ -188,6 +197,18 @@ using (var scope = app.Services.CreateScope())
         app.Logger.LogError(ex, "Search index could not be initialized — search may return nothing until POST /api/search/reindex.");
     }
 
+    // One-time fill of slide_deck.slide_count for rows that predate the column;
+    // every save maintains it afterwards. Purely local, but a failure should
+    // cost a badge, not the process.
+    try
+    {
+        await scope.ServiceProvider.GetRequiredService<ISlideDeckService>().BackfillSlideCountsAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Slide count backfill failed — deck badges may be missing until the decks are saved again.");
+    }
+
     // No account is created here. An instance with an empty account table is
     // "unclaimed": the browser shows a one-time setup screen and whoever fills it
     // in becomes the admin, with a password they chose. The alternative — seeding
@@ -211,6 +232,25 @@ var api = app.MapGroup("/api");
 // /api/v1 and /api/llm subgroups inherit it. Endpoints that must stay reachable
 // without a session (health, version, sign-in itself) carry AllowAnonymousEndpoint.
 api.AddEndpointFilter<AuthEndpointFilter>();
+
+// A body that lives at a storage provider can fail to load anywhere content is
+// read — page get, revision get, diagram, slides, export, the bookshelf sites —
+// so the translation to "503, and here is which provider to fix" lives on the
+// group rather than on each handler.
+api.AddEndpointFilter(async (ctx, next) =>
+{
+    try
+    {
+        return await next(ctx);
+    }
+    catch (ContentUnavailableException ex)
+    {
+        return Results.Problem(
+            statusCode: StatusCodes.Status503ServiceUnavailable,
+            title: $"Storage provider '{ex.ProviderName}' is unreachable",
+            detail: ex.Message);
+    }
+});
 
 // Build version, sourced from <Version> in BeeDocs.Api.csproj. The deploy script
 // bumps the last digit (the build number) on every deploy, so this is what the
@@ -628,6 +668,57 @@ api.MapDelete("/shelves/{id}", async (string id, IDocumentService docs, Cancella
     var ok = await docs.DeleteShelfAsync(id, ct);
     return ok ? Results.NoContent() : Results.NotFound();
 });
+
+// Assign the shelf's storage (null providerId = local SQLite) and move every
+// content body there, synchronously — the client gives this call minutes, not
+// the default timeout. Admin-only: it exercises stored cloud credentials.
+// A partial failure leaves the shelf pointed at the target with every row
+// self-describing where its body is; re-POSTing resumes, skipping done rows.
+api.MapPost("/shelves/{id}/storage", async (
+    string id,
+    AssignShelfStorageRequest body,
+    IDocumentService docs,
+    IStorageProviderService providers,
+    ShelfContentMover mover,
+    CancellationToken ct) =>
+{
+    if (await docs.GetShelfAsync(id, ct) is null) return Results.NotFound();
+
+    var providerId = string.IsNullOrWhiteSpace(body.ProviderId) ? null : body.ProviderId.Trim();
+    if (providerId is not null)
+    {
+        var secret = await providers.ResolveAsync(providerId, ct);
+        if (secret is null)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["providerId"] = ["Unknown storage provider."],
+            });
+        }
+
+        if (!secret.IsReady)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["providerId"] = [secret.Kind == StorageProviderKinds.GoogleDrive
+                    ? $"Connect '{secret.Name}' to Google Drive before assigning it to a shelf."
+                    : $"Add a connection string to '{secret.Name}' before assigning it to a shelf."],
+            });
+        }
+    }
+
+    var report = await mover.MoveShelfContentAsync(id, providerId, ct);
+    if (report.Errors.Count > 0)
+    {
+        return Results.Problem(
+            statusCode: StatusCodes.Status502BadGateway,
+            title: $"Move incomplete: {report.Moved} item(s) moved, {report.Errors.Count} failed. "
+                + "Run the move again to resume — finished items are skipped.",
+            detail: string.Join(" | ", report.Errors.Take(5)));
+    }
+
+    return Results.Ok(await docs.GetShelfAsync(id, ct));
+}).WithMetadata(RequireRole.Admin);
 
 // --- Bookshelf websites ---
 // A published shelf is served at /bookshelf-serve/{slug} as a reader-only site.
@@ -1270,6 +1361,118 @@ llm.MapPost("/complete", async (LlmCompleteRequest body, ILlmClient client, Canc
         return LlmFailure(ex);
     }
 });
+
+// --- Storage providers ---
+// Where shelf content bodies can live besides SQLite. Provider rows hold cloud
+// credentials, so every route is admin-only — except the Google OAuth callback,
+// which Google's redirect reaches with no session; its HMAC-signed state is the
+// authentication there.
+var storageProviders = api.MapGroup("/storage-providers").WithTags("Storage");
+var storageAdmin = RequireRole.Admin;
+
+// Behind a reverse proxy the scheme/host the API sees are not what the browser
+// (and Google) must use — set BeeDocs:PublicBaseUrl (including any public path
+// prefix) and it wins outright.
+var configuredPublicBaseUrl = app.Configuration["BeeDocs:PublicBaseUrl"];
+string GoogleRedirectUri(HttpRequest request)
+{
+    var baseUrl = string.IsNullOrWhiteSpace(configuredPublicBaseUrl)
+        ? $"{request.Scheme}://{request.Host}"
+        : configuredPublicBaseUrl.Trim().TrimEnd('/');
+    return baseUrl + "/api/storage-providers/google/callback";
+}
+
+storageProviders.MapGet("", async (IStorageProviderService providers, CancellationToken ct) =>
+    Results.Ok(await providers.ListAsync(ct))).WithMetadata(storageAdmin);
+
+storageProviders.MapPost("", async (CreateStorageProviderRequest body, IStorageProviderService providers, CancellationToken ct) =>
+{
+    try
+    {
+        var created = await providers.CreateAsync(body, ct);
+        return Results.Created($"/api/storage-providers/{created.Id}", created);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["provider"] = [ex.Message] });
+    }
+}).WithMetadata(storageAdmin);
+
+storageProviders.MapGet("/{id}", async (string id, IStorageProviderService providers, CancellationToken ct) =>
+{
+    var provider = await providers.GetAsync(id, ct);
+    return provider is null ? Results.NotFound() : Results.Ok(provider);
+}).WithMetadata(storageAdmin);
+
+storageProviders.MapPut("/{id}", async (string id, UpdateStorageProviderRequest body, IStorageProviderService providers, CancellationToken ct) =>
+{
+    var updated = await providers.UpdateAsync(id, body, ct);
+    return updated is null ? Results.NotFound() : Results.Ok(updated);
+}).WithMetadata(storageAdmin);
+
+storageProviders.MapDelete("/{id}", async (string id, IStorageProviderService providers, CancellationToken ct) =>
+{
+    try
+    {
+        var ok = await providers.DeleteAsync(id, ct);
+        return ok ? Results.NoContent() : Results.NotFound();
+    }
+    // In use — by a shelf assignment or by content rows an interrupted move
+    // left behind. The message says which and what to do about it.
+    catch (InvalidOperationException ex)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: ex.Message);
+    }
+}).WithMetadata(storageAdmin);
+
+// Reachability + credentials. Reports failure in the payload rather than as an
+// error status, because the settings UI shows the message either way.
+storageProviders.MapPost("/{id}/test", async (string id, IStorageProviderService providers, CancellationToken ct) =>
+{
+    var secret = await providers.ResolveAsync(id, ct);
+    if (secret is null) return Results.NotFound();
+    if (!secret.IsReady)
+    {
+        return Results.Ok(new StorageTestResultDto(false,
+            secret.Kind == StorageProviderKinds.GoogleDrive
+                ? "Not connected yet — save the OAuth client and click Connect."
+                : "No connection string stored yet."));
+    }
+
+    // Built directly rather than through the router so a test never seeds the
+    // cache with a client that was only ever probed.
+    return Results.Ok(await ContentStoreRouter.Create(secret).TestAsync(ct));
+}).WithMetadata(storageAdmin);
+
+storageProviders.MapPost("/{id}/google/connect", async (
+    string id, HttpRequest request, GoogleOAuthService oauth, CancellationToken ct) =>
+{
+    try
+    {
+        var url = await oauth.BuildConnectUrlAsync(id, GoogleRedirectUri(request), ct);
+        return Results.Ok(new StorageConnectResponseDto(url));
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["provider"] = [ex.Message] });
+    }
+}).WithMetadata(storageAdmin);
+
+storageProviders.MapGet("/google/callback", async (
+    string? code, string? state, HttpRequest request, GoogleOAuthService oauth, CancellationToken ct) =>
+{
+    var result = await oauth.HandleCallbackAsync(code, state, GoogleRedirectUri(request), ct);
+    var heading = result.Ok ? "Google Drive connected" : "Connection failed";
+    return Results.Content($"""
+        <!doctype html>
+        <html><head><meta charset="utf-8"><title>BeeDocs — {heading}</title></head>
+        <body style="font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto;">
+          <h1 style="font-size: 1.25rem;">{heading}</h1>
+          <p>{System.Net.WebUtility.HtmlEncode(result.Message)}</p>
+          <p>You can close this window and return to BeeDocs.</p>
+        </body></html>
+        """, "text/html");
+}).WithMetadata(new AllowAnonymousEndpoint());
 
 // --- Export ---
 // PDF is produced in the browser (Print → Save as PDF) because rendering

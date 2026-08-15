@@ -5,6 +5,8 @@ namespace BeeDocs.Api.Models;
 /// <param name="OwnerId">Account responsible for the shelf, or null when nobody was identified.</param>
 /// <param name="BookCount">Books currently on the shelf.</param>
 /// <param name="Published">True when <c>/bookshelf-serve/{slug}</c> is a public website.</param>
+/// <param name="StorageProviderId">Where content bodies live, or null for local SQLite.</param>
+/// <param name="StorageProviderName">That provider's name, resolved for the client.</param>
 public sealed record ShelfDto(
     string Id,
     string Title,
@@ -15,6 +17,8 @@ public sealed record ShelfDto(
     string? OwnerId,
     string? OwnerName,
     int BookCount,
+    string? StorageProviderId,
+    string? StorageProviderName,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
 );
@@ -625,6 +629,67 @@ public sealed record LlmTestResultDto(
     int ElapsedMs
 );
 
+// --- Storage providers ---
+
+/// <summary>
+/// A storage provider as the client sees it. The Azure connection string, Google
+/// client secret and refresh token are write-only — only has/hint fields return.
+/// There is no enabled flag: a provider that content already points at must
+/// always answer, so the only states are "ready" (Azure: connection string
+/// stored; Google: consent completed) and "not yet".
+/// </summary>
+/// <param name="Kind">azure-blob | google-drive.</param>
+/// <param name="Container">azure-blob: the blob container name.</param>
+/// <param name="ConnectionStringHint">Last four characters of the stored connection string, or null.</param>
+/// <param name="GoogleClientId">Echoed — an OAuth client id is public by design.</param>
+/// <param name="GoogleConnected">google-drive: the consent flow has stored a refresh token.</param>
+/// <param name="ShelfCount">Shelves currently assigned to this provider.</param>
+public sealed record StorageProviderDto(
+    string Id,
+    string Kind,
+    string Name,
+    string? Container,
+    bool HasConnectionString,
+    string? ConnectionStringHint,
+    string? GoogleClientId,
+    bool HasGoogleClientSecret,
+    bool GoogleConnected,
+    int ShelfCount,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="Name">Omit to take the default for <paramref name="Kind"/>.</param>
+/// <param name="Container">azure-blob: omit for "beedocs".</param>
+public sealed record CreateStorageProviderRequest(
+    [property: Required, MinLength(1)] string Kind,
+    string? Name,
+    string? Container,
+    string? ConnectionString,
+    string? ClientId,
+    string? ClientSecret
+);
+
+/// <param name="ConnectionString">null = leave the stored value untouched; "" = delete it; anything else = replace it.</param>
+/// <param name="ClientId">Same convention. Changing or clearing it also drops the refresh token — a token minted for one client is useless under another.</param>
+/// <param name="ClientSecret">Same convention as <paramref name="ConnectionString"/>, and same token-drop rule as <paramref name="ClientId"/>.</param>
+public sealed record UpdateStorageProviderRequest(
+    string? Name,
+    string? Container,
+    string? ConnectionString,
+    string? ClientId,
+    string? ClientSecret
+);
+
+/// <param name="Message">Human-readable either way — show it verbatim.</param>
+public sealed record StorageTestResultDto(bool Ok, string Message);
+
+/// <param name="Url">Google consent page to open in a browser.</param>
+public sealed record StorageConnectResponseDto(string Url);
+
+/// <param name="ProviderId">Target provider, or null to move content back to local SQLite.</param>
+public sealed record AssignShelfStorageRequest(string? ProviderId);
+
 // --- Users, roles & sign-in ---
 
 /// <summary>
@@ -755,15 +820,17 @@ public sealed record DocumentCountsDto(
     int Total
 );
 
-/// <param name="ContentBytes">Live document text: page Markdown plus diagram and slide-deck JSON.</param>
-/// <param name="RevisionBytes">The page change log — every kept copy, the price of history.</param>
+/// <param name="ContentBytes">Live document text stored locally: page Markdown plus diagram and slide-deck JSON.</param>
+/// <param name="RevisionBytes">The page change log — every locally kept copy, the price of history.</param>
 /// <param name="DatabaseBytes">The SQLite files on disk (main + WAL), everything included.</param>
 /// <param name="UploadsBytes">Uploaded images and other files under /uploads.</param>
+/// <param name="ExternalBytes">Bodies offloaded to storage providers, measured at upload time.</param>
 public sealed record StorageStatsDto(
     long ContentBytes,
     long RevisionBytes,
     long DatabaseBytes,
-    long UploadsBytes
+    long UploadsBytes,
+    long ExternalBytes
 );
 
 /// <param name="Day">UTC calendar date, yyyy-MM-dd.</param>

@@ -37,6 +37,10 @@ import type {
   SlideDeckSummary,
   SlideTemplate,
   SlideTemplateSummary,
+  CreateStorageProviderRequest,
+  StorageProvider,
+  StorageTestResult,
+  UpdateStorageProviderRequest,
 } from './types'
 import { withApiBase } from './basePath'
 
@@ -584,6 +588,49 @@ export const api = {
       signal,
       // The server's own budget is 90s; cut off just past it, not at the shared default.
       timeoutMs: 95_000,
+    }),
+
+  /**
+   * Storage providers (admin-only): where shelf content bodies can live besides
+   * SQLite. Secrets are write-only — the API returns has/hint fields, so an
+   * unchanged form must omit the secret rather than echo a hint back.
+   */
+  listStorageProviders: () => request<StorageProvider[]>('/api/storage-providers'),
+  getStorageProvider: (id: string) => request<StorageProvider>(`/api/storage-providers/${id}`),
+  createStorageProvider: (body: CreateStorageProviderRequest) =>
+    request<StorageProvider>('/api/storage-providers', { method: 'POST', body: JSON.stringify(body) }),
+  updateStorageProvider: (id: string, body: UpdateStorageProviderRequest) =>
+    request<StorageProvider>(`/api/storage-providers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  /** 409s while any shelf (or a stranded content ref) still uses the provider. */
+  deleteStorageProvider: (id: string) =>
+    request<void>(`/api/storage-providers/${id}`, { method: 'DELETE' }),
+
+  /** Reachability + credential check. Failures come back as ok:false, not a thrown error. */
+  testStorageProvider: (id: string, signal?: AbortSignal) =>
+    request<StorageTestResult>(`/api/storage-providers/${id}/test`, { method: 'POST', signal }),
+
+  /**
+   * Begin the Google Drive consent flow — open the returned URL in a new
+   * window. When consent completes the provider's `googleConnected` flips true;
+   * the API's callback page tells the user to close the window.
+   */
+  connectGoogleStorageProvider: (id: string) =>
+    request<{ url: string }>(`/api/storage-providers/${id}/google/connect`, { method: 'POST' }),
+
+  /**
+   * Move a shelf's content bodies to a provider (null = back to Local/SQLite).
+   * Synchronous on the server and proportional to the shelf's content — give it
+   * minutes, not the shared 30s default. On a timeout the move may still finish
+   * server-side; re-running resumes and skips completed items.
+   */
+  setShelfStorage: (shelfId: string, providerId: string | null) =>
+    request<Shelf>(`/api/shelves/${shelfId}/storage`, {
+      method: 'POST',
+      body: JSON.stringify({ providerId }),
+      timeoutMs: 600_000,
     }),
 
   /**

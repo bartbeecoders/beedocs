@@ -1,0 +1,24 @@
+/*
+ * Storage providers panel. The component reuses the llm-* accordion-card chrome
+ * from llm-providers.css (root: "llm-providers storage-providers") — only what
+ * that sheet lacks lives here.
+ */
+
+/* Green state badge — llm-providers has default/warn/dirty but nothing "healthy". */
+.storage-providers .llm-badge.is-ok {
+  background: color-mix(in srgb, var(--ok, #16a34a) 16%, transparent);
+  color: var(--ok, #16a34a);
+  border: 1px solid color-mix(in srgb, var(--ok, #16a34a) 40%, transparent);
+}
+
+/* Connect row: button + waiting hint + stop side by side. */
+.storage-providers .sp-connect {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.storage-providers .sp-waiting {
+  margin: 0;
+}

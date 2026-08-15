@@ -81,7 +81,11 @@ public interface IDocumentService
     Task<PageRevisionDto?> GetPageRevisionAsync(string pageId, string revisionId, CancellationToken ct = default);
 }
 
-public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAccessor currentUser) : IDocumentService
+public sealed class DocumentService(
+    SqliteConnectionFactory db,
+    ICurrentUserAccessor currentUser,
+    ContentResolver resolver,
+    ShelfContentMover mover) : IDocumentService
 {
     /// <summary>
     /// Book columns, plus the owner's display name and the shelf's title resolved
@@ -105,9 +109,12 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         SELECT s.id, s.title, s.description, s.slug, s.sort_order, s.published, s.owner_id,
                s.created_at, s.updated_at,
                COALESCE(NULLIF(TRIM(u.display_name), ''), u.username) AS owner_name,
-               (SELECT COUNT(*) FROM book b WHERE b.shelf_id = s.id) AS book_count
+               (SELECT COUNT(*) FROM book b WHERE b.shelf_id = s.id) AS book_count,
+               s.storage_provider_id,
+               sp.name AS storage_provider_name
         FROM shelf s
         LEFT JOIN app_user u ON u.id = s.owner_id
+        LEFT JOIN storage_provider sp ON sp.id = s.storage_provider_id
         """;
 
     /// <summary>
@@ -120,7 +127,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
                p.owner_id, p.created_at, p.updated_at,
                COALESCE(NULLIF(TRIM(uo.display_name), ''), uo.username) AS owner_name,
                r.changed_by, r.changed_by_name,
-               p.track_changes, p.max_revisions
+               p.track_changes, p.max_revisions, p.content_ref
         FROM page p
         LEFT JOIN app_user uo ON uo.id = p.owner_id
         LEFT JOIN page_revision r ON r.page_id = p.id AND r.version = p.version
@@ -241,7 +248,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         return ToDto(
             existing,
             await OwnerNameAsync(conn, existing.OwnerId, ct),
-            await ShelfBookCountAsync(conn, existing.Id, ct));
+            await ShelfBookCountAsync(conn, existing.Id, ct),
+            await StorageProviderNameAsync(conn, existing.StorageProviderId, ct));
     }
 
     public async Task<bool> DeleteShelfAsync(string id, CancellationToken ct = default)
@@ -249,6 +257,22 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectShelfAsync(conn, id, ct);
         if (existing is null) return false;
+
+        // The books survive the shelf, so their content must be back in SQLite
+        // before they return to the library root — unshelving them while their
+        // bodies sit at a provider nothing points to anymore would strand them.
+        // A failure aborts the delete; re-running resumes where this stopped.
+        if (existing.StorageProviderId is not null)
+        {
+            var report = await mover.MoveShelfContentAsync(id, targetProviderId: null, ct);
+            if (report.Errors.Count > 0)
+            {
+                throw new ContentUnavailableException(
+                    "shelf storage",
+                    $"Could not bring all content back from the shelf's storage provider "
+                    + $"({report.Errors.Count} item(s) failed). Fix the provider and delete again.");
+            }
+        }
 
         await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
         // Unshelve rather than cascade: a shelf groups books, it does not own their
@@ -468,6 +492,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
             existing.OwnerId = NormalizeOwnerId(request.OwnerId);
         // Same convention for the shelf: "" is how a book is moved back to the
         // library root, and omitting it entirely leaves the book where it is.
+        var previousShelfId = existing.ShelfId;
         if (request.ShelfId is not null)
             existing.ShelfId = await ResolveShelfIdAsync(conn, request.ShelfId, ct);
         existing.UpdatedAt = DateTimeOffset.UtcNow;
@@ -488,6 +513,17 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         SqliteHelpers.Add(cmd, "$owner_id", existing.OwnerId);
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
+
+        // A book that changed shelves may now sit under a different storage
+        // provider — its bodies follow it. The book row is already committed and
+        // every content row self-describes, so a partial relocation here is
+        // readable and resumed by the next move; the mover logs failures.
+        if (!string.Equals(previousShelfId, existing.ShelfId, StringComparison.Ordinal))
+        {
+            var target = await ContentResolver.ProviderIdForBookAsync(conn, existing.Id, ct);
+            await mover.MoveBookContentAsync(existing.Id, target, ct);
+        }
+
         return ToDto(
             existing,
             await OwnerNameAsync(conn, existing.OwnerId, ct),
@@ -499,6 +535,10 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectBookAsync(conn, id, ct);
         if (existing is null) return false;
+
+        // Refs first: the rows are gone after the cascade, and the cloud objects
+        // they point at are deleted best-effort only after the commit.
+        var cloudRefs = await CollectBookContentRefsAsync(conn, id, ct);
 
         // Cascade pages, chapters, diagrams, slide decks and book-scoped shape
         // collections.
@@ -522,6 +562,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
             await tx.CommitAsync(ct);
         }
 
+        await resolver.DeleteAllAsync(cloudRefs, ct);
         return true;
     }
 
@@ -706,8 +747,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"{PageSelect} WHERE p.id = $id LIMIT 1";
         SqliteHelpers.Add(cmd, "$id", id);
-        await using var reader = await cmd.ExecuteReaderAsync(ct);
-        return await reader.ReadAsync(ct) ? ReadPageDto(reader) : null;
+        return await ReadResolvedPageAsync(cmd, ct);
     }
 
     public async Task<PageDto?> GetPageBySlugAsync(string bookId, string pageSlug, CancellationToken ct = default)
@@ -722,8 +762,29 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
             """;
         SqliteHelpers.Add(cmd, "$book_id", bookId);
         SqliteHelpers.Add(cmd, "$slug", wantSlug);
-        await using var reader = await cmd.ExecuteReaderAsync(ct);
-        return await reader.ReadAsync(ct) ? ReadPageDto(reader) : null;
+        return await ReadResolvedPageAsync(cmd, ct);
+    }
+
+    /// <summary>
+    /// Execute a <see cref="PageSelect"/>-shaped single-row query and hand back
+    /// the DTO with its body resolved — fetched from the row's storage provider
+    /// when offloaded. The provider fetch happens after the reader is closed.
+    /// </summary>
+    private async Task<PageDto?> ReadResolvedPageAsync(SqliteCommand cmd, CancellationToken ct)
+    {
+        PageDto? dto = null;
+        string? contentRef = null;
+        await using (var reader = await cmd.ExecuteReaderAsync(ct))
+        {
+            if (await reader.ReadAsync(ct))
+            {
+                dto = ReadPageDto(reader);
+                contentRef = SqliteHelpers.GetNullableString(reader, 16);
+            }
+        }
+
+        if (dto is null || contentRef is null) return dto;
+        return dto with { Content = await resolver.LoadAsync(dto.Content, contentRef, ct) };
     }
 
     public async Task<PageDto> CreatePageAsync(string bookId, CreatePageRequest request, CancellationToken ct = default)
@@ -754,16 +815,32 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
             UpdatedAt = now,
         };
 
+        // Content placement is decided — and any provider upload done — before
+        // the transaction opens, so a slow provider never holds the write lock.
+        var body = page.Content;
+        var target = await ContentResolver.ProviderIdForBookAsync(conn, book.Id, ct);
+        var pageCell = await resolver.SaveAsync(body, target, ContentRef.PageKey(page.Id), null, ct);
+        page.Content = pageCell.InlineValue;
+        page.ContentRef = pageCell.ContentRef;
+        page.ContentSize = pageCell.ContentSize;
+        // A page cell that fell back inline means the provider is unreachable —
+        // don't attempt a second doomed upload for the log entry.
+        var revisionId = SqliteHelpers.NewId();
+        var revisionCell = pageCell.ContentRef is null
+            ? new ContentCell(body, null, null)
+            : await resolver.SaveAsync(body, target, ContentRef.RevisionKey(revisionId), null, ct);
+
         // Page and its first log entry in one transaction: a page whose history
         // does not start at its own creation is a history with a hole in it.
         await using (var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct))
         {
             await InsertPageAsync(conn, page, tx, ct);
-            await InsertRevisionAsync(conn, tx, page, PageChangeKinds.Created, actor, now, ct);
+            await InsertRevisionAsync(conn, tx, page, PageChangeKinds.Created, actor, now, revisionId, revisionCell, ct);
             await tx.CommitAsync(ct);
         }
 
-        return ToDto(page, await OwnerNameAsync(conn, page.OwnerId, ct), actor.Id, actor.Name);
+        var dto = ToDto(page, await OwnerNameAsync(conn, page.OwnerId, ct), actor.Id, actor.Name);
+        return dto with { Content = body };
     }
 
     public async Task<PageDto?> UpdatePageAsync(string id, UpdatePageRequest request, CancellationToken ct = default)
@@ -792,13 +869,17 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
                     "Only the page's owner or an admin can change its tracking settings.");
         }
 
-        await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
+        // Content placement is decided — and any provider I/O done — before the
+        // transaction opens, so a slow provider never holds the write lock. A
+        // metadata-only save of an offloaded page must fetch the body: the log
+        // entry below records the full state, not just what changed.
+        var target = await ContentResolver.ProviderIdForBookAsync(conn, existing.BookId, ct);
+        var oldPageRef = existing.ContentRef;
+        var body = request.Content ?? await resolver.LoadAsync(existing.Content, existing.ContentRef, ct);
 
         existing.Title = request.Title.Trim();
         if (!string.IsNullOrWhiteSpace(request.Slug))
             existing.Slug = SlugHelper.Slugify(request.Slug);
-        if (request.Content is not null)
-            existing.Content = request.Content;
         if (request.ChapterId is not null)
             existing.ChapterId = string.IsNullOrWhiteSpace(request.ChapterId) ? null : request.ChapterId.Trim();
         if (request.SortOrder is int order)
@@ -812,36 +893,98 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         existing.Version += 1;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
-        await using (var cmd = conn.CreateCommand())
+        var pageCell = await resolver.SaveAsync(body, target, ContentRef.PageKey(existing.Id), oldPageRef, ct);
+        existing.Content = pageCell.InlineValue;
+        existing.ContentRef = pageCell.ContentRef;
+        existing.ContentSize = pageCell.ContentSize;
+
+        // Fold this save into the newest log entry when it is the same author
+        // still in the same sitting (see RevisionCoalesceWindow) — decided here,
+        // outside the transaction, because the coalesced entry's body may need a
+        // provider upload of its own.
+        var newest = await SelectNewestRevisionAsync(conn, existing.Id, ct);
+        var coalesce = newest is not null
+            && newest.ChangeKind == PageChangeKinds.Updated
+            && string.Equals(newest.ChangedBy, actor.Id, StringComparison.Ordinal)
+            && newest.CreatedAt >= existing.UpdatedAt - RevisionCoalesceWindow;
+        var revisionId = coalesce ? newest!.Id : SqliteHelpers.NewId();
+        var oldRevisionRef = coalesce ? newest!.ContentRef : null;
+        var revisionCell = pageCell.ContentRef is null
+            ? new ContentCell(body, null, null)
+            : await resolver.SaveAsync(body, target, ContentRef.RevisionKey(revisionId), oldRevisionRef, ct);
+
+        IReadOnlyList<string> prunedRefs;
+        await using (var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct))
         {
-            cmd.Transaction = tx;
-            cmd.CommandText = """
-                UPDATE page SET title = $title, slug = $slug, content = $content, chapter_id = $chapter_id,
-                  sort_order = $sort_order, version = $version, owner_id = $owner_id,
-                  track_changes = $track_changes, max_revisions = $max_revisions, updated_at = $updated_at
-                WHERE id = $id
-                """;
-            SqliteHelpers.Add(cmd, "$id", existing.Id);
-            SqliteHelpers.Add(cmd, "$title", existing.Title);
-            SqliteHelpers.Add(cmd, "$slug", existing.Slug);
-            SqliteHelpers.Add(cmd, "$content", existing.Content);
-            SqliteHelpers.Add(cmd, "$chapter_id", existing.ChapterId);
-            SqliteHelpers.Add(cmd, "$sort_order", existing.SortOrder);
-            SqliteHelpers.Add(cmd, "$version", existing.Version);
-            SqliteHelpers.Add(cmd, "$owner_id", existing.OwnerId);
-            SqliteHelpers.Add(cmd, "$track_changes", existing.TrackChanges ? 1 : 0);
-            SqliteHelpers.Add(cmd, "$max_revisions", existing.MaxRevisions);
-            SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
-            await cmd.ExecuteNonQueryAsync(ct);
+            await using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = """
+                    UPDATE page SET title = $title, slug = $slug, content = $content,
+                      content_ref = $content_ref, content_size = $content_size, chapter_id = $chapter_id,
+                      sort_order = $sort_order, version = $version, owner_id = $owner_id,
+                      track_changes = $track_changes, max_revisions = $max_revisions, updated_at = $updated_at
+                    WHERE id = $id
+                    """;
+                SqliteHelpers.Add(cmd, "$id", existing.Id);
+                SqliteHelpers.Add(cmd, "$title", existing.Title);
+                SqliteHelpers.Add(cmd, "$slug", existing.Slug);
+                SqliteHelpers.Add(cmd, "$content", existing.Content);
+                SqliteHelpers.Add(cmd, "$content_ref", existing.ContentRef);
+                SqliteHelpers.Add(cmd, "$content_size", existing.ContentSize);
+                SqliteHelpers.Add(cmd, "$chapter_id", existing.ChapterId);
+                SqliteHelpers.Add(cmd, "$sort_order", existing.SortOrder);
+                SqliteHelpers.Add(cmd, "$version", existing.Version);
+                SqliteHelpers.Add(cmd, "$owner_id", existing.OwnerId);
+                SqliteHelpers.Add(cmd, "$track_changes", existing.TrackChanges ? 1 : 0);
+                SqliteHelpers.Add(cmd, "$max_revisions", existing.MaxRevisions);
+                SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            // Logged *after* the write and holding the new state, so the newest
+            // entry always mirrors the live page and reading the log needs no
+            // off-by-one.
+            if (coalesce)
+            {
+                await using var update = conn.CreateCommand();
+                update.Transaction = tx;
+                update.CommandText = """
+                    UPDATE page_revision
+                    SET version = $version, title = $title, content = $content,
+                        content_ref = $content_ref, content_size = $content_size,
+                        changed_by_name = $changed_by_name, created_at = $created_at
+                    WHERE id = $id
+                    """;
+                SqliteHelpers.Add(update, "$id", revisionId);
+                SqliteHelpers.Add(update, "$version", existing.Version);
+                SqliteHelpers.Add(update, "$title", existing.Title);
+                SqliteHelpers.Add(update, "$content", revisionCell.InlineValue);
+                SqliteHelpers.Add(update, "$content_ref", revisionCell.ContentRef);
+                SqliteHelpers.Add(update, "$content_size", revisionCell.ContentSize);
+                SqliteHelpers.Add(update, "$changed_by_name", actor.Name);
+                SqliteHelpers.Add(update, "$created_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
+                await update.ExecuteNonQueryAsync(ct);
+            }
+            else
+            {
+                await InsertRevisionAsync(
+                    conn, tx, existing, PageChangeKinds.Updated, actor, existing.UpdatedAt, revisionId, revisionCell, ct);
+            }
+
+            prunedRefs = await PruneRevisionsAsync(conn, tx, existing, ct);
+            await tx.CommitAsync(ct);
         }
 
-        // Logged *after* the write and holding the new state, so the newest entry
-        // always mirrors the live page and reading the log needs no off-by-one.
-        await WriteUpdatedRevisionAsync(conn, tx, existing, actor, existing.UpdatedAt, ct);
-        await PruneRevisionsAsync(conn, tx, existing, ct);
+        // Cloud cleanup strictly after the commit: rows must never point at
+        // objects a rolled-back write already deleted. All best-effort.
+        await resolver.CleanupReplacedAsync(oldPageRef, pageCell.ContentRef, ct);
+        if (coalesce)
+            await resolver.CleanupReplacedAsync(oldRevisionRef, revisionCell.ContentRef, ct);
+        await resolver.DeleteAllAsync(prunedRefs, ct);
 
-        await tx.CommitAsync(ct);
-        return ToDto(existing, await OwnerNameAsync(conn, existing.OwnerId, ct), actor.Id, actor.Name);
+        var dto = ToDto(existing, await OwnerNameAsync(conn, existing.OwnerId, ct), actor.Id, actor.Name);
+        return dto with { Content = body };
     }
 
     public async Task<bool> DeletePageAsync(string id, CancellationToken ct = default)
@@ -850,10 +993,20 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         var existing = await SelectPageAsync(conn, id, ct);
         if (existing is null) return false;
 
-        await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
-        await ExecAsync(conn, tx, "DELETE FROM page_revision WHERE page_id = $id", ("$id", id), ct);
-        await ExecAsync(conn, tx, "DELETE FROM page WHERE id = $id", ("$id", id), ct);
-        await tx.CommitAsync(ct);
+        var cloudRefs = new List<string>();
+        if (existing.ContentRef is not null) cloudRefs.Add(existing.ContentRef);
+        await CollectRefsAsync(conn, cloudRefs,
+            "SELECT content_ref FROM page_revision WHERE page_id = $id AND content_ref IS NOT NULL",
+            ("$id", id), ct);
+
+        await using (var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct))
+        {
+            await ExecAsync(conn, tx, "DELETE FROM page_revision WHERE page_id = $id", ("$id", id), ct);
+            await ExecAsync(conn, tx, "DELETE FROM page WHERE id = $id", ("$id", id), ct);
+            await tx.CommitAsync(ct);
+        }
+
+        await resolver.DeleteAllAsync(cloudRefs, ct);
         return true;
     }
 
@@ -1090,7 +1243,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, version, title, content, changed_by, changed_by_name, change_kind, created_at
+            SELECT id, version, title, content, changed_by, changed_by_name, change_kind, created_at, content_ref
             FROM page_revision
             WHERE id = $id AND page_id = $page_id
             LIMIT 1
@@ -1098,21 +1251,30 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         SqliteHelpers.Add(cmd, "$id", revisionId);
         SqliteHelpers.Add(cmd, "$page_id", page.Id);
 
-        await using var reader = await cmd.ExecuteReaderAsync(ct);
-        if (!await reader.ReadAsync(ct)) return null;
+        PageRevisionDto? dto = null;
+        string? contentRef = null;
+        await using (var reader = await cmd.ExecuteReaderAsync(ct))
+        {
+            if (await reader.ReadAsync(ct))
+            {
+                var version = reader.GetInt32(1);
+                dto = new PageRevisionDto(
+                    Id: reader.GetString(0),
+                    PageId: page.Id,
+                    Version: version,
+                    Title: reader.GetString(2),
+                    Content: reader.GetString(3),
+                    ChangedById: SqliteHelpers.GetNullableString(reader, 4),
+                    ChangedByName: SqliteHelpers.GetNullableString(reader, 5),
+                    ChangeKind: reader.IsDBNull(6) ? PageChangeKinds.Updated : reader.GetString(6),
+                    ChangedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 7)),
+                    IsCurrent: version == page.Version);
+                contentRef = SqliteHelpers.GetNullableString(reader, 8);
+            }
+        }
 
-        var version = reader.GetInt32(1);
-        return new PageRevisionDto(
-            Id: reader.GetString(0),
-            PageId: page.Id,
-            Version: version,
-            Title: reader.GetString(2),
-            Content: reader.GetString(3),
-            ChangedById: SqliteHelpers.GetNullableString(reader, 4),
-            ChangedByName: SqliteHelpers.GetNullableString(reader, 5),
-            ChangeKind: reader.IsDBNull(6) ? PageChangeKinds.Updated : reader.GetString(6),
-            ChangedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 7)),
-            IsCurrent: version == page.Version);
+        if (dto is null || contentRef is null) return dto;
+        return dto with { Content = await resolver.LoadAsync(dto.Content, contentRef, ct) };
     }
 
     /// <summary>
@@ -1121,13 +1283,34 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
     /// mirrors the live page, so a limit of 1 keeps just that). With tracking off
     /// or the limit at 0 the whole log is kept, exactly as before the feature.
     /// </summary>
-    private static async Task PruneRevisionsAsync(
+    private static async Task<IReadOnlyList<string>> PruneRevisionsAsync(
         SqliteConnection conn,
         SqliteTransaction? tx,
         Page page,
         CancellationToken ct)
     {
-        if (!page.TrackChanges || page.MaxRevisions <= 0) return;
+        if (!page.TrackChanges || page.MaxRevisions <= 0) return [];
+
+        // The doomed rows' cloud objects are the caller's to clean up after the
+        // commit, so their refs are collected before the delete removes them.
+        var refs = new List<string>();
+        await using (var collect = conn.CreateCommand())
+        {
+            collect.Transaction = tx;
+            collect.CommandText = """
+                SELECT content_ref FROM page_revision
+                WHERE page_id = $page_id AND content_ref IS NOT NULL AND id NOT IN (
+                  SELECT id FROM page_revision
+                  WHERE page_id = $page_id
+                  ORDER BY version DESC, created_at DESC
+                  LIMIT $keep)
+                """;
+            SqliteHelpers.Add(collect, "$page_id", page.Id);
+            SqliteHelpers.Add(collect, "$keep", page.MaxRevisions);
+            await using var reader = await collect.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+                refs.Add(reader.GetString(0));
+        }
 
         await using var cmd = conn.CreateCommand();
         cmd.Transaction = tx;
@@ -1142,6 +1325,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         SqliteHelpers.Add(cmd, "$page_id", page.Id);
         SqliteHelpers.Add(cmd, "$keep", page.MaxRevisions);
         await cmd.ExecuteNonQueryAsync(ct);
+        return refs;
     }
 
     /// <summary>
@@ -1153,47 +1337,37 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
     /// </summary>
     private static readonly TimeSpan RevisionCoalesceWindow = TimeSpan.FromMinutes(5);
 
-    private static async Task WriteUpdatedRevisionAsync(
-        SqliteConnection conn,
-        SqliteTransaction? tx,
-        Page page,
-        CurrentActor actor,
-        DateTimeOffset changedAt,
-        CancellationToken ct)
-    {
-        // Fold this save into the newest entry when it is the same author still
-        // in the same sitting: the row keeps mirroring the live page, it just
-        // stops multiplying. `IS` rather than `=` so two anonymous saves (null
-        // changed_by) also match. Only 'updated' rows coalesce — the 'created'
-        // entry stays the pristine first version, and a save right after an
-        // idle gap (or by someone else) falls through to a plain insert, which
-        // is what preserves the state the previous sitting left behind.
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.Transaction = tx;
-            cmd.CommandText = """
-                UPDATE page_revision
-                SET version = $version, title = $title, content = $content,
-                    changed_by_name = $changed_by_name, created_at = $created_at
-                WHERE id = (SELECT id FROM page_revision WHERE page_id = $page_id
-                            ORDER BY version DESC, created_at DESC LIMIT 1)
-                  AND change_kind = $change_kind
-                  AND changed_by IS $changed_by
-                  AND created_at >= $cutoff
-                """;
-            SqliteHelpers.Add(cmd, "$page_id", page.Id);
-            SqliteHelpers.Add(cmd, "$version", page.Version);
-            SqliteHelpers.Add(cmd, "$title", page.Title);
-            SqliteHelpers.Add(cmd, "$content", page.Content);
-            SqliteHelpers.Add(cmd, "$changed_by", actor.Id);
-            SqliteHelpers.Add(cmd, "$changed_by_name", actor.Name);
-            SqliteHelpers.Add(cmd, "$change_kind", PageChangeKinds.Updated);
-            SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(changedAt));
-            SqliteHelpers.Add(cmd, "$cutoff", SqliteHelpers.FormatTimestamp(changedAt - RevisionCoalesceWindow));
-            if (await cmd.ExecuteNonQueryAsync(ct) > 0) return;
-        }
+    /// <summary>
+    /// The newest log entry, as far as coalescing cares: the row a same-sitting
+    /// save would fold into. Only 'updated' rows by the same author within
+    /// <see cref="RevisionCoalesceWindow"/> qualify — the 'created' entry stays
+    /// the pristine first version, and a save after an idle gap (or by someone
+    /// else) becomes a plain insert, which is what preserves the state the
+    /// previous sitting left behind. The caller decides; this only reads.
+    /// </summary>
+    private sealed record NewestRevision(
+        string Id, string ChangeKind, string? ChangedBy, DateTimeOffset CreatedAt, string? ContentRef);
 
-        await InsertRevisionAsync(conn, tx, page, PageChangeKinds.Updated, actor, changedAt, ct);
+    private static async Task<NewestRevision?> SelectNewestRevisionAsync(
+        SqliteConnection conn, string pageId, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, change_kind, changed_by, created_at, content_ref
+            FROM page_revision
+            WHERE page_id = $page_id
+            ORDER BY version DESC, created_at DESC
+            LIMIT 1
+            """;
+        SqliteHelpers.Add(cmd, "$page_id", pageId);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        return new NewestRevision(
+            Id: reader.GetString(0),
+            ChangeKind: reader.IsDBNull(1) ? PageChangeKinds.Updated : reader.GetString(1),
+            ChangedBy: SqliteHelpers.GetNullableString(reader, 2),
+            CreatedAt: SqliteHelpers.ReadTimestamp(reader, 3),
+            ContentRef: SqliteHelpers.GetNullableString(reader, 4));
     }
 
     private static async Task InsertRevisionAsync(
@@ -1203,21 +1377,27 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         string changeKind,
         CurrentActor actor,
         DateTimeOffset changedAt,
+        string revisionId,
+        ContentCell cell,
         CancellationToken ct)
     {
         await using var cmd = conn.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = """
             INSERT INTO page_revision
-              (id, page_id, version, title, content, changed_by, changed_by_name, change_kind, created_at)
+              (id, page_id, version, title, content, content_ref, content_size,
+               changed_by, changed_by_name, change_kind, created_at)
             VALUES
-              ($id, $page_id, $version, $title, $content, $changed_by, $changed_by_name, $change_kind, $created_at)
+              ($id, $page_id, $version, $title, $content, $content_ref, $content_size,
+               $changed_by, $changed_by_name, $change_kind, $created_at)
             """;
-        SqliteHelpers.Add(cmd, "$id", SqliteHelpers.NewId());
+        SqliteHelpers.Add(cmd, "$id", revisionId);
         SqliteHelpers.Add(cmd, "$page_id", page.Id);
         SqliteHelpers.Add(cmd, "$version", page.Version);
         SqliteHelpers.Add(cmd, "$title", page.Title);
-        SqliteHelpers.Add(cmd, "$content", page.Content);
+        SqliteHelpers.Add(cmd, "$content", cell.InlineValue);
+        SqliteHelpers.Add(cmd, "$content_ref", cell.ContentRef);
+        SqliteHelpers.Add(cmd, "$content_size", cell.ContentSize);
         SqliteHelpers.Add(cmd, "$changed_by", actor.Id);
         SqliteHelpers.Add(cmd, "$changed_by_name", actor.Name);
         SqliteHelpers.Add(cmd, "$change_kind", changeKind);
@@ -1247,6 +1427,51 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         cmd.CommandText = "SELECT title FROM shelf WHERE id = $id LIMIT 1";
         SqliteHelpers.Add(cmd, "$id", shelfId);
         return await cmd.ExecuteScalarAsync(ct) as string;
+    }
+
+    /// <summary>Name for a storage provider id — what the client shows instead of a raw id.</summary>
+    private static async Task<string?> StorageProviderNameAsync(
+        SqliteConnection conn, string? providerId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(providerId)) return null;
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT name FROM storage_provider WHERE id = $id LIMIT 1";
+        SqliteHelpers.Add(cmd, "$id", providerId);
+        return await cmd.ExecuteScalarAsync(ct) as string;
+    }
+
+    /// <summary>Every cloud object a book's content rows point at, across all four tables.</summary>
+    private static async Task<List<string>> CollectBookContentRefsAsync(
+        SqliteConnection conn, string bookId, CancellationToken ct)
+    {
+        var refs = new List<string>();
+        await CollectRefsAsync(conn, refs, """
+            SELECT content_ref FROM page WHERE book_id = $id AND content_ref IS NOT NULL
+            UNION ALL
+            SELECT content_ref FROM page_revision
+            WHERE page_id IN (SELECT id FROM page WHERE book_id = $id) AND content_ref IS NOT NULL
+            UNION ALL
+            SELECT content_ref FROM diagram WHERE book_id = $id AND content_ref IS NOT NULL
+            UNION ALL
+            SELECT content_ref FROM slide_deck WHERE book_id = $id AND content_ref IS NOT NULL
+            """, ("$id", bookId), ct);
+        return refs;
+    }
+
+    private static async Task CollectRefsAsync(
+        SqliteConnection conn,
+        List<string> refs,
+        string sql,
+        (string Name, object? Value) param,
+        CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        SqliteHelpers.Add(cmd, param.Name, param.Value);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            refs.Add(reader.GetString(0));
     }
 
     private static async Task<int> ShelfBookCountAsync(SqliteConnection conn, string shelfId, CancellationToken ct)
@@ -1312,10 +1537,10 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         await using var cmd = conn.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = """
-            INSERT INTO page (id, book_id, chapter_id, title, slug, content, sort_order, version, owner_id,
-              track_changes, max_revisions, created_at, updated_at)
-            VALUES ($id, $book_id, $chapter_id, $title, $slug, $content, $sort_order, $version, $owner_id,
-              $track_changes, $max_revisions, $created_at, $updated_at)
+            INSERT INTO page (id, book_id, chapter_id, title, slug, content, content_ref, content_size,
+              sort_order, version, owner_id, track_changes, max_revisions, created_at, updated_at)
+            VALUES ($id, $book_id, $chapter_id, $title, $slug, $content, $content_ref, $content_size,
+              $sort_order, $version, $owner_id, $track_changes, $max_revisions, $created_at, $updated_at)
             """;
         SqliteHelpers.Add(cmd, "$id", page.Id);
         SqliteHelpers.Add(cmd, "$book_id", page.BookId);
@@ -1323,6 +1548,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         SqliteHelpers.Add(cmd, "$title", page.Title);
         SqliteHelpers.Add(cmd, "$slug", page.Slug);
         SqliteHelpers.Add(cmd, "$content", page.Content);
+        SqliteHelpers.Add(cmd, "$content_ref", page.ContentRef);
+        SqliteHelpers.Add(cmd, "$content_size", page.ContentSize);
         SqliteHelpers.Add(cmd, "$sort_order", page.SortOrder);
         SqliteHelpers.Add(cmd, "$version", page.Version);
         SqliteHelpers.Add(cmd, "$owner_id", page.OwnerId);
@@ -1361,7 +1588,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, title, description, slug, sort_order, published, owner_id, created_at, updated_at
+            SELECT id, title, description, slug, sort_order, published, owner_id, storage_provider_id,
+                   created_at, updated_at
             FROM shelf WHERE id = $id LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$id", id);
@@ -1376,8 +1604,9 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
             SortOrder = reader.GetInt32(4),
             Published = ReadFlag(reader, 5),
             OwnerId = SqliteHelpers.GetNullableString(reader, 6),
-            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 7),
-            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 8),
+            StorageProviderId = SqliteHelpers.GetNullableString(reader, 7),
+            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 8),
+            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 9),
         };
     }
 
@@ -1408,7 +1637,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT id, book_id, chapter_id, title, slug, content, sort_order, version, owner_id, created_at, updated_at,
-                   track_changes, max_revisions
+                   track_changes, max_revisions, content_ref, content_size
             FROM page WHERE id = $id LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$id", id);
@@ -1432,6 +1661,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 10),
         TrackChanges = ReadFlag(reader, 11),
         MaxRevisions = reader.GetInt32(12),
+        ContentRef = SqliteHelpers.GetNullableString(reader, 13),
+        ContentSize = reader.IsDBNull(14) ? null : reader.GetInt64(14),
     };
 
     private static async Task<string> UniqueShelfSlugAsync(SqliteConnection conn, string baseSlug, CancellationToken ct)
@@ -1607,7 +1838,9 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 7)),
         UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 8)),
         OwnerName: SqliteHelpers.GetNullableString(reader, 9),
-        BookCount: reader.GetInt32(10));
+        BookCount: reader.GetInt32(10),
+        StorageProviderId: SqliteHelpers.GetNullableString(reader, 11),
+        StorageProviderName: SqliteHelpers.GetNullableString(reader, 12));
 
     /// <summary>Reads a row shaped by <see cref="PageSelect"/>.</summary>
     private static PageDto ReadPageDto(SqliteDataReader reader) => new(
@@ -1650,7 +1883,7 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         CreatedAt: Coalesce(b.CreatedAt),
         UpdatedAt: Coalesce(b.UpdatedAt));
 
-    private static ShelfDto ToDto(Shelf s, string? ownerName, int bookCount) => new(
+    private static ShelfDto ToDto(Shelf s, string? ownerName, int bookCount, string? storageProviderName = null) => new(
         Id: s.Id,
         Title: s.Title,
         Description: s.Description,
@@ -1660,6 +1893,8 @@ public sealed class DocumentService(SqliteConnectionFactory db, ICurrentUserAcce
         OwnerId: s.OwnerId,
         OwnerName: ownerName,
         BookCount: bookCount,
+        StorageProviderId: s.StorageProviderId,
+        StorageProviderName: storageProviderName,
         CreatedAt: Coalesce(s.CreatedAt),
         UpdatedAt: Coalesce(s.UpdatedAt));
 

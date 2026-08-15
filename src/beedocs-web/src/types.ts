@@ -19,6 +19,10 @@ export type Shelf = {
   ownerName?: string | null
   /** Books currently on the shelf. */
   bookCount: number
+  /** Where this shelf's content bodies live. Null = Local (SQLite), the default. */
+  storageProviderId?: string | null
+  /** That provider's name, resolved server-side. */
+  storageProviderName?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -583,6 +587,61 @@ export type LlmCompleteRequest = {
   temperature?: number
 }
 
+export type StorageProviderKind = 'azure-blob' | 'google-drive'
+
+/**
+ * A configured backend that shelf content bodies can be offloaded to. Secrets
+ * (Azure connection string, Google client secret) stay server-side — only
+ * has/hint fields return. There is no enabled flag: a provider that content
+ * already points at must always answer, so the only states are "ready"
+ * (Azure: connection string stored; Google: consent completed) and "not yet".
+ */
+export type StorageProvider = {
+  id: string
+  kind: StorageProviderKind
+  name: string
+  /** azure-blob: the blob container name. Null for other kinds. */
+  container: string | null
+  hasConnectionString: boolean
+  /** Last 4 characters of the stored connection string; null when there is none. */
+  connectionStringHint: string | null
+  /** OAuth client id — public in OAuth terms, so it round-trips. */
+  googleClientId: string | null
+  hasGoogleClientSecret: boolean
+  /** google-drive: the consent flow has stored a refresh token. */
+  googleConnected: boolean
+  /** Shelves currently assigned to this provider. */
+  shelfCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** Only `kind` is required — the server names the row after its kind. */
+export type CreateStorageProviderRequest = {
+  kind: StorageProviderKind
+  name?: string
+  container?: string
+  connectionString?: string
+  clientId?: string
+  clientSecret?: string
+}
+
+export type UpdateStorageProviderRequest = {
+  name?: string
+  container?: string
+  /** Omit leaves the stored value alone; "" clears it. */
+  connectionString?: string
+  /** Changing or clearing either OAuth credential also drops the refresh token. */
+  clientId?: string
+  clientSecret?: string
+}
+
+/** Never fails with an error status — a broken provider comes back as ok:false. */
+export type StorageTestResult = {
+  ok: boolean
+  message: string
+}
+
 /**
  * admin — everything, plus account management
  * editor — create/edit/delete content
@@ -717,6 +776,8 @@ export type StorageStats = {
   databaseBytes: number
   /** Uploaded images and other files under /uploads. */
   uploadsBytes: number
+  /** Bodies offloaded to storage providers, measured at upload time. */
+  externalBytes: number
 }
 
 export type DailyActivity = {

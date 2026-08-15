@@ -157,6 +157,27 @@ public static class DatabaseInitializer
               updated_at TEXT NOT NULL
             );
 
+            -- Storage providers for shelf content offloading. The secret columns
+            -- (azure_connection_string, google_client_secret, google_refresh_token)
+            -- are write-only in the llm_provider.api_key sense: read only inside
+            -- StorageProviderService to reach the backend, never put in a DTO.
+            -- Not search-indexed — configuration, not content.
+            CREATE TABLE IF NOT EXISTS storage_provider (
+              id TEXT PRIMARY KEY NOT NULL,
+              kind TEXT NOT NULL,
+              name TEXT NOT NULL,
+              azure_connection_string TEXT,
+              azure_container TEXT,
+              google_client_id TEXT,
+              google_client_secret TEXT,
+              -- Written only by the OAuth callback.
+              google_refresh_token TEXT,
+              -- Drive folder ensured on connect; content objects live inside it.
+              google_folder_id TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
             -- Instance settings an admin can change at runtime from the Settings
             -- page — one row per key. The /api/v1 publish key lives here (its
             -- value is write-only, same rule as llm_provider.api_key); the
@@ -269,6 +290,22 @@ public static class DatabaseInitializer
         // Every insert names its own kind, so this default never touches a new row.
         await AddColumnIfMissingAsync(
             connection, "page_revision", "change_kind", "TEXT NOT NULL DEFAULT 'legacy'", ct);
+        // Storage offloading. NULL content_ref is "body inline in content/source",
+        // which is exactly where every existing row's body already is — so the
+        // migration needs no backfill. NULL shelf.storage_provider_id is local
+        // SQLite for the same reason.
+        await AddColumnIfMissingAsync(connection, "shelf", "storage_provider_id", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "page", "content_ref", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "page", "content_size", "INTEGER", ct);
+        await AddColumnIfMissingAsync(connection, "page_revision", "content_ref", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "page_revision", "content_size", "INTEGER", ct);
+        await AddColumnIfMissingAsync(connection, "diagram", "content_ref", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "diagram", "content_size", "INTEGER", ct);
+        await AddColumnIfMissingAsync(connection, "slide_deck", "content_ref", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "slide_deck", "content_size", "INTEGER", ct);
+        // NULL = "derive from source"; SlideDeckService backfills once at startup
+        // and every save maintains it, so list projections never load the body.
+        await AddColumnIfMissingAsync(connection, "slide_deck", "slide_count", "INTEGER", ct);
 
         await using (var indexes = connection.CreateCommand())
         {

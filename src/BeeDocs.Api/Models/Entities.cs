@@ -25,6 +25,14 @@ public sealed class Shelf
     /// permissions stay role-based.
     /// </summary>
     public string? OwnerId { get; set; }
+    /// <summary>
+    /// <see cref="StorageProvider.Id"/> that new content saved under this shelf
+    /// is offloaded to, or null for local SQLite. Directs writes only — where an
+    /// existing body actually lives is recorded on its own row (see
+    /// <see cref="Page.ContentRef"/>), so this flag and reality may briefly
+    /// disagree while a move is running or after one was interrupted.
+    /// </summary>
+    public string? StorageProviderId { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -71,8 +79,20 @@ public sealed class Page
     public string? ChapterId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
-    /// <summary>Markdown source (supports fenced mermaid blocks).</summary>
+    /// <summary>
+    /// Markdown source (supports fenced mermaid blocks). Empty when the body has
+    /// been offloaded to a storage provider — see <see cref="ContentRef"/>.
+    /// </summary>
     public string Content { get; set; } = string.Empty;
+    /// <summary>
+    /// Where the body lives when it is not in <see cref="Content"/>:
+    /// <c>"{storageProviderId}:{key}"</c>, or null for inline. Self-describing on
+    /// purpose — readers resolve this, never the shelf's provider flag, so every
+    /// intermediate state of a content move stays readable.
+    /// </summary>
+    public string? ContentRef { get; set; }
+    /// <summary>UTF-8 byte size of the offloaded body; null while inline.</summary>
+    public long? ContentSize { get; set; }
     public int SortOrder { get; set; }
     public int Version { get; set; } = 1;
     /// <summary>
@@ -107,6 +127,10 @@ public sealed class PageRevision
     public int Version { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
+    /// <summary>Same convention as <see cref="Page.ContentRef"/>.</summary>
+    public string? ContentRef { get; set; }
+    /// <summary>Same convention as <see cref="Page.ContentSize"/>.</summary>
+    public long? ContentSize { get; set; }
     /// <summary><see cref="User.Id"/> of whoever made the change, or null when nobody was identified.</summary>
     public string? ChangedBy { get; set; }
     /// <summary>
@@ -150,6 +174,10 @@ public sealed class Diagram
     /// for mermaid/c4/plantuml, the text source.
     /// </summary>
     public string Source { get; set; } = string.Empty;
+    /// <summary>Same convention as <see cref="Page.ContentRef"/>.</summary>
+    public string? ContentRef { get; set; }
+    /// <summary>Same convention as <see cref="Page.ContentSize"/>.</summary>
+    public long? ContentSize { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -169,6 +197,16 @@ public sealed class SlideDeck
     /// see <c>src/beedocs-web/src/slides/slideModel.ts</c> for the schema.
     /// </summary>
     public string Source { get; set; } = string.Empty;
+    /// <summary>Same convention as <see cref="Page.ContentRef"/>.</summary>
+    public string? ContentRef { get; set; }
+    /// <summary>Same convention as <see cref="Page.ContentSize"/>.</summary>
+    public long? ContentSize { get; set; }
+    /// <summary>
+    /// Slide count maintained on every save, so list projections don't have to
+    /// load <see cref="Source"/> (which may be offloaded) just to show a badge.
+    /// Null on rows written before the column existed — derive from Source then.
+    /// </summary>
+    public int? SlideCount { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -208,6 +246,33 @@ public sealed class LlmProvider
     public string Model { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public int SortOrder { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
+/// A configured backend that shelf content bodies can be offloaded to. Sparse
+/// per-kind columns rather than a config blob so the write-only-secret rule
+/// stays greppable: the three secret fields are read only by
+/// <see cref="Services.StorageProviderService"/> and never reach a DTO.
+/// </summary>
+public sealed class StorageProvider
+{
+    public string Id { get; set; } = string.Empty;
+    /// <summary>azure-blob | google-drive — see <see cref="Services.StorageProviderKinds"/>.</summary>
+    public string Kind { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    /// <summary>Never serialized to a client; the DTO exposes only has/hint.</summary>
+    public string? AzureConnectionString { get; set; }
+    public string? AzureContainer { get; set; }
+    /// <summary>OAuth client id. Public in OAuth terms, so the DTO echoes it.</summary>
+    public string? GoogleClientId { get; set; }
+    /// <summary>Never serialized to a client.</summary>
+    public string? GoogleClientSecret { get; set; }
+    /// <summary>Written only by the OAuth callback; never serialized to a client.</summary>
+    public string? GoogleRefreshToken { get; set; }
+    /// <summary>Drive folder the callback ensured; objects are created inside it.</summary>
+    public string? GoogleFolderId { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

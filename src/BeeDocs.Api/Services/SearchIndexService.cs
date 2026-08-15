@@ -44,6 +44,7 @@ public sealed record SearchQuery(
 /// </summary>
 public sealed partial class SearchIndexService(
     SqliteConnectionFactory db,
+    ContentResolver resolver,
     ILogger<SearchIndexService> logger
 ) : ISearchIndexService
 {
@@ -254,10 +255,32 @@ public sealed partial class SearchIndexService(
 
         if (pending.Count == 0) return 0;
 
-        await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
+        // Two phases: entity loads first, with no transaction open — an offloaded
+        // body is fetched from its storage provider, and network I/O must never
+        // sit inside the write lock — then one transaction applying everything
+        // that loaded. A row whose provider fetch failed stays queued with its
+        // queued_at bumped, so healthy rows drain first and the drain loop still
+        // terminates (it does not count as applied).
+        var loaded = new List<(string Kind, string Id, IndexDoc? Doc)>();
+        var failed = new List<(string Kind, string Id)>();
+        var failures = 0;
         foreach (var (kind, id, op) in pending)
         {
-            var doc = op == "delete" ? null : await LoadAsync(conn, tx, kind, id, ct);
+            try
+            {
+                loaded.Add((kind, id, op == "delete" ? null : await LoadAsync(conn, kind, id, ct)));
+            }
+            catch (ContentUnavailableException ex)
+            {
+                failed.Add((kind, id));
+                if (failures++ == 0)
+                    logger.LogWarning(ex, "Search indexing skipped rows whose storage provider is unreachable");
+            }
+        }
+
+        await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
+        foreach (var (kind, id, doc) in loaded)
+        {
             if (doc is null)
                 await DeleteDocAsync(conn, tx, kind, id, ct);
             else
@@ -270,8 +293,22 @@ public sealed partial class SearchIndexService(
             SqliteHelpers.Add(dequeue, "$id", id);
             await dequeue.ExecuteNonQueryAsync(ct);
         }
+
+        foreach (var (kind, id) in failed)
+        {
+            await using var requeue = conn.CreateCommand();
+            requeue.Transaction = tx;
+            requeue.CommandText = """
+                UPDATE search_queue SET queued_at = datetime('now')
+                WHERE kind = $kind AND entity_id = $id
+                """;
+            SqliteHelpers.Add(requeue, "$kind", kind);
+            SqliteHelpers.Add(requeue, "$id", id);
+            await requeue.ExecuteNonQueryAsync(ct);
+        }
+
         await tx.CommitAsync(ct);
-        return pending.Count;
+        return loaded.Count;
     }
 
     private sealed record IndexDoc(
@@ -284,17 +321,22 @@ public sealed partial class SearchIndexService(
         string UpdatedAt
     );
 
-    /// <summary>Read one entity and reduce it to indexable text. Null when it is gone.</summary>
-    private static async Task<IndexDoc?> LoadAsync(
-        SqliteConnection conn, SqliteTransaction tx, string kind, string id, CancellationToken ct)
+    /// <summary>
+    /// Read one entity and reduce it to indexable text. Null when it is gone.
+    /// Content-bearing kinds select <c>content_ref</c> too: an offloaded body is
+    /// fetched from its storage provider after the reader closes, which is why
+    /// this runs before the drain transaction opens. Throws
+    /// <see cref="ContentUnavailableException"/> when that fetch fails.
+    /// </summary>
+    private async Task<IndexDoc?> LoadAsync(
+        SqliteConnection conn, string kind, string id, CancellationToken ct)
     {
         await using var cmd = conn.CreateCommand();
-        cmd.Transaction = tx;
         cmd.CommandText = kind switch
         {
-            "page" => "SELECT title, content, book_id, chapter_id, updated_at FROM page WHERE id = $id",
-            "diagram" => "SELECT title, source, book_id, kind, updated_at FROM diagram WHERE id = $id",
-            "slides" => "SELECT title, source, book_id, updated_at FROM slide_deck WHERE id = $id",
+            "page" => "SELECT title, content, book_id, chapter_id, updated_at, content_ref FROM page WHERE id = $id",
+            "diagram" => "SELECT title, source, book_id, kind, updated_at, content_ref FROM diagram WHERE id = $id",
+            "slides" => "SELECT title, source, book_id, updated_at, content_ref FROM slide_deck WHERE id = $id",
             "book" => "SELECT title, description, updated_at FROM book WHERE id = $id",
             "folder" => "SELECT title, book_id, updated_at FROM chapter WHERE id = $id",
             "shelf" => "SELECT title, description, updated_at FROM shelf WHERE id = $id",
@@ -303,59 +345,74 @@ public sealed partial class SearchIndexService(
         if (cmd.CommandText is null) return null;
         SqliteHelpers.Add(cmd, "$id", id);
 
-        await using var reader = await cmd.ExecuteReaderAsync(ct);
-        if (!await reader.ReadAsync(ct)) return null;
+        string title;
+        string? body = null;
+        string? bookId = null;
+        string? chapterId = null;
+        string updatedAt;
+        string? diagramKind = null;
+        string? contentRef = null;
+
+        await using (var reader = await cmd.ExecuteReaderAsync(ct))
+        {
+            if (!await reader.ReadAsync(ct)) return null;
+
+            title = reader.GetString(0);
+            switch (kind)
+            {
+                case "page":
+                    body = SqliteHelpers.GetNullableString(reader, 1);
+                    bookId = SqliteHelpers.GetNullableString(reader, 2);
+                    chapterId = SqliteHelpers.GetNullableString(reader, 3);
+                    updatedAt = reader.GetString(4);
+                    contentRef = SqliteHelpers.GetNullableString(reader, 5);
+                    break;
+                case "diagram":
+                    body = SqliteHelpers.GetNullableString(reader, 1);
+                    bookId = SqliteHelpers.GetNullableString(reader, 2);
+                    diagramKind = SqliteHelpers.GetNullableString(reader, 3);
+                    updatedAt = reader.GetString(4);
+                    contentRef = SqliteHelpers.GetNullableString(reader, 5);
+                    break;
+                case "slides":
+                    body = SqliteHelpers.GetNullableString(reader, 1);
+                    bookId = SqliteHelpers.GetNullableString(reader, 2);
+                    updatedAt = reader.GetString(3);
+                    contentRef = SqliteHelpers.GetNullableString(reader, 4);
+                    break;
+                case "book":
+                    body = SqliteHelpers.GetNullableString(reader, 1);
+                    bookId = id;
+                    updatedAt = reader.GetString(2);
+                    break;
+                case "folder":
+                    bookId = SqliteHelpers.GetNullableString(reader, 1);
+                    chapterId = id;
+                    updatedAt = reader.GetString(2);
+                    break;
+                // No book_id: a shelf sits above books rather than inside one, so
+                // scoping a search to a book must not turn up its shelf.
+                case "shelf":
+                    body = SqliteHelpers.GetNullableString(reader, 1);
+                    updatedAt = reader.GetString(2);
+                    break;
+                default:
+                    return null;
+            }
+        }
+
+        if (contentRef is not null)
+            body = await resolver.LoadAsync(body ?? string.Empty, contentRef, ct);
 
         return kind switch
         {
-            "page" => new IndexDoc(
-                kind, id,
-                SqliteHelpers.GetNullableString(reader, 2),
-                SqliteHelpers.GetNullableString(reader, 3),
-                reader.GetString(0),
-                SearchText.FromMarkdown(SqliteHelpers.GetNullableString(reader, 1)),
-                reader.GetString(4)),
-
+            "page" => new IndexDoc(kind, id, bookId, chapterId, title, SearchText.FromMarkdown(body), updatedAt),
             "diagram" => new IndexDoc(
-                kind, id,
-                SqliteHelpers.GetNullableString(reader, 2),
-                null,
-                reader.GetString(0),
-                SearchText.FromDiagramSource(
-                    SqliteHelpers.GetNullableString(reader, 3),
-                    SqliteHelpers.GetNullableString(reader, 1)),
-                reader.GetString(4)),
-
-            "slides" => new IndexDoc(
-                kind, id,
-                SqliteHelpers.GetNullableString(reader, 2),
-                null,
-                reader.GetString(0),
-                SearchText.FromSlideDeckSource(SqliteHelpers.GetNullableString(reader, 1)),
-                reader.GetString(3)),
-
-            "book" => new IndexDoc(
-                kind, id, id, null,
-                reader.GetString(0),
-                SqliteHelpers.GetNullableString(reader, 1) ?? "",
-                reader.GetString(2)),
-
-            "folder" => new IndexDoc(
-                kind, id,
-                SqliteHelpers.GetNullableString(reader, 1),
-                id,
-                reader.GetString(0),
-                "",
-                reader.GetString(2)),
-
-            // No book_id: a shelf sits above books rather than inside one, so
-            // scoping a search to a book must not turn up its shelf.
-            "shelf" => new IndexDoc(
-                kind, id, null, null,
-                reader.GetString(0),
-                SqliteHelpers.GetNullableString(reader, 1) ?? "",
-                reader.GetString(2)),
-
+                kind, id, bookId, null, title, SearchText.FromDiagramSource(diagramKind, body), updatedAt),
+            "slides" => new IndexDoc(kind, id, bookId, null, title, SearchText.FromSlideDeckSource(body), updatedAt),
+            "book" => new IndexDoc(kind, id, bookId, null, title, body ?? "", updatedAt),
+            "folder" => new IndexDoc(kind, id, bookId, chapterId, title, "", updatedAt),
+            "shelf" => new IndexDoc(kind, id, null, null, title, body ?? "", updatedAt),
             _ => null,
         };
     }

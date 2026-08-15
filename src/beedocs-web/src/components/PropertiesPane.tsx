@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 import { api } from '../api'
+import type { Shelf, StorageProvider } from '../types'
 import { withBase } from '../basePath'
 import { bookshelfSitePath } from '../markdownLinks'
 import { useAuth } from '../auth/AuthContext'
@@ -370,6 +371,9 @@ export function PropertiesPane({ pageState, diagramState, slideState, view }: Pr
             ownerName={shelf.ownerName}
           />
         </Field>
+        <Field label="Storage">
+          <ShelfStorageField shelf={shelf} />
+        </Field>
         <Field label="Website">
           <div className="shelf-site-props">
             <label className="check-row">
@@ -527,6 +531,184 @@ function BookShelfField({
         </span>
       )}
     </>
+  )
+}
+
+/**
+ * Where the shelf's content bodies live. Unlike every other write-on-change
+ * field in this pane, picking a value MOVES data server-side and can take
+ * minutes — so the change is confirmed in a modal first, and the select never
+ * shows the target until the server says it holds. Admin-only: the API refuses
+ * anyone else, and non-admins get the read-only name instead.
+ */
+function ShelfStorageField({ shelf }: { shelf: Shelf }) {
+  const { canManageUsers } = useAuth()
+  const { refreshTree } = useWorkspace()
+  const [providers, setProviders] = useState<StorageProvider[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  // The target awaiting confirmation. undefined = no dialog; null = "Local".
+  const [pending, setPending] = useState<string | null | undefined>(undefined)
+  const [moving, setMoving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const currentLabel = shelf.storageProviderName ?? 'Local (SQLite)'
+
+  useEffect(() => {
+    if (!canManageUsers) return
+    let alive = true
+    api
+      .listStorageProviders()
+      .then((list) => {
+        if (alive) setProviders(list)
+      })
+      .catch((e) => {
+        if (alive) setLoadError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      alive = false
+    }
+  }, [canManageUsers])
+
+  if (!canManageUsers) return <span>{currentLabel}</span>
+
+  const ready = (p: StorageProvider) =>
+    p.kind === 'azure-blob' ? p.hasConnectionString : p.googleConnected
+  // Ready providers, plus the assigned one even if since broken — the select
+  // must be able to show the truth.
+  const options = (providers ?? []).filter((p) => ready(p) || p.id === shelf.storageProviderId)
+  const pendingName = pending
+    ? (options.find((p) => p.id === pending)?.name ?? 'that provider')
+    : 'Local (SQLite)'
+
+  return (
+    <>
+      <select
+        value={shelf.storageProviderId ?? ''}
+        disabled={moving || providers === null}
+        onChange={(e) => {
+          const next = e.target.value || null
+          if (next !== (shelf.storageProviderId ?? null)) {
+            setError(null)
+            setPending(next)
+          }
+        }}
+      >
+        <option value="">Local (SQLite)</option>
+        {options.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      {providers !== null && options.length === 0 && (
+        <span className="muted sm">Add a provider in Settings → Storage providers.</span>
+      )}
+      {loadError && (
+        <span className="users-error" role="alert">
+          {loadError}
+        </span>
+      )}
+      {pending !== undefined && (
+        <ShelfStorageConfirm
+          shelf={shelf}
+          currentLabel={currentLabel}
+          targetName={pendingName}
+          moving={moving}
+          error={error}
+          onCancel={() => {
+            if (!moving) {
+              setPending(undefined)
+              setError(null)
+            }
+          }}
+          onConfirm={async () => {
+            setMoving(true)
+            setError(null)
+            try {
+              await api.setShelfStorage(shelf.id, pending ?? null)
+              // The tree carries the Shelf DTO this pane renders from.
+              await refreshTree()
+              setPending(undefined)
+            } catch (e) {
+              setError(e instanceof Error ? e.message : String(e))
+            } finally {
+              setMoving(false)
+            }
+          }}
+        />
+      )}
+    </>
+  )
+}
+
+/** The confirm/progress dialog for a shelf storage move — ImportDialog's modal idiom. */
+function ShelfStorageConfirm({
+  shelf,
+  currentLabel,
+  targetName,
+  moving,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  shelf: Shelf
+  currentLabel: string
+  targetName: string
+  moving: boolean
+  error: string | null
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape' && !moving) onCancel()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [moving, onCancel])
+
+  // A timeout is not a verdict: the server keeps moving after the client hangs up.
+  const timedOut = error !== null && /did not respond/i.test(error)
+
+  return (
+    <div className="modal-backdrop" onClick={moving ? undefined : onCancel}>
+      <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Move shelf storage</h2>
+        </div>
+        <div className="modal-body">
+          <p>
+            Move the content of <strong>{shelf.title}</strong> ({shelf.bookCount}{' '}
+            {shelf.bookCount === 1 ? 'book' : 'books'}) from <strong>{currentLabel}</strong> to{' '}
+            <strong>{targetName}</strong>?
+          </p>
+          <p className="muted sm">
+            Every page, revision, diagram and slide deck body is moved to the new location. This
+            runs on the server and can take several minutes for a large shelf. If it is
+            interrupted, running the same move again resumes where it stopped.
+          </p>
+          {moving && (
+            <p className="banner warn compact">Moving content… keep this tab open.</p>
+          )}
+          {error && (
+            <p className="banner error compact">
+              {error}
+              {timedOut
+                ? ' The move may still be finishing on the server — wait a moment, then run the same move again; finished items are skipped.'
+                : ''}
+            </p>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn" disabled={moving} onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="btn primary" disabled={moving} onClick={onConfirm}>
+            {moving ? 'Moving…' : 'Move content'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

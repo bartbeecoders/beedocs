@@ -13,7 +13,7 @@ public interface IDiagramService
     Task<bool> DeleteAsync(string id, CancellationToken ct = default);
 }
 
-public sealed class DiagramService(SqliteConnectionFactory db) : IDiagramService
+public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver resolver) : IDiagramService
 {
     public static string DefaultBeeDiagramSource { get; } =
         """{"version":1,"nodes":[],"edges":[],"viewport":{"x":0,"y":0,"zoom":1}}""";
@@ -56,7 +56,9 @@ public sealed class DiagramService(SqliteConnectionFactory db) : IDiagramService
     {
         await using var conn = await db.OpenConnectionAsync(ct);
         var row = await SelectAsync(conn, id, ct);
-        return row is null ? null : ToDto(row);
+        if (row is null) return null;
+        row.Source = await resolver.LoadAsync(row.Source, row.ContentRef, ct);
+        return ToDto(row);
     }
 
     public async Task<DiagramDto> CreateAsync(string bookId, CreateDiagramRequest request, CancellationToken ct = default)
@@ -73,7 +75,7 @@ public sealed class DiagramService(SqliteConnectionFactory db) : IDiagramService
 
         var kind = NormalizeKind(request.Kind);
         var now = DateTimeOffset.UtcNow;
-        var source = string.IsNullOrWhiteSpace(request.Source)
+        var body = string.IsNullOrWhiteSpace(request.Source)
             ? (kind == "beediagram" ? DefaultBeeDiagramSource : string.Empty)
             : request.Source;
 
@@ -84,15 +86,22 @@ public sealed class DiagramService(SqliteConnectionFactory db) : IDiagramService
             PageId = string.IsNullOrWhiteSpace(request.PageId) ? null : request.PageId.Trim(),
             Title = request.Title.Trim(),
             Kind = kind,
-            Source = source,
             CreatedAt = now,
             UpdatedAt = now,
         };
 
+        var target = await ContentResolver.ProviderIdForBookAsync(conn, bookId, ct);
+        var cell = await resolver.SaveAsync(body, target, ContentRef.DiagramKey(diagram.Id), null, ct);
+        diagram.Source = cell.InlineValue;
+        diagram.ContentRef = cell.ContentRef;
+        diagram.ContentSize = cell.ContentSize;
+
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO diagram (id, book_id, page_id, title, kind, source, created_at, updated_at)
-            VALUES ($id, $book_id, $page_id, $title, $kind, $source, $created_at, $updated_at)
+            INSERT INTO diagram (id, book_id, page_id, title, kind, source, content_ref, content_size,
+              created_at, updated_at)
+            VALUES ($id, $book_id, $page_id, $title, $kind, $source, $content_ref, $content_size,
+              $created_at, $updated_at)
             """;
         SqliteHelpers.Add(cmd, "$id", diagram.Id);
         SqliteHelpers.Add(cmd, "$book_id", diagram.BookId);
@@ -100,9 +109,13 @@ public sealed class DiagramService(SqliteConnectionFactory db) : IDiagramService
         SqliteHelpers.Add(cmd, "$title", diagram.Title);
         SqliteHelpers.Add(cmd, "$kind", diagram.Kind);
         SqliteHelpers.Add(cmd, "$source", diagram.Source);
+        SqliteHelpers.Add(cmd, "$content_ref", diagram.ContentRef);
+        SqliteHelpers.Add(cmd, "$content_size", diagram.ContentSize);
         SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(diagram.CreatedAt));
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(diagram.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
+
+        diagram.Source = body;
         return ToDto(diagram);
     }
 
@@ -115,25 +128,41 @@ public sealed class DiagramService(SqliteConnectionFactory db) : IDiagramService
         existing.Title = request.Title.Trim();
         if (!string.IsNullOrWhiteSpace(request.Kind))
             existing.Kind = NormalizeKind(request.Kind);
-        if (request.Source is not null)
-            existing.Source = request.Source;
         if (request.PageId is not null)
             existing.PageId = string.IsNullOrWhiteSpace(request.PageId) ? null : request.PageId.Trim();
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            UPDATE diagram SET title = $title, kind = $kind, source = $source, page_id = $page_id,
-              updated_at = $updated_at
-            WHERE id = $id
-            """;
-        SqliteHelpers.Add(cmd, "$id", existing.Id);
-        SqliteHelpers.Add(cmd, "$title", existing.Title);
-        SqliteHelpers.Add(cmd, "$kind", existing.Kind);
-        SqliteHelpers.Add(cmd, "$source", existing.Source);
-        SqliteHelpers.Add(cmd, "$page_id", existing.PageId);
-        SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
-        await cmd.ExecuteNonQueryAsync(ct);
+        // Provider I/O before the write, same discipline as pages: a metadata-only
+        // save of an offloaded diagram fetches the body so the row stays whole.
+        var target = await ContentResolver.ProviderIdForBookAsync(conn, existing.BookId, ct);
+        var oldRef = existing.ContentRef;
+        var body = request.Source ?? await resolver.LoadAsync(existing.Source, existing.ContentRef, ct);
+        var cell = await resolver.SaveAsync(body, target, ContentRef.DiagramKey(existing.Id), oldRef, ct);
+        existing.Source = cell.InlineValue;
+        existing.ContentRef = cell.ContentRef;
+        existing.ContentSize = cell.ContentSize;
+
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                UPDATE diagram SET title = $title, kind = $kind, source = $source,
+                  content_ref = $content_ref, content_size = $content_size, page_id = $page_id,
+                  updated_at = $updated_at
+                WHERE id = $id
+                """;
+            SqliteHelpers.Add(cmd, "$id", existing.Id);
+            SqliteHelpers.Add(cmd, "$title", existing.Title);
+            SqliteHelpers.Add(cmd, "$kind", existing.Kind);
+            SqliteHelpers.Add(cmd, "$source", existing.Source);
+            SqliteHelpers.Add(cmd, "$content_ref", existing.ContentRef);
+            SqliteHelpers.Add(cmd, "$content_size", existing.ContentSize);
+            SqliteHelpers.Add(cmd, "$page_id", existing.PageId);
+            SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        await resolver.CleanupReplacedAsync(oldRef, cell.ContentRef, ct);
+        existing.Source = body;
         return ToDto(existing);
     }
 
@@ -143,10 +172,14 @@ public sealed class DiagramService(SqliteConnectionFactory db) : IDiagramService
         var existing = await SelectAsync(conn, id, ct);
         if (existing is null) return false;
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM diagram WHERE id = $id";
-        SqliteHelpers.Add(cmd, "$id", id);
-        await cmd.ExecuteNonQueryAsync(ct);
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "DELETE FROM diagram WHERE id = $id";
+            SqliteHelpers.Add(cmd, "$id", id);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        await resolver.DeleteAsync(existing.ContentRef, ct);
         return true;
     }
 
@@ -154,7 +187,7 @@ public sealed class DiagramService(SqliteConnectionFactory db) : IDiagramService
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, book_id, page_id, title, kind, source, created_at, updated_at
+            SELECT id, book_id, page_id, title, kind, source, created_at, updated_at, content_ref, content_size
             FROM diagram WHERE id = $id LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$id", id);
@@ -170,6 +203,8 @@ public sealed class DiagramService(SqliteConnectionFactory db) : IDiagramService
             Source = reader.GetString(5),
             CreatedAt = SqliteHelpers.ReadTimestamp(reader, 6),
             UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 7),
+            ContentRef = SqliteHelpers.GetNullableString(reader, 8),
+            ContentSize = reader.IsDBNull(9) ? null : reader.GetInt64(9),
         };
     }
 

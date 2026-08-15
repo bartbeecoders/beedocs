@@ -115,6 +115,30 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   used to delete a book's description. The tree groups books by `shelfId` rather
   than nesting them (`WorkspaceContext` keeps one flat `books` list), so a book has
   one identity and one loaded set of children wherever it is drawn.
+- **Storage providers** let a shelf's content bodies live in the cloud instead of
+  SQLite: rows in `storage_provider` (kinds `azure-blob` via connection string,
+  `google-drive` via OAuth consent — secrets write-only, llm_provider-style,
+  leaving `StorageProviderService` only through `ResolveAsync`), assigned per
+  shelf with `POST /api/shelves/{id}/storage` (admin, synchronous, minutes-scale;
+  UI gives it a 600s timeout) and configured at `/api/storage-providers` (admin;
+  the Google callback is the one anonymous route — its HMAC-signed `state` is the
+  auth). **Only bodies move** (`page.content`, `page_revision.content`,
+  `diagram.source`, `slide_deck.source`); tree, metadata, `updated_at` and the
+  search index stay local. The load-bearing invariant is the per-row
+  `content_ref` column: NULL = body inline (pre-feature behavior), else
+  `"{providerId}:{key}"` — readers resolve the ref via `ContentResolver`, never
+  the shelf flag, which only directs *new* writes. That makes
+  `ShelfContentMover` idempotent (each row is one atomic UPDATE; re-POST resumes
+  a crashed move) and is why cloud→cloud moves need no shelf history. Provider
+  I/O always happens *before* a SQLite transaction opens (see `DrainBatchAsync`'s
+  two-phase restructure and every domain-service save); a provider failure on
+  save falls back inline rather than losing text, on read maps to 503 via the
+  `/api`-group filter in `Program.cs`. Deleting a provider is refused (409) while
+  any shelf or stranded `content_ref` uses it; deleting a shelf repatriates
+  first; moving a book between shelves relocates its bodies. Settings UI:
+  `StorageProviders.tsx` (reuses the `llm-*` card chrome); shelf assignment:
+  `ShelfStorageField` in `PropertiesPane.tsx` with a confirm modal. Uploads stay
+  local (v1).
 - **SQLite** is file-backed by default (`data/sqlite/beedocs.db` under the API
   content root, directory configurable via `BeeDocs:DataPath`, or a full
   `ConnectionStrings:Sqlite`). There is no separate DB server.

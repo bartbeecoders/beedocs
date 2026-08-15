@@ -70,26 +70,35 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
     private async Task<StorageStatsDto> StorageAsync(SqliteConnection conn, CancellationToken ct)
     {
         // LENGTH() on TEXT counts characters; casting to BLOB counts the bytes
-        // actually stored (SQLite keeps text as UTF-8).
+        // actually stored (SQLite keeps text as UTF-8). Offloaded rows keep an
+        // empty inline column, so they naturally fall out of the local sums;
+        // their cost lives in content_size, recorded at upload time, and is
+        // reported separately as ExternalBytes.
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT (SELECT COALESCE(SUM(LENGTH(CAST(content AS BLOB))), 0) FROM page)
                  + (SELECT COALESCE(SUM(LENGTH(CAST(source AS BLOB))), 0) FROM diagram)
                  + (SELECT COALESCE(SUM(LENGTH(CAST(source AS BLOB))), 0) FROM slide_deck),
                    (SELECT COALESCE(SUM(LENGTH(CAST(content AS BLOB))), 0) FROM page_revision),
-                   (SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size())
+                   (SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()),
+                   (SELECT COALESCE(SUM(content_size), 0) FROM page WHERE content_ref IS NOT NULL)
+                 + (SELECT COALESCE(SUM(content_size), 0) FROM page_revision WHERE content_ref IS NOT NULL)
+                 + (SELECT COALESCE(SUM(content_size), 0) FROM diagram WHERE content_ref IS NOT NULL)
+                 + (SELECT COALESCE(SUM(content_size), 0) FROM slide_deck WHERE content_ref IS NOT NULL)
             """;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         await reader.ReadAsync(ct);
         var contentBytes = reader.GetInt64(0);
         var revisionBytes = reader.GetInt64(1);
         var logicalDbBytes = reader.GetInt64(2);
+        var externalBytes = reader.GetInt64(3);
 
         return new StorageStatsDto(
             ContentBytes: contentBytes,
             RevisionBytes: revisionBytes,
             DatabaseBytes: DatabaseFileBytes(logicalDbBytes),
-            UploadsBytes: UploadsBytes());
+            UploadsBytes: UploadsBytes(),
+            ExternalBytes: externalBytes);
     }
 
     /// <summary>
