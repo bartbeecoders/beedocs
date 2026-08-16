@@ -16,6 +16,18 @@ const IsometricView = lazy(() => import('../isometric/IsometricView'))
 
 const isometricLoading = <div className="canvas-message muted">Loading isometric editor…</div>
 
+/**
+ * Kinds offered by the toolbar switcher. Switching only changes how the
+ * source is interpreted — nothing is converted, so flipping back is free
+ * until the document is edited under the new kind.
+ */
+const KIND_OPTIONS: { kind: string; label: string; title: string }[] = [
+  { kind: 'beediagram', label: 'BeeDiagram', title: 'Free-form canvas — Studio or Classic editor' },
+  { kind: 'isometric', label: 'Isometric', title: 'Tile-grid isometric editor' },
+  { kind: 'mermaid', label: 'Mermaid', title: 'Mermaid text source with live preview' },
+  { kind: 'c4', label: 'C4', title: 'C4 model in Mermaid syntax' },
+]
+
 export type DiagramEditorState = {
   diagram: Diagram | null
   title: string
@@ -262,19 +274,25 @@ export function DiagramCanvas({ onStateChange }: Props) {
         <div className="toolbar-group">
           {canWrite ? (
             <>
-              <select
-                value={kind}
-                onChange={(e) => {
-                  setKind(e.target.value)
-                  setDirty(true)
-                }}
-                aria-label="Diagram kind"
-              >
-                <option value="beediagram">BeeDiagram</option>
-                <option value="isometric">Isometric</option>
-                <option value="mermaid">Mermaid</option>
-                <option value="c4">C4 (Mermaid)</option>
-              </select>
+              <div className="segmented" role="tablist" aria-label="Diagram kind">
+                {KIND_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.kind}
+                    type="button"
+                    role="tab"
+                    aria-selected={kind === opt.kind}
+                    className={kind === opt.kind ? 'active' : ''}
+                    title={opt.title}
+                    onClick={() => {
+                      if (kind === opt.kind) return
+                      setKind(opt.kind)
+                      setDirty(true)
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 className="btn primary sm"
