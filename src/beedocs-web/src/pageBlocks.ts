@@ -12,6 +12,7 @@ export type InsertKind =
   | 'table'
   | 'callout'
   | 'beediagram'
+  | 'isometric'
   | 'freedraw'
   | 'excelgrid'
   | 'mermaid-flow'
@@ -32,6 +33,25 @@ function starterBeeSource(): string {
       { id: 'e1', from: a.id, to: b.id, label: 'uses' },
       { id: 'e2', from: b.id, to: c.id, label: 'reads/writes' },
     ],
+  })
+}
+
+/** Same starter idea as the BeeDiagram: three connected items beat a blank grid. */
+function starterIsoSource(): string {
+  return JSON.stringify({
+    version: 1,
+    items: [
+      { id: 'i1', x: 0, y: 0, shape: 'user', label: 'Actor' },
+      { id: 'i2', x: 3, y: 0, shape: 'server', label: 'System' },
+      { id: 'i3', x: 6, y: 0, shape: 'database', label: 'Store' },
+    ],
+    connectors: [
+      { id: 'c1', from: 'i1', to: 'i2', label: 'uses' },
+      { id: 'c2', from: 'i2', to: 'i3', label: 'reads/writes' },
+    ],
+    zones: [],
+    texts: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
   })
 }
 
@@ -76,6 +96,8 @@ export function segmentsForInsert(kind: InsertKind, opts?: { diagramId?: string;
       ]
     case 'beediagram':
       return [{ type: 'fence', lang: 'beediagram', body: starterBeeSource() }]
+    case 'isometric':
+      return [{ type: 'fence', lang: 'isometric', body: starterIsoSource() }]
     case 'freedraw':
       return [
         {
@@ -122,6 +144,6 @@ export function segmentsForInsert(kind: InsertKind, opts?: { diagramId?: string;
 }
 
 /** Linked diagram: fence only (caller creates the diagram entity) */
-export function segmentsForLinkedDiagram(diagramId: string, _title?: string): ContentSegment[] {
+export function segmentsForLinkedDiagram(diagramId: string): ContentSegment[] {
   return [{ type: 'fence', lang: 'beediagram-ref', body: diagramId }]
 }

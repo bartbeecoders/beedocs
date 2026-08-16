@@ -38,8 +38,8 @@ export type ContentSegment = TextSegment | FenceSegment
 /** Languages rendered as interactive diagram blocks in the hybrid page editor */
 export const VISUAL_FENCE_LANGS = new Set(['beediagram', 'beediagram-ref'])
 
-/** Isometric isometric diagram embeds — the body is a diagram id, not JSON */
-export const ISOMETRIC_FENCE_LANGS = new Set(['isometric-ref'])
+/** Isometric diagram blocks: inline JSON (`isometric`) or an entity id (`isometric-ref`) */
+export const ISOMETRIC_FENCE_LANGS = new Set(['isometric', 'isometric-ref'])
 
 /** Free-draw sketch pad (JSON stroke document) */
 export const FREEDRAW_FENCE_LANGS = new Set(['freedraw', 'sketch'])

@@ -266,27 +266,38 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
 
   // First open: fit existing content into view (the editor never writes the
   // viewport back, so stored documents carry the server default of 0,0). An
-  // empty document instead gets the origin tile mid-view.
+  // empty document instead gets the origin tile mid-view. Inline page blocks
+  // report a sliver of a size mid-layout, so wait for the wrapper to settle
+  // into something real, with a timeout as the escape hatch for genuinely
+  // tiny containers.
   const centeredOnce = useRef(false)
   const fitOnOpenRef = useRef<() => void>(() => {})
-  useEffect(() => {
-    if (centeredOnce.current) return
-    const el = wrapRef.current
-    if (!el || el.clientWidth === 0) return
-    const vp = doc.viewport
-    if (vp && (vp.x !== 0 || vp.y !== 0 || vp.zoom !== 1)) {
-      // A deliberate stored viewport (e.g. an imported document) wins.
+  const centerOnOpen = useCallback(
+    (force: boolean) => {
+      if (centeredOnce.current) return
+      const el = wrapRef.current
+      if (!el || el.clientWidth === 0) return
+      if (!force && el.clientWidth < 240) return
+      const vp = ctrl.docRef.current.viewport
       centeredOnce.current = true
-      return
-    }
-    centeredOnce.current = true
-    const d = ctrl.docRef.current
-    if (d.items.length + d.zones.length + d.texts.length > 0) {
-      fitOnOpenRef.current()
-    } else {
-      setViewport({ x: el.clientWidth / 2, y: el.clientHeight / 2.6, zoom: 1 })
-    }
-  }, [ctrl.docRef, doc.viewport, setViewport, size])
+      if (vp && (vp.x !== 0 || vp.y !== 0 || vp.zoom !== 1)) {
+        // A deliberate stored viewport (e.g. an imported document) wins.
+        return
+      }
+      const d = ctrl.docRef.current
+      if (d.items.length + d.zones.length + d.texts.length > 0) {
+        fitOnOpenRef.current()
+      } else {
+        setViewport({ x: el.clientWidth / 2, y: el.clientHeight / 2.6, zoom: 1 })
+      }
+    },
+    [ctrl.docRef, setViewport],
+  )
+  useEffect(() => centerOnOpen(false), [centerOnOpen, size])
+  useEffect(() => {
+    const t = setTimeout(() => centerOnOpen(true), 400)
+    return () => clearTimeout(t)
+  }, [centerOnOpen])
 
   // ── Coordinate helpers ─────────────────────────────────────────────────────
 

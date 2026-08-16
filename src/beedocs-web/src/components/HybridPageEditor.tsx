@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { withApiBase } from '../basePath'
@@ -55,8 +55,12 @@ import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
 import { ExcelGridCanvas } from './ExcelGridCanvas'
 import { FreeDrawCanvas } from './FreeDrawCanvas'
 import { MarkdownTableEditor } from './MarkdownTableEditor'
-import { IsometricRefBlock } from './MarkdownView'
 import { MediaEmbed, parseMediaFenceBody } from './media/MediaEmbed'
+
+// Lazy so pages without an isometric section don't load the iso editor module.
+const IsometricEditor = lazy(() => import('../isometric/IsometricEditor'))
+
+const isometricLoading = <p className="muted sm">Loading isometric editor…</p>
 import { SyncedTextarea } from './SyncedText'
 
 /** Build markdown segments for an uploaded PDF / 3D model fence. */
@@ -297,7 +301,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             pageId: pageId || undefined,
             source: starter?.body,
           })
-          insertAt(at, segmentsForLinkedDiagram(diagram.id, title))
+          insertAt(at, segmentsForLinkedDiagram(diagram.id))
           await renameInTree()
         } catch (e) {
           setInsertError(e instanceof Error ? e.message : String(e))
@@ -767,6 +771,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             <IsometricFenceBlock
               segment={seg}
               bookId={bookId}
+              onBodyChange={(body) => updateFenceBody(index, body)}
               onRemove={() => removeSegment(index)}
             />
           ) : isVisualFenceLang(seg.lang) ? (
@@ -1201,6 +1206,15 @@ function InsertToolbar({
         >
           Linked diagram
         </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
+          onClick={() => onInsert('isometric')}
+          title="Insert an inline isometric (tile-grid) diagram stored on this page"
+        >
+          Isometric
+        </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('mermaid-flow')}>
           Flowchart
         </button>
@@ -1282,6 +1296,7 @@ function InsertGap({
               ['subsection', 'Subsection'],
               ['beediagram', 'BeeDiagram'],
               ['beediagram-linked', 'Linked diagram'],
+              ['isometric', 'Isometric'],
               ['freedraw', 'Free draw'],
               ['excelgrid', 'Spreadsheet'],
               ['mermaid-flow', 'Flowchart'],
@@ -1522,30 +1537,38 @@ function ExcelGridFenceBlock({
 }
 
 /**
- * ```isometric-ref block in the hybrid editor: the isometric diagram itself is
- * explorable here, but edited on its own page — the isometric workspace is a
- * full-screen editor, not an inline widget.
+ * Isometric blocks in the hybrid editor: an inline ```isometric fence hosts
+ * the tile-grid editor right in the page (the document lives in the fence),
+ * while ```isometric-ref delegates to the kind-aware linked-diagram block.
  */
 function IsometricFenceBlock({
   segment,
   bookId,
+  onBodyChange,
   onRemove,
 }: {
   segment: FenceSegment
   bookId?: string
+  onBodyChange: (body: string) => void
   onRemove: () => void
 }) {
+  if (segment.lang === 'isometric-ref') {
+    return <RefDiagramBlock diagramId={segment.body} bookId={bookId} onRemove={onRemove} />
+  }
+
   return (
     <div className="hybrid-visual-diagram">
       <div className="hybrid-fence-chrome">
         <span className="inline-diagram-badge">Isometric</span>
-        <span className="hybrid-fence-title">Isometric diagram · stored in this book</span>
+        <span className="hybrid-fence-title">Isometric · stored on this page</span>
         <button type="button" className="btn ghost sm danger" onClick={onRemove}>
           Remove
         </button>
       </div>
-      <div className="hybrid-visual-body">
-        <IsometricRefBlock diagramId={segment.body} bookId={bookId} showOpenLink />
+      <div className="hybrid-visual-body hybrid-visual-body--studio">
+        <Suspense fallback={isometricLoading}>
+          <IsometricEditor source={segment.body} onChange={onBodyChange} />
+        </Suspense>
       </div>
     </div>
   )
@@ -1594,6 +1617,9 @@ function RefDiagramBlock({
   const id = diagramId.trim().split(/\s+/)[0] ?? ''
   const [title, setTitle] = useState<string | null>(null)
   const [source, setSource] = useState<string | null>(null)
+  // Which editor to host follows the entity's stored kind, not the fence
+  // language — so a ref keeps working even if the diagram's kind changed.
+  const [kind, setKind] = useState('beediagram')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -1612,6 +1638,7 @@ function RefDiagramBlock({
         if (cancelled) return
         setTitle(d.title)
         titleRef.current = d.title
+        setKind(d.kind)
         setSource(d.source)
         latestRef.current = d.source
         setDirty(false)
@@ -1680,7 +1707,9 @@ function RefDiagramBlock({
     <div className="hybrid-visual-diagram">
       <div className="hybrid-fence-chrome">
         <div className="hybrid-fence-labels">
-          <span className="inline-diagram-badge">BeeDiagram</span>
+          <span className="inline-diagram-badge">
+            {kind === 'isometric' ? 'Isometric' : 'BeeDiagram'}
+          </span>
           <span className="hybrid-fence-title">{title ?? id}</span>
           <span className="muted sm">linked · reusable</span>
         </div>
@@ -1711,7 +1740,13 @@ function RefDiagramBlock({
       </div>
       {error && <div className="banner error compact">{error}</div>}
       <div className="hybrid-visual-body hybrid-visual-body--studio">
-        <BeeDiagramWorkbench source={source} onChange={onEditorChange} bookId={bookId} />
+        {kind === 'isometric' ? (
+          <Suspense fallback={isometricLoading}>
+            <IsometricEditor key={id} source={source} onChange={onEditorChange} />
+          </Suspense>
+        ) : (
+          <BeeDiagramWorkbench source={source} onChange={onEditorChange} bookId={bookId} />
+        )}
       </div>
     </div>
   )
