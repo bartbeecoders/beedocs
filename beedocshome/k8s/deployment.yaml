@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beedocshome
+  namespace: beedocshome
+  labels:
+    app: beedocshome
+    app.kubernetes.io/name: beedocshome
+spec:
+  # Stateless static site — rolling updates are fine, unlike the main
+  # BeeDocs deployment where SQLite pins us to Recreate.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: beedocshome
+  template:
+    metadata:
+      labels:
+        app: beedocshome
+        app.kubernetes.io/name: beedocshome
+    spec:
+      imagePullSecrets:
+        - name: acr-secret
+      containers:
+        - name: beedocshome
+          image: beecodersregistry.azurecr.io/beedocshome:latest
+          # The deploy script always pushes :latest, so the tag alone never
+          # changes — Always + `rollout restart` is what picks up a new digest.
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            # nginx-unprivileged runs as uid 101 and needs no volumes.
+            runAsNonRoot: true
+            runAsUser: 101
+            runAsGroup: 101
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

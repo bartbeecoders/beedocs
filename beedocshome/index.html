@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BeeDocs — self-hosted systems documentation with a diagram studio inside</title>
+  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, slide decks — and an MCP server so AI agents write docs alongside you." />
+  <meta property="og:title" content="BeeDocs — documentation that draws its own architecture" />
+  <meta property="og:description" content="Self-hosted docs for systems teams: Markdown books, BeeDiagram Studio, isometric views, slides, full-text search, and an MCP server for AI agents. One container, SQLite inside. MIT-licensed and free forever." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://beedocshome.hideterms.com/" />
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script src="assets/main.js" defer></script>
+</head>
+<body>
+
+<header class="site-head">
+  <div class="container head-inner">
+    <a class="brand" href="#top" aria-label="BeeDocs home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 2 L28.1 9 L28.1 23 L16 30 L3.9 23 L3.9 9 Z" fill="var(--honey)" stroke="var(--ink)" stroke-width="1.8" stroke-linejoin="round"/>
+        <line x1="10.5" y1="13" x2="21.5" y2="13" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="10.5" y1="19" x2="18" y2="19" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-name">BeeDocs</span>
+    </a>
+    <nav class="head-nav" aria-label="Sections">
+      <a href="#tour">Tour</a>
+      <a href="#features">Features</a>
+      <a href="#diagrams">Diagrams</a>
+      <a href="#agents">AI agents</a>
+      <a href="#selfhost">Self-host</a>
+      <a href="#license">Free forever</a>
+    </nav>
+    <div class="head-actions">
+      <a class="btn btn-ghost" href="https://github.com/bartbeecoders/beedocs" rel="noopener">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+      <a class="btn btn-honey" href="https://beedocs.hideterms.com" rel="noopener">Open demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ============================================================ hero -->
+  <section class="hero">
+    <div class="container hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="dot" aria-hidden="true"></span>self-hosted · single container · SQLite inside</p>
+        <h1>Documentation that draws its own architecture.</h1>
+        <p class="lede">
+          BeeDocs is a self-hosted platform for documenting software and hardware
+          systems: a library of books and Markdown pages with a draw.io-class
+          diagram studio, isometric architecture views and slide decks built in.
+          It ships an MCP server too, so your AI agents write docs right next to you.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-honey btn-lg" href="https://beedocs.hideterms.com" rel="noopener">Open the live demo</a>
+          <a class="btn btn-ghost btn-lg" href="https://github.com/bartbeecoders/beedocs" rel="noopener">View on GitHub</a>
+        </div>
+        <p class="hero-facts mono">MIT license · REST API · MCP for agents · runs on Docker or K3S</p>
+      </div>
+      <figure class="hero-iso">
+        <svg id="iso-hero" viewBox="0 0 900 530" role="img"
+             aria-label="Isometric diagram of the BeeDocs architecture: the web workspace and AI agents connected to one API process with SQLite inside, all on a single self-hosted node."></svg>
+        <figcaption class="mono">fig. 01 — the BeeDocs stack, drawn the way BeeDocs draws it:
+          a 2:1 tile grid, three shades per shape, one JSON document.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ============================================================ tour -->
+  <section id="tour" class="section section-alt reveal">
+    <div class="container">
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>in action</p>
+      <h2>See the workspace before you host it.</h2>
+      <p class="section-lede">A lap around a real library — the same build you get
+         from <span class="mono">docker compose up</span>, showing its own demo
+         content.</p>
+      <figure class="tour-video">
+        <video muted loop playsinline autoplay preload="metadata"
+               poster="assets/tour/beedocs-demo-poster.jpg"
+               aria-label="Screen recording touring BeeDocs: a Markdown page with embedded diagrams, the isometric editor, BeeDiagram Studio, and the slide designer.">
+          <source src="assets/tour/beedocs-demo.webm" type="video/webm" />
+          <source src="assets/tour/beedocs-demo.mp4" type="video/mp4" />
+        </video>
+        <figcaption class="mono">fig. 02 — one library, four editors: a Markdown
+          page with live embeds, the isometric view, BeeDiagram Studio, and slides.</figcaption>
+      </figure>
+      <div class="shot-grid">
+        <figure class="shot">
+          <img src="assets/tour/workspace.jpg" loading="lazy" width="1280" height="602"
+               alt="The BeeDocs workspace: library tree on the left, split Markdown editor in the center with a rendered Mermaid sequence diagram and an embedded isometric view, properties pane on the right." />
+          <figcaption class="mono">fig. 03 — the workspace: tree, split Markdown
+            editor, live preview with Mermaid and isometric embeds.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/tour/studio.jpg" loading="lazy" width="1280" height="602"
+               alt="BeeDiagram Studio editing a checkout flow: shape palette on the left, connected service boxes and a database on the canvas, diagram options on the right." />
+          <figcaption class="mono">fig. 04 — BeeDiagram Studio: palette, canvas,
+            hover-to-connect arrows, format panel.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/tour/isometric.jpg" loading="lazy" width="1280" height="602"
+               alt="The isometric editor showing a production topology: servers, database, cache, queue and firewall on a 2:1 tile grid inside a green cluster zone." />
+          <figcaption class="mono">fig. 05 — the isometric editor: a production
+            topology on the 2:1 tile grid.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/tour/slides.jpg" loading="lazy" width="1280" height="602"
+               alt="The slide designer with a dark-themed architecture review deck: filmstrip of slides on the left, title slide on the canvas, slide options and Present button on the right." />
+          <figcaption class="mono">fig. 06 — the slide designer: filmstrip, canvas,
+            themes, one-click Present.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================== features -->
+  <section id="features" class="section reveal">
+    <div class="container">
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>the library</p>
+      <h2>Everything a systems team writes, in one place.</h2>
+      <div class="card-grid">
+        <article class="card">
+          <h3>A library, not a wiki maze</h3>
+          <p>Shelves hold books, books hold chapters and pages. Publish a shelf
+             and it becomes a clean reader site of its own.</p>
+        </article>
+        <article class="card">
+          <h3>Markdown with live diagrams</h3>
+          <p>Mermaid, C4 and BeeDiagram fences render inline as you type.
+             Autosave runs every 1.5&nbsp;seconds; history keeps one revision per
+             sitting, not per keystroke.</p>
+        </article>
+        <article class="card">
+          <h3>Slides from the same library</h3>
+          <p>Deck designer, full-screen presenter, reusable templates — and
+             export to a real <span class="mono">.pptx</span> file that Google
+             Slides opens natively.</p>
+        </article>
+        <article class="card">
+          <h3>Search that is never stale</h3>
+          <p>SQLite FTS5 over every page, book and diagram label. Whoever wrote
+             the row — UI, agent or import — it gets indexed.
+             <span class="mono">Ctrl+K</span> opens it anywhere.</p>
+        </article>
+        <article class="card">
+          <h3>Accounts when you want them</h3>
+          <p>Three roles — admin, editor, viewer — with sessions and hardened
+             password hashing. Auth is off by default and flips on without a
+             migration.</p>
+        </article>
+        <article class="card">
+          <h3>Owners and page history</h3>
+          <p>Every page keeps a change log of who left it in what state. Owners
+             can turn on full revision copies, with pruning they control.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================== diagrams -->
+  <section id="diagrams" class="section section-alt reveal">
+    <div class="container">
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>diagrams</p>
+      <h2>Three ways to draw, one place to keep them.</h2>
+      <div class="card-grid three">
+        <article class="card">
+          <p class="card-tag mono">kind: beediagram</p>
+          <h3>BeeDiagram Studio</h3>
+          <p>A draw.io-style editor: shape palette, infinite canvas,
+             hover-to-connect arrows with 16 connection points, alignment
+             guides, a format panel and Azure service stencils.</p>
+        </article>
+        <article class="card">
+          <p class="card-tag mono">kind: isometric</p>
+          <h3>Isometric views</h3>
+          <p>Architecture on a 2:1 dimetric tile grid — racks, servers, clouds
+             and zones hand-drawn from primitives, connectors snapped between
+             tiles. The diagram above is one.</p>
+        </article>
+        <article class="card">
+          <p class="card-tag mono">```mermaid</p>
+          <h3>Mermaid &amp; C4</h3>
+          <p>Text-first flowcharts, sequence diagrams and C4 context views
+             inside ordinary Markdown fences, rendered live in the editor.</p>
+        </article>
+      </div>
+      <p class="section-note">Every diagram is one JSON document. It looks identical
+         in the editor, embedded in a page, and in the PDF and HTML exports.</p>
+    </div>
+  </section>
+
+  <!-- ========================================================== agents -->
+  <section id="agents" class="section reveal">
+    <div class="container split">
+      <div class="split-copy">
+        <p class="eyebrow"><span class="dot" aria-hidden="true"></span>mcp server</p>
+        <h2>Your agents write here too.</h2>
+        <p>BeeDocs ships an MCP server that wraps the whole API: create books,
+           write pages, build BeeDiagrams and isometric views, assemble slide
+           decks, search the library. Add a shape to the palette and a generated
+           catalog carries it to your agents — no second edit.</p>
+        <p>Connect Claude Code, Cursor, VS&nbsp;Code or Claude Desktop over stdio
+           or HTTP, with optional bearer-token auth in front.</p>
+        <ul class="chip-row" aria-label="Example MCP tools">
+          <li class="mono">beedocs_create_page</li>
+          <li class="mono">beedocs_create_beediagram_with_nodes</li>
+          <li class="mono">beedocs_create_isometric_with_items</li>
+          <li class="mono">beedocs_search</li>
+        </ul>
+      </div>
+      <div class="split-panel">
+        <div class="code-panel" role="img" aria-label="Terminal command adding BeeDocs as an MCP server to Claude Code">
+          <p class="code-title mono">connect an agent</p>
+<pre class="mono"><code><span class="c"># Claude Code</span>
+claude mcp add --transport http beedocs \
+  https://docs.your-domain.com/mcp
+
+<span class="c"># or stdio, straight from the repo</span>
+claude mcp add beedocs -- dotnet run \
+  --project src/BeeDocs.Mcp</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================== self-host -->
+  <section id="selfhost" class="section section-alt reveal">
+    <div class="container split">
+      <div class="split-copy">
+        <p class="eyebrow"><span class="dot" aria-hidden="true"></span>self-host</p>
+        <h2>One container. Your server. Your data.</h2>
+        <p>A .NET&nbsp;10 API serves the built React workspace, uploads and the
+           database from a single process. SQLite is embedded — there is no
+           database server to run, and a backup is one file.</p>
+        <ul class="check-list">
+          <li>Deploy with Docker Compose, Podman or K3S</li>
+          <li>Optional cloud storage for page bodies — Azure Blob or Google Drive</li>
+          <li>Opt-in sign-in wall; API key for machine callers</li>
+          <li>This page and the demo run on the same VPS</li>
+        </ul>
+      </div>
+      <div class="split-panel">
+        <div class="code-panel" role="img" aria-label="Terminal commands to clone and run BeeDocs with Docker Compose">
+          <p class="code-title mono">up and running</p>
+<pre class="mono"><code>git clone \
+  https://github.com/bartbeecoders/beedocs.git
+cd beedocs
+docker compose up --build
+
+<span class="c"># → http://localhost:5080</span></code></pre>
+        </div>
+        <a class="btn btn-honey btn-lg btn-block" href="https://github.com/bartbeecoders/beedocs" rel="noopener">Get the code on GitHub</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================== license -->
+  <section id="license" class="section reveal">
+    <div class="container split">
+      <div class="split-copy">
+        <p class="eyebrow"><span class="dot" aria-hidden="true"></span>mit license</p>
+        <h2>Free forever. It says so in the repo.</h2>
+        <p>BeeDocs is open source under the MIT license — the whole thing, not
+           an open core with the good parts held back. Every feature on this
+           page ships in the same free build, and always will.</p>
+        <ul class="check-list">
+          <li>No paid tiers, no seat licenses, no feature gates</li>
+          <li>Use it commercially, fork it, embed it, sell what you build on it</li>
+          <li>No account with us, no phone-home, no telemetry</li>
+          <li>Your library is one SQLite file — leave whenever you like, and take it with you</li>
+        </ul>
+      </div>
+      <div class="split-panel">
+        <div class="code-panel" role="img" aria-label="Excerpt of the MIT license file that ships in the BeeDocs repository">
+          <p class="code-title mono">LICENSE</p>
+<pre class="mono"><code>MIT License
+
+Copyright (c) 2026 BeeCoders
+
+Permission is hereby granted,
+<span class="hl">free of charge</span>, to any person
+obtaining a copy of this software …
+to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell
+copies of the Software …
+
+<span class="c"># the full text, verbatim</span>
+<span class="c"># github.com/bartbeecoders/beedocs</span></code></pre>
+        </div>
+        <a class="btn btn-ghost btn-lg btn-block" href="https://github.com/bartbeecoders/beedocs/blob/main/LICENSE" rel="noopener">Read the license</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-foot">
+  <div class="container foot-inner">
+    <div class="foot-brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 2 L28.1 9 L28.1 23 L16 30 L3.9 23 L3.9 9 Z" fill="var(--honey)" stroke="var(--ink)" stroke-width="1.8" stroke-linejoin="round"/>
+        <line x1="10.5" y1="13" x2="21.5" y2="13" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="10.5" y1="19" x2="18" y2="19" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <p class="brand-name">BeeDocs</p>
+        <p class="foot-tag">Self-hosted systems documentation.</p>
+      </div>
+    </div>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="https://beedocs.hideterms.com" rel="noopener">Live demo</a>
+      <a href="https://github.com/bartbeecoders/beedocs" rel="noopener">GitHub</a>
+      <a href="https://github.com/bartbeecoders/beedocs/blob/main/Docs/ARCHITECTURE.md" rel="noopener">Architecture</a>
+      <a href="https://github.com/bartbeecoders/beedocs/blob/main/Docs/MCP-SERVER.md" rel="noopener">MCP docs</a>
+      <a href="https://github.com/bartbeecoders/beedocs/blob/main/LICENSE" rel="noopener">MIT license</a>
+    </nav>
+    <p class="foot-fine mono">© 2026 BeeCoders — MIT licensed, free forever · served from the same VPS as the demo.</p>
+  </div>
+</footer>
+
+</body>
+</html>

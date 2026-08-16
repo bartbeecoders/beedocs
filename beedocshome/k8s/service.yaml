@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: beedocshome
+  namespace: beedocshome
+  labels:
+    app.kubernetes.io/name: beedocshome
+spec:
+  type: NodePort
+  selector:
+    app: beedocshome
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      # Public entry point. The Cloudflare Tunnel on the node forwards
+      # beedocshome.hideterms.com to http://<node>:32097 (tunnel config lives
+      # outside this repo). BeeDocs itself uses 32095/32096 — do not collide.
+      nodePort: 32097
+      protocol: TCP

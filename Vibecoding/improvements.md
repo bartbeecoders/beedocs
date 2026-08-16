@@ -91,3 +91,14 @@ Add the ability to sserver bookshelves as web sited.
 .../bookshelf-serve/{{bookshelfname}}  --> servess all the books and pages in a seperate website
 
 Put the link buttons of Users, Stats, Help and settings into a dropdown menu.
+
+
+Isoflow
+
+Look at this project: https://github.com/markmanx/isoflow
+It allows to draw cool iso metric design documents. Incorporate it into Beedocs, so we can use it.
+
+I do not like it. This Isoflow component is not very inntuitive. Can you not create the same functionality from scratch. Do not use the IsoFlow library or the fossflow library.
+Build it from scratch. This way it will fit better in the platform (same mouse handling, look and feel etc)
+
+Would it make sense to add the isodiagram designer to the diagram section (like the studio and classic view)

@@ -1,0 +1,533 @@
+/* ==========================================================================
+   BeeDocs marketing site — beedocshome.hideterms.com
+   Ground: the product's own Studio canvas (white + dot grid).
+   Accent: honey amber for actions, drafting blue for links/connectors.
+   Type:   Bricolage Grotesque (display) · Instrument Sans (body)
+           · IBM Plex Mono (labels, ports, code — anything the product names).
+   ========================================================================== */
+
+:root {
+  --paper: #fbfaf7;
+  --canvas: #ffffff;
+  --grid: #e6e3d8;
+  --ink: #23211a;
+  --muted: #6f6a5c;
+  --honey: #eba312;
+  --honey-deep: #b87709;
+  --connector: #4e6e9b;
+  --panel-ink: #26241d;
+  --panel-text: #efece2;
+
+  --font-display: "Bricolage Grotesque", system-ui, sans-serif;
+  --font-body: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+img, svg { max-width: 100%; }
+
+a { color: var(--connector); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+:focus-visible {
+  outline: 2px solid var(--honey-deep);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.container {
+  max-width: 1120px;
+  margin-inline: auto;
+  padding-inline: 24px;
+}
+
+.mono { font-family: var(--font-mono); }
+
+/* ------------------------------------------------------------- headings */
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+h1 { font-size: clamp(2.3rem, 5.2vw, 3.9rem); font-weight: 800; }
+h2 { font-size: clamp(1.7rem, 3.4vw, 2.5rem); font-weight: 700; margin-bottom: 0.5em; }
+h3 { font-size: 1.14rem; font-weight: 700; line-height: 1.3; }
+
+/* The eyebrow is set like a diagram label: mono, small, with a connection
+   point in front — everything on this page is an artifact off the canvas. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  margin-bottom: 1.1em;
+}
+
+.eyebrow .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--canvas);
+  border: 2px solid var(--honey-deep);
+  flex: none;
+}
+
+/* -------------------------------------------------------------- buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.72em 1.15em;
+  border-radius: 9px;
+  border: 1.5px solid transparent;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.btn-lg { font-size: 1.02rem; padding: 0.85em 1.4em; }
+.btn-block { width: 100%; justify-content: center; margin-top: 14px; }
+
+.btn-honey {
+  background: var(--honey);
+  color: var(--ink);
+  border-color: var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.btn-honey:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--ink); }
+.btn-honey:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
+
+.btn-ghost {
+  background: var(--canvas);
+  color: var(--ink);
+  border-color: var(--grid);
+}
+.btn-ghost:hover { border-color: var(--ink); }
+
+/* --------------------------------------------------------------- header */
+
+.site-head {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--grid);
+}
+
+.head-inner {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding-block: 12px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.brand-mark { width: 30px; height: 30px; flex: none; }
+
+.brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.22rem;
+  letter-spacing: -0.01em;
+}
+
+.head-nav {
+  display: flex;
+  gap: 22px;
+  margin-inline: auto;
+}
+
+.head-nav a {
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+.head-nav a:hover { color: var(--honey-deep); }
+
+.head-actions { display: flex; gap: 10px; }
+
+/* ----------------------------------------------------------------- hero */
+
+.hero {
+  /* The Studio canvas: white with the dot grid. */
+  background:
+    radial-gradient(var(--grid) 1.1px, transparent 1.1px) 0 0 / 22px 22px,
+    var(--canvas);
+  border-bottom: 1px solid var(--grid);
+}
+
+.hero-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  align-items: center;
+  gap: 48px;
+  padding-block: 76px 64px;
+}
+
+.lede {
+  font-size: 1.14rem;
+  color: var(--muted);
+  margin-top: 1.1em;
+  max-width: 34em;
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 1.8em;
+}
+
+.hero-facts {
+  margin-top: 1.6em;
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.hero-iso { min-width: 0; }
+
+.hero-iso svg { width: 100%; height: auto; display: block; }
+
+.hero-iso figcaption {
+  margin-top: 10px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  line-height: 1.5;
+  max-width: 40em;
+}
+
+/* ------------------------------------------------------------- sections */
+
+.section { padding-block: 84px; scroll-margin-top: 64px; }
+
+.section-alt {
+  background: var(--canvas);
+  border-block: 1px solid var(--grid);
+}
+
+.section-note {
+  margin-top: 28px;
+  color: var(--muted);
+  font-size: 0.97rem;
+  max-width: 46em;
+}
+
+.section-lede {
+  color: var(--muted);
+  max-width: 40em;
+}
+
+/* ------------------------------------------------------------- the tour */
+
+.tour-video { margin-top: 34px; }
+
+.tour-video video {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--canvas);
+  border: 1px solid var(--grid);
+  border-radius: 12px;
+  box-shadow: 4px 4px 0 var(--grid);
+}
+
+.tour-video figcaption,
+.shot figcaption {
+  margin-top: 10px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.shot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 26px 18px;
+  margin-top: 34px;
+}
+
+.shot { min-width: 0; }
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--canvas);
+  border: 1px solid var(--grid);
+  border-radius: 10px;
+}
+
+/* ---------------------------------------------------------------- cards */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  margin-top: 34px;
+}
+
+.card {
+  background: var(--canvas);
+  border: 1px solid var(--grid);
+  border-radius: 12px;
+  padding: 24px 22px;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.section-alt .card { background: var(--paper); }
+
+.card:hover { border-color: var(--honey); transform: translateY(-2px); }
+
+.card h3 { margin-bottom: 0.5em; }
+
+.card p { color: var(--muted); font-size: 0.97rem; }
+
+.card p .mono {
+  font-size: 0.88em;
+  background: var(--paper);
+  border: 1px solid var(--grid);
+  border-radius: 5px;
+  padding: 0.08em 0.35em;
+}
+.section-alt .card p .mono { background: var(--canvas); }
+
+.card-tag {
+  font-size: 0.74rem;
+  color: var(--honey-deep);
+  letter-spacing: 0.05em;
+  margin-bottom: 0.9em;
+}
+
+/* --------------------------------------------------------- split layout */
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
+  gap: 56px;
+  align-items: center;
+}
+
+.split-copy p + p { margin-top: 0.9em; }
+.split-copy > p { color: var(--muted); max-width: 36em; }
+
+.chip-row {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 1.4em;
+}
+
+.chip-row li {
+  font-size: 0.76rem;
+  background: var(--canvas);
+  border: 1px solid var(--grid);
+  border-radius: 999px;
+  padding: 0.4em 0.9em;
+  color: var(--ink);
+}
+
+.check-list {
+  list-style: none;
+  margin-top: 1.2em;
+  display: grid;
+  gap: 0.55em;
+}
+
+.check-list li {
+  padding-left: 1.6em;
+  position: relative;
+  color: var(--muted);
+}
+
+.check-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.42em;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--canvas);
+  border: 2px solid var(--honey-deep);
+}
+
+/* ----------------------------------------------------------- code panel */
+
+.code-panel {
+  background: var(--panel-ink);
+  color: var(--panel-text);
+  border-radius: 12px;
+  border: 1px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--grid);
+  overflow: hidden;
+}
+
+.code-title {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b8b19c;
+  padding: 12px 18px 0;
+}
+
+.code-panel pre {
+  padding: 12px 18px 18px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+
+.code-panel .c { color: #948d78; }
+
+/* The one phrase of the license that is the whole point. */
+.code-panel .hl { color: var(--honey); font-weight: 500; }
+
+/* --------------------------------------------------------------- footer */
+
+.site-foot {
+  border-top: 1px solid var(--grid);
+  background: var(--paper);
+  padding-block: 44px;
+}
+
+.foot-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 24px 48px;
+}
+
+.foot-brand { display: flex; align-items: center; gap: 12px; }
+
+.foot-tag { color: var(--muted); font-size: 0.9rem; }
+
+.foot-links { display: flex; flex-wrap: wrap; gap: 20px; margin-inline: auto; }
+
+.foot-links a { color: var(--ink); text-decoration: none; font-weight: 500; font-size: 0.95rem; }
+.foot-links a:hover { color: var(--honey-deep); }
+
+.foot-fine { font-size: 0.74rem; color: var(--muted); }
+
+/* ------------------------------------------------- hero iso SVG styling */
+
+#iso-hero text {
+  font-family: var(--font-mono);
+  fill: var(--ink);
+}
+
+#iso-hero .iso-label { font-size: 15px; font-weight: 500; }
+#iso-hero .iso-sub { font-size: 12px; fill: var(--muted); }
+#iso-hero .iso-zone-label { font-size: 12px; fill: var(--muted); letter-spacing: 0.06em; }
+
+#iso-hero .iso-zone {
+  fill: var(--honey);
+  fill-opacity: 0.05;
+  stroke: var(--grid);
+  stroke-dasharray: 5 5;
+  stroke-width: 1.5;
+}
+
+#iso-hero .iso-face { stroke: var(--ink); stroke-width: 1.4; stroke-linejoin: round; }
+
+#iso-hero .iso-edge polyline {
+  fill: none;
+  stroke: var(--connector);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* -------------------------------------------------- entrance animations */
+
+#iso-hero .iso-item,
+#iso-hero .iso-zone-g {
+  opacity: 0;
+  animation: iso-pop 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+
+#iso-hero .iso-edge {
+  opacity: 0;
+  animation: iso-fade 0.4s ease forwards;
+}
+
+#iso-hero .iso-edge polyline {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: iso-draw 0.7s ease forwards;
+  animation-delay: inherit;
+}
+
+@keyframes iso-pop {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes iso-fade { to { opacity: 1; } }
+
+@keyframes iso-draw { to { stroke-dashoffset: 0; } }
+
+/* scroll reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.reveal.visible { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+  #iso-hero .iso-item,
+  #iso-hero .iso-zone-g,
+  #iso-hero .iso-edge { animation: none; opacity: 1; }
+  #iso-hero .iso-edge polyline { animation: none; stroke-dashoffset: 0; }
+  .btn, .card { transition: none; }
+}
+
+/* ----------------------------------------------------------- responsive */
+
+@media (max-width: 960px) {
+  .hero-inner { grid-template-columns: 1fr; padding-block: 48px; gap: 36px; }
+  .split { grid-template-columns: 1fr; gap: 36px; }
+  .head-nav { display: none; }
+  .section { padding-block: 60px; }
+}
+
+@media (max-width: 560px) {
+  .head-actions .btn-ghost { display: none; }
+  .cta-row .btn { width: 100%; justify-content: center; }
+  .foot-links { margin-inline: 0; }
+}
