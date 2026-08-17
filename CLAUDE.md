@@ -163,6 +163,23 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   Markdown with embedded Mermaid and `beediagram`/`beediagram-ref` fences
   (`markdownFences.ts`, `pageBlocks.ts`). All API calls go through the typed
   client in `api.ts`.
+- **Page grid layout** (`pageLayout.ts`) — a page can arrange its blocks in a
+  COLS×ROWS grid of cells instead of one top-to-bottom flow. The whole feature
+  lives in the page's Markdown as HTML comment markers
+  (`<!-- bee:layout 2x2 -->` + `<!-- bee:cell N -->`), parsed fence-aware so
+  diagram JSON can never tear a page apart; no marker = the classic single
+  flow, and switching back to 1×1 serializes bare Markdown with no markers.
+  The hybrid editor renders one block list per cell (`data-cell-root`,
+  layout picker in the insert toolbar) and `useBlockReorder` addresses blocks
+  as `{cell, index}` so the same drag handle moves blocks between cells (←/→
+  on a focused handle is the keyboard path). `MarkdownView` splits into a
+  `.page-grid` of per-cell bodies — which keeps inline-fence occurrence
+  indices per cell — and `buildPageOutline`, the PDF exporter
+  (`.export-grid`) and the reader site follow the same cell order; block ids
+  (`outlineId`) count across cells. Server-side, `MarkdownDoc.ParseProse`
+  skips whole-line HTML comments, which is what keeps the markers out of
+  DOCX exports and the search index. Grids collapse to one column under
+  900 px.
 - **BeeDiagram** is a custom diagram format (`kind: "beediagram"`, stored as a
   JSON `nodes`/`edges`/`viewport` document — see `diagram/beeModel.ts`) with two
   interchangeable editors on the same document:

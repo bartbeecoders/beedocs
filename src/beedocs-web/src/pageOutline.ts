@@ -1,4 +1,5 @@
 import { splitMarkdownSegments, type ContentSegment } from './markdownFences'
+import { parsePageLayout } from './pageLayout'
 
 export type PageOutlineKind = 'heading' | 'diagram' | 'freedraw' | 'excelgrid' | 'media' | 'code' | 'block'
 
@@ -18,15 +19,25 @@ const HEADING_RE = /^(#{1,6})\s+(.+?)\s*$/m
 /**
  * Build a navigation outline for a page from its Markdown source.
  * One entry per hybrid editor block that is a heading section or a major embed.
+ *
+ * A page with a grid layout is outlined cell by cell, and block indices count
+ * across all cells in order — the same numbering the editor and the preview
+ * use for their anchor ids.
  */
 export function buildPageOutline(content: string): PageOutlineItem[] {
-  const segments = splitMarkdownSegments(content ?? '')
+  const parsed = parsePageLayout(content ?? '')
+  const cells = parsed ? parsed.cells : [content ?? '']
   const items: PageOutlineItem[] = []
 
-  segments.forEach((seg, blockIndex) => {
-    const item = outlineItemForSegment(seg, blockIndex)
-    if (item) items.push(item)
-  })
+  let offset = 0
+  for (const cell of cells) {
+    const segments = splitMarkdownSegments(cell)
+    segments.forEach((seg, i) => {
+      const item = outlineItemForSegment(seg, offset + i)
+      if (item) items.push(item)
+    })
+    offset += segments.length
+  }
 
   return items
 }

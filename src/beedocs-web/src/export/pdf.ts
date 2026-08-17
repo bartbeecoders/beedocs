@@ -4,6 +4,7 @@ import { withApiBase } from '../basePath'
 import { excelGridToHtml } from '../excelgrid/model'
 import { freeDrawToSvg } from '../freedraw/model'
 import { cellStyleClass, parseTableMarker, tableThemeClass, type TableMarker } from '../markdownTable'
+import { isLayoutMarkerLine, parsePageLayout } from '../pageLayout'
 import type { Chapter, Page } from '../types'
 import { beeDiagramToSvg } from './beeDiagramSvg'
 import { isoDiagramToSvg } from '../isometric/isoSvg'
@@ -66,7 +67,7 @@ export async function exportPageToPdf(pageId: string, onProgress?: ExportProgres
   const page = await api.getPage(pageId)
 
   onProgress?.('Rendering content…')
-  const body = await markdownToExportHtml(page.content, makeDiagramResolver())
+  const body = await pageContentToExportHtml(page.content, makeDiagramResolver())
 
   const generated = new Date().toLocaleString()
   const html = `<!DOCTYPE html>
@@ -119,7 +120,7 @@ export async function exportBookToPdf(bookId: string, onProgress?: ExportProgres
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i]
     onProgress?.(`Rendering “${page.title}” (${i + 1}/${pages.length})…`)
-    const body = await markdownToExportHtml(page.content, resolveDiagram)
+    const body = await pageContentToExportHtml(page.content, resolveDiagram)
     pageHtml.push(`
       <section class="export-page" id="page-${esc(page.id)}">
         <h1 class="export-page-title">${esc(page.title)}</h1>
@@ -167,6 +168,30 @@ export async function exportBookToPdf(bookId: string, onProgress?: ExportProgres
 
   onProgress?.('Opening print dialog…')
   openPrintWindow(html)
+}
+
+/**
+ * Render a page's content, honouring an optional grid layout: cells become a
+ * CSS grid (Chromium prints grid fine), and each cell renders through the
+ * ordinary Markdown pipeline.
+ */
+async function pageContentToExportHtml(
+  content: string,
+  resolveDiagram: (id: string) => Promise<{ title: string; source: string; kind: string }>,
+): Promise<string> {
+  const parsed = parsePageLayout(content)
+  if (!parsed) return markdownToExportHtml(content, resolveDiagram)
+
+  const cells: string[] = []
+  for (const cell of parsed.cells) {
+    // Sequential — mermaid.render is not safe to run concurrently.
+    cells.push(await markdownToExportHtml(cell, resolveDiagram))
+  }
+  return (
+    `<div class="export-grid" style="grid-template-columns: repeat(${parsed.layout.cols}, minmax(0, 1fr));">` +
+    cells.map((c) => `<div class="export-grid-cell">${c}</div>`).join('') +
+    `</div>`
+  )
 }
 
 async function markdownToExportHtml(
@@ -299,6 +324,12 @@ function renderProse(text: string): string {
   while (i < lines.length) {
     const line = lines[i]
     const trimmed = line.trim()
+
+    // Layout markers are structure, not prose — never let one print as text.
+    if (isLayoutMarkerLine(trimmed)) {
+      i++
+      continue
+    }
 
     // A table style marker styles the table that follows; it renders as nothing.
     const marker = parseTableMarker(trimmed)
@@ -545,6 +576,16 @@ const PRINT_CSS = `
   .export-page-body th.bee-cell--warn, .export-page-body td.bee-cell--warn { background: #f9ecd9; color: #7a4c14; }
   .export-page-body th.bee-cell--danger, .export-page-body td.bee-cell--danger { background: #f9e2e2; color: #8c2626; }
   .export-page-body th.bee-cell--muted, .export-page-body td.bee-cell--muted { background: #ededee; color: #666666; }
+  .export-grid {
+    display: grid;
+    gap: 5mm 6mm;
+    align-items: start;
+    margin: 0.4em 0;
+  }
+  .export-grid-cell {
+    min-width: 0;
+    overflow: hidden;
+  }
   .export-mermaid, .export-diagram {
     margin: 1em 0;
     page-break-inside: avoid;

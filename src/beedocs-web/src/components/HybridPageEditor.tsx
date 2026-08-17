@@ -1,8 +1,8 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { withApiBase } from '../basePath'
-import { useBlockReorder } from '../hooks/useBlockReorder'
+import { sameGap, useBlockReorder, type BlockAddr, type GapAddr } from '../hooks/useBlockReorder'
 import { useImageIntake, type ImageIntakeContext } from '../hooks/useImageIntake'
 import {
   isExcelGridFenceLang,
@@ -48,6 +48,16 @@ import {
   modelFormatFromExtension,
 } from '../media/mediaKinds'
 import { segmentsForInsert, segmentsForLinkedDiagram, type InsertKind } from '../pageBlocks'
+import {
+  LAYOUT_PRESETS,
+  cellCount,
+  formatLayoutSpec,
+  parseLayoutSpec,
+  parsePageLayout,
+  reflowCells,
+  serializePageLayout,
+  type PageLayout,
+} from '../pageLayout'
 import { outlineId } from '../pageOutline'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { AiAssistBar, AiAssistField } from './AiAssist'
@@ -153,7 +163,42 @@ type Props = {
   placeholder?: string
 }
 
-type InsertAt = 'end' | number // number = insert before segment index
+/**
+ * The editor's working shape of a page: its grid layout (null = the classic
+ * single flow) and one segment list per cell. Serializing goes back through
+ * `serializePageLayout`, so the markers round-trip with the content.
+ */
+type EditorDoc = {
+  layout: PageLayout | null
+  cells: ContentSegment[][]
+}
+
+/** Every cell keeps at least one (possibly empty) text block to type into. */
+function ensureCell(segments: ContentSegment[]): ContentSegment[] {
+  return segments.length > 0 ? segments : [{ type: 'text', text: '' }]
+}
+
+function parseEditorDoc(content: string): EditorDoc {
+  const parsed = parsePageLayout(content)
+  if (!parsed) return { layout: null, cells: [splitMarkdownSegments(content)] }
+  return { layout: parsed.layout, cells: parsed.cells.map((c) => ensureCell(splitMarkdownSegments(c))) }
+}
+
+function serializeEditorDoc(doc: EditorDoc): string {
+  const cellMds = doc.cells.map(joinMarkdownSegments)
+  if (!doc.layout) return cellMds[0] ?? ''
+  return serializePageLayout(doc.layout, cellMds)
+}
+
+/** Where an insert should land: a gap index inside a cell, or that cell's end. */
+type InsertTarget = { cell: number; at: number | 'end' }
+
+/** Parse a `data-drop-slot` value (`before:CELL:GAP` / `segment:CELL:INDEX`). */
+function parseDropSlot(raw: string): { kind: 'before' | 'segment'; cell: number; index: number } | null {
+  const m = /^(before|segment):(\d+):(\d+)$/.exec(raw)
+  if (!m) return null
+  return { kind: m[1] as 'before' | 'segment', cell: Number(m[2]), index: Number(m[3]) }
+}
 
 type ReorderGapProps = {
   onDragOver: (e: React.DragEvent) => void
@@ -165,72 +210,115 @@ type ReorderGapProps = {
  * Page editor that keeps prose as Markdown textareas but renders BeeDiagram
  * fences as the full visual canvas editor — so you edit diagrams on the page.
  * Markdown images show as previews in edit mode; drops insert at the pointer.
+ *
+ * Pages can arrange their blocks in a grid (`pageLayout.ts`): each cell hosts
+ * its own block list, and blocks drag between cells with the same handle that
+ * reorders them.
  */
 export function HybridPageEditor({ content, onChange, bookId, pageId, placeholder }: Props) {
   const lastEmitted = useRef(content)
   const rootRef = useRef<HTMLDivElement>(null)
-  const [segments, setSegments] = useState<ContentSegment[]>(() => splitMarkdownSegments(content))
+  const [doc, setDoc] = useState<EditorDoc>(() => parseEditorDoc(content))
   const [busy, setBusy] = useState(false)
   const [insertError, setInsertError] = useState<string | null>(null)
   const [dropHint, setDropHint] = useState<string | null>(null)
   /** A page/book is being dragged over the editor from the library tree. */
   const [linkDragging, setLinkDragging] = useState(false)
+  /** Cell the toolbar inserts into — follows focus/clicks. Always 0 without a grid. */
+  const [activeCell, setActiveCell] = useState(0)
   const { renameInTree } = useWorkspace()
 
   useEffect(() => {
     if (content === lastEmitted.current) return
-    setSegments(splitMarkdownSegments(content))
+    setDoc(parseEditorDoc(content))
     lastEmitted.current = content
   }, [content])
 
   const emit = useCallback(
-    (next: ContentSegment[]) => {
-      setSegments(next)
-      const md = joinMarkdownSegments(next)
+    (next: EditorDoc) => {
+      setDoc(next)
+      const md = serializeEditorDoc(next)
       lastEmitted.current = md
       onChange(md)
     },
     [onChange],
   )
 
-  const segmentsRef = useRef(segments)
-  segmentsRef.current = segments
+  const docRef = useRef(doc)
+  docRef.current = doc
+  const activeCellRef = useRef(activeCell)
+  activeCellRef.current = Math.min(activeCell, doc.cells.length - 1)
 
-  const updateSegment = useCallback(
-    (index: number, patch: ContentSegment) => {
-      // Read through the ref: a handler created in an earlier render must not
-      // rebuild the document from that render's (now stale) segment list.
-      emit(segmentsRef.current.map((s, i) => (i === index ? keepBlockId(s, patch) : s)))
+  /** Replace one cell's segment list (already normalized by the caller). */
+  const emitCell = useCallback(
+    (cell: number, segments: ContentSegment[]) => {
+      const d = docRef.current
+      emit({ ...d, cells: d.cells.map((c, i) => (i === cell ? ensureCell(segments) : c)) })
     },
     [emit],
+  )
+
+  const updateSegment = useCallback(
+    (cell: number, index: number, patch: ContentSegment) => {
+      // Read through the ref: a handler created in an earlier render must not
+      // rebuild the document from that render's (now stale) segment list.
+      const list = docRef.current.cells[cell]
+      if (!list) return
+      emitCell(cell, list.map((s, i) => (i === index ? keepBlockId(s, patch) : s)))
+    },
+    [emitCell],
   )
 
   const removeSegment = useCallback(
-    (index: number) => {
-      emit(mergeAdjacentText(segmentsRef.current.filter((_, i) => i !== index)))
+    (cell: number, index: number) => {
+      const list = docRef.current.cells[cell]
+      if (!list) return
+      emitCell(cell, mergeAdjacentText(list.filter((_, i) => i !== index)))
     },
-    [emit],
+    [emitCell],
   )
 
   /**
-   * Move a block to sit before position `to` in the current list.
+   * Move a block to sit before gap `to.gap` in cell `to.cell` — which may be a
+   * different cell than the one it came from.
    *
-   * `to` is a gap index, so dropping into the gap directly after the dragged
-   * block is a no-op rather than an off-by-one shuffle.
+   * Within one cell, `to.gap` is a gap index, so dropping into the gap directly
+   * after the dragged block is a no-op rather than an off-by-one shuffle.
    */
   const moveSegment = useCallback(
-    (from: number, to: number) => {
-      const list = segmentsRef.current
-      if (from < 0 || from >= list.length) return
-      if (to === from || to === from + 1) return
+    (from: BlockAddr, to: GapAddr) => {
+      const d = docRef.current
+      const source = d.cells[from.cell]
+      if (!source || from.index < 0 || from.index >= source.length) return
+      if (!d.cells[to.cell]) return
 
-      const next = [...list]
-      const [moved] = next.splice(from, 1)
+      if (from.cell === to.cell) {
+        if (to.gap === from.index || to.gap === from.index + 1) return
+        const next = [...source]
+        const [moved] = next.splice(from.index, 1)
+        if (!moved) return
+        next.splice(to.gap > from.index ? to.gap - 1 : to.gap, 0, moved)
+        emitCell(from.cell, mergeAdjacentText(next))
+        return
+      }
+
+      const nextSource = [...source]
+      const [moved] = nextSource.splice(from.index, 1)
       if (!moved) return
-      next.splice(to > from ? to - 1 : to, 0, moved)
-      emit(mergeAdjacentText(next))
+      const nextTarget = [...d.cells[to.cell]]
+      nextTarget.splice(Math.min(Math.max(0, to.gap), nextTarget.length), 0, moved)
+      emit({
+        ...d,
+        cells: d.cells.map((c, i) =>
+          i === from.cell
+            ? ensureCell(mergeAdjacentText(nextSource))
+            : i === to.cell
+              ? mergeAdjacentText(nextTarget)
+              : c,
+        ),
+      })
     },
-    [emit],
+    [emit, emitCell],
   )
 
   /**
@@ -241,50 +329,85 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
    * block — and so only becomes draggable — when focus leaves.
    */
   const normalizeBlocks = useCallback(() => {
-    const list = segmentsRef.current
-    const next = mergeAdjacentText(list)
-    const unchanged =
-      next.length === list.length &&
-      next.every((s, i) => {
-        const prev = list[i]
-        return s.type === 'text' && prev.type === 'text'
-          ? s.text === prev.text
-          : s.type === 'fence' && prev.type === 'fence' && s.lang === prev.lang && s.body === prev.body
-      })
-    if (unchanged) return
-    emit(next)
+    const d = docRef.current
+    let changed = false
+    const cells = d.cells.map((list) => {
+      const next = mergeAdjacentText(list)
+      const unchanged =
+        next.length === list.length &&
+        next.every((s, i) => {
+          const prev = list[i]
+          return s.type === 'text' && prev.type === 'text'
+            ? s.text === prev.text
+            : s.type === 'fence' && prev.type === 'fence' && s.lang === prev.lang && s.body === prev.body
+        })
+      if (unchanged) return list
+      changed = true
+      return ensureCell(next)
+    })
+    if (!changed) return
+    emit({ ...d, cells })
   }, [emit])
 
   const reorder = useBlockReorder({ onMove: moveSegment, containerRef: rootRef })
 
   const updateFenceBody = useCallback(
-    (index: number, body: string) => {
-      const list = segmentsRef.current
-      const seg = list[index]
+    (cell: number, index: number, body: string) => {
+      const list = docRef.current.cells[cell]
+      const seg = list?.[index]
       if (!seg || seg.type !== 'fence') return
-      emit(list.map((s, i) => (i === index ? keepBlockId(s, { ...seg, body }) : s)))
+      emitCell(cell, list.map((s, i) => (i === index ? keepBlockId(s, { ...seg, body }) : s)))
     },
-    [emit],
+    [emitCell],
   )
 
   const insertAt = useCallback(
-    (at: InsertAt, extra: ContentSegment[]) => {
-      const list = segmentsRef.current
+    (target: InsertTarget, extra: ContentSegment[]) => {
+      const d = docRef.current
+      const cell = Math.min(Math.max(0, target.cell), d.cells.length - 1)
+      const list = d.cells[cell]
       let next: ContentSegment[]
-      if (at === 'end') {
+      if (target.at === 'end') {
         next = [...list, ...extra]
       } else {
+        const at = Math.min(Math.max(0, target.at), list.length)
         next = [...list.slice(0, at), ...extra, ...list.slice(at)]
       }
-      next = mergeAdjacentText(next)
-      emit(next)
+      emitCell(cell, mergeAdjacentText(next))
+    },
+    [emitCell],
+  )
+
+  /** Default landing spot for content that arrives without a drop slot. */
+  const defaultTarget = useCallback(
+    (): InsertTarget => ({ cell: activeCellRef.current, at: 'end' }),
+    [],
+  )
+
+  /** Switch the page's grid layout, re-flowing existing cells into the new one. */
+  const changeLayout = useCallback(
+    (spec: string) => {
+      const layout = parseLayoutSpec(spec)
+      if (!layout) return
+      const d = docRef.current
+      if (d.layout && formatLayoutSpec(d.layout) === formatLayoutSpec(layout)) return
+      if (!d.layout && cellCount(layout) <= 1) return
+      const cellMds = d.cells.map(joinMarkdownSegments)
+      const single = cellCount(layout) <= 1
+      const reflowed = reflowCells(cellMds, single ? 1 : cellCount(layout))
+      setActiveCell(0)
+      emit({
+        layout: single ? null : layout,
+        cells: reflowed.map((md) => ensureCell(splitMarkdownSegments(md))),
+      })
     },
     [emit],
   )
 
   const handleInsert = useCallback(
-    async (kind: InsertKind | 'beediagram-linked', at: InsertAt = 'end') => {
+    async (kind: InsertKind | 'beediagram-linked', at?: InsertTarget) => {
       setInsertError(null)
+      const target = at ?? { cell: activeCellRef.current, at: 'end' as const }
       if (kind === 'beediagram-linked') {
         if (!bookId) {
           setInsertError('Open a page inside a book to add a linked diagram.')
@@ -301,7 +424,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             pageId: pageId || undefined,
             source: starter?.body,
           })
-          insertAt(at, segmentsForLinkedDiagram(diagram.id))
+          insertAt(target, segmentsForLinkedDiagram(diagram.id))
           await renameInTree()
         } catch (e) {
           setInsertError(e instanceof Error ? e.message : String(e))
@@ -315,24 +438,24 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         const label = kind === 'section' ? 'Section title' : 'Subsection title'
         const title = window.prompt(label, kind === 'section' ? 'Overview' : 'Details')?.trim()
         if (!title) return
-        // Always prepend — new sections belong at the top of the page.
-        insertAt(0, segmentsForInsert(kind, { title }))
+        // Toolbar inserts prepend — new sections belong at the top of their cell.
+        insertAt(at ?? { cell: activeCellRef.current, at: 0 }, segmentsForInsert(kind, { title }))
         return
       }
 
-      insertAt(at, segmentsForInsert(kind))
+      insertAt(target, segmentsForInsert(kind))
     },
     [bookId, insertAt, pageId, renameInTree],
   )
 
   /** Insert image markdown into a specific text segment at a character offset. */
   const insertImagesIntoTextSegment = useCallback(
-    (segmentIndex: number, offset: number, images: UploadedImage[]) => {
-      const list = segmentsRef.current
-      const seg = list[segmentIndex]
+    (cell: number, segmentIndex: number, offset: number, images: UploadedImage[]) => {
+      const list = docRef.current.cells[cell]
+      const seg = list?.[segmentIndex]
       if (!seg || seg.type !== 'text') {
         const parts = images.map((img) => markdownImageSnippet(img.url, img.fileName)).join('\n\n')
-        insertAt(segmentIndex, [{ type: 'text', text: `\n\n${parts}\n\n` }])
+        insertAt({ cell, at: segmentIndex }, [{ type: 'text', text: `\n\n${parts}\n\n` }])
         return
       }
       let text = seg.text
@@ -342,9 +465,9 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         text = insertMarkdownAt(text, off, snip)
         off += snip.length + 4 // rough advance past padding
       }
-      emit(list.map((s, i) => (i === segmentIndex ? keepBlockId(s, { type: 'text', text }) : s)))
+      emitCell(cell, list.map((s, i) => (i === segmentIndex ? keepBlockId(s, { type: 'text', text }) : s)))
     },
-    [emit, insertAt],
+    [emitCell, insertAt],
   )
 
   const insertImagesFromContext = useCallback(
@@ -357,18 +480,16 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
           : null)
 
       if (el) {
-        const slot = el.getAttribute('data-drop-slot') || ''
-        // before:N → insert new text block before segment N
-        if (slot.startsWith('before:')) {
-          const idx = Number(slot.slice('before:'.length))
+        const slot = parseDropSlot(el.getAttribute('data-drop-slot') || '')
+        // before → insert a new text block at that gap
+        if (slot?.kind === 'before') {
           const parts = images.map((img) => markdownImageSnippet(img.url, img.fileName)).join('\n\n')
-          insertAt(Number.isFinite(idx) ? idx : 'end', [{ type: 'text', text: `\n\n${parts}\n\n` }])
+          insertAt({ cell: slot.cell, at: slot.index }, [{ type: 'text', text: `\n\n${parts}\n\n` }])
           setDropHint(null)
           return
         }
-        // segment:N → insert into that text segment
-        if (slot.startsWith('segment:')) {
-          const idx = Number(slot.slice('segment:'.length))
+        // segment → insert into that text segment
+        if (slot?.kind === 'segment') {
           const ta =
             el instanceof HTMLTextAreaElement
               ? el
@@ -379,32 +500,35 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
           } else if (ta && ctx.clientY) {
             offset = textOffsetFromPointer(ta, ctx.clientY)
           }
-          if (Number.isFinite(idx)) {
-            insertImagesIntoTextSegment(idx, offset, images)
-            setDropHint(null)
-            return
-          }
-        }
-      }
-
-      // Focused textarea fallback (paste)
-      const active = document.activeElement
-      if (active instanceof HTMLTextAreaElement && active.dataset.segmentIndex != null) {
-        const idx = Number(active.dataset.segmentIndex)
-        const offset = active.selectionStart ?? active.value.length
-        if (Number.isFinite(idx)) {
-          insertImagesIntoTextSegment(idx, offset, images)
+          insertImagesIntoTextSegment(slot.cell, slot.index, offset, images)
           setDropHint(null)
           return
         }
       }
 
-      // Default: end of document
+      // Focused textarea fallback (paste)
+      const active = document.activeElement
+      if (
+        active instanceof HTMLTextAreaElement &&
+        active.dataset.segmentIndex != null &&
+        active.dataset.cellIndex != null
+      ) {
+        const cell = Number(active.dataset.cellIndex)
+        const idx = Number(active.dataset.segmentIndex)
+        const offset = active.selectionStart ?? active.value.length
+        if (Number.isFinite(cell) && Number.isFinite(idx)) {
+          insertImagesIntoTextSegment(cell, idx, offset, images)
+          setDropHint(null)
+          return
+        }
+      }
+
+      // Default: end of the active cell
       const parts = images.map((img) => markdownImageSnippet(img.url, img.fileName)).join('\n\n')
-      insertAt('end', [{ type: 'text', text: `\n\n${parts}\n\n` }])
+      insertAt(defaultTarget(), [{ type: 'text', text: `\n\n${parts}\n\n` }])
       setDropHint(null)
     },
-    [insertAt, insertImagesIntoTextSegment],
+    [defaultTarget, insertAt, insertImagesIntoTextSegment],
   )
 
   const { dragging, uploading, pickFiles } = useImageIntake({
@@ -416,7 +540,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
   })
 
   const pickMedia = useCallback(
-    (kind: 'pdf' | 'model', at: InsertAt = 'end') => {
+    (kind: 'pdf' | 'model', at?: InsertTarget) => {
       const input = document.createElement('input')
       input.type = 'file'
       if (kind === 'pdf') {
@@ -433,7 +557,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
           try {
             const result = await api.uploadFile(file)
             const lang = fenceLangFromMediaFile(file) || (kind === 'pdf' ? 'pdf' : 'model')
-            insertAt(at, mediaFenceFromUpload(result.url, result.fileName || file.name, lang))
+            insertAt(at ?? defaultTarget(), mediaFenceFromUpload(result.url, result.fileName || file.name, lang))
           } catch (e) {
             setInsertError(e instanceof Error ? e.message : String(e))
           } finally {
@@ -443,7 +567,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       }
       input.click()
     },
-    [insertAt],
+    [defaultTarget, insertAt],
   )
 
   /** Drop PDF / 3D models (image drops stay with useImageIntake). */
@@ -469,7 +593,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             const result = await api.uploadFile(file)
             const lang = fenceLangFromMediaFile(file)
             if (!lang) continue
-            insertAt('end', mediaFenceFromUpload(result.url, result.fileName || file.name, lang))
+            insertAt(defaultTarget(), mediaFenceFromUpload(result.url, result.fileName || file.name, lang))
           }
         } catch (err) {
           setInsertError(err instanceof Error ? err.message : String(err))
@@ -481,7 +605,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
 
     el.addEventListener('drop', onDrop)
     return () => el.removeEventListener('drop', onDrop)
-  }, [insertAt])
+  }, [defaultTarget, insertAt])
 
   /** Drop JSON / XML — inlined as a fenced block rather than uploaded. */
   useEffect(() => {
@@ -499,10 +623,10 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       e.stopPropagation()
 
       // Land where it was dropped when the pointer is over a slot, as images do.
-      const slot = (e.target as Element | null)?.closest?.('[data-drop-slot]')
-      const raw = slot?.getAttribute('data-drop-slot') ?? ''
-      const at: InsertAt = raw.startsWith('before:') ? Number(raw.slice(7)) : 'end'
-      const target: InsertAt = typeof at === 'number' && Number.isFinite(at) ? at : 'end'
+      const slotEl = (e.target as Element | null)?.closest?.('[data-drop-slot]')
+      const slot = parseDropSlot(slotEl?.getAttribute('data-drop-slot') ?? '')
+      const target: InsertTarget =
+        slot?.kind === 'before' ? { cell: slot.cell, at: slot.index } : defaultTarget()
 
       void (async () => {
         setBusy(true)
@@ -529,7 +653,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
 
     el.addEventListener('drop', onDrop)
     return () => el.removeEventListener('drop', onDrop)
-  }, [insertAt])
+  }, [defaultTarget, insertAt])
 
   /** Drop CSV / TSV — opened as an Excel-style grid section. */
   useEffect(() => {
@@ -545,10 +669,10 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       e.preventDefault()
       e.stopPropagation()
 
-      const slot = (e.target as Element | null)?.closest?.('[data-drop-slot]')
-      const raw = slot?.getAttribute('data-drop-slot') ?? ''
-      const at: InsertAt = raw.startsWith('before:') ? Number(raw.slice(7)) : 'end'
-      const target: InsertAt = typeof at === 'number' && Number.isFinite(at) ? at : 'end'
+      const slotEl = (e.target as Element | null)?.closest?.('[data-drop-slot]')
+      const slot = parseDropSlot(slotEl?.getAttribute('data-drop-slot') ?? '')
+      const target: InsertTarget =
+        slot?.kind === 'before' ? { cell: slot.cell, at: slot.index } : defaultTarget()
 
       void (async () => {
         setBusy(true)
@@ -573,7 +697,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
 
     el.addEventListener('drop', onDrop)
     return () => el.removeEventListener('drop', onDrop)
-  }, [insertAt])
+  }, [defaultTarget, insertAt])
 
   /**
    * Drop a page or book dragged from the library tree — inserts a Markdown
@@ -609,33 +733,25 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       const slotEl =
         (e.target instanceof Element ? e.target : null)?.closest?.('[data-drop-slot]') ??
         document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-drop-slot]')
-      if (slotEl) {
-        const slot = slotEl.getAttribute('data-drop-slot') || ''
-        if (slot.startsWith('before:')) {
-          const idx = Number(slot.slice('before:'.length))
-          insertAt(Number.isFinite(idx) ? idx : 'end', [{ type: 'text', text: `\n\n${snippet}\n\n` }])
+      const slot = parseDropSlot(slotEl?.getAttribute('data-drop-slot') ?? '')
+      if (slot?.kind === 'before') {
+        insertAt({ cell: slot.cell, at: slot.index }, [{ type: 'text', text: `\n\n${snippet}\n\n` }])
+        return
+      }
+      if (slot?.kind === 'segment') {
+        const seg = docRef.current.cells[slot.cell]?.[slot.index]
+        if (seg?.type === 'text' && slotEl) {
+          const ta =
+            slotEl instanceof HTMLTextAreaElement
+              ? slotEl
+              : (slotEl.querySelector('textarea') as HTMLTextAreaElement | null)
+          const offset = ta ? textOffsetFromPointer(ta, e.clientY) : seg.text.length
+          const text = insertInlineMarkdownAt(seg.text, offset, snippet)
+          updateSegment(slot.cell, slot.index, { type: 'text', text })
           return
         }
-        if (slot.startsWith('segment:')) {
-          const idx = Number(slot.slice('segment:'.length))
-          const seg = segmentsRef.current[idx]
-          if (Number.isFinite(idx) && seg?.type === 'text') {
-            const ta =
-              slotEl instanceof HTMLTextAreaElement
-                ? slotEl
-                : (slotEl.querySelector('textarea') as HTMLTextAreaElement | null)
-            const offset = ta ? textOffsetFromPointer(ta, e.clientY) : seg.text.length
-            const text = insertInlineMarkdownAt(seg.text, offset, snippet)
-            emit(
-              segmentsRef.current.map((s, i) =>
-                i === idx ? keepBlockId(s, { type: 'text', text }) : s,
-              ),
-            )
-            return
-          }
-        }
       }
-      insertAt('end', [{ type: 'text', text: `\n\n${snippet}\n\n` }])
+      insertAt(defaultTarget(), [{ type: 'text', text: `\n\n${snippet}\n\n` }])
     }
 
     // dragend fires on the tree row that started the drag, wherever it ended.
@@ -652,19 +768,128 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       el.removeEventListener('drop', onDrop)
       document.removeEventListener('dragend', onDragEnd, true)
     }
-  }, [emit, insertAt])
+  }, [defaultTarget, insertAt, updateSegment])
 
   /** Remove one embedded piece (image or table) from a text segment by its raw Markdown. */
   const removePieceFromSegment = useCallback(
-    (segmentIndex: number, raw: string) => {
-      const list = segmentsRef.current
-      const seg = list[segmentIndex]
+    (cell: number, segmentIndex: number, raw: string) => {
+      const seg = docRef.current.cells[cell]?.[segmentIndex]
       if (!seg || seg.type !== 'text') return
       const text = seg.text.replace(raw, '').replace(/\n{3,}/g, '\n\n')
-      emit(list.map((s, i) => (i === segmentIndex ? keepBlockId(s, { type: 'text', text }) : s)))
+      updateSegment(cell, segmentIndex, { type: 'text', text })
     },
-    [emit],
+    [updateSegment],
   )
+
+  const layout = doc.layout
+  const gridMode = layout != null
+  const totalBlocks = doc.cells.reduce((sum, c) => sum + c.length, 0)
+  /** Global block index offsets per cell — outline ids span cells in order. */
+  const cellOffsets: number[] = []
+  {
+    let acc = 0
+    for (const c of doc.cells) {
+      cellOffsets.push(acc)
+      acc += c.length
+    }
+  }
+
+  const renderBlock = (seg: ContentSegment, cellIdx: number, index: number) => {
+    const globalIndex = cellOffsets[cellIdx] + index
+    const cellSegs = doc.cells[cellIdx]
+    return (
+      <div
+        key={blockId(seg)}
+        id={outlineId(globalIndex)}
+        className={`hybrid-block-wrap${
+          reorder.dragAddr?.cell === cellIdx && reorder.dragAddr?.index === index ? ' is-dragging' : ''
+        }`}
+        data-block-index={index}
+        data-outline-id={outlineId(globalIndex)}
+      >
+        <BlockHandle
+          label={blockLabel(seg)}
+          canMoveUp={index > 0}
+          canMoveDown={index < cellSegs.length - 1}
+          canMoveLeft={gridMode && cellIdx > 0}
+          canMoveRight={gridMode && cellIdx < doc.cells.length - 1}
+          canRemove={gridMode || totalBlocks > 1}
+          onDragStart={(e) => reorder.start({ cell: cellIdx, index }, e)}
+          onDragEnd={reorder.end}
+          onMoveUp={() => moveSegment({ cell: cellIdx, index }, { cell: cellIdx, gap: index - 1 })}
+          onMoveDown={() => moveSegment({ cell: cellIdx, index }, { cell: cellIdx, gap: index + 2 })}
+          onMoveLeft={() =>
+            moveSegment(
+              { cell: cellIdx, index },
+              { cell: cellIdx - 1, gap: doc.cells[cellIdx - 1]?.length ?? 0 },
+            )
+          }
+          onMoveRight={() => moveSegment({ cell: cellIdx, index }, { cell: cellIdx + 1, gap: 0 })}
+          onRemove={() => removeSegment(cellIdx, index)}
+        />
+        {seg.type === 'text' ? (
+          <RichTextBlock
+            cellIndex={cellIdx}
+            segmentIndex={index}
+            value={seg.text}
+            pageContext={content}
+            placeholder={globalIndex === 0 ? placeholder : 'Continue Markdown…'}
+            dragging={dragging || linkDragging}
+            onChange={(text) => updateSegment(cellIdx, index, { type: 'text', text })}
+            onBlur={normalizeBlocks}
+            onRemovePiece={(raw) => removePieceFromSegment(cellIdx, index, raw)}
+          />
+        ) : isMediaFenceLang(seg.lang) ? (
+          <MediaFenceBlock
+            segment={seg}
+            onChange={(next) => updateSegment(cellIdx, index, next)}
+            onRemove={() => removeSegment(cellIdx, index)}
+          />
+        ) : isFreedrawFenceLang(seg.lang) ? (
+          <FreeDrawFenceBlock
+            segment={seg}
+            onBodyChange={(body) => updateFenceBody(cellIdx, index, body)}
+            onRemove={() => removeSegment(cellIdx, index)}
+          />
+        ) : isExcelGridFenceLang(seg.lang) ? (
+          <ExcelGridFenceBlock
+            segment={seg}
+            onBodyChange={(body) => updateFenceBody(cellIdx, index, body)}
+            onRemove={() => removeSegment(cellIdx, index)}
+          />
+        ) : isIsometricFenceLang(seg.lang) ? (
+          <IsometricFenceBlock
+            segment={seg}
+            bookId={bookId}
+            onBodyChange={(body) => updateFenceBody(cellIdx, index, body)}
+            onRemove={() => removeSegment(cellIdx, index)}
+          />
+        ) : isVisualFenceLang(seg.lang) ? (
+          <VisualFenceBlock
+            segment={seg}
+            bookId={bookId}
+            onBodyChange={(body) => updateFenceBody(cellIdx, index, body)}
+            onRemove={() => removeSegment(cellIdx, index)}
+          />
+        ) : (
+          <SourceFenceBlock
+            segment={seg}
+            onChange={(next) => updateSegment(cellIdx, index, next)}
+            onRemove={() => removeSegment(cellIdx, index)}
+          />
+        )}
+        <InsertGap
+          busy={busy}
+          onInsert={(k) => void handleInsert(k, { cell: cellIdx, at: index + 1 })}
+          dropSlot={`before:${cellIdx}:${index + 1}`}
+          dropLabel="Insert image here"
+          dragging={dragging}
+          reorderProps={reorder.gapProps({ cell: cellIdx, gap: index + 1 })}
+          reorderActive={sameGap(reorder.overGap, { cell: cellIdx, gap: index + 1 })}
+        />
+      </div>
+    )
+  }
 
   return (
     <div
@@ -692,7 +917,9 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       )}
       <InsertToolbar
         busy={busy || uploading}
-        onInsert={(k) => void handleInsert(k, 'end')}
+        layoutSpec={layout ? formatLayoutSpec(layout) : '1x1'}
+        onLayoutChange={changeLayout}
+        onInsert={(k) => void handleInsert(k)}
         onPickImage={() => pickFiles()}
         onPickPdf={() => pickMedia('pdf')}
         onPickModel={() => pickMedia('model')}
@@ -707,99 +934,44 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         the file as a code block you can reformat; <code>.csv</code> / <code>.tsv</code> becomes a
         spreadsheet section. Drag a <strong>page or book from the library</strong>{' '}
         into a section to insert a link to it.
+        {gridMode && (
+          <>
+            {' '}This page uses a <strong>{layout!.cols}×{layout!.rows} grid</strong> — drag blocks between
+            cells with their handle, or use ←/→ on a focused handle.
+          </>
+        )}
       </p>
 
-      <InsertGap
-        busy={busy}
-        onInsert={(k) => void handleInsert(k, 0)}
-        label="Insert at top"
-        dropSlot="before:0"
-        dropLabel="Insert image at top of page"
-        dragging={dragging}
-        gapIndex={0}
-        reorderProps={reorder.gapProps(0)}
-        reorderActive={reorder.overGap === 0}
-      />
-
-      {segments.map((seg, index) => (
-        <div
-          key={blockId(seg)}
-          id={outlineId(index)}
-          className={`hybrid-block-wrap${reorder.dragIndex === index ? ' is-dragging' : ''}`}
-          data-block-index={index}
-          data-outline-id={outlineId(index)}
-        >
-          <BlockHandle
-            index={index}
-            total={segments.length}
-            label={blockLabel(seg)}
-            onDragStart={(e) => reorder.start(index, e)}
-            onDragEnd={reorder.end}
-            onMove={(to) => moveSegment(index, to)}
-            onRemove={() => removeSegment(index)}
-          />
-          {seg.type === 'text' ? (
-            <RichTextBlock
-              segmentIndex={index}
-              value={seg.text}
-              pageContext={content}
-              placeholder={index === 0 ? placeholder : 'Continue Markdown…'}
-              dragging={dragging || linkDragging}
-              onChange={(text) => updateSegment(index, { type: 'text', text })}
-              onBlur={normalizeBlocks}
-              onRemovePiece={(raw) => removePieceFromSegment(index, raw)}
+      <div
+        className={`hybrid-cells${gridMode ? ' hybrid-cells--grid' : ''}`}
+        style={gridMode ? ({ '--page-grid-cols': layout!.cols } as CSSProperties) : undefined}
+      >
+        {doc.cells.map((segs, cellIdx) => (
+          <section
+            key={cellIdx}
+            data-cell-root={cellIdx}
+            className={`hybrid-cell${gridMode ? ' hybrid-cell--grid' : ''}${
+              gridMode && activeCellRef.current === cellIdx ? ' is-active' : ''
+            }`}
+            aria-label={gridMode ? `Layout cell ${cellIdx + 1}` : undefined}
+            onFocusCapture={() => setActiveCell(cellIdx)}
+            onMouseDownCapture={() => setActiveCell(cellIdx)}
+          >
+            {gridMode && <div className="hybrid-cell-tag">Cell {cellIdx + 1}</div>}
+            <InsertGap
+              busy={busy}
+              onInsert={(k) => void handleInsert(k, { cell: cellIdx, at: 0 })}
+              label={gridMode ? `Insert at top of cell ${cellIdx + 1}` : 'Insert at top'}
+              dropSlot={`before:${cellIdx}:0`}
+              dropLabel={gridMode ? `Insert image at top of cell ${cellIdx + 1}` : 'Insert image at top of page'}
+              dragging={dragging}
+              reorderProps={reorder.gapProps({ cell: cellIdx, gap: 0 })}
+              reorderActive={sameGap(reorder.overGap, { cell: cellIdx, gap: 0 })}
             />
-          ) : isMediaFenceLang(seg.lang) ? (
-            <MediaFenceBlock
-              segment={seg}
-              onChange={(next) => updateSegment(index, next)}
-              onRemove={() => removeSegment(index)}
-            />
-          ) : isFreedrawFenceLang(seg.lang) ? (
-            <FreeDrawFenceBlock
-              segment={seg}
-              onBodyChange={(body) => updateFenceBody(index, body)}
-              onRemove={() => removeSegment(index)}
-            />
-          ) : isExcelGridFenceLang(seg.lang) ? (
-            <ExcelGridFenceBlock
-              segment={seg}
-              onBodyChange={(body) => updateFenceBody(index, body)}
-              onRemove={() => removeSegment(index)}
-            />
-          ) : isIsometricFenceLang(seg.lang) ? (
-            <IsometricFenceBlock
-              segment={seg}
-              bookId={bookId}
-              onBodyChange={(body) => updateFenceBody(index, body)}
-              onRemove={() => removeSegment(index)}
-            />
-          ) : isVisualFenceLang(seg.lang) ? (
-            <VisualFenceBlock
-              segment={seg}
-              bookId={bookId}
-              onBodyChange={(body) => updateFenceBody(index, body)}
-              onRemove={() => removeSegment(index)}
-            />
-          ) : (
-            <SourceFenceBlock
-              segment={seg}
-              onChange={(next) => updateSegment(index, next)}
-              onRemove={() => removeSegment(index)}
-            />
-          )}
-          <InsertGap
-            busy={busy}
-            onInsert={(k) => void handleInsert(k, index + 1)}
-            dropSlot={`before:${index + 1}`}
-            dropLabel="Insert image here"
-            dragging={dragging}
-            gapIndex={index + 1}
-            reorderProps={reorder.gapProps(index + 1)}
-            reorderActive={reorder.overGap === index + 1}
-          />
-        </div>
-      ))}
+            {segs.map((seg, index) => renderBlock(seg, cellIdx, index))}
+          </section>
+        ))}
+      </div>
     </div>
   )
 }
@@ -815,34 +987,42 @@ function blockLabel(seg: ContentSegment): string {
 
 /**
  * Grip for reordering a block: drag it, or move the block with the keyboard.
+ * On a grid page, ←/→ send the block to the neighbouring cell.
  *
  * Reordering hangs off a handle rather than the block itself so that dragging
  * inside a textarea still selects text, which is what anyone editing prose
  * expects a drag to do.
  */
 function BlockHandle({
-  index,
-  total,
   label,
+  canMoveUp,
+  canMoveDown,
+  canMoveLeft,
+  canMoveRight,
+  canRemove,
   onDragStart,
   onDragEnd,
-  onMove,
+  onMoveUp,
+  onMoveDown,
+  onMoveLeft,
+  onMoveRight,
   onRemove,
 }: {
-  index: number
-  total: number
   label: string
+  canMoveUp: boolean
+  canMoveDown: boolean
+  canMoveLeft: boolean
+  canMoveRight: boolean
+  canRemove: boolean
   onDragStart: (e: React.DragEvent) => void
   onDragEnd: () => void
-  /** Target gap index. */
-  onMove: (to: number) => void
+  onMoveUp: () => void
+  onMoveDown: () => void
+  onMoveLeft: () => void
+  onMoveRight: () => void
   onRemove: () => void
 }) {
-  const canMoveUp = index > 0
-  const canMoveDown = index < total - 1
-  // Keep at least one block so the page always has somewhere to type.
-  const canRemove = total > 1
-
+  const cellHint = canMoveLeft || canMoveRight ? ' · ← / → to another cell' : ''
   return (
     <div className="block-controls">
       <button
@@ -855,17 +1035,23 @@ function BlockHandle({
         onKeyDown={(e) => {
           if (e.key === 'ArrowUp' && canMoveUp) {
             e.preventDefault()
-            onMove(index - 1)
+            onMoveUp()
           } else if (e.key === 'ArrowDown' && canMoveDown) {
             e.preventDefault()
-            onMove(index + 2)
+            onMoveDown()
+          } else if (e.key === 'ArrowLeft' && canMoveLeft) {
+            e.preventDefault()
+            onMoveLeft()
+          } else if (e.key === 'ArrowRight' && canMoveRight) {
+            e.preventDefault()
+            onMoveRight()
           } else if ((e.key === 'Delete' || e.key === 'Backspace') && canRemove) {
             e.preventDefault()
             onRemove()
           }
         }}
-        aria-label={`Move block: ${label}. Drag, or use arrow up and down.`}
-        title="Drag to reorder · ↑ / ↓ to move"
+        aria-label={`Move block: ${label}. Drag, or use arrow keys.`}
+        title={`Drag to reorder · ↑ / ↓ to move${cellHint}`}
       >
         <span aria-hidden="true">{'⠿'}</span>
       </button>
@@ -978,6 +1164,7 @@ function mergeAdjacentText(segments: ContentSegment[]): ContentSegment[] {
  * remains a single text string with ![alt](url) / pipe-table syntax.
  */
 function RichTextBlock({
+  cellIndex,
   segmentIndex,
   value,
   pageContext,
@@ -987,6 +1174,7 @@ function RichTextBlock({
   placeholder,
   dragging,
 }: {
+  cellIndex: number
   segmentIndex: number
   value: string
   /** Whole page, handed to the AI helpers as grounding for this block. */
@@ -1035,13 +1223,14 @@ function RichTextBlock({
     return (
       <div
         className={`rich-text-block${dragging ? ' drop-active' : ''}`}
-        data-drop-slot={`segment:${segmentIndex}`}
+        data-drop-slot={`segment:${cellIndex}:${segmentIndex}`}
         data-drop-label="Insert image in this section"
       >
         <AiAssistField context={pageContext}>
           <SyncedTextarea
             className="hybrid-text-block"
             data-segment-index={segmentIndex}
+            data-cell-index={cellIndex}
             value={value}
             rows={Math.min(28, Math.max(3, value.split('\n').length + 1))}
             onValueChange={onChange}
@@ -1057,7 +1246,7 @@ function RichTextBlock({
   return (
     <div
       className={`rich-text-block has-images${dragging ? ' drop-active' : ''}`}
-      data-drop-slot={`segment:${segmentIndex}`}
+      data-drop-slot={`segment:${cellIndex}:${segmentIndex}`}
       data-drop-label="Insert image in this section"
     >
       {pieces.map((p, i) => {
@@ -1097,6 +1286,7 @@ function RichTextBlock({
             <SyncedTextarea
               className="hybrid-text-block hybrid-text-piece"
               data-segment-index={segmentIndex}
+              data-cell-index={cellIndex}
               value={p.text}
               rows={rows}
               onValueChange={(next) => updatePieceText(i, next)}
@@ -1113,17 +1303,25 @@ function RichTextBlock({
 
 function InsertToolbar({
   busy,
+  layoutSpec,
+  onLayoutChange,
   onInsert,
   onPickImage,
   onPickPdf,
   onPickModel,
 }: {
   busy: boolean
+  /** Current layout as "COLSxROWS" ("1x1" = single flow). */
+  layoutSpec: string
+  onLayoutChange: (spec: string) => void
   onInsert: (kind: InsertKind | 'beediagram-linked') => void
   onPickImage?: () => void
   onPickPdf?: () => void
   onPickModel?: () => void
 }) {
+  const presets = LAYOUT_PRESETS.some((p) => p.spec === layoutSpec)
+    ? LAYOUT_PRESETS
+    : [...LAYOUT_PRESETS, { spec: layoutSpec, label: layoutSpec.replace('x', ' × ') }]
   return (
     <div className="insert-toolbar" role="toolbar" aria-label="Insert content">
       <span className="insert-toolbar-label">Add</span>
@@ -1234,6 +1432,26 @@ function InsertToolbar({
           Free draw
         </button>
       </div>
+      <div className="insert-toolbar-divider" aria-hidden />
+      <div className="insert-toolbar-group insert-toolbar-group--layout">
+        <label className="insert-toolbar-label" htmlFor="page-layout-picker">
+          Layout
+        </label>
+        <select
+          id="page-layout-picker"
+          className="page-layout-picker"
+          value={layoutSpec}
+          disabled={busy}
+          onChange={(e) => onLayoutChange(e.target.value)}
+          title="Arrange this page's sections in a grid — drag blocks into any cell"
+        >
+          {presets.map((p) => (
+            <option key={p.spec} value={p.spec}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   )
 }
@@ -1247,7 +1465,6 @@ function InsertGap({
   dragging,
   reorderProps,
   reorderActive,
-  gapIndex,
 }: {
   busy: boolean
   onInsert: (kind: InsertKind | 'beediagram-linked') => void
@@ -1260,8 +1477,6 @@ function InsertGap({
   reorderProps?: ReorderGapProps | null
   /** The dragged block is currently hovering this gap. */
   reorderActive?: boolean
-  /** Gap index (0 = before first block) — used for hit-testing attributes. */
-  gapIndex?: number
 }) {
   const [open, setOpen] = useState(false)
   const canAcceptBlock = Boolean(reorderProps)
@@ -1273,7 +1488,6 @@ function InsertGap({
       }
       data-drop-slot={dropSlot}
       data-drop-label={dropLabel}
-      data-block-gap={gapIndex != null ? String(gapIndex) : undefined}
       {...reorderProps}
     >
       <button
