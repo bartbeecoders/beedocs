@@ -8,9 +8,11 @@ isometric SVG of the BeeDocs stack, generated at load time by
 isometric editor uses.
 
 ```
-index.html          the page
+index.html          the landing page
+releases.html       release history — every version and what it brought
 assets/             styles.css · main.js · favicon.svg
-assets/tour/        screenshots + demo video (webm/mp4) captured from a seeded local instance
+assets/tour/        screenshots + videos (webm/mp4) captured from a seeded local
+                    instance: workspace tour, grid pages, the isometric editor
 nginx.conf          server config (nginx-unprivileged, :8080, /healthz)
 Dockerfile          nginx + the files
 k8s/                namespace · service (NodePort 32097) · deployment

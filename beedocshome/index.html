@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BeeDocs — self-hosted systems documentation with a diagram studio inside</title>
-  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, slide decks — and an MCP server so AI agents write docs alongside you." />
+  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks — and an MCP server so AI agents write docs alongside you." />
   <meta property="og:title" content="BeeDocs — documentation that draws its own architecture" />
   <meta property="og:description" content="Self-hosted docs for systems teams: Markdown books, BeeDiagram Studio, isometric views, slides, full-text search, and an MCP server for AI agents. One container, SQLite inside. MIT-licensed and free forever." />
   <meta property="og:type" content="website" />
@@ -30,11 +30,12 @@
     </a>
     <nav class="head-nav" aria-label="Sections">
       <a href="#tour">Tour</a>
+      <a href="#gridpages">Grid pages</a>
       <a href="#features">Features</a>
       <a href="#diagrams">Diagrams</a>
       <a href="#agents">AI agents</a>
       <a href="#selfhost">Self-host</a>
-      <a href="#license">Free forever</a>
+      <a href="releases.html">Releases</a>
     </nav>
     <div class="head-actions">
       <a class="btn btn-ghost" href="https://github.com/bartbeecoders/beedocs" rel="noopener">
@@ -122,6 +123,45 @@
     </div>
   </section>
 
+  <!-- ====================================================== grid pages -->
+  <section id="gridpages" class="section reveal">
+    <div class="container">
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>new in v0.5 · grid pages</p>
+      <h2>Lay pages out like a dashboard.</h2>
+      <p class="section-lede">A page doesn't have to be one long column. Pick a
+         grid — 2×1, 3×1, 2×2, 3×2 — and every section, diagram, table and image
+         becomes a block you drag into a cell. The layout lives inside the
+         page's own Markdown, so it survives exports, history and the API.</p>
+      <figure class="tour-video">
+        <video muted loop playsinline autoplay preload="metadata"
+               poster="assets/tour/grid-pages-poster.jpg"
+               aria-label="Screen recording of grid pages: a 2 by 2 page in preview, then the editor where the Runbook section is dragged from one cell into another, and the rearranged page rendered again.">
+          <source src="assets/tour/grid-pages.webm" type="video/webm" />
+          <source src="assets/tour/grid-pages.mp4" type="video/mp4" />
+        </video>
+        <figcaption class="mono">fig. 07 — a 2×2 page: prose, a Mermaid flow, a
+          table and a runbook — then a section dragged between cells and the
+          page re-rendered.</figcaption>
+      </figure>
+      <div class="shot-grid">
+        <figure class="shot">
+          <img src="assets/tour/grid-drag.jpg" loading="lazy" width="1280" height="640"
+               alt="The page editor mid-drag: the Runbook block ghosted in its cell while an amber Move-here bar marks the drop target inside another cell of the 2 by 2 grid." />
+          <figcaption class="mono">fig. 08 — drag a block between cells; the
+            amber bar marks where it lands. ←/→ on a handle does the same by
+            keyboard.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/tour/grid-split.jpg" loading="lazy" width="1280" height="602"
+               alt="Split view of a grid page: the cell-based editor on the left and the rendered 2 by 2 grid — prose, Mermaid flowchart, table and runbook — on the right." />
+          <figcaption class="mono">fig. 09 — split view: cells on the left, the
+            rendered grid live on the right. Preview, PDF, DOCX and the reader
+            site all honour the layout.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
   <!-- ======================================================== features -->
   <section id="features" class="section reveal">
     <div class="container">
@@ -138,6 +178,12 @@
           <p>Mermaid, C4 and BeeDiagram fences render inline as you type.
              Autosave runs every 1.5&nbsp;seconds; history keeps one revision per
              sitting, not per keystroke.</p>
+        </article>
+        <article class="card">
+          <h3>Grid page layouts</h3>
+          <p>Arrange a page's sections in a 2×1, 3×1, 2×2 or 3×2 grid of cells
+             and drag blocks between them. The layout is plain Markdown, so
+             preview, exports and the reader site all render it.</p>
         </article>
         <article class="card">
           <h3>Slides from the same library</h3>
@@ -195,6 +241,44 @@
       </div>
       <p class="section-note">Every diagram is one JSON document. It looks identical
          in the editor, embedded in a page, and in the PDF and HTML exports.</p>
+    </div>
+  </section>
+
+  <!-- ==================================================== isometric live -->
+  <section id="isometric" class="section reveal">
+    <div class="container">
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>the isometric editor, working</p>
+      <h2>Architecture you can pick up and move.</h2>
+      <p class="section-lede">Built from scratch for BeeDocs — no third-party
+         diagram library. Hover a shape for connect arrows, drag it to another
+         tile and the connectors re-route, click a palette shape to place it,
+         double-click to rename. Every step below is the real editor.</p>
+      <figure class="tour-video">
+        <video muted loop playsinline autoplay preload="metadata"
+               poster="assets/tour/isometric-editor-poster.jpg"
+               aria-label="Screen recording of the isometric editor: a production topology on the tile grid, a server dragged to a new tile with its connectors following, a cache placed from the shape palette and renamed to sessions.">
+          <source src="assets/tour/isometric-editor.webm" type="video/webm" />
+          <source src="assets/tour/isometric-editor.mp4" type="video/mp4" />
+        </video>
+        <figcaption class="mono">fig. 10 — moving <span class="mono">checkout-1</span>
+          to a new tile (connectors follow), placing a cache from the palette,
+          renaming it <span class="mono">sessions</span>. Auto-saved throughout.</figcaption>
+      </figure>
+      <div class="shot-grid">
+        <figure class="shot">
+          <img src="assets/tour/iso-editor.jpg" loading="lazy" width="1280" height="640"
+               alt="The isometric editor: shape palette with compute, data and network stencils on the left, a checkout topology of firewall, load balancer, servers, database, cache and queue on the 2:1 tile grid." />
+          <figcaption class="mono">fig. 11 — palette, tile grid, one JSON
+            document. Embed it in any page with an
+            <span class="mono">isometric-ref</span> fence.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/tour/iso-connect.jpg" loading="lazy" width="1280" height="640"
+               alt="Hovering a server in the isometric editor shows four amber connect arrows pointing to the neighbouring tiles, ready to drag a connector to another shape." />
+          <figcaption class="mono">fig. 12 — hover for connect arrows: drag one
+            to link shapes, or click it for a connected copy.</figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
@@ -318,6 +402,7 @@ copies of the Software …
     </div>
     <nav class="foot-links" aria-label="Footer">
       <a href="https://beedocs.hideterms.com" rel="noopener">Live demo</a>
+      <a href="releases.html">Releases</a>
       <a href="https://github.com/bartbeecoders/beedocs" rel="noopener">GitHub</a>
       <a href="https://github.com/bartbeecoders/beedocs/blob/main/Docs/ARCHITECTURE.md" rel="noopener">Architecture</a>
       <a href="https://github.com/bartbeecoders/beedocs/blob/main/Docs/MCP-SERVER.md" rel="noopener">MCP docs</a>

@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BeeDocs releases — every version and what it brought</title>
+  <meta name="description" content="The BeeDocs release history: grid page layouts, the isometric editor, slide decks, the bookshelf reader sites, full-text search, users and roles — version by version, all in the same free MIT-licensed build." />
+  <meta property="og:title" content="BeeDocs releases" />
+  <meta property="og:description" content="Every BeeDocs version and what it brought — from the first commit to grid page layouts. All features ship in the same free, MIT-licensed build." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://beedocshome.hideterms.com/releases.html" />
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script src="assets/main.js" defer></script>
+</head>
+<body>
+
+<header class="site-head">
+  <div class="container head-inner">
+    <a class="brand" href="index.html" aria-label="BeeDocs home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 2 L28.1 9 L28.1 23 L16 30 L3.9 23 L3.9 9 Z" fill="var(--honey)" stroke="var(--ink)" stroke-width="1.8" stroke-linejoin="round"/>
+        <line x1="10.5" y1="13" x2="21.5" y2="13" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="10.5" y1="19" x2="18" y2="19" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-name">BeeDocs</span>
+    </a>
+    <nav class="head-nav" aria-label="Sections">
+      <a href="index.html#tour">Tour</a>
+      <a href="index.html#gridpages">Grid pages</a>
+      <a href="index.html#features">Features</a>
+      <a href="index.html#diagrams">Diagrams</a>
+      <a href="index.html#agents">AI agents</a>
+      <a href="index.html#selfhost">Self-host</a>
+      <a href="releases.html" aria-current="page">Releases</a>
+    </nav>
+    <div class="head-actions">
+      <a class="btn btn-ghost" href="https://github.com/bartbeecoders/beedocs" rel="noopener">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+      <a class="btn btn-honey" href="https://beedocs.hideterms.com" rel="noopener">Open demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="section">
+    <div class="container">
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>release history</p>
+      <h1 class="releases-title">Every release, and what it brought.</h1>
+      <p class="section-lede">BeeDocs ships continuously — the version pill in the
+         app's header maps every running instance to a commit. Here is the road
+         so far, newest first. Everything below is in the same free,
+         MIT-licensed build.</p>
+
+      <ol class="timeline" reversed>
+
+        <!-- ================================================== v0.5 -->
+        <li class="release">
+          <div class="release-head">
+            <span class="release-badge release-badge--latest mono">v0.5</span>
+            <h2>Grid page layouts</h2>
+            <p class="release-date mono">17 Aug 2026 · latest</p>
+          </div>
+          <p>Pages break out of the single column: pick a <strong>2×1, 3×1, 2×2
+             or 3×2 grid</strong> and every section, diagram, table and image
+             becomes a block you drag between cells — by pointer or with
+             ←/→ on the keyboard.</p>
+          <ul class="release-list">
+            <li>The layout lives inside the page's own Markdown as comment
+                markers, so it round-trips through the API, MCP tools, history
+                and imports — and a page without one is exactly what it was
+                before.</li>
+            <li>Preview, split view, the published bookshelf sites, the page
+                outline and the PDF export all render the same grid; DOCX
+                export and search read the cells as a clean linear flow.</li>
+            <li>Switching layouts re-flows content losslessly — shrinking folds
+                surplus cells into the last one, and 1×1 leaves a marker-free
+                document.</li>
+            <li>Rendered pages keep one steady cursor instead of flickering
+                between text and arrow per section.</li>
+          </ul>
+          <figure class="release-shot">
+            <img src="assets/tour/grid-drag.jpg" loading="lazy" width="1280" height="640"
+                 alt="The BeeDocs page editor mid-drag, moving the Runbook block from one grid cell into another with an amber drop indicator." />
+            <figcaption class="mono">dragging a section between cells of a 2×2 page —
+              <a href="index.html#gridpages">watch the working video</a></figcaption>
+          </figure>
+        </li>
+
+        <!-- ================================================== v0.4 -->
+        <li class="release">
+          <div class="release-head">
+            <span class="release-badge mono">v0.4</span>
+            <h2>Slides, the isometric editor, and cloud storage</h2>
+            <p class="release-date mono">14–16 Aug 2026</p>
+          </div>
+          <p>The library learned to present itself — and to draw architecture
+             the way architects sketch it.</p>
+          <ul class="release-list">
+            <li><strong>Slide decks</strong>: a PowerPoint-style designer
+                (filmstrip · canvas · format panel), a full-screen presenter,
+                reusable templates, and export to a real
+                <span class="mono">.pptx</span> that Google Slides opens
+                natively. Decks are first-class MCP citizens too.</li>
+            <li><strong>Isometric diagrams</strong>: a from-scratch editor on a
+                2:1 dimetric tile grid — hand-drawn shapes, hover-to-connect
+                arrows, zones and connectors — embeddable in any page and
+                buildable by AI agents through structured MCP tools.</li>
+            <li><strong>Cloud storage providers</strong>: a shelf's page bodies
+                can live in Azure Blob or Google Drive while the tree, search
+                and metadata stay local — moves are idempotent and resumable.</li>
+            <li><strong>Change tracking</strong> per page (owner-gated full
+                revision copies with pruning) and a statistics API.</li>
+            <li>The <strong>MIT license</strong> landed in the repo — free
+                forever, in writing.</li>
+          </ul>
+          <div class="release-shot-row">
+            <figure class="release-shot">
+              <img src="assets/tour/iso-editor.jpg" loading="lazy" width="1280" height="640"
+                   alt="The isometric editor showing a production checkout topology on the tile grid with the shape palette open." />
+              <figcaption class="mono">the isometric editor —
+                <a href="index.html#isometric">see it working</a></figcaption>
+            </figure>
+            <figure class="release-shot">
+              <img src="assets/tour/slides.jpg" loading="lazy" width="1280" height="602"
+                   alt="The slide designer with a dark architecture review deck: filmstrip, canvas and Present button." />
+              <figcaption class="mono">the slide designer and presenter</figcaption>
+            </figure>
+          </div>
+        </li>
+
+        <!-- ================================================== v0.3 -->
+        <li class="release">
+          <div class="release-head">
+            <span class="release-badge mono">v0.3</span>
+            <h2>Spreadsheets, table designer, and published bookshelves</h2>
+            <p class="release-date mono">12–14 Aug 2026</p>
+          </div>
+          <ul class="release-list">
+            <li><strong>Excel-style spreadsheet sections</strong> on any page —
+                drop a <span class="mono">.csv</span> and it becomes an editable
+                grid.</li>
+            <li>A <strong>Markdown table designer</strong>: add and remove rows
+                and columns in place, with themes — while storage stays plain
+                pipe-table Markdown.</li>
+            <li><strong>Document linking</strong>: drag a page or book from the
+                library tree into prose to link it.</li>
+            <li><strong>Published bookshelves</strong>: flip a shelf to
+                <em>published</em> and it becomes a clean reader website of its
+                own.</li>
+            <li>API-key management for machine callers and shelf-aware
+                publishing endpoints.</li>
+          </ul>
+        </li>
+
+        <!-- ================================================== v0.2 -->
+        <li class="release">
+          <div class="release-head">
+            <span class="release-badge mono">v0.2</span>
+            <h2>SQLite, search, shelves, and sign-in</h2>
+            <p class="release-date mono">30 Jul – 12 Aug 2026</p>
+          </div>
+          <ul class="release-list">
+            <li>Storage moved to <strong>embedded SQLite</strong> — no database
+                server, one-file backups.</li>
+            <li><strong>Full-text search</strong> on SQLite FTS5 across pages,
+                books and diagram labels, kept fresh by triggers whoever writes
+                the row. <span class="mono">Ctrl+K</span> everywhere.</li>
+            <li><strong>Users &amp; roles</strong>: admin / editor / viewer,
+                sessions, hardened password hashing, ownership tracking — with
+                the sign-in wall opt-in.</li>
+            <li><strong>Shelves</strong> above books, a free-draw sketch pad,
+                Azure service stencils for the Studio, and export/import for
+                books and documents.</li>
+            <li>The MCP server updated to protocol revision
+                <span class="mono">2026-07-28</span>.</li>
+          </ul>
+        </li>
+
+        <!-- ================================================== v0.1 -->
+        <li class="release">
+          <div class="release-head">
+            <span class="release-badge mono">v0.1</span>
+            <h2>The platform</h2>
+            <p class="release-date mono">29 Jul 2026</p>
+          </div>
+          <p>The first release already carried the whole idea: documentation
+             that draws its own architecture, with AI agents as first-class
+             writers.</p>
+          <ul class="release-list">
+            <li>Library of books, chapters and Markdown pages with live Mermaid
+                and C4 fences.</li>
+            <li><strong>BeeDiagram Studio</strong> — the draw.io-style editor:
+                palette, infinite canvas, hover-to-connect arrows, format
+                panel.</li>
+            <li>The <strong>MCP server</strong> over stdio and Streamable HTTP,
+                so Claude Code, Cursor and friends write docs alongside you.</li>
+            <li>One-container deployment with Docker Compose or K3S, uploads
+                and data on a single volume.</li>
+          </ul>
+          <figure class="release-shot">
+            <img src="assets/tour/studio.jpg" loading="lazy" width="1280" height="602"
+                 alt="BeeDiagram Studio editing a checkout flow with the shape palette and format panel." />
+            <figcaption class="mono">BeeDiagram Studio, there from the start</figcaption>
+          </figure>
+        </li>
+
+      </ol>
+
+      <p class="section-note">Versioning is
+         <span class="mono">MAJOR.MINOR.BUILD</span> — the build digit ticks on
+         every deploy, so the pill in a running app's header always maps to a
+         commit. Minor versions above are the feature milestones.</p>
+      <div class="cta-row releases-cta">
+        <a class="btn btn-honey btn-lg" href="https://beedocs.hideterms.com" rel="noopener">Try the latest on the demo</a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/bartbeecoders/beedocs/commits/main" rel="noopener">Full commit history</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-foot">
+  <div class="container foot-inner">
+    <div class="foot-brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 2 L28.1 9 L28.1 23 L16 30 L3.9 23 L3.9 9 Z" fill="var(--honey)" stroke="var(--ink)" stroke-width="1.8" stroke-linejoin="round"/>
+        <line x1="10.5" y1="13" x2="21.5" y2="13" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="10.5" y1="19" x2="18" y2="19" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <p class="brand-name">BeeDocs</p>
+        <p class="foot-tag">Self-hosted systems documentation.</p>
+      </div>
+    </div>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="https://beedocs.hideterms.com" rel="noopener">Live demo</a>
+      <a href="releases.html">Releases</a>
+      <a href="https://github.com/bartbeecoders/beedocs" rel="noopener">GitHub</a>
+      <a href="https://github.com/bartbeecoders/beedocs/blob/main/Docs/ARCHITECTURE.md" rel="noopener">Architecture</a>
+      <a href="https://github.com/bartbeecoders/beedocs/blob/main/Docs/MCP-SERVER.md" rel="noopener">MCP docs</a>
+      <a href="https://github.com/bartbeecoders/beedocs/blob/main/LICENSE" rel="noopener">MIT license</a>
+    </nav>
+    <p class="foot-fine mono">© 2026 BeeCoders — MIT licensed, free forever · served from the same VPS as the demo.</p>
+  </div>
+</footer>
+
+</body>
+</html>
