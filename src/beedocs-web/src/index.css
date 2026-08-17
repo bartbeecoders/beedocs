@@ -1596,6 +1596,22 @@ select:focus {
 
 .markdown-body {
   line-height: 1.65;
+  /* A rendered page reads as a document: keep one arrow cursor instead of the
+     browser flipping to a text I-beam over every prose run and back over
+     headings, tables and diagrams. Selection still works. */
+  cursor: default;
+}
+
+/* `default` is inherited, which would override the automatic pointer/text
+   cursors interactive elements normally get — hand those back explicitly.
+   (.btn and other controls already carry their own cursor rules.) */
+.markdown-body a {
+  cursor: pointer;
+}
+
+.markdown-body textarea,
+.markdown-body input {
+  cursor: text;
 }
 
 .markdown-body h1,
@@ -5094,7 +5110,7 @@ html[data-density='compact'] .media-embed-title {
 /* Blocks get a gutter so the handle has somewhere to live that is neither on top
    of the text nor outside the scroll container. */
 .hybrid-block-wrap,
-.hybrid-page-editor > .insert-gap {
+.hybrid-cell > .insert-gap {
   position: relative;
   padding-left: 1.7rem;
 }
@@ -6084,4 +6100,83 @@ html[data-scheme='dark'] {
 
 .stats-generated {
   margin-top: 1.25rem;
+}
+
+/* ==========================================================================
+   Page grid layout — a page arranges its blocks in a COLS×ROWS grid of cells
+   (`pageLayout.ts`). `--page-grid-cols` is set inline from the layout.
+   ========================================================================== */
+
+/* Editor: the cell container replaces the editor's old flat block column. */
+.hybrid-cells {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.hybrid-cells--grid {
+  display: grid;
+  grid-template-columns: repeat(var(--page-grid-cols, 1), minmax(0, 1fr));
+  gap: 0.8rem;
+  align-items: start;
+}
+
+.hybrid-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.hybrid-cell--grid {
+  border: 1px dashed color-mix(in srgb, var(--border-strong) 85%, transparent);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.55rem 0.7rem;
+  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+}
+
+.hybrid-cell--grid.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-strong));
+}
+
+.hybrid-cell-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.insert-toolbar-group--layout {
+  gap: 0.4rem;
+}
+
+.page-layout-picker {
+  width: auto;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.82rem;
+}
+
+/* Preview / reader site / split view: same grid, quieter chrome. */
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--page-grid-cols, 1), minmax(0, 1fr));
+  gap: 1rem 1.4rem;
+  align-items: start;
+}
+
+.page-grid-cell {
+  min-width: 0;
+}
+
+.page-grid-cell .markdown-body > :first-child {
+  margin-top: 0;
+}
+
+/* Narrow screens: fall back to one column so cells stay readable. */
+@media (max-width: 900px) {
+  .hybrid-cells--grid,
+  .page-grid {
+    grid-template-columns: 1fr;
+  }
 }

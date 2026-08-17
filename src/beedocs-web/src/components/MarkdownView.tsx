@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
   type ComponentProps,
+  type CSSProperties,
   type ReactNode,
 } from 'react'
 import { Link } from 'react-router-dom'
@@ -20,6 +21,7 @@ import mermaid from 'mermaid'
 import { api } from '../api'
 import { withApiBase } from '../basePath'
 import { replaceFenceBody, splitMarkdownSegments } from '../markdownFences'
+import { parsePageLayout, serializePageLayout } from '../pageLayout'
 import { isInternalDocHref } from '../markdownLinks'
 import { useMarkdownSite } from '../site/markdownSite'
 import { remarkTableThemes } from '../markdownTable'
@@ -601,12 +603,75 @@ export type MarkdownViewProps = {
   bookId?: string
 }
 
-export const MarkdownView = memo(function MarkdownView({
+type MarkdownBodyProps = MarkdownViewProps & {
+  /**
+   * Global block-index offset used for outline anchors when this body renders
+   * one cell of a page grid — so ids line up with `buildPageOutline`, which
+   * counts blocks across all cells in order.
+   */
+  blockIndexOffset?: number
+}
+
+/**
+ * Rendered Markdown for a page — or, when the page declares a grid layout
+ * (`pageLayout.ts`), a CSS grid whose cells each render their own Markdown.
+ * Per-cell rendering keeps inline fence editing correct: a cell's fence
+ * indices are counted within that cell, and edits are stitched back into the
+ * full document here.
+ */
+export const MarkdownView = memo(function MarkdownView(props: MarkdownViewProps) {
+  const { content, onContentChange } = props
+  const parsed = useMemo(() => parsePageLayout(content), [content])
+  const offsets = useMemo(() => {
+    if (!parsed) return []
+    const out: number[] = []
+    let acc = 0
+    for (const cell of parsed.cells) {
+      out.push(acc)
+      acc += splitMarkdownSegments(cell).length
+    }
+    return out
+  }, [parsed])
+
+  const handleCellChange = useCallback(
+    (cellIdx: number, next: string) => {
+      if (!parsed || !onContentChange) return
+      const cells = [...parsed.cells]
+      cells[cellIdx] = next
+      onContentChange(serializePageLayout(parsed.layout, cells))
+    },
+    [parsed, onContentChange],
+  )
+
+  if (!parsed) return <MarkdownBody {...props} />
+
+  return (
+    <div
+      className="page-grid"
+      style={{ '--page-grid-cols': parsed.layout.cols } as CSSProperties}
+    >
+      {parsed.cells.map((cell, i) => (
+        <div className="page-grid-cell" key={i}>
+          <MarkdownBody
+            content={cell}
+            editable={props.editable}
+            bookId={props.bookId}
+            blockIndexOffset={offsets[i]}
+            onContentChange={onContentChange ? (next) => handleCellChange(i, next) : undefined}
+          />
+        </div>
+      ))}
+    </div>
+  )
+})
+
+const MarkdownBody = memo(function MarkdownBody({
   content,
   editable = false,
   onContentChange,
   bookId,
-}: MarkdownViewProps) {
+  blockIndexOffset = 0,
+}: MarkdownBodyProps) {
   const site = useMarkdownSite()
   const contentRef = useRef(content)
   contentRef.current = content
@@ -651,17 +716,17 @@ export const MarkdownView = memo(function MarkdownView({
     splitMarkdownSegments(content).forEach((seg, blockIndex) => {
       if (seg.type === 'text') {
         if (/^(#{1,6})\s+\S/m.test(seg.text.trimStart())) {
-          headingIds.push(outlineId(blockIndex))
+          headingIds.push(outlineId(blockIndex + blockIndexOffset))
         }
         return
       }
       const lang = seg.lang.toLowerCase()
       const n = fenceCounts[lang] ?? 0
       fenceCounts[lang] = n + 1
-      fenceKeyToId.set(`${lang}:${n}`, outlineId(blockIndex))
+      fenceKeyToId.set(`${lang}:${n}`, outlineId(blockIndex + blockIndexOffset))
     })
     return { fenceKeyToId, headingIds }
-  }, [content])
+  }, [content, blockIndexOffset])
 
   const headingCursor = useRef(0)
   headingCursor.current = 0

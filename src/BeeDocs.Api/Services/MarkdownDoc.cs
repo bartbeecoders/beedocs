@@ -109,6 +109,16 @@ public static partial class MarkdownDoc
                 continue;
             }
 
+            // A line that is one whole HTML comment is invisible in every
+            // renderer — this is also where the page grid-layout markers
+            // (<!-- bee:layout … --> / <!-- bee:cell … -->) disappear, so DOCX
+            // export and the search index see the cells as a linear flow.
+            if (line.StartsWith("<!--", StringComparison.Ordinal) && line.EndsWith("-->", StringComparison.Ordinal))
+            {
+                i++;
+                continue;
+            }
+
             // Table: a run of lines that start and end with a pipe.
             if (line.StartsWith('|') && line.EndsWith('|') && line.Length > 1)
             {
@@ -184,7 +194,8 @@ public static partial class MarkdownDoc
                 var t = lines[i].Trim();
                 if (t.Length == 0) break;
                 if (HeadingRegex().IsMatch(t) || RuleRegex().IsMatch(t) || t.StartsWith('>')
-                    || t.StartsWith('|') || BulletRegex().IsMatch(lines[i]) || OrderedRegex().IsMatch(lines[i]))
+                    || t.StartsWith('|') || t.StartsWith("<!--", StringComparison.Ordinal)
+                    || BulletRegex().IsMatch(lines[i]) || OrderedRegex().IsMatch(lines[i]))
                     break;
                 para.Add(t);
                 i++;

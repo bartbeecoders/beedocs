@@ -14,12 +14,22 @@ export function isBlockDrag(dt: DataTransfer | null): boolean {
   return !!dt && Array.from(dt.types || []).includes(BLOCK_MIME)
 }
 
+/** A block's position: which grid cell it lives in, and where inside it. */
+export type BlockAddr = { cell: number; index: number }
+
+/** A drop target: gap `gap` (0 = before first block) inside cell `cell`. */
+export type GapAddr = { cell: number; gap: number }
+
+export function sameGap(a: GapAddr | null, b: GapAddr | null): boolean {
+  return !!a && !!b && a.cell === b.cell && a.gap === b.gap
+}
+
 type Options = {
-  /** Move the block at `from` to sit before gap index `to`. */
-  onMove: (from: number, to: number) => void
+  /** Move the block at `from` to sit before gap `to` (possibly in another cell). */
+  onMove: (from: BlockAddr, to: GapAddr) => void
   /**
-   * Editor root. Used to find scrollable ancestors (for edge auto-scroll) and
-   * block elements (for drop-target hit testing while scrolling).
+   * Editor root. Used to find scrollable ancestors (for edge auto-scroll),
+   * cell containers (`[data-cell-root]`) and block elements for hit testing.
    */
   containerRef?: RefObject<HTMLElement | null>
 }
@@ -74,51 +84,89 @@ function autoScrollAt(clientY: number, parents: HTMLElement[]): boolean {
 }
 
 /**
- * Pick a gap index from pointer Y by walking block mid-lines.
- * More reliable than only reacting to thin insert-gap hit targets, especially
- * while auto-scroll is moving content under a fixed pointer.
+ * Pick the cell container the pointer is over — or, when it sits in the gutter
+ * between cells, the nearest one — so a drag can cross grid columns.
  */
-function gapFromPointer(root: HTMLElement, clientY: number, from: number): number | null {
-  const blocks = root.querySelectorAll<HTMLElement>('.hybrid-block-wrap')
-  if (blocks.length === 0) return 0
+function cellFromPointer(
+  root: HTMLElement,
+  clientX: number,
+  clientY: number,
+): { cell: number; el: HTMLElement } | null {
+  const cells = root.querySelectorAll<HTMLElement>('[data-cell-root]')
+  if (cells.length === 0) return null
+
+  let best: { cell: number; el: HTMLElement } | null = null
+  let bestDist = Infinity
+  cells.forEach((el) => {
+    const idx = Number(el.getAttribute('data-cell-root'))
+    if (!Number.isFinite(idx)) return
+    const r = el.getBoundingClientRect()
+    const dx = clientX < r.left ? r.left - clientX : clientX > r.right ? clientX - r.right : 0
+    const dy = clientY < r.top ? r.top - clientY : clientY > r.bottom ? clientY - r.bottom : 0
+    const dist = dx * dx + dy * dy
+    if (dist < bestDist) {
+      bestDist = dist
+      best = { cell: idx, el }
+    }
+  })
+  return best
+}
+
+/**
+ * Pick a gap from pointer position: choose the cell under (or nearest to) the
+ * pointer, then walk that cell's block mid-lines. More reliable than only
+ * reacting to thin insert-gap hit targets, especially while auto-scroll is
+ * moving content under a fixed pointer.
+ */
+function gapFromPointer(
+  root: HTMLElement,
+  clientX: number,
+  clientY: number,
+  from: BlockAddr,
+): GapAddr | null {
+  const hit = cellFromPointer(root, clientX, clientY)
+  if (!hit) return null
+
+  const blocks = hit.el.querySelectorAll<HTMLElement>('.hybrid-block-wrap')
+  if (blocks.length === 0) return skipNoop({ cell: hit.cell, gap: 0 }, from)
 
   const first = blocks[0].getBoundingClientRect()
-  if (clientY < first.top + 12) return skipNoop(0, from)
+  if (clientY < first.top + 12) return skipNoop({ cell: hit.cell, gap: 0 }, from)
 
   const last = blocks[blocks.length - 1].getBoundingClientRect()
-  if (clientY > last.bottom - 12) return skipNoop(blocks.length, from)
+  if (clientY > last.bottom - 12) return skipNoop({ cell: hit.cell, gap: blocks.length }, from)
 
   for (let i = 0; i < blocks.length; i++) {
     const r = blocks[i].getBoundingClientRect()
     const mid = r.top + r.height / 2
-    if (clientY < mid) return skipNoop(i, from)
+    if (clientY < mid) return skipNoop({ cell: hit.cell, gap: i }, from)
   }
-  return skipNoop(blocks.length, from)
+  return skipNoop({ cell: hit.cell, gap: blocks.length }, from)
 }
 
 /** Dropping immediately before or after the dragged block is a no-op. */
-function skipNoop(gap: number, from: number): number | null {
-  if (gap === from || gap === from + 1) return null
+function skipNoop(gap: GapAddr, from: BlockAddr): GapAddr | null {
+  if (gap.cell === from.cell && (gap.gap === from.index || gap.gap === from.index + 1)) return null
   return gap
 }
 
 export function useBlockReorder({ onMove, containerRef }: Options) {
-  /** Index of the block being dragged, or null when no reorder is in flight. */
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  /** Address of the block being dragged, or null when no reorder is in flight. */
+  const [dragAddr, setDragAddr] = useState<BlockAddr | null>(null)
   /** Gap the pointer is currently targeting. */
-  const [overGap, setOverGap] = useState<number | null>(null)
+  const [overGap, setOverGap] = useState<GapAddr | null>(null)
 
-  const dragIndexRef = useRef<number | null>(null)
-  const overGapRef = useRef<number | null>(null)
+  const dragAddrRef = useRef<BlockAddr | null>(null)
+  const overGapRef = useRef<GapAddr | null>(null)
   const scrollParentsRef = useRef<HTMLElement[]>([])
-  const lastPointerY = useRef<number | null>(null)
+  const lastPointer = useRef<{ x: number; y: number } | null>(null)
   const rafRef = useRef<number | null>(null)
   const onMoveRef = useRef(onMove)
   onMoveRef.current = onMove
 
-  const setOver = useCallback((gap: number | null) => {
+  const setOver = useCallback((gap: GapAddr | null) => {
     overGapRef.current = gap
-    setOverGap(gap)
+    setOverGap((prev) => (sameGap(prev, gap) ? prev : gap))
   }, [])
 
   const stopAutoScroll = useCallback(() => {
@@ -126,40 +174,40 @@ export function useBlockReorder({ onMove, containerRef }: Options) {
       cancelAnimationFrame(rafRef.current)
       rafRef.current = null
     }
-    lastPointerY.current = null
+    lastPointer.current = null
     scrollParentsRef.current = []
   }, [])
 
   const end = useCallback(() => {
-    dragIndexRef.current = null
-    setDragIndex(null)
+    dragAddrRef.current = null
+    setDragAddr(null)
     setOver(null)
     stopAutoScroll()
   }, [setOver, stopAutoScroll])
 
-  const updateTargetFromY = useCallback(
-    (clientY: number) => {
-      const from = dragIndexRef.current
+  const updateTargetFromPointer = useCallback(
+    (clientX: number, clientY: number) => {
+      const from = dragAddrRef.current
       if (from === null) return
       const root = containerRef?.current
       if (!root) return
-      setOver(gapFromPointer(root, clientY, from))
+      setOver(gapFromPointer(root, clientX, clientY, from))
     },
     [containerRef, setOver],
   )
 
   const tickScroll = useCallback(() => {
     rafRef.current = null
-    if (dragIndexRef.current === null) return
-    const y = lastPointerY.current
-    if (y == null) return
+    if (dragAddrRef.current === null) return
+    const p = lastPointer.current
+    if (p == null) return
 
-    const scrolled = autoScrollAt(y, scrollParentsRef.current)
+    const scrolled = autoScrollAt(p.y, scrollParentsRef.current)
     // After scrolling, content moves under a fixed pointer — re-hit-test gaps.
-    if (scrolled) updateTargetFromY(y)
+    if (scrolled) updateTargetFromPointer(p.x, p.y)
 
     rafRef.current = requestAnimationFrame(tickScroll)
-  }, [updateTargetFromY])
+  }, [updateTargetFromPointer])
 
   const ensureAutoScroll = useCallback(() => {
     if (rafRef.current != null) return
@@ -167,12 +215,12 @@ export function useBlockReorder({ onMove, containerRef }: Options) {
   }, [tickScroll])
 
   const start = useCallback(
-    (index: number, e: React.DragEvent) => {
-      dragIndexRef.current = index
-      setDragIndex(index)
+    (addr: BlockAddr, e: React.DragEvent) => {
+      dragAddrRef.current = addr
+      setDragAddr(addr)
       setOver(null)
       e.dataTransfer.effectAllowed = 'move'
-      e.dataTransfer.setData(BLOCK_MIME, String(index))
+      e.dataTransfer.setData(BLOCK_MIME, `${addr.cell}:${addr.index}`)
       // Some browsers refuse a drag with no text payload.
       e.dataTransfer.setData('text/plain', '')
 
@@ -185,7 +233,7 @@ export function useBlockReorder({ onMove, containerRef }: Options) {
 
       const root = containerRef?.current ?? (e.currentTarget as HTMLElement)
       scrollParentsRef.current = findScrollParents(root)
-      lastPointerY.current = e.clientY
+      lastPointer.current = { x: e.clientX, y: e.clientY }
       ensureAutoScroll()
     },
     [containerRef, ensureAutoScroll, setOver],
@@ -194,7 +242,7 @@ export function useBlockReorder({ onMove, containerRef }: Options) {
   // While a block drag is active: track the pointer, auto-scroll, accept drops
   // even when the pointer is not sitting on a thin gap element.
   useEffect(() => {
-    if (dragIndex === null) return
+    if (dragAddr === null) return
 
     const onDragOver = (e: DragEvent) => {
       if (!isBlockDrag(e.dataTransfer)) return
@@ -203,17 +251,17 @@ export function useBlockReorder({ onMove, containerRef }: Options) {
 
       // Some browsers report (0,0) when the pointer leaves the window.
       if (e.clientX === 0 && e.clientY === 0) return
-      lastPointerY.current = e.clientY
-      updateTargetFromY(e.clientY)
+      lastPointer.current = { x: e.clientX, y: e.clientY }
+      updateTargetFromPointer(e.clientX, e.clientY)
       ensureAutoScroll()
     }
 
     const onDrop = (e: DragEvent) => {
-      if (dragIndexRef.current === null) return
+      if (dragAddrRef.current === null) return
       if (!isBlockDrag(e.dataTransfer)) return
       e.preventDefault()
       e.stopPropagation()
-      const from = dragIndexRef.current
+      const from = dragAddrRef.current
       const to = overGapRef.current
       end()
       if (from !== null && to !== null) onMoveRef.current(from, to)
@@ -233,14 +281,14 @@ export function useBlockReorder({ onMove, containerRef }: Options) {
       document.removeEventListener('drop', onDrop, true)
       document.removeEventListener('dragend', onDragEnd, true)
     }
-  }, [dragIndex, end, ensureAutoScroll, updateTargetFromY])
+  }, [dragAddr, end, ensureAutoScroll, updateTargetFromPointer])
 
   /** Wire onto a gap for visual drop feedback. Drop itself is handled globally. */
   const gapProps = useCallback(
-    (gap: number) => {
-      const from = dragIndexRef.current
+    (gap: GapAddr) => {
+      const from = dragAddrRef.current
       if (from === null) return null
-      if (gap === from || gap === from + 1) return null
+      if (skipNoop(gap, from) === null) return null
 
       return {
         onDragOver: (e: React.DragEvent) => {
@@ -249,7 +297,7 @@ export function useBlockReorder({ onMove, containerRef }: Options) {
           e.stopPropagation()
           e.dataTransfer.dropEffect = 'move'
           if (e.clientX === 0 && e.clientY === 0) return
-          lastPointerY.current = e.clientY
+          lastPointer.current = { x: e.clientX, y: e.clientY }
           setOver(gap)
           ensureAutoScroll()
         },
@@ -260,7 +308,7 @@ export function useBlockReorder({ onMove, containerRef }: Options) {
           if (!isBlockDrag(e.dataTransfer)) return
           e.preventDefault()
           e.stopPropagation()
-          const source = dragIndexRef.current
+          const source = dragAddrRef.current
           end()
           if (source !== null) onMoveRef.current(source, gap)
         },
@@ -269,5 +317,5 @@ export function useBlockReorder({ onMove, containerRef }: Options) {
     [end, ensureAutoScroll, setOver],
   )
 
-  return { dragIndex, overGap, start, end, gapProps }
+  return { dragAddr, overGap, start, end, gapProps }
 }
