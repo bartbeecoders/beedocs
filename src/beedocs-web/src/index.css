@@ -1596,6 +1596,22 @@ select:focus {
 
 .markdown-body {
   line-height: 1.65;
+  /* A rendered page reads as a document: keep one arrow cursor instead of the
+     browser flipping to a text I-beam over every prose run and back over
+     headings, tables and diagrams. Selection still works. */
+  cursor: default;
+}
+
+/* `default` is inherited, which would override the automatic pointer/text
+   cursors interactive elements normally get — hand those back explicitly.
+   (.btn and other controls already carry their own cursor rules.) */
+.markdown-body a {
+  cursor: pointer;
+}
+
+.markdown-body textarea,
+.markdown-body input {
+  cursor: text;
 }
 
 .markdown-body h1,
