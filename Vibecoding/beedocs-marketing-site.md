@@ -9,3 +9,9 @@ Add start and deploy scripts
 
 
 Add screenshots and a demo video of the beedocs app.
+
+
+Update the marketing site with the latest features (grid pages, isometric).
+Add a releases page, which shows all the releases and improvements
+
+Include more screenshots and working videos of new features.
