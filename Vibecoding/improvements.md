@@ -102,3 +102,10 @@ I do not like it. This Isoflow component is not very inntuitive. Can you not cre
 Build it from scratch. This way it will fit better in the platform (same mouse handling, look and feel etc)
 
 Would it make sense to add the isodiagram designer to the diagram section (like the studio and classic view)
+
+Add the ability to have multiple columns on a page.
+Now the sections are just from top to bottom. What if we could use a grids system to place sections.
+A page could have a setting like 1x1, 2x1 (2 columns), 2x2 (2 columns, 2 rows) etc
+Sections, images, etc can then be dragged on a cell.
+Make all rendering work perfectly (preview, editing, exports etc)
+Do this in a seperate branch
