@@ -101,10 +101,16 @@ public sealed record CreateChapterRequest(
     int? SortOrder
 );
 
+/// <param name="Title">Omit to leave the name alone (needed only when renaming).</param>
+/// <param name="BookId">
+/// Null/omit leaves the folder where it is; a different id moves the folder
+/// and every page inside it (page-linked diagrams follow).
+/// </param>
 public sealed record UpdateChapterRequest(
-    [property: Required, MinLength(1)] string Title,
+    string? Title,
     string? Slug,
-    int? SortOrder
+    int? SortOrder,
+    string? BookId = null
 );
 
 public sealed record PageSummaryDto(
@@ -156,6 +162,10 @@ public sealed record CreatePageRequest(
 /// <param name="OwnerId">null leaves the owner untouched; "" clears it; anything else replaces it.</param>
 /// <param name="TrackChanges">null leaves it untouched. Changing it needs the page's owner or an admin.</param>
 /// <param name="MaxRevisions">null leaves it untouched; 0 = unlimited. Changing it needs the page's owner or an admin.</param>
+/// <param name="BookId">
+/// Null/omit leaves the page in its book; a different id moves it (and any
+/// diagrams linked to it). A folder id must belong to that destination book.
+/// </param>
 public sealed record UpdatePageRequest(
     [property: Required, MinLength(1)] string Title,
     string? Slug,
@@ -164,7 +174,8 @@ public sealed record UpdatePageRequest(
     int? SortOrder,
     string? OwnerId = null,
     bool? TrackChanges = null,
-    int? MaxRevisions = null
+    int? MaxRevisions = null,
+    string? BookId = null
 );
 
 /// <summary>

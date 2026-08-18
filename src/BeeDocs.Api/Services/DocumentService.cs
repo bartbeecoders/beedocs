@@ -663,9 +663,22 @@ public sealed class DocumentService(
         var existing = await SelectChapterAsync(conn, id, ct);
         if (existing is null) return null;
 
-        existing.Title = request.Title.Trim();
+        if (!string.IsNullOrWhiteSpace(request.Title))
+            existing.Title = request.Title.Trim();
         if (!string.IsNullOrWhiteSpace(request.Slug))
-            existing.Slug = await UniqueChapterSlugAsync(conn, existing.BookId, SlugHelper.Slugify(request.Slug), ct);
+            existing.Slug = SlugHelper.Slugify(request.Slug);
+
+        var destBookId = string.IsNullOrWhiteSpace(request.BookId) ? null : request.BookId.Trim();
+        var moving = destBookId is not null
+            && !string.Equals(destBookId, existing.BookId, StringComparison.Ordinal);
+        if (moving)
+        {
+            await MoveChapterToBookAsync(conn, existing, destBookId!, request.SortOrder, ct);
+            return ToDto(existing);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Slug))
+            existing.Slug = await UniqueChapterSlugAsync(conn, existing.BookId, existing.Slug, ct);
         if (request.SortOrder is int order)
             existing.SortOrder = order;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
@@ -682,6 +695,123 @@ public sealed class DocumentService(
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
         return ToDto(existing);
+    }
+
+    /// <summary>
+    /// Relocate a folder into another book, taking its pages (and any diagrams
+    /// linked to those pages) with it. Slugs are unique-ified against the
+    /// destination; bodies follow if the two books sit on different storage.
+    /// </summary>
+    private async Task MoveChapterToBookAsync(
+        SqliteConnection conn,
+        Chapter existing,
+        string destBookId,
+        int? requestedSortOrder,
+        CancellationToken ct)
+    {
+        var dest = await SelectBookAsync(conn, destBookId, ct)
+            ?? throw new KeyNotFoundException($"Book '{destBookId}' was not found.");
+
+        var sourceProvider = await ContentResolver.ProviderIdForBookAsync(conn, existing.BookId, ct);
+        var destProvider = await ContentResolver.ProviderIdForBookAsync(conn, dest.Id, ct);
+
+        existing.Slug = await UniqueChapterSlugAsync(conn, dest.Id, existing.Slug, ct);
+        existing.SortOrder = requestedSortOrder
+            ?? await NextChapterSortOrderAsync(conn, dest.Id, ct);
+        existing.BookId = dest.Id;
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var pages = new List<(string Id, string Slug)>();
+        await using (var list = conn.CreateCommand())
+        {
+            list.CommandText = "SELECT id, slug FROM page WHERE chapter_id = $id";
+            SqliteHelpers.Add(list, "$id", existing.Id);
+            await using var reader = await list.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+                pages.Add((reader.GetString(0), reader.GetString(1)));
+        }
+
+        var destSlugs = new List<string>();
+        await using (var slugs = conn.CreateCommand())
+        {
+            slugs.CommandText = "SELECT slug FROM page WHERE book_id = $book_id";
+            SqliteHelpers.Add(slugs, "$book_id", dest.Id);
+            await using var reader = await slugs.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+                destSlugs.Add(reader.GetString(0));
+        }
+
+        var newSlugs = new List<(string Id, string Slug)>(pages.Count);
+        foreach (var (pageId, slug) in pages)
+        {
+            var unique = UniqueSlug(slug, destSlugs);
+            destSlugs.Add(unique);
+            newSlugs.Add((pageId, unique));
+        }
+
+        await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
+        await using (var upd = conn.CreateCommand())
+        {
+            upd.Transaction = tx;
+            upd.CommandText = """
+                UPDATE chapter SET book_id = $book_id, title = $title, slug = $slug,
+                  sort_order = $sort_order, updated_at = $updated_at
+                WHERE id = $id
+                """;
+            SqliteHelpers.Add(upd, "$id", existing.Id);
+            SqliteHelpers.Add(upd, "$book_id", existing.BookId);
+            SqliteHelpers.Add(upd, "$title", existing.Title);
+            SqliteHelpers.Add(upd, "$slug", existing.Slug);
+            SqliteHelpers.Add(upd, "$sort_order", existing.SortOrder);
+            SqliteHelpers.Add(upd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
+            await upd.ExecuteNonQueryAsync(ct);
+        }
+
+        foreach (var (pageId, slug) in newSlugs)
+        {
+            await using var upd = conn.CreateCommand();
+            upd.Transaction = tx;
+            upd.CommandText = "UPDATE page SET book_id = $book_id, slug = $slug WHERE id = $id";
+            SqliteHelpers.Add(upd, "$id", pageId);
+            SqliteHelpers.Add(upd, "$book_id", dest.Id);
+            SqliteHelpers.Add(upd, "$slug", slug);
+            await upd.ExecuteNonQueryAsync(ct);
+        }
+
+        if (newSlugs.Count > 0)
+        {
+            await using var upd = conn.CreateCommand();
+            upd.Transaction = tx;
+            var names = newSlugs.Select((_, i) => $"$p{i}").ToArray();
+            upd.CommandText =
+                $"UPDATE diagram SET book_id = $book_id WHERE page_id IN ({string.Join(", ", names)})";
+            SqliteHelpers.Add(upd, "$book_id", dest.Id);
+            for (var i = 0; i < newSlugs.Count; i++)
+                SqliteHelpers.Add(upd, names[i], newSlugs[i].Id);
+            await upd.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+
+        // Same pattern as moving a book between shelves: flip ownership first,
+        // then relocate bodies. Each content_ref is self-describing, so a
+        // partial run is readable and the next move resumes it.
+        if (!string.Equals(sourceProvider, destProvider, StringComparison.Ordinal)
+            && newSlugs.Count > 0)
+        {
+            await mover.MovePageSetContentAsync(
+                newSlugs.Select(p => p.Id).ToList(), destProvider, ct);
+        }
+    }
+
+    private static async Task<int> NextChapterSortOrderAsync(
+        SqliteConnection conn, string bookId, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM chapter WHERE book_id = $book_id";
+        SqliteHelpers.Add(cmd, "$book_id", bookId);
+        var value = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(value ?? 0, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     public async Task<bool> DeleteChapterAsync(string id, CancellationToken ct = default)
@@ -869,11 +999,7 @@ public sealed class DocumentService(
                     "Only the page's owner or an admin can change its tracking settings.");
         }
 
-        // Content placement is decided — and any provider I/O done — before the
-        // transaction opens, so a slow provider never holds the write lock. A
-        // metadata-only save of an offloaded page must fetch the body: the log
-        // entry below records the full state, not just what changed.
-        var target = await ContentResolver.ProviderIdForBookAsync(conn, existing.BookId, ct);
+        var sourceProvider = await ContentResolver.ProviderIdForBookAsync(conn, existing.BookId, ct);
         var oldPageRef = existing.ContentRef;
         var body = request.Content ?? await resolver.LoadAsync(existing.Content, existing.ContentRef, ct);
 
@@ -890,8 +1016,38 @@ public sealed class DocumentService(
             existing.TrackChanges = trackChanges;
         if (request.MaxRevisions is int maxRevisions)
             existing.MaxRevisions = maxRevisions;
-        existing.Version += 1;
+
+        var destBookId = string.IsNullOrWhiteSpace(request.BookId) ? null : request.BookId.Trim();
+        var moving = destBookId is not null
+            && !string.Equals(destBookId, existing.BookId, StringComparison.Ordinal);
+        if (moving)
+        {
+            var dest = await SelectBookAsync(conn, destBookId!, ct)
+                ?? throw new KeyNotFoundException($"Book '{destBookId}' was not found.");
+            // A folder from the old book would dangle; omitted chapterId means root.
+            if (request.ChapterId is null)
+                existing.ChapterId = null;
+            if (existing.ChapterId is not null)
+            {
+                var folder = await SelectChapterAsync(conn, existing.ChapterId, ct);
+                if (folder is null
+                    || !string.Equals(folder.BookId, dest.Id, StringComparison.Ordinal))
+                    throw new ArgumentException(
+                        "Folder does not belong to the destination book.", nameof(request.ChapterId));
+            }
+
+            existing.Slug = await UniquePageSlugAsync(conn, dest.Id, existing.Slug, ct);
+            existing.BookId = dest.Id;
+        }
+
         existing.UpdatedAt = DateTimeOffset.UtcNow;
+
+        // Content placement is decided — and any provider I/O done — before the
+        // transaction opens, so a slow provider never holds the write lock. A
+        // metadata-only save of an offloaded page must fetch the body: the log
+        // entry below records the full state, not just what changed. After a
+        // book move this is the destination's provider, so the live body follows.
+        var target = await ContentResolver.ProviderIdForBookAsync(conn, existing.BookId, ct);
 
         var pageCell = await resolver.SaveAsync(body, target, ContentRef.PageKey(existing.Id), oldPageRef, ct);
         existing.Content = pageCell.InlineValue;
@@ -907,6 +1063,10 @@ public sealed class DocumentService(
             && newest.ChangeKind == PageChangeKinds.Updated
             && string.Equals(newest.ChangedBy, actor.Id, StringComparison.Ordinal)
             && newest.CreatedAt >= existing.UpdatedAt - RevisionCoalesceWindow;
+        // Version counts sittings, not auto-saves: fold this write into the
+        // current sitting without bumping, so typing does not run the number up.
+        if (!coalesce)
+            existing.Version += 1;
         var revisionId = coalesce ? newest!.Id : SqliteHelpers.NewId();
         var oldRevisionRef = coalesce ? newest!.ContentRef : null;
         var revisionCell = pageCell.ContentRef is null
@@ -920,13 +1080,14 @@ public sealed class DocumentService(
             {
                 cmd.Transaction = tx;
                 cmd.CommandText = """
-                    UPDATE page SET title = $title, slug = $slug, content = $content,
+                    UPDATE page SET book_id = $book_id, title = $title, slug = $slug, content = $content,
                       content_ref = $content_ref, content_size = $content_size, chapter_id = $chapter_id,
                       sort_order = $sort_order, version = $version, owner_id = $owner_id,
                       track_changes = $track_changes, max_revisions = $max_revisions, updated_at = $updated_at
                     WHERE id = $id
                     """;
                 SqliteHelpers.Add(cmd, "$id", existing.Id);
+                SqliteHelpers.Add(cmd, "$book_id", existing.BookId);
                 SqliteHelpers.Add(cmd, "$title", existing.Title);
                 SqliteHelpers.Add(cmd, "$slug", existing.Slug);
                 SqliteHelpers.Add(cmd, "$content", existing.Content);
@@ -940,6 +1101,16 @@ public sealed class DocumentService(
                 SqliteHelpers.Add(cmd, "$max_revisions", existing.MaxRevisions);
                 SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
                 await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            if (moving)
+            {
+                await using var diag = conn.CreateCommand();
+                diag.Transaction = tx;
+                diag.CommandText = "UPDATE diagram SET book_id = $book_id WHERE page_id = $id";
+                SqliteHelpers.Add(diag, "$book_id", existing.BookId);
+                SqliteHelpers.Add(diag, "$id", existing.Id);
+                await diag.ExecuteNonQueryAsync(ct);
             }
 
             // Logged *after* the write and holding the new state, so the newest
@@ -982,6 +1153,11 @@ public sealed class DocumentService(
         if (coalesce)
             await resolver.CleanupReplacedAsync(oldRevisionRef, revisionCell.ContentRef, ct);
         await resolver.DeleteAllAsync(prunedRefs, ct);
+
+        // Live body already followed via SaveAsync above. Older revisions and
+        // page-linked diagrams still sit on the source provider until this runs.
+        if (moving && !string.Equals(sourceProvider, target, StringComparison.Ordinal))
+            await mover.MovePageSetContentAsync([existing.Id], target, ct);
 
         var dto = ToDto(existing, await OwnerNameAsync(conn, existing.OwnerId, ct), actor.Id, actor.Name);
         return dto with { Content = body };

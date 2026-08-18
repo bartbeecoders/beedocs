@@ -943,11 +943,18 @@ api.MapPost("/books/{bookId}/chapters", async (string bookId, CreateChapterReque
 
 api.MapPut("/chapters/{id}", async (string id, UpdateChapterRequest body, IDocumentService docs, CancellationToken ct) =>
 {
-    if (string.IsNullOrWhiteSpace(body.Title))
+    if (string.IsNullOrWhiteSpace(body.Title) && string.IsNullOrWhiteSpace(body.BookId))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
 
-    var updated = await docs.UpdateChapterAsync(id, body, ct);
-    return updated is null ? Results.NotFound() : Results.Ok(updated);
+    try
+    {
+        var updated = await docs.UpdateChapterAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
 });
 
 api.MapDelete("/chapters/{id}", async (string id, IDocumentService docs, CancellationToken ct) =>
@@ -992,9 +999,17 @@ api.MapPut("/pages/{id}", async (string id, UpdatePageRequest body, IDocumentSer
         var updated = await docs.UpdatePageAsync(id, body, ct);
         return updated is null ? Results.NotFound() : Results.Ok(updated);
     }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
     catch (ArgumentException e)
     {
-        return Results.ValidationProblem(new Dictionary<string, string[]> { ["maxRevisions"] = [e.Message] });
+        var field = e.ParamName is "ChapterId" or "chapterId" ? "chapterId"
+            : e.ParamName is "BookId" or "bookId" ? "bookId"
+            : e.Message.Contains("maxRevisions", StringComparison.OrdinalIgnoreCase) ? "maxRevisions"
+            : "page";
+        return Results.ValidationProblem(new Dictionary<string, string[]> { [field] = [e.Message] });
     }
     // Tracking settings are owner-gated inside the service — the endpoint filter
     // only knows roles, and "owner of this page" is not a role.

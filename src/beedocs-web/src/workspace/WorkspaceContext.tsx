@@ -84,6 +84,8 @@ type WorkspaceCtx = {
     /** Target sort order among siblings in the destination */
     sortOrder?: number
   }) => Promise<void>
+  /** Move a folder (and its pages) into another book. */
+  moveFolder: (chapterId: string, fromBookId: string, toBookId: string) => Promise<{ pageIds: string[] }>
   reorderFolder: (chapterId: string, bookId: string, sortOrder: number) => Promise<void>
   renameInTree: () => Promise<void>
 }
@@ -604,41 +606,173 @@ graph LR
       sortOrder?: number
     }) => {
       const full = await api.getPage(args.pageId)
+      const fromBookId = full.bookId
       const chapterIdPayload = args.chapterId == null ? '' : args.chapterId
       const updated = await api.updatePage(args.pageId, {
         title: full.title,
         content: full.content,
         chapterId: chapterIdPayload,
+        bookId: fromBookId !== args.bookId ? args.bookId : undefined,
         sortOrder: args.sortOrder ?? full.sortOrder,
       })
+      const dest = books.find((b) => b.id === args.bookId)
+      const movedDiagrams = (books.find((b) => b.id === fromBookId)?.diagrams ?? []).filter(
+        (d) => d.pageId === args.pageId,
+      )
       setBooks((prev) =>
         prev.map((b) => {
-          if (b.id !== args.bookId) return b
-          const pages = b.pages.map((p) =>
-            p.id === args.pageId
-              ? {
-                  ...p,
-                  chapterId: updated.chapterId ?? null,
-                  sortOrder: updated.sortOrder,
-                  title: updated.title,
-                }
-              : p,
-          )
-          return {
-            ...b,
-            pages: pages.sort(
-              (a, c) => a.sortOrder - c.sortOrder || a.title.localeCompare(c.title),
-            ),
-            expandedFolders:
-              args.chapterId != null
-                ? new Set(b.expandedFolders).add(args.chapterId)
-                : b.expandedFolders,
+          if (fromBookId === args.bookId) {
+            if (b.id !== args.bookId) return b
+            const pages = b.pages.map((p) =>
+              p.id === args.pageId
+                ? {
+                    ...p,
+                    chapterId: updated.chapterId ?? null,
+                    sortOrder: updated.sortOrder,
+                    title: updated.title,
+                    slug: updated.slug,
+                  }
+                : p,
+            )
+            return {
+              ...b,
+              pages: pages.sort(
+                (a, c) => a.sortOrder - c.sortOrder || a.title.localeCompare(c.title),
+              ),
+              expandedFolders:
+                args.chapterId != null
+                  ? new Set(b.expandedFolders).add(args.chapterId)
+                  : b.expandedFolders,
+            }
           }
+          if (b.id === fromBookId) {
+            return {
+              ...b,
+              pages: b.pages.filter((p) => p.id !== args.pageId),
+              diagrams: b.diagrams.filter((d) => d.pageId !== args.pageId),
+            }
+          }
+          if (b.id === args.bookId && b.expanded) {
+            const nextPage = {
+              id: updated.id,
+              bookId: args.bookId,
+              chapterId: updated.chapterId ?? null,
+              title: updated.title,
+              slug: updated.slug,
+              sortOrder: updated.sortOrder,
+              version: updated.version,
+              ownerId: updated.ownerId,
+              ownerName: updated.ownerName,
+              updatedAt: updated.updatedAt,
+            }
+            return {
+              ...b,
+              pages: [...b.pages.filter((p) => p.id !== args.pageId), nextPage].sort(
+                (a, c) => a.sortOrder - c.sortOrder || a.title.localeCompare(c.title),
+              ),
+              diagrams: [
+                ...b.diagrams.filter((d) => d.pageId !== args.pageId),
+                ...movedDiagrams.map((d) => ({ ...d, bookId: args.bookId })),
+              ],
+              expandedFolders:
+                args.chapterId != null
+                  ? new Set(b.expandedFolders).add(args.chapterId)
+                  : b.expandedFolders,
+            }
+          }
+          return b
         }),
       )
       if (args.chapterId) setExpandedFolders((s) => new Set(s).add(args.chapterId!))
+      if (fromBookId !== args.bookId) {
+        setExpandedIds((s) => new Set(s).add(args.bookId))
+        setSelectionState((prev) =>
+          prev.kind === 'page' && prev.pageId === args.pageId
+            ? { kind: 'page', bookId: args.bookId, pageId: args.pageId }
+            : prev,
+        )
+        if (!dest?.expanded) await expandBook(args.bookId)
+        if (args.chapterId) {
+          setBooks((prev) =>
+            prev.map((b) =>
+              b.id === args.bookId
+                ? { ...b, expandedFolders: new Set(b.expandedFolders).add(args.chapterId!) }
+                : b,
+            ),
+          )
+        }
+      }
     },
-    [],
+    [books, expandBook],
+  )
+
+  const moveFolder = useCallback(
+    async (chapterId: string, fromBookId: string, toBookId: string) => {
+      if (fromBookId === toBookId) return { pageIds: [] }
+      const source = books.find((b) => b.id === fromBookId)
+      const dest = books.find((b) => b.id === toBookId)
+      if (!source?.chapters.some((c) => c.id === chapterId)) return { pageIds: [] }
+      const movedPages = source.pages.filter((p) => p.chapterId === chapterId)
+      const movedPageIds = movedPages.map((p) => p.id)
+      const movedDiagrams = source.diagrams.filter(
+        (d) => d.pageId != null && movedPageIds.includes(d.pageId),
+      )
+      const updated = await api.updateChapter(chapterId, { bookId: toBookId })
+      setBooks((prev) =>
+        prev.map((b) => {
+          if (b.id === fromBookId) {
+            const expandedFolders = new Set(b.expandedFolders)
+            expandedFolders.delete(chapterId)
+            return {
+              ...b,
+              chapters: b.chapters.filter((c) => c.id !== chapterId),
+              pages: b.pages.filter((p) => p.chapterId !== chapterId),
+              diagrams: b.diagrams.filter(
+                (d) => d.pageId == null || !movedPageIds.includes(d.pageId),
+              ),
+              expandedFolders,
+            }
+          }
+          if (b.id === toBookId && b.expanded) {
+            return {
+              ...b,
+              chapters: [...b.chapters.filter((c) => c.id !== chapterId), updated].sort(
+                (a, c) => a.sortOrder - c.sortOrder || a.title.localeCompare(c.title),
+              ),
+              pages: [
+                ...b.pages,
+                ...movedPages.map((p) => ({ ...p, bookId: toBookId })),
+              ].sort((a, c) => a.sortOrder - c.sortOrder || a.title.localeCompare(c.title)),
+              diagrams: [
+                ...b.diagrams,
+                ...movedDiagrams.map((d) => ({ ...d, bookId: toBookId })),
+              ],
+              expandedFolders: new Set(b.expandedFolders).add(chapterId),
+            }
+          }
+          return b
+        }),
+      )
+      setExpandedFolders((s) => new Set(s).add(chapterId))
+      setExpandedIds((s) => new Set(s).add(toBookId))
+      setSelectionState((prev) => {
+        if (prev.kind === 'folder' && prev.chapterId === chapterId)
+          return { kind: 'folder', bookId: toBookId, chapterId }
+        if (prev.kind === 'page' && movedPageIds.includes(prev.pageId))
+          return { kind: 'page', bookId: toBookId, pageId: prev.pageId }
+        return prev
+      })
+      if (!dest?.expanded) await expandBook(toBookId)
+      setBooks((prev) =>
+        prev.map((b) =>
+          b.id === toBookId
+            ? { ...b, expandedFolders: new Set(b.expandedFolders).add(chapterId) }
+            : b,
+        ),
+      )
+      return { pageIds: movedPageIds }
+    },
+    [books, expandBook],
   )
 
   const reorderFolder = useCallback(
@@ -701,6 +835,7 @@ graph LR
       deleteSlideDeck,
       renameFolder,
       movePage,
+      moveFolder,
       reorderFolder,
       renameInTree,
     }),
@@ -734,6 +869,7 @@ graph LR
       deleteSlideDeck,
       renameFolder,
       movePage,
+      moveFolder,
       reorderFolder,
       renameInTree,
     ],

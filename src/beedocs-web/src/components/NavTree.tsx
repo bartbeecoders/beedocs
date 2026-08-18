@@ -70,7 +70,7 @@ type CtxMenu =
  */
 type DragPayload =
   | { type: 'page'; pageId: string; bookId: string; chapterId: string | null; title: string }
-  | { type: 'folder'; chapterId: string; bookId: string }
+  | { type: 'folder'; chapterId: string; bookId: string; title?: string }
   | { type: 'book'; bookId: string; shelfId: string | null; title: string }
 
 type Creating =
@@ -104,6 +104,7 @@ export function NavTree() {
     deleteSlideDeck,
     renameFolder,
     movePage,
+    moveFolder,
     toggleFolder,
     toggleShelf,
     refreshTree,
@@ -263,8 +264,21 @@ export function NavTree() {
     e.stopPropagation()
     setDragOver(null)
     const payload = parseDrag(e)
-    if (!payload || payload.bookId !== bookId) return
-    if (payload.type === 'page') {
+    if (!payload) return
+    if (payload.type === 'folder') {
+      if (payload.bookId === bookId) return
+      try {
+        const { pageIds } = await moveFolder(payload.chapterId, payload.bookId, bookId)
+        if (params.pageId && pageIds.includes(params.pageId)) {
+          void navigate(`/books/${bookId}/pages/${params.pageId}`)
+        }
+      } catch (err: unknown) {
+        alert(err instanceof Error ? err.message : String(err))
+      }
+      return
+    }
+    if (payload.type !== 'page') return
+    try {
       const book = books.find((b) => b.id === bookId)
       const siblings = (book?.pages ?? []).filter(
         (p) => (p.chapterId ?? null) === chapterId && p.id !== payload.pageId,
@@ -275,6 +289,11 @@ export function NavTree() {
         chapterId,
         sortOrder: siblings.length,
       })
+      if (params.pageId === payload.pageId && payload.bookId !== bookId) {
+        void navigate(`/books/${bookId}/pages/${payload.pageId}`)
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -284,14 +303,21 @@ export function NavTree() {
     place: 'before' | 'after',
     e: React.DragEvent,
   ) => {
+    const payload = parseDrag(e)
+    // A folder dropped on a page should land on the enclosing book, not be
+    // swallowed by the page's reorder gap.
+    if (payload?.type === 'folder') {
+      e.preventDefault()
+      return
+    }
     e.preventDefault()
     e.stopPropagation()
     setDragOver(null)
-    const payload = parseDrag(e)
-    if (!payload || payload.type !== 'page' || payload.bookId !== bookId) return
+    if (!payload || payload.type !== 'page') return
     if (payload.pageId === target.id) return
     const chapterId = target.chapterId ?? null
     const book = books.find((b) => b.id === bookId)
+    const source = books.find((b) => b.id === payload.bookId)
     const siblings = (book?.pages ?? [])
       .filter((p) => (p.chapterId ?? null) === chapterId)
       .sort((a, c) => a.sortOrder - c.sortOrder || a.title.localeCompare(c.title))
@@ -299,15 +325,28 @@ export function NavTree() {
     const idx = without.findIndex((p) => p.id === target.id)
     const insertAt = place === 'before' ? idx : idx + 1
     const reordered = [...without]
-    const moving = (book?.pages ?? []).find((p) => p.id === payload.pageId)
+    const moving =
+      siblings.find((p) => p.id === payload.pageId) ??
+      source?.pages.find((p) => p.id === payload.pageId)
     if (!moving) return
-    reordered.splice(Math.max(0, insertAt), 0, { ...moving, chapterId })
-    // Persist sort orders
-    for (let i = 0; i < reordered.length; i++) {
-      const p = reordered[i]
-      if (p.id === payload.pageId || p.sortOrder !== i || (p.chapterId ?? null) !== chapterId) {
-        await movePage({ pageId: p.id, bookId, chapterId, sortOrder: i })
+    reordered.splice(Math.max(0, insertAt), 0, { ...moving, chapterId, bookId })
+    try {
+      for (let i = 0; i < reordered.length; i++) {
+        const p = reordered[i]
+        if (
+          p.id === payload.pageId ||
+          p.sortOrder !== i ||
+          (p.chapterId ?? null) !== chapterId ||
+          p.bookId !== bookId
+        ) {
+          await movePage({ pageId: p.id, bookId, chapterId, sortOrder: i })
+        }
       }
+      if (params.pageId === payload.pageId && payload.bookId !== bookId) {
+        void navigate(`/books/${bookId}/pages/${payload.pageId}`)
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -1027,9 +1066,8 @@ function BookNode({
     <li key={book.id} className="tree-book">
       <div
         className={`tree-row ${bookActive ? 'active' : ''}${dragOver === rootDropId ? ' drag-over' : ''}`}
-        // Dragged to be shelved; also a drop target for pages moving to the
-        // book root. The two never collide — a book payload is only accepted by
-        // shelf rows, a page payload only by book and folder rows.
+        // Dragged to be shelved; also a drop target for pages and folders
+        // moving in from another book, and for pages moving to this book's root.
         draggable={canWrite}
         onDragStart={(e) =>
           onDragStart(e, {
@@ -1248,7 +1286,12 @@ function FolderNode({
         className={`tree-row child folder-row${folderSelected ? ' active' : ''}${dragOver === dropId ? ' drag-over' : ''}`}
         draggable={canWrite}
         onDragStart={(e) =>
-          onDragStart(e, { type: 'folder', chapterId: folder.id, bookId: book.id })
+          onDragStart(e, {
+            type: 'folder',
+            chapterId: folder.id,
+            bookId: book.id,
+            title: folder.title,
+          })
         }
         onContextMenu={(e) =>
           openMenu(e, {

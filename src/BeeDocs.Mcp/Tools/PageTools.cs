@@ -99,20 +99,22 @@ public sealed class PageTools(BeeDocsApiClient client)
         });
 
     [McpServerTool(Name = "beedocs_move_page", Title = "Move page"),
-     Description("Move a page into a folder (chapterId) or to book root (chapterId null), and/or set sortOrder among siblings.")]
+     Description("Move a page into a folder, to book root, into another book, and/or set sortOrder among siblings.")]
     public Task<string> MovePage(
         string pageId,
         [Description("Target folder id, or null/omit to leave unchanged; use clearFolder to move to root")]
         string? chapterId = null,
         [Description("If true, move page to book root (clears chapterId)")] bool clearFolder = false,
         int? sortOrder = null,
+        [Description("Destination book id. Omit to leave the page in its current book.")]
+        string? bookId = null,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
         {
             var page = await client.GetPageAsync(pageId, ct);
             string? nextChapter = chapterId;
-            var chapterSpecified = clearFolder || chapterId is not null;
-            if (clearFolder)
+            var chapterSpecified = clearFolder || chapterId is not null || bookId is not null;
+            if (clearFolder || (bookId is not null && chapterId is null))
             {
                 nextChapter = null;
             }
@@ -128,7 +130,8 @@ public sealed class PageTools(BeeDocsApiClient client)
                 BeeDocsApiClient.PropStringOrNull(page, "slug"),
                 nextChapter,
                 chapterSpecified,
-                sortOrder ?? (page.TryGetProperty("sortOrder", out var so) && so.TryGetInt32(out var n) ? n : null));
+                sortOrder ?? (page.TryGetProperty("sortOrder", out var so) && so.TryGetInt32(out var n) ? n : null),
+                bookId);
             return ToolHelpers.Json(await client.UpdatePageAsync(pageId, body, ct));
         });
 }

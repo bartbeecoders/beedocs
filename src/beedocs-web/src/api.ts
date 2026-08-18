@@ -342,7 +342,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  updateChapter: (id: string, body: { title: string; slug?: string; sortOrder?: number }) =>
+  updateChapter: (id: string, body: { title?: string; slug?: string; sortOrder?: number; bookId?: string }) =>
     request<Chapter>(`/api/chapters/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteChapter: (id: string) => request<void>(`/api/chapters/${id}`, { method: 'DELETE' }),
 
@@ -372,6 +372,8 @@ export const api = {
       slug?: string
       /** Pass "" to clear folder assignment */
       chapterId?: string | null
+      /** Destination book. Omit to leave the page where it is. */
+      bookId?: string
       sortOrder?: number
       /** Omit to leave the owner alone; "" clears it. */
       ownerId?: string | null
@@ -385,7 +387,7 @@ export const api = {
 
   /**
    * The page's change log, newest first. The first entry matches the page's live
-   * version — every save adds one.
+   * version — consecutive saves in one sitting fold into it rather than adding one.
    */
   getPageHistory: (id: string, limit?: number) =>
     request<PageHistory>(`/api/pages/${id}/history${limit ? `?limit=${limit}` : ''}`),

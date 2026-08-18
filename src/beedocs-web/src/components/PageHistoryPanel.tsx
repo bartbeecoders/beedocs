@@ -6,10 +6,12 @@ import { MarkdownView } from './MarkdownView'
 type Props = {
   pageId: string
   /**
-   * The page's live version. Every save bumps it, which is exactly when the log
-   * has a new entry — so this is what re-fetches the list.
+   * The page's live version and last-write time. Version counts sittings (it
+   * stays put while auto-saves fold into the current one); updatedAt moves on
+   * every save, which is when the current log entry's timestamp changes.
    */
   version: number | undefined
+  updatedAt?: string
 }
 
 /** Same day → time only; this year → day and month; older → include the year. */
@@ -45,7 +47,7 @@ function whoChanged(entry: PageHistoryEntry): string {
  * properties pane beside the page's other facts. When the page's owner has
  * change tracking switched on, each kept copy can be pulled up in full.
  */
-export function PageHistoryPanel({ pageId, version }: Props) {
+export function PageHistoryPanel({ pageId, version, updatedAt }: Props) {
   const [history, setHistory] = useState<PageHistory | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** Entry whose full document is open in the viewer. */
@@ -67,9 +69,9 @@ export function PageHistoryPanel({ pageId, version }: Props) {
     return () => {
       cancelled = true
     }
-    // `version` is not read in the body — it is the signal that a save landed
-    // and the log has grown.
-  }, [pageId, version])
+    // `version` and `updatedAt` are not read in the body — they are the signal
+    // that a save landed (a new sitting, or the current sitting's timestamp).
+  }, [pageId, version, updatedAt])
 
   if (error) {
     return (

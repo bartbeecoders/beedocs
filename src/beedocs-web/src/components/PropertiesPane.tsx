@@ -180,7 +180,7 @@ export function PropertiesPane({ pageState, diagramState, slideState, view }: Pr
         )}
         <div className="props-hint">
           <h4>History</h4>
-          <PageHistoryPanel pageId={p?.id ?? ''} version={p?.version} />
+          <PageHistoryPanel pageId={p?.id ?? ''} version={p?.version} updatedAt={p?.updatedAt} />
         </div>
         {/* View mode, saving and the how-to-add-content note are all about
             editing. A read-only account is shown the page's facts and nothing

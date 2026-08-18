@@ -69,7 +69,8 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 |------|------|-------------|
 | `beedocs_list_chapters` | `bookId` | List folders |
 | `beedocs_create_chapter` | `bookId`, `title`, `slug?`, `sortOrder?` | Create folder |
-| `beedocs_update_chapter` | `chapterId`, `title`, `slug?`, `sortOrder?` | Rename / reorder folder |
+| `beedocs_update_chapter` | `chapterId`, `title`, `slug?`, `sortOrder?`, `bookId?` | Rename / reorder folder, or move it to another book |
+| `beedocs_move_chapter` | `chapterId`, `bookId`, `sortOrder?` | Move folder (and its pages) into another book |
 | `beedocs_delete_chapter` | `chapterId` | Delete folder (pages move to book root) |
 
 ### Pages (Markdown documents)
@@ -82,7 +83,7 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_update_page` | `pageId`, `title`, `content?`, `slug?`, `chapterId?`, `sortOrder?` | Update (revision saved) |
 | `beedocs_delete_page` | `pageId` | Delete page |
 | `beedocs_append_page_content` | `pageId`, `markdown`, `separator?` | Append Markdown and save |
-| `beedocs_move_page` | `pageId`, `chapterId?`, `clearFolder?`, `sortOrder?` | Move into/out of folder / reorder |
+| `beedocs_move_page` | `pageId`, `chapterId?`, `clearFolder?`, `sortOrder?`, `bookId?` | Move into/out of folder, into another book, or reorder |
 
 ### Images
 

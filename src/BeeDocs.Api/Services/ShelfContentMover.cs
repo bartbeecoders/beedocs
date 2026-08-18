@@ -130,6 +130,78 @@ public sealed class ShelfContentMover(
         return new MoveReport(moved, skipped, errors);
     }
 
+    /// <summary>
+    /// Relocate bodies for a set of pages (and their revisions and page-linked
+    /// diagrams). Used when a folder moves between books that sit on different
+    /// storage backends — the same per-row UPDATE as a whole-book move, scoped
+    /// to what actually changed books.
+    /// </summary>
+    public async Task<MoveReport> MovePageSetContentAsync(
+        IReadOnlyList<string> pageIds, string? targetProviderId, CancellationToken ct = default)
+    {
+        if (pageIds.Count == 0)
+            return new MoveReport(0, 0, []);
+
+        await using var conn = await db.OpenConnectionAsync(ct);
+
+        var names = pageIds.Select((_, i) => $"$p{i}").ToArray();
+        var inList = string.Join(", ", names);
+        void BindIds(SqliteCommand cmd)
+        {
+            for (var i = 0; i < pageIds.Count; i++)
+                SqliteHelpers.Add(cmd, names[i], pageIds[i]);
+        }
+
+        var moved = 0;
+        var skipped = 0;
+        var errors = new List<string>();
+
+        var sources = new (string Table, string Column, string Where, Func<string, string> Key)[]
+        {
+            ("page", "content", $"id IN ({inList})", ContentRef.PageKey),
+            ("page_revision", "content", $"page_id IN ({inList})", ContentRef.RevisionKey),
+            ("diagram", "source", $"page_id IN ({inList})", ContentRef.DiagramKey),
+        };
+
+        foreach (var (table, column, where, key) in sources)
+        {
+            var rows = new List<(string Id, string Inline, string? Ref)>();
+            await using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = $"SELECT id, {column}, content_ref FROM {table} WHERE {where}";
+                BindIds(cmd);
+                await using var reader = await cmd.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct))
+                    rows.Add((reader.GetString(0), reader.GetString(1), SqliteHelpers.GetNullableString(reader, 2)));
+            }
+
+            foreach (var (id, inline, oldRef) in rows)
+            {
+                if (AtDestination(oldRef, targetProviderId))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                try
+                {
+                    await MoveRowAsync(conn, table, column, id, inline, oldRef, targetProviderId, key(id), ct);
+                    moved++;
+                }
+                catch (Exception ex)
+                {
+                    var message = $"{table} {id}: {ex.GetBaseException().Message}";
+                    logger.LogWarning(ex, "Moving {Table} row {Id} failed", table, id);
+                    errors.Add(message);
+                    if (moved == 0 && errors.Count >= EarlyAbortThreshold)
+                        return new MoveReport(moved, skipped, errors);
+                }
+            }
+        }
+
+        return new MoveReport(moved, skipped, errors);
+    }
+
     private static bool AtDestination(string? contentRef, string? targetProviderId) =>
         targetProviderId is null
             ? contentRef is null

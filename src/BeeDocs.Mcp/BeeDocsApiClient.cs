@@ -174,13 +174,15 @@ public sealed class BeeDocsApiClient(HttpClient http)
         string? slug = null,
         string? chapterId = null,
         bool chapterIdSpecified = false,
-        int? sortOrder = null)
+        int? sortOrder = null,
+        string? bookId = null)
     {
         var clean = new Dictionary<string, object?> { ["title"] = title };
         if (content is not null) clean["content"] = content;
         if (slug is not null) clean["slug"] = slug;
         if (sortOrder is not null) clean["sortOrder"] = sortOrder.Value;
         if (chapterIdSpecified) clean["chapterId"] = chapterId ?? "";
+        if (!string.IsNullOrWhiteSpace(bookId)) clean["bookId"] = bookId;
         return clean;
     }
 
