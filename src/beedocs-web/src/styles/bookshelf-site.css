@@ -252,6 +252,31 @@
   padding: 2.25rem 2.4rem 4rem;
 }
 
+/* On a page, 46rem is the *prose* measure, not the article's width: a wide
+   table crammed into it wraps every cell (and clips the last column) while
+   the space beside the article sits empty — the workspace canvas has no such
+   cap, which is why the same page reads fine there. So let the article span
+   its column and move the measure onto the children, leaving tables free to
+   take the room they need; `overflow-x: auto` on the table still handles one
+   too wide for even that. */
+.bsite-page .bsite-article {
+  width: 100%;
+  max-width: min(100%, 80rem);
+}
+
+.bsite-page .bsite-page-head,
+.bsite-page .bsite-pager,
+.bsite-page .markdown-body > * {
+  /* 46rem minus the article's own horizontal padding, so a line of prose
+     stays exactly as wide as it was before the article grew. */
+  max-width: calc(46rem - 4.8rem);
+}
+
+.bsite-page .markdown-body > table {
+  width: max-content;
+  max-width: 100%;
+}
+
 .bsite-hero h1,
 .bsite-page-head h1 {
   margin: 0 0 0.55rem;
