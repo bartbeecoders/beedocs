@@ -8,7 +8,14 @@ namespace BeeDocs.Api.Models;
 /// not have to re-derive it from configuration (the configured value may be
 /// relative to the content root).
 /// </summary>
-public sealed record StorageOptions(string UploadsRoot);
+/// <param name="UploadsRoot">Images and other embeddable assets, served publicly at <c>/uploads</c>.</param>
+/// <param name="AttachmentsRoot">
+/// Book attachments. A separate directory precisely because it is <em>not</em>
+/// served statically: attachments are reached only through
+/// <c>/api/attachments/{id}/download</c>, so the read-open that a published
+/// bookshelf grants <c>/uploads</c> never reaches them.
+/// </param>
+public sealed record StorageOptions(string UploadsRoot, string AttachmentsRoot);
 
 /// <summary>
 /// The BeeDocs portable archive: a zip with <c>beedocs.json</c> at the root and

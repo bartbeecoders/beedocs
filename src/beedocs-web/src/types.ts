@@ -131,7 +131,14 @@ export type PageRevision = {
 /** Server-rendered export formats. PDF is produced in the browser instead. */
 export type ExportFormat = 'archive' | 'markdown' | 'docx'
 
-export type SearchKind = 'page' | 'diagram' | 'slides' | 'book' | 'folder' | 'shelf'
+export type SearchKind =
+  | 'page'
+  | 'diagram'
+  | 'slides'
+  | 'attachment'
+  | 'book'
+  | 'folder'
+  | 'shelf'
 
 /** Sentinels the API wraps matched terms in. Never present in stored content. */
 export const HIGHLIGHT_OPEN = '\ue000'
@@ -226,6 +233,7 @@ export type SearchStatus = {
   pages: number
   diagrams: number
   slideDecks: number
+  attachments: number
   books: number
   folders: number
   shelves: number
@@ -322,6 +330,32 @@ export type SlideDeck = {
   source: string
   createdAt: string
   updatedAt: string
+}
+
+/**
+ * A file filed against a book — a PDF, a Word/PowerPoint/Excel document, an
+ * archive. The bytes never travel as JSON: `downloadUrl` is the API route that
+ * serves them, and uploads go up as multipart form data.
+ */
+export type AttachmentSummary = {
+  id: string
+  bookId: string
+  title: string
+  /** Original name as uploaded — what a download is saved as. */
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  ownerId?: string | null
+  /** Display name the server resolved for {@link ownerId}. */
+  ownerName?: string | null
+  /** API route for the bytes. Pass through `withApiBase` before using it. */
+  downloadUrl: string
+  updatedAt: string
+}
+
+export type Attachment = AttachmentSummary & {
+  description?: string | null
+  createdAt: string
 }
 
 /** App-wide reusable deck layout, listed when creating a new deck. */
@@ -763,7 +797,8 @@ export type DocumentCounts = {
   pages: number
   diagrams: number
   slideDecks: number
-  /** Content documents only: pages + diagrams + slide decks. */
+  attachments: number
+  /** Content documents only: pages + diagrams + slide decks + attachments. */
   total: number
 }
 
@@ -776,6 +811,8 @@ export type StorageStats = {
   databaseBytes: number
   /** Uploaded images and other files under /uploads. */
   uploadsBytes: number
+  /** Book attachments on disk — the PDFs and Office documents themselves. */
+  attachmentBytes: number
   /** Bodies offloaded to storage providers, measured at upload time. */
   externalBytes: number
 }

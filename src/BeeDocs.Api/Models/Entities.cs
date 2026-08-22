@@ -338,3 +338,36 @@ public sealed class ShapeCollection
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
+
+/// <summary>
+/// A file kept alongside a book's pages — a PDF, a Word/PowerPoint/Excel
+/// document, an archive. Unlike pages, diagrams and slide decks, the payload is
+/// an opaque byte stream on disk rather than text in SQLite, so nothing here is
+/// offloaded to a storage provider and only the metadata is a row.
+/// </summary>
+public sealed class Attachment
+{
+    public string Id { get; set; } = string.Empty;
+    /// <summary>Owning book (required for library listing).</summary>
+    public string BookId { get; set; } = string.Empty;
+    /// <summary>The name a person gave it. Defaults to the uploaded file's name.</summary>
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    /// <summary>Original name as uploaded — what a download is served as.</summary>
+    public string FileName { get; set; } = string.Empty;
+    /// <summary>
+    /// Name on disk under the attachments root: <c>{id}{ext}</c>, never anything
+    /// the uploader chose, so a crafted file name cannot escape the directory.
+    /// </summary>
+    public string StoredName { get; set; } = string.Empty;
+    public string ContentType { get; set; } = "application/octet-stream";
+    public long SizeBytes { get; set; }
+    /// <summary>
+    /// <see cref="User.Id"/> of the account responsible for this file. Defaults
+    /// to the owning book's owner, falling back to whoever uploaded it. Like
+    /// every other owner, it grants nothing.
+    /// </summary>
+    public string? OwnerId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}

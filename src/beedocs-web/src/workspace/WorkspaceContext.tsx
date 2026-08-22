@@ -9,7 +9,15 @@ import {
   type ReactNode,
 } from 'react'
 import { api } from '../api'
-import type { Book, Chapter, DiagramSummary, PageSummary, Shelf, SlideDeckSummary } from '../types'
+import type {
+  AttachmentSummary,
+  Book,
+  Chapter,
+  DiagramSummary,
+  PageSummary,
+  Shelf,
+  SlideDeckSummary,
+} from '../types'
 import { parseDeck, starterDeckSource } from '../slides/slideModel'
 import {
   selectionEquals,
@@ -24,6 +32,7 @@ export type TreeBook = Book & {
   pages: PageSummary[]
   diagrams: DiagramSummary[]
   slideDecks: SlideDeckSummary[]
+  attachments: AttachmentSummary[]
   chapters: Chapter[]
   expanded: boolean
   /** Expanded folder (chapter) ids within this book */
@@ -63,6 +72,10 @@ type WorkspaceCtx = {
   createDiagram: (bookId: string, title: string, kind?: string) => Promise<DiagramSummary>
   /** Starts from a title slide carrying the deck's name. */
   createSlideDeck: (bookId: string, title: string, templateId?: string) => Promise<SlideDeckSummary>
+  /** Upload a file into a book. Rejects with the server's message on a bad type or size. */
+  uploadAttachment: (bookId: string, file: File) => Promise<AttachmentSummary>
+  /** Replace a summary in the tree after its properties were saved elsewhere. */
+  patchAttachment: (bookId: string, next: AttachmentSummary) => void
   deleteBook: (bookId: string) => Promise<void>
   /** The shelf goes; its books return to the library root. */
   deleteShelf: (shelfId: string) => Promise<void>
@@ -75,6 +88,7 @@ type WorkspaceCtx = {
   deleteFolder: (chapterId: string, bookId: string) => Promise<void>
   deleteDiagram: (diagramId: string, bookId: string) => Promise<void>
   deleteSlideDeck: (deckId: string, bookId: string) => Promise<void>
+  deleteAttachment: (attachmentId: string, bookId: string) => Promise<void>
   renameFolder: (chapterId: string, bookId: string, title: string) => Promise<void>
   /** Move page into folder (or root) and/or reorder among siblings */
   movePage: (args: {
@@ -91,6 +105,11 @@ type WorkspaceCtx = {
 }
 
 const Ctx = createContext<WorkspaceCtx | null>(null)
+
+/** The order GET /api/books/{id}/attachments returns, kept for optimistic edits. */
+function sortAttachments(list: AttachmentSummary[]): AttachmentSummary[] {
+  return [...list].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+}
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [books, setBooks] = useState<TreeBook[]>([])
@@ -154,13 +173,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const loadChildren = async (bookId: string) => {
-    const [pages, diagrams, slideDecks, chapters] = await Promise.all([
+    const [pages, diagrams, slideDecks, attachments, chapters] = await Promise.all([
       api.listPages(bookId),
       api.listDiagrams(bookId),
       api.listSlideDecks(bookId),
+      api.listAttachments(bookId),
       api.listChapters(bookId),
     ])
-    return { pages, diagrams, slideDecks, chapters }
+    return { pages, diagrams, slideDecks, attachments, chapters }
   }
 
   const refreshTree = useCallback(async () => {
@@ -179,6 +199,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               pages: [],
               diagrams: [],
               slideDecks: [],
+              attachments: [],
               chapters: [],
               expanded: false,
               expandedFolders: new Set<string>(),
@@ -200,6 +221,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               pages: [],
               diagrams: [],
               slideDecks: [],
+              attachments: [],
               chapters: [],
               expanded: true,
               expandedFolders: new Set<string>(),
@@ -309,6 +331,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           pages: [],
           diagrams: [],
           slideDecks: [],
+          attachments: [],
           chapters: [],
           expanded: false,
           expandedFolders: new Set(),
@@ -514,6 +537,51 @@ graph LR
     )
     setExpandedIds((s) => new Set(s).add(bookId))
     return summary
+  }, [])
+
+  const uploadAttachment = useCallback(async (bookId: string, file: File) => {
+    const created = await api.uploadAttachment(bookId, file)
+    // The list is title-ordered server-side; mirror that here rather than
+    // prepending, so a re-fetch does not appear to shuffle the tree.
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.id === bookId
+          ? {
+              ...b,
+              expanded: true,
+              attachments: sortAttachments([...b.attachments, created]),
+            }
+          : b,
+      ),
+    )
+    setExpandedIds((s) => new Set(s).add(bookId))
+    return created
+  }, [])
+
+  const patchAttachment = useCallback((bookId: string, next: AttachmentSummary) => {
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.id === bookId
+          ? {
+              ...b,
+              attachments: sortAttachments(
+                b.attachments.map((a) => (a.id === next.id ? { ...a, ...next } : a)),
+              ),
+            }
+          : b,
+      ),
+    )
+  }, [])
+
+  const deleteAttachment = useCallback(async (attachmentId: string, bookId: string) => {
+    await api.deleteAttachment(attachmentId)
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.id === bookId
+          ? { ...b, attachments: b.attachments.filter((a) => a.id !== attachmentId) }
+          : b,
+      ),
+    )
   }, [])
 
   const deleteBook = useCallback(
@@ -824,6 +892,8 @@ graph LR
       createFolder,
       createDiagram,
       createSlideDeck,
+      uploadAttachment,
+      patchAttachment,
       deleteBook,
       deleteShelf,
       renameShelf,
@@ -833,6 +903,7 @@ graph LR
       deleteFolder,
       deleteDiagram,
       deleteSlideDeck,
+      deleteAttachment,
       renameFolder,
       movePage,
       moveFolder,
@@ -858,6 +929,8 @@ graph LR
       createFolder,
       createDiagram,
       createSlideDeck,
+      uploadAttachment,
+      patchAttachment,
       deleteBook,
       deleteShelf,
       renameShelf,
@@ -867,6 +940,7 @@ graph LR
       deleteFolder,
       deleteDiagram,
       deleteSlideDeck,
+      deleteAttachment,
       renameFolder,
       movePage,
       moveFolder,

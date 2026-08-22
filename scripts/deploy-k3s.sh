@@ -31,7 +31,8 @@ set -euo pipefail
 # Registry:  beecodersregistry.azurecr.io  (reuses the existing acr-secret
 #            ImagePullSecret — copied into this namespace on first deploy.)
 # Storage:   one PVC mounted at /data, holding both the SQLite store
-#            (/data/sqlite/beedocs.db) and uploaded images (/data/uploads).
+#            (/data/sqlite/beedocs.db), uploaded images (/data/uploads) and
+#            book attachments (/data/attachments).
 #
 # Usage:
 #   ./scripts/deploy-k3s.sh [all|build|push|deploy|status|logs|shell]

@@ -147,6 +147,100 @@ public sealed class BeeDocsApiClient(HttpClient http)
     public Task DeleteSlideTemplateAsync(string id, CancellationToken ct = default)
         => SendAsync(HttpMethod.Delete, $"/api/slide-templates/{Uri.EscapeDataString(id)}", null, ct);
 
+    // --- Attachments (files filed against a book) ---
+    // Multipart rather than JSON: the payload is bytes, and base64 in a JSON body
+    // would inflate it by a third on a route that already carries whole documents.
+
+    public Task<JsonElement> ListAttachmentsAsync(string bookId, CancellationToken ct = default)
+        => GetAsync($"/api/books/{Uri.EscapeDataString(bookId)}/attachments", ct);
+
+    public Task<JsonElement> GetAttachmentAsync(string id, CancellationToken ct = default)
+        => GetAsync($"/api/attachments/{Uri.EscapeDataString(id)}", ct);
+
+    public Task<JsonElement> UpdateAttachmentAsync(string id, object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Put, $"/api/attachments/{Uri.EscapeDataString(id)}", body, ct);
+
+    public Task DeleteAttachmentAsync(string id, CancellationToken ct = default)
+        => SendAsync(HttpMethod.Delete, $"/api/attachments/{Uri.EscapeDataString(id)}", null, ct);
+
+    public Task<JsonElement> UploadAttachmentAsync(
+        string bookId,
+        string base64,
+        string fileName,
+        string? title = null,
+        string? description = null,
+        CancellationToken ct = default)
+    {
+        var path = $"/api/books/{Uri.EscapeDataString(bookId)}/attachments";
+        var fields = new Dictionary<string, string?> { ["title"] = title, ["description"] = description };
+        return PostFileAsync(path, base64, fileName, fields, ct);
+    }
+
+    public Task<JsonElement> ReplaceAttachmentFileAsync(
+        string id,
+        string base64,
+        string fileName,
+        CancellationToken ct = default)
+        => PostFileAsync($"/api/attachments/{Uri.EscapeDataString(id)}/file", base64, fileName, null, ct);
+
+    /// <summary>The stored bytes, with the type and download name the API served them as.</summary>
+    public async Task<(byte[] Bytes, string ContentType, string FileName)> DownloadAttachmentAsync(
+        string id, CancellationToken ct = default)
+    {
+        var path = $"/api/attachments/{Uri.EscapeDataString(id)}/download";
+        using var response = await http.GetAsync(path, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var text = await response.Content.ReadAsStringAsync(ct);
+            throw new BeeDocsApiException(
+                $"BeeDocs API GET {path} failed: {(int)response.StatusCode} {response.ReasonPhrase}",
+                (int)response.StatusCode,
+                text);
+        }
+
+        return (
+            await response.Content.ReadAsByteArrayAsync(ct),
+            response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream",
+            response.Content.Headers.ContentDisposition?.FileNameStar
+                ?? response.Content.Headers.ContentDisposition?.FileName?.Trim('"')
+                ?? id);
+    }
+
+    /// <summary>
+    /// Multipart POST of one file plus optional text fields. The content type is
+    /// left as octet-stream on purpose: the API decides it from the extension,
+    /// which is the thing it validated, so guessing here would only be ignored.
+    /// </summary>
+    private async Task<JsonElement> PostFileAsync(
+        string path,
+        string base64,
+        string fileName,
+        IReadOnlyDictionary<string, string?>? fields,
+        CancellationToken ct)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(base64);
+        }
+        catch (FormatException e)
+        {
+            throw new BeeDocsApiException($"base64 is not valid base64: {e.Message}", 400);
+        }
+
+        using var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(bytes);
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        form.Add(file, "file", fileName);
+        foreach (var (key, value) in fields ?? new Dictionary<string, string?>())
+        {
+            if (!string.IsNullOrWhiteSpace(value)) form.Add(new StringContent(value), key);
+        }
+
+        using var response = await http.PostAsync(path, form, ct);
+        return await ReadResponseAsync(response, "POST", path);
+    }
+
     public async Task<JsonElement> UploadImageAsync(
         string base64,
         string fileName,

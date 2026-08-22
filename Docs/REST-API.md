@@ -384,5 +384,6 @@ No API key required.
 | `BeeDocs:DataPath` | `BeeDocs__DataPath` | `data/sqlite` | SQLite directory (`beedocs.db`) |
 | `ConnectionStrings:Sqlite` | `ConnectionStrings__Sqlite` | _(derived)_ | Full SQLite connection string (overrides DataPath) |
 | `BeeDocs:UploadsPath` | `BeeDocs__UploadsPath` | `data/uploads` | Image uploads |
+| `BeeDocs:AttachmentsPath` | `BeeDocs__AttachmentsPath` | `data/attachments` | Book attachments (never served statically) |
 
 K3S: add `BeeDocs__ApiKey` to the deployment secret/config if other services will call the API.

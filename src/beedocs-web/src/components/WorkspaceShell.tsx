@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTheme } from '../theme'
 import { useAuth } from '../auth/AuthContext'
@@ -12,6 +12,7 @@ import { ResizablePane } from './ResizablePane'
 import { PageCanvas, type PageEditorState } from './PageCanvas'
 import { DiagramCanvas, type DiagramEditorState } from './DiagramCanvas'
 import { SlideCanvas, type SlideEditorState } from './SlideCanvas'
+import { AttachmentCanvas, type AttachmentEditorState } from './AttachmentCanvas'
 import { PropertiesPane } from './PropertiesPane'
 import { SettingsPanel } from './SettingsPanel'
 import { UsersPage } from './UsersPage'
@@ -21,6 +22,15 @@ import { ExportMenu } from './ExportMenu'
 import { WorkspaceToolbar } from './WorkspaceToolbar'
 import { SearchPalette } from './SearchPalette'
 import { NamePromptDialog } from './NamePromptDialog'
+import {
+  ATTACHMENT_ACCEPT,
+  attachmentIcon,
+  attachmentTypeLabel,
+  dragHasFiles,
+  formatFileSize,
+} from '../media/attachments'
+import { useAttachmentUpload } from '../hooks/useAttachmentUpload'
+import { useFileDropZone } from '../hooks/useFileDropZone'
 
 export function WorkspaceShell() {
   const location = useLocation()
@@ -31,6 +41,7 @@ export function WorkspaceShell() {
   const [pageState, setPageState] = useState<PageEditorState | null>(null)
   const [diagramState, setDiagramState] = useState<DiagramEditorState | null>(null)
   const [slideState, setSlideState] = useState<SlideEditorState | null>(null)
+  const [attachmentState, setAttachmentState] = useState<AttachmentEditorState | null>(null)
   const [version, setVersion] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
 
@@ -45,6 +56,31 @@ export function WorkspaceShell() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  /**
+   * Swallow file drops that miss a drop zone.
+   *
+   * A file dropped on plain page chrome is, by default, a *navigation*: the
+   * browser leaves the workspace and opens the file. That costs whatever was
+   * unsaved in the editor, and it is an easy miss now that dragging documents
+   * in is a normal thing to do. Nothing here handles the file — the zones that
+   * do stopPropagation before this ever runs — it only refuses the default.
+   *
+   * Scoped to file drags, so dragging selected text inside a textarea and the
+   * tree's own item drags are untouched.
+   */
+  useEffect(() => {
+    const swallow = (e: DragEvent) => {
+      if (!dragHasFiles(e.dataTransfer)) return
+      e.preventDefault()
+    }
+    window.addEventListener('dragover', swallow)
+    window.addEventListener('drop', swallow)
+    return () => {
+      window.removeEventListener('dragover', swallow)
+      window.removeEventListener('drop', swallow)
+    }
   }, [])
 
   // Which build is live. Fetched once; failure is non-fatal — the pill just
@@ -70,6 +106,7 @@ export function WorkspaceShell() {
     if (params.pageId) return 'page' as const
     if (params.diagramId) return 'diagram' as const
     if (params.deckId) return 'slides' as const
+    if (params.attachmentId) return 'attachment' as const
     if (params.bookId) return 'book' as const
     if (params.shelfId) return 'shelf' as const
     return 'welcome' as const
@@ -80,6 +117,7 @@ export function WorkspaceShell() {
     params.pageId,
     params.diagramId,
     params.deckId,
+    params.attachmentId,
   ])
 
   // Keep toolbar selection aligned with the route (folders stick until route changes).
@@ -91,6 +129,7 @@ export function WorkspaceShell() {
       pageId: params.pageId,
       diagramId: params.diagramId,
       deckId: params.deckId,
+      attachmentId: params.attachmentId,
     })
   }, [
     view,
@@ -99,6 +138,7 @@ export function WorkspaceShell() {
     params.pageId,
     params.diagramId,
     params.deckId,
+    params.attachmentId,
     syncSelectionFromRoute,
   ])
 
@@ -138,6 +178,9 @@ export function WorkspaceShell() {
       } else if (params.deckId) {
         const deck = book.slideDecks.find((d) => d.id === params.deckId)
         crumbs.push({ label: deck?.title ?? slideState?.title ?? 'Slides' })
+      } else if (params.attachmentId) {
+        const file = book.attachments.find((a) => a.id === params.attachmentId)
+        crumbs.push({ label: file?.title ?? attachmentState?.title ?? 'File' })
       }
     }
     return crumbs
@@ -150,9 +193,11 @@ export function WorkspaceShell() {
     params.pageId,
     params.diagramId,
     params.deckId,
+    params.attachmentId,
     pageState?.title,
     diagramState?.title,
     slideState?.title,
+    attachmentState?.title,
   ])
 
   return (
@@ -205,9 +250,11 @@ export function WorkspaceShell() {
         pageId={params.pageId}
         diagramId={params.diagramId}
         deckId={params.deckId}
+        attachmentId={params.attachmentId}
         pageState={pageState}
         diagramState={diagramState}
         slideState={slideState}
+        attachmentState={attachmentState}
       />
 
       <div className="ws-body">
@@ -244,6 +291,7 @@ export function WorkspaceShell() {
           {view === 'page' && <PageCanvas onStateChange={setPageState} />}
           {view === 'diagram' && <DiagramCanvas onStateChange={setDiagramState} />}
           {view === 'slides' && <SlideCanvas onStateChange={setSlideState} />}
+          {view === 'attachment' && <AttachmentCanvas onStateChange={setAttachmentState} />}
         </main>
 
         <ResizablePane
@@ -260,6 +308,7 @@ export function WorkspaceShell() {
             pageState={pageState}
             diagramState={diagramState}
             slideState={slideState}
+            attachmentState={attachmentState}
             view={view}
           />
         </ResizablePane>
@@ -536,13 +585,33 @@ function BookOverview({ bookId }: { bookId: string }) {
   const { books, createPage, createDiagram, createSlideDeck } = useWorkspace()
   const book = books.find((b) => b.id === bookId)
   const [prompt, setPrompt] = useState<'page' | 'diagram' | 'slides' | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const { uploadingIn, error: uploadError, clearError, upload } = useAttachmentUpload()
+  // The whole overview is the drop target, not a dedicated strip: this page is
+  // where someone goes to see what a book holds, so it is where they arrive
+  // holding a document.
+  const fileDrop = useFileDropZone({
+    enabled: canWrite,
+    onFiles: (files) => void upload(bookId, files),
+  })
+  const uploading = uploadingIn === bookId
 
   if (!book) {
     return <div className="canvas-message muted">Loading book…</div>
   }
 
   return (
-    <div className="book-overview">
+    <div
+      className={`book-overview${fileDrop.dragging ? ' file-drop-over' : ''}`}
+      {...fileDrop.dropProps}
+    >
+      {fileDrop.dragging && (
+        <div className="file-drop-overlay">
+          <span aria-hidden>📎</span>
+          <strong>Drop to add to “{book.title}”</strong>
+          <span className="muted sm">PDF, Word, PowerPoint, Excel, archives and images</span>
+        </div>
+      )}
       <div className="book-overview-head">
         <h1>{book.title}</h1>
         <ExportMenu scope="book" id={book.id} title={book.title} />
@@ -561,11 +630,35 @@ function BookOverview({ bookId }: { bookId: string }) {
           <span className="stat-value">{book.slideDecks.length}</span>
           <span className="stat-label">Slide decks</span>
         </div>
+        <div className="stat">
+          <span className="stat-value">{book.attachments.length}</span>
+          <span className="stat-label">Files</span>
+        </div>
       </div>
       <p className="muted">
         Choose a page or diagram from the tree to open it in the editor. Properties appear on the
         right.
+        {canWrite && ' Drop a PDF or Office document anywhere on this page to file it here.'}
       </p>
+
+      {book.attachments.length > 0 && (
+        <>
+          <h2 className="book-overview-subhead">Files</h2>
+          <ul className="attachment-list">
+            {book.attachments.map((a) => (
+              <li key={a.id}>
+                <Link to={`/books/${bookId}/files/${a.id}`} className="attachment-list-link">
+                  <span aria-hidden>{attachmentIcon(a.fileName, a.contentType)}</span>
+                  <span className="attachment-list-title">{a.title}</span>
+                  <span className="muted sm">
+                    {attachmentTypeLabel(a.fileName, a.contentType)} · {formatFileSize(a.sizeBytes)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {canWrite && (
         <div className="row" style={{ gap: '0.5rem', marginTop: '1rem' }}>
           <button type="button" className="btn primary sm" onClick={() => setPrompt('page')}>
@@ -577,6 +670,31 @@ function BookOverview({ bookId }: { bookId: string }) {
           <button type="button" className="btn sm" onClick={() => setPrompt('slides')}>
             New slides
           </button>
+          <button
+            type="button"
+            className="btn sm"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            title="Upload a PDF, Word, PowerPoint or other document into this book"
+          >
+            {uploading ? 'Uploading…' : 'Upload file'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ATTACHMENT_ACCEPT}
+            multiple
+            hidden
+            onChange={(e) => {
+              void upload(bookId, e.target.files)
+              e.target.value = ''
+            }}
+          />
+        </div>
+      )}
+      {uploadError && (
+        <div className="banner error compact" onClick={clearError} role="alert">
+          {uploadError}
         </div>
       )}
 

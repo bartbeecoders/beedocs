@@ -40,8 +40,16 @@ public sealed class BeeDocsResources(BeeDocsApiClient client)
         return Text($"beedocs://books/{bookId}/chapters", chapters);
     }
 
+    [McpServerResource(UriTemplate = "beedocs://books/{bookId}/attachments", Name = "beedocs-book-attachments", MimeType = "application/json")]
+    [Description("Attachment metadata for a book — the filed PDFs, Office documents and archives. Contents via beedocs_read_attachment.")]
+    public async Task<TextResourceContents> BookAttachments(string bookId, CancellationToken ct = default)
+    {
+        var attachments = await client.ListAttachmentsAsync(bookId, ct);
+        return Text($"beedocs://books/{bookId}/attachments", attachments);
+    }
+
     [McpServerResource(UriTemplate = "beedocs://books/{bookId}/tree", Name = "beedocs-book-tree", MimeType = "application/json")]
-    [Description("Folders with nested pages, root pages, diagrams, and slide decks.")]
+    [Description("Folders with nested pages, root pages, diagrams, slide decks, and attachments.")]
     public async Task<TextResourceContents> BookTree(string bookId, CancellationToken ct = default)
     {
         var tree = await BookTools.BuildTreeAsync(client, bookId, ct);

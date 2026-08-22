@@ -109,3 +109,7 @@ A page could have a setting like 1x1, 2x1 (2 columns), 2x2 (2 columns, 2 rows) e
 Sections, images, etc can then be dragged on a cell.
 Make all rendering work perfectly (preview, editing, exports etc)
 Do this in a seperate branch
+
+Add the ability to upload/add documents to books. Files like PDF, word, powerpoint etc can then bee added to books.
+Users can set the properties (title, owner etc)
+

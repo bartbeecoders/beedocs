@@ -92,6 +92,40 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_upload_image` | `base64`, `fileName`, `contentType?` | Upload to `/uploads/…` |
 | `beedocs_embed_image_in_page` | `pageId`, `url?` **or** `base64`+`fileName`, `alt?`, `heading?` | Upload (optional) + append `![alt](url)` |
 
+### Attachments (files filed in a book)
+
+| Tool | Args | Description |
+|------|------|-------------|
+| `beedocs_list_attachments` | `bookId` | Metadata for every file in the book |
+| `beedocs_get_attachment` | `attachmentId` | One file's title, description, owner, type, size |
+| `beedocs_upload_attachment` | `bookId`, `base64`, `fileName`, `title?`, `description?` | File a document against a book |
+| `beedocs_read_attachment` | `attachmentId` | Contents — `text` for text formats, `base64` otherwise |
+| `beedocs_update_attachment` | `attachmentId`, `title`, `description?`, `ownerId?`, `fileName?` | Properties only; `""` clears, omit leaves alone |
+| `beedocs_replace_attachment_file` | `attachmentId`, `base64`, `fileName` | New bytes, same id — links keep working |
+| `beedocs_link_attachment_in_page` | `pageId`, `attachmentId`, `label?`, `heading?` | Append a Markdown link to the file |
+| `beedocs_delete_attachment` | `attachmentId` | Delete row and stored file |
+
+Accepted extensions: `.pdf .doc .docx .xls .xlsx .ppt .pptx .vsd .vsdx .odt .ods
+.odp .txt .md .rtf .csv .json .xml .yaml .yml .zip .7z .tar .gz .png .jpg .jpeg
+.gif .webp .svg` — max 100 MB. The **extension** decides, not the content type.
+
+`beedocs_read_attachment` refuses files over 8 MB and returns the download URL
+instead: base64 of a 100 MB PDF is ~133 MB of text pointed at a context window.
+Text formats (TXT, MD, CSV, JSON, XML, YAML, SVG) come back as readable text.
+
+Attachments vs. images: `beedocs_upload_image` is for pictures embedded in page
+Markdown (`/uploads/…`, served statically); an attachment is a *document filed in
+a book*, reachable only through the API and linked as
+`[Title](/books/{bookId}/files/{attachmentId})`.
+
+Attachment metadata also rides along in `beedocs_get_book_tree`,
+`beedocs_export_book`, and the `beedocs://books/{bookId}/attachments` resource.
+
+`beedocs_search` matches the **text inside** these documents, not just their
+titles — PDF, Word, PowerPoint, Excel, OpenDocument, RTF, text formats and zip
+entry names are all extracted into the index. So finding "the spec that mentions
+the latch tolerance" is one search, not a download-and-read loop.
+
 ### Diagrams
 
 | Tool | Args | Description |
@@ -222,7 +256,8 @@ document format is documented in [SLIDES.md](./SLIDES.md).
 | `beedocs://books/{bookId}` | Book metadata |
 | `beedocs://books/{bookId}/pages` | Page summaries |
 | `beedocs://books/{bookId}/chapters` | Folder list |
-| `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams + slide decks |
+| `beedocs://books/{bookId}/attachments` | Attachment metadata (contents via `beedocs_read_attachment`) |
+| `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams + slide decks + attachments |
 | `beedocs://pages/{pageId}` | Full page |
 | `beedocs://diagram/catalog` | Every shape, Azure stencil, palette group, anchor, route and arrow head |
 | `beedocs://diagrams/{diagramId}` | Full diagram |

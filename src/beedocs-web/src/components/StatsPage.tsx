@@ -98,7 +98,8 @@ export function StatsPage() {
               <span className="stats-tile-label">Documents</span>
               <span className="stats-tile-detail muted sm">
                 {plural(stats.documents.pages, 'page')} · {plural(stats.documents.diagrams, 'diagram')} ·{' '}
-                {plural(stats.documents.slideDecks, 'slide deck')}
+                {plural(stats.documents.slideDecks, 'slide deck')} ·{' '}
+                {plural(stats.documents.attachments, 'file')}
               </span>
               <span className="stats-tile-detail muted sm">
                 in {plural(stats.documents.books, 'book')}
@@ -121,7 +122,14 @@ export function StatsPage() {
             <div className="stats-tile">
               <span className="stats-tile-value">{formatBytes(stats.storage.uploadsBytes)}</span>
               <span className="stats-tile-label">Uploads</span>
-              <span className="stats-tile-detail muted sm">Images and attached files</span>
+              <span className="stats-tile-detail muted sm">Images embedded in pages</span>
+            </div>
+            <div className="stats-tile">
+              <span className="stats-tile-value">{formatBytes(stats.storage.attachmentBytes)}</span>
+              <span className="stats-tile-label">Attached files</span>
+              <span className="stats-tile-detail muted sm">
+                {plural(stats.documents.attachments, 'document')} filed in books
+              </span>
             </div>
           </section>
 

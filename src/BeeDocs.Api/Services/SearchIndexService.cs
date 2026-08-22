@@ -32,7 +32,8 @@ public sealed record SearchQuery(
 );
 
 /// <summary>
-/// Full-text search over shelves, books, folders, pages, diagrams and slide decks.
+/// Full-text search over shelves, books, folders, pages, diagrams, slide decks
+/// and attachments — including the text inside uploaded documents.
 ///
 /// The index is a plain <c>search_doc</c> table holding extracted text, with an
 /// FTS5 table mirroring it for matching and ranking. Writes never go through this
@@ -45,6 +46,7 @@ public sealed record SearchQuery(
 public sealed partial class SearchIndexService(
     SqliteConnectionFactory db,
     ContentResolver resolver,
+    StorageOptions storage,
     ILogger<SearchIndexService> logger
 ) : ISearchIndexService
 {
@@ -55,6 +57,19 @@ public sealed partial class SearchIndexService(
 
     private const int MaxLimit = 100;
     private const int DrainBatch = 500;
+
+    /// <summary>
+    /// Bumped whenever <see cref="AttachmentTextExtractor"/> learns to read more
+    /// than it used to. Startup compares it against what the database was last
+    /// indexed with and requeues every attachment when they differ, so improving
+    /// the extractor reaches documents already uploaded instead of only the next
+    /// ones — and so the feature arrives without anyone being told to press
+    /// Reindex. Pages, diagrams and decks are unaffected; only attachments are
+    /// requeued.
+    /// </summary>
+    private const int AttachmentTextVersion = 1;
+
+    private const string AttachmentTextVersionKey = "search.attachmentTextVersion";
 
     /// <summary>
     /// Fold diacritics so "cafe" finds "café", and split on underscores so
@@ -83,6 +98,7 @@ public sealed partial class SearchIndexService(
         // queued. Reconciling here backfills it, and on every later start it repairs
         // any drift left by a crash mid-write.
         await ReconcileAsync(conn, ct);
+        await RequeueAttachmentsIfExtractorChangedAsync(conn, ct);
         var applied = await DrainAsync(ct);
         if (applied > 0)
             logger.LogInformation("Search index brought up to date: {Count} document(s).", applied);
@@ -186,6 +202,12 @@ public sealed partial class SearchIndexService(
             WHERE d.id IS NULL OR d.updated_at <> s.updated_at;
 
             INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+            SELECT 'attachment', a.id, 'upsert', datetime('now')
+            FROM attachment a
+            LEFT JOIN search_doc d ON d.kind = 'attachment' AND d.entity_id = a.id
+            WHERE d.id IS NULL OR d.updated_at <> a.updated_at;
+
+            INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
             SELECT 'book', b.id, 'upsert', datetime('now')
             FROM book b
             LEFT JOIN search_doc d ON d.kind = 'book' AND d.entity_id = b.id
@@ -209,11 +231,60 @@ public sealed partial class SearchIndexService(
             WHERE (d.kind = 'page'    AND NOT EXISTS (SELECT 1 FROM page    WHERE id = d.entity_id))
                OR (d.kind = 'diagram' AND NOT EXISTS (SELECT 1 FROM diagram WHERE id = d.entity_id))
                OR (d.kind = 'slides'  AND NOT EXISTS (SELECT 1 FROM slide_deck WHERE id = d.entity_id))
+               OR (d.kind = 'attachment' AND NOT EXISTS (SELECT 1 FROM attachment WHERE id = d.entity_id))
                OR (d.kind = 'book'    AND NOT EXISTS (SELECT 1 FROM book    WHERE id = d.entity_id))
                OR (d.kind = 'folder'  AND NOT EXISTS (SELECT 1 FROM chapter WHERE id = d.entity_id))
                OR (d.kind = 'shelf'   AND NOT EXISTS (SELECT 1 FROM shelf   WHERE id = d.entity_id));
             """;
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// Queue every attachment for re-extraction when the extractor has moved on
+    /// since this database was last indexed. Reconcile cannot notice this on its
+    /// own: it compares <c>updated_at</c>, and a document whose text we can now
+    /// read better has not itself changed.
+    /// </summary>
+    private async Task RequeueAttachmentsIfExtractorChangedAsync(
+        SqliteConnection conn, CancellationToken ct)
+    {
+        string? stored;
+        await using (var read = conn.CreateCommand())
+        {
+            read.CommandText = "SELECT value FROM app_setting WHERE key = $key LIMIT 1";
+            SqliteHelpers.Add(read, "$key", AttachmentTextVersionKey);
+            stored = await read.ExecuteScalarAsync(ct) as string;
+        }
+
+        if (int.TryParse(stored, out var indexedWith) && indexedWith >= AttachmentTextVersion)
+            return;
+
+        await using (var queue = conn.CreateCommand())
+        {
+            queue.CommandText = """
+                INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+                SELECT 'attachment', id, 'upsert', datetime('now') FROM attachment
+                """;
+            var count = await queue.ExecuteNonQueryAsync(ct);
+            if (count > 0)
+            {
+                logger.LogInformation(
+                    "Queued {Count} attachment(s) to be re-read for search (extractor v{Version}).",
+                    count, AttachmentTextVersion);
+            }
+        }
+
+        // Written before the drain runs, deliberately: a document that crashes
+        // the extractor must not put the process into a requeue loop on every
+        // restart. Extraction failures already degrade to metadata-only.
+        await using var mark = conn.CreateCommand();
+        mark.CommandText = """
+            INSERT INTO app_setting (key, value, updated_at) VALUES ($key, $value, datetime('now'))
+            ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """;
+        SqliteHelpers.Add(mark, "$key", AttachmentTextVersionKey);
+        SqliteHelpers.Add(mark, "$value", AttachmentTextVersion.ToString());
+        await mark.ExecuteNonQueryAsync(ct);
     }
 
     public async Task<int> DrainAsync(CancellationToken ct = default)
@@ -337,6 +408,13 @@ public sealed partial class SearchIndexService(
             "page" => "SELECT title, content, book_id, chapter_id, updated_at, content_ref FROM page WHERE id = $id",
             "diagram" => "SELECT title, source, book_id, kind, updated_at, content_ref FROM diagram WHERE id = $id",
             "slides" => "SELECT title, source, book_id, updated_at, content_ref FROM slide_deck WHERE id = $id",
+            // Metadata only: the bytes are an opaque binary nobody can index, so
+            // an attachment is found by what a person called it and by its
+            // description and file name.
+            // stored_name/size drive text extraction; the file itself is read
+            // after this reader closes, in the same no-transaction phase as a
+            // storage-provider fetch.
+            "attachment" => "SELECT title, TRIM(COALESCE(description, '') || ' ' || file_name), book_id, updated_at, file_name, stored_name, size_bytes FROM attachment WHERE id = $id",
             "book" => "SELECT title, description, updated_at FROM book WHERE id = $id",
             "folder" => "SELECT title, book_id, updated_at FROM chapter WHERE id = $id",
             "shelf" => "SELECT title, description, updated_at FROM shelf WHERE id = $id",
@@ -352,6 +430,9 @@ public sealed partial class SearchIndexService(
         string updatedAt;
         string? diagramKind = null;
         string? contentRef = null;
+        string? attachmentFile = null;
+        string? attachmentStored = null;
+        long attachmentSize = 0;
 
         await using (var reader = await cmd.ExecuteReaderAsync(ct))
         {
@@ -380,6 +461,14 @@ public sealed partial class SearchIndexService(
                     updatedAt = reader.GetString(3);
                     contentRef = SqliteHelpers.GetNullableString(reader, 4);
                     break;
+                case "attachment":
+                    body = SqliteHelpers.GetNullableString(reader, 1);
+                    bookId = SqliteHelpers.GetNullableString(reader, 2);
+                    updatedAt = reader.GetString(3);
+                    attachmentFile = SqliteHelpers.GetNullableString(reader, 4);
+                    attachmentStored = SqliteHelpers.GetNullableString(reader, 5);
+                    attachmentSize = reader.IsDBNull(6) ? 0 : reader.GetInt64(6);
+                    break;
                 case "book":
                     body = SqliteHelpers.GetNullableString(reader, 1);
                     bookId = id;
@@ -404,12 +493,31 @@ public sealed partial class SearchIndexService(
         if (contentRef is not null)
             body = await resolver.LoadAsync(body ?? string.Empty, contentRef, ct);
 
+        // The document's own words, appended to its metadata. Runs here — after
+        // the reader closed, before the drain transaction opens — for the same
+        // reason a provider fetch does: this reads a file and can be slow, and
+        // slow work must never sit inside the write lock. Extraction never
+        // throws, so a PDF nobody can parse still indexes by its title.
+        if (kind == "attachment" && attachmentStored is { Length: > 0 })
+        {
+            var extracted = await Task.Run(
+                () => AttachmentTextExtractor.Extract(
+                    AttachmentService.StoredPath(storage.AttachmentsRoot, attachmentStored),
+                    attachmentFile ?? "",
+                    attachmentSize,
+                    ct),
+                ct);
+            if (extracted.Length > 0)
+                body = string.IsNullOrWhiteSpace(body) ? extracted : body + "\n" + extracted;
+        }
+
         return kind switch
         {
             "page" => new IndexDoc(kind, id, bookId, chapterId, title, SearchText.FromMarkdown(body), updatedAt),
             "diagram" => new IndexDoc(
                 kind, id, bookId, null, title, SearchText.FromDiagramSource(diagramKind, body), updatedAt),
             "slides" => new IndexDoc(kind, id, bookId, null, title, SearchText.FromSlideDeckSource(body), updatedAt),
+            "attachment" => new IndexDoc(kind, id, bookId, null, title, body ?? "", updatedAt),
             "book" => new IndexDoc(kind, id, bookId, null, title, body ?? "", updatedAt),
             "folder" => new IndexDoc(kind, id, bookId, chapterId, title, "", updatedAt),
             "shelf" => new IndexDoc(kind, id, null, null, title, body ?? "", updatedAt),
@@ -610,6 +718,7 @@ public sealed partial class SearchIndexService(
         "page" when bookId is not null => $"/books/{bookId}/pages/{entityId}",
         "diagram" when bookId is not null => $"/books/{bookId}/diagrams/{entityId}",
         "slides" when bookId is not null => $"/books/{bookId}/slides/{entityId}",
+        "attachment" when bookId is not null => $"/books/{bookId}/files/{entityId}",
         "folder" when bookId is not null => $"/books/{bookId}",
         "book" => $"/books/{entityId}",
         "shelf" => $"/shelves/{entityId}",
@@ -759,6 +868,7 @@ public sealed partial class SearchIndexService(
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'page'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'diagram'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'slides'),
+              (SELECT COUNT(*) FROM search_doc WHERE kind = 'attachment'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'book'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'folder'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'shelf'),
@@ -766,9 +876,9 @@ public sealed partial class SearchIndexService(
             """;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))
-            return new SearchStatusDto(_fts ? "fts5" : "like", 0, 0, 0, 0, 0, 0, 0, 0, null);
+            return new SearchStatusDto(_fts ? "fts5" : "like", 0, 0, 0, 0, 0, 0, 0, 0, 0, null);
 
-        var lastIndexed = SqliteHelpers.GetNullableString(reader, 8) is { } raw
+        var lastIndexed = SqliteHelpers.GetNullableString(reader, 9) is { } raw
             && DateTimeOffset.TryParse(raw, out var parsed)
                 ? parsed
                 : (DateTimeOffset?)null;
@@ -780,9 +890,10 @@ public sealed partial class SearchIndexService(
             Pages: reader.GetInt32(2),
             Diagrams: reader.GetInt32(3),
             SlideDecks: reader.GetInt32(4),
-            Books: reader.GetInt32(5),
-            Folders: reader.GetInt32(6),
-            Shelves: reader.GetInt32(7),
+            Attachments: reader.GetInt32(5),
+            Books: reader.GetInt32(6),
+            Folders: reader.GetInt32(7),
+            Shelves: reader.GetInt32(8),
             LastIndexedAt: lastIndexed);
     }
 }

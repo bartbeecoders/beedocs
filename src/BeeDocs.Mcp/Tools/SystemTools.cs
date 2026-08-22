@@ -29,7 +29,10 @@ public sealed class SystemTools(BeeDocsApiClient client)
     public string GetApiInfo() => ToolHelpers.Json(new
     {
         apiBaseUrl = client.BaseUrl,
-        entities = new[] { "shelf", "book", "chapter (folder)", "page", "diagram", "slide deck", "upload" },
+        entities = new[]
+        {
+            "shelf", "book", "chapter (folder)", "page", "diagram", "slide deck", "attachment", "upload",
+        },
         hierarchy = "shelf → book → chapter (folder) → page. Only the book level is required: "
             + "a book sits on at most one shelf, and an unshelved book sits at the library root.",
         diagramKinds = new[] { "beediagram", "isometric", "mermaid", "c4", "plantuml" },
@@ -109,12 +112,31 @@ public sealed class SystemTools(BeeDocsApiClient client)
             templates = "beedocs_list_slide_templates → templateId on create; beedocs_save_slide_template stores a deck's layout app-wide",
             export = "beedocs_export_slide_deck_pptx returns a base64 .pptx (also the Google Slides import path)",
         },
+        attachments = new
+        {
+            what = "Files filed against a book — PDF, Word/PowerPoint/Excel, Visio, OpenDocument, "
+                + "text/CSV/JSON/XML/YAML, archives and images. BeeDocs stores these rather than "
+                + "authoring them: there is no edit tool, only upload / replace / describe / read.",
+            accepts = ".pdf .doc .docx .xls .xlsx .ppt .pptx .vsd .vsdx .odt .ods .odp .txt .md .rtf "
+                + ".csv .json .xml .yaml .yml .zip .7z .tar .gz .png .jpg .jpeg .gif .webp .svg (max 100 MB)",
+            tools = "beedocs_list_attachments / beedocs_get_attachment / beedocs_upload_attachment / "
+                + "beedocs_read_attachment / beedocs_update_attachment / "
+                + "beedocs_replace_attachment_file / beedocs_link_attachment_in_page / "
+                + "beedocs_delete_attachment",
+            reading = "beedocs_read_attachment returns `text` for text formats and `base64` otherwise; "
+                + "files over 8 MB are refused with a URL to fetch directly.",
+            link = "[Title](/books/{bookId}/files/{attachmentId}) — the workspace route, not the raw "
+                + "download, so a reader lands on the file with its properties.",
+            versus_uploads = "beedocs_upload_image is for pictures embedded in page Markdown "
+                + "(/uploads/…, served statically); an attachment is a document filed in a book.",
+        },
         capabilities = new
         {
             folders = "chapters group pages; beedocs_create_chapter / update / delete / move_page",
             images = "beedocs_upload_image then embed Markdown or image nodes",
             diagrams = "beedocs_list_diagram_shapes for the shape/Azure-stencil catalog, then beedocs_create_beediagram_with_nodes / beedocs_update_beediagram_nodes; isometric views via beedocs_create_isometric_with_items",
             slides = "beedocs_create_slide_deck_with_slides for presentations; present from the UI at /books/{bookId}/slides/{deckId}",
+            attachments = "beedocs_upload_attachment files a document in a book; beedocs_link_attachment_in_page references it from the docs that discuss it",
             export = "beedocs_export_book or beedocs_export_library_snapshot",
         },
         suggestedWorkflow = new[]

@@ -9,14 +9,21 @@ import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
 import type { SlideEditorState } from './SlideCanvas'
+import type { AttachmentEditorState } from './AttachmentCanvas'
 import { OwnerField } from './OwnerField'
 import { PageHistoryPanel } from './PageHistoryPanel'
 import { SyncedInput } from './SyncedText'
+import {
+  attachmentIcon,
+  attachmentTypeLabel,
+  formatFileSize,
+} from '../media/attachments'
 
 type Props = {
   pageState: PageEditorState | null
   diagramState: DiagramEditorState | null
   slideState: SlideEditorState | null
+  attachmentState: AttachmentEditorState | null
   view:
     | 'welcome'
     | 'shelf'
@@ -24,13 +31,20 @@ type Props = {
     | 'page'
     | 'diagram'
     | 'slides'
+    | 'attachment'
     | 'settings'
     | 'users'
     | 'stats'
     | 'help'
 }
 
-export function PropertiesPane({ pageState, diagramState, slideState, view }: Props) {
+export function PropertiesPane({
+  pageState,
+  diagramState,
+  slideState,
+  attachmentState,
+  view,
+}: Props) {
   const { bookId, shelfId } = useParams()
   const { canWrite, authEnabled, canManageUsers, user } = useAuth()
   const { books, shelves, setShelfPublished } = useWorkspace()
@@ -341,6 +355,123 @@ export function PropertiesPane({ pageState, diagramState, slideState, view }: Pr
             Arrow keys or click to advance, right-click to go back, <strong>Esc</strong> to end.
             Presenting starts from the selected slide.
           </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (view === 'attachment' && attachmentState) {
+    const a = attachmentState.attachment
+    return (
+      <div className="props-pane">
+        <h3>File</h3>
+        <Field label="Title">
+          {canWrite ? (
+            <SyncedInput value={attachmentState.title} onValueChange={attachmentState.setTitle} />
+          ) : (
+            <span>{attachmentState.title}</span>
+          )}
+        </Field>
+        <Field label="Description">
+          {canWrite ? (
+            <textarea
+              className="props-textarea"
+              rows={3}
+              value={attachmentState.description}
+              placeholder="What this document is, and when it applies"
+              onChange={(e) => attachmentState.setDescription(e.target.value)}
+            />
+          ) : (
+            <span>{a?.description || '—'}</span>
+          )}
+        </Field>
+        <Field label="Owner">
+          <OwnerField
+            value={attachmentState.ownerId}
+            fallbackName={a?.ownerName}
+            onChange={attachmentState.setOwnerId}
+          />
+        </Field>
+        <Field label="File name">
+          {canWrite ? (
+            <SyncedInput
+              value={attachmentState.fileName}
+              onValueChange={attachmentState.setFileName}
+            />
+          ) : (
+            <code className="mono-block">{a?.fileName ?? '—'}</code>
+          )}
+        </Field>
+        <Field label="Type">
+          <span>
+            {a ? (
+              <>
+                <span aria-hidden>{attachmentIcon(a.fileName, a.contentType)}</span>{' '}
+                {attachmentTypeLabel(a.fileName, a.contentType)}
+              </>
+            ) : (
+              '—'
+            )}
+          </span>
+        </Field>
+        <Field label="Size">
+          <span>{a ? formatFileSize(a.sizeBytes) : '—'}</span>
+        </Field>
+        <Field label="Added">
+          <span className="sm">{a ? new Date(a.createdAt).toLocaleString() : '—'}</span>
+        </Field>
+        <Field label="Updated">
+          <span className="sm">{a ? new Date(a.updatedAt).toLocaleString() : '—'}</span>
+        </Field>
+        <div className="props-actions">
+          <button type="button" className="btn sm" onClick={() => attachmentState.download()}>
+            Download
+          </button>
+          {canWrite && (
+            <>
+              <button
+                type="button"
+                className="btn primary sm"
+                disabled={attachmentState.saving || !attachmentState.dirty}
+                onClick={() => void attachmentState.save()}
+              >
+                {attachmentState.saving ? 'Saving…' : 'Save properties'}
+              </button>
+              <button
+                type="button"
+                className="btn ghost sm"
+                onClick={() => attachmentState.replaceFile()}
+              >
+                Replace file
+              </button>
+              <button
+                type="button"
+                className="btn danger ghost sm"
+                onClick={() => void attachmentState.deleteAttachment()}
+              >
+                Delete
+              </button>
+            </>
+          )}
+        </div>
+        <div className="props-hint">
+          <h4>Markdown link</h4>
+          {/* The route, not the download URL: it opens the file in the workspace
+              with its properties, which is what a reader following a link wants. */}
+          <pre className="embed-snippet sm">
+            {a ? `[${a.title}](/books/${a.bookId}/files/${a.id})` : ''}
+          </pre>
+          <button
+            type="button"
+            className="btn sm"
+            disabled={!a}
+            onClick={() =>
+              a &&
+              void navigator.clipboard.writeText(`[${a.title}](/books/${a.bookId}/files/${a.id})`)
+            }
+          >
+            Copy link
+          </button>
         </div>
       </div>
     )

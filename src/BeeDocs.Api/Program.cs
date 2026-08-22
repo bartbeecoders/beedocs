@@ -27,7 +27,16 @@ var uploadsRoot = string.IsNullOrWhiteSpace(configuredUploads)
     : Path.GetFullPath(configuredUploads, builder.Environment.ContentRootPath);
 Directory.CreateDirectory(uploadsRoot);
 
-builder.Services.AddSingleton(new StorageOptions(uploadsRoot));
+// Book attachments (PDF, Word, PowerPoint, …). A directory of its own rather
+// than a corner of uploads: nothing serves it statically, so the read-open that
+// a published bookshelf grants /uploads cannot reach a filed contract.
+var configuredAttachments = builder.Configuration["BeeDocs:AttachmentsPath"];
+var attachmentsRoot = string.IsNullOrWhiteSpace(configuredAttachments)
+    ? Path.Combine(builder.Environment.ContentRootPath, "data", "attachments")
+    : Path.GetFullPath(configuredAttachments, builder.Environment.ContentRootPath);
+Directory.CreateDirectory(attachmentsRoot);
+
+builder.Services.AddSingleton(new StorageOptions(uploadsRoot, attachmentsRoot));
 builder.Services.Configure<ApiKeyOptions>(builder.Configuration.GetSection(ApiKeyOptions.SectionName));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.AddSingleton<ApiKeySettingsService>();
@@ -65,6 +74,7 @@ builder.Services.AddSingleton<GoogleOAuthService>();
 builder.Services.AddSingleton<IDocumentService, DocumentService>();
 builder.Services.AddSingleton<IDiagramService, DiagramService>();
 builder.Services.AddSingleton<ISlideDeckService, SlideDeckService>();
+builder.Services.AddSingleton<IAttachmentService, AttachmentService>();
 builder.Services.AddSingleton<ISlideTemplateService, SlideTemplateService>();
 builder.Services.AddSingleton<SlideDeckPptxExporter>();
 builder.Services.AddSingleton<IShapeCollectionService, ShapeCollectionService>();
@@ -1188,6 +1198,123 @@ api.MapDelete("/slide-templates/{id}", async (string id, ISlideTemplateService t
 });
 
 // --- Shape collections (book-scoped or app-wide studio snippets) ---
+// --- Attachments (files filed against a book: PDF, Word, PowerPoint, …) ---
+// The form is read straight off HttpRequest rather than via IFormFile binding,
+// to match /api/uploads and to stay clear of the minimal-API antiforgery filter.
+static async Task<(IFormFile? File, IFormCollection Form)> ReadAttachmentFormAsync(
+    HttpRequest request, CancellationToken ct)
+{
+    var form = await request.ReadFormAsync(ct);
+    return (form.Files.GetFile("file") ?? form.Files.FirstOrDefault(), form);
+}
+
+api.MapGet("/books/{bookId}/attachments", async (string bookId, IAttachmentService attachments, CancellationToken ct) =>
+    Results.Ok(await attachments.ListByBookAsync(bookId, ct)));
+
+api.MapPost("/books/{bookId}/attachments", async (
+    string bookId, HttpRequest request, IAttachmentService attachments, CancellationToken ct) =>
+{
+    if (!request.HasFormContentType)
+        return Results.BadRequest(new { error = "Expected multipart form data with a file field." });
+
+    var (file, form) = await ReadAttachmentFormAsync(request, ct);
+    if (file is null || file.Length == 0)
+        return Results.BadRequest(new { error = "No file uploaded." });
+
+    try
+    {
+        await using var stream = file.OpenReadStream();
+        var created = await attachments.CreateAsync(
+            bookId,
+            new AttachmentUpload(stream, file.FileName, file.ContentType, file.Length),
+            form["title"].ToString(),
+            form["description"].ToString(),
+            ct);
+        return Results.Created($"/api/attachments/{created.Id}", created);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (InvalidAttachmentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["file"] = [e.Message] });
+    }
+});
+
+api.MapGet("/attachments/{id}", async (string id, IAttachmentService attachments, CancellationToken ct) =>
+{
+    var found = await attachments.GetAsync(id, ct);
+    return found is null ? Results.NotFound() : Results.Ok(found);
+});
+
+api.MapPut("/attachments/{id}", async (
+    string id, UpdateAttachmentRequest body, IAttachmentService attachments, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    var updated = await attachments.UpdateAsync(id, body, ct);
+    return updated is null ? Results.NotFound() : Results.Ok(updated);
+});
+
+// Replace the bytes, keep the identity: the attachment's id, title, description
+// and owner survive, so a page linking to it still links to the new version.
+api.MapPost("/attachments/{id}/file", async (
+    string id, HttpRequest request, IAttachmentService attachments, CancellationToken ct) =>
+{
+    if (!request.HasFormContentType)
+        return Results.BadRequest(new { error = "Expected multipart form data with a file field." });
+
+    var (file, _) = await ReadAttachmentFormAsync(request, ct);
+    if (file is null || file.Length == 0)
+        return Results.BadRequest(new { error = "No file uploaded." });
+
+    try
+    {
+        await using var stream = file.OpenReadStream();
+        var updated = await attachments.ReplaceFileAsync(
+            id, new AttachmentUpload(stream, file.FileName, file.ContentType, file.Length), ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (InvalidAttachmentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["file"] = [e.Message] });
+    }
+});
+
+// Types a browser may render in place. Everything else downloads, whatever the
+// caller asks for: an inline SVG runs as script on this origin — which is
+// exactly the session the file is being served behind.
+static bool CanRenderInline(string contentType) =>
+    contentType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase)
+    || contentType.Equals("text/plain", StringComparison.OrdinalIgnoreCase)
+    || contentType is "image/png" or "image/jpeg" or "image/gif" or "image/webp";
+
+api.MapGet("/attachments/{id}/download", async (
+    string id, bool? inline, IAttachmentService attachments, HttpContext http, CancellationToken ct) =>
+{
+    var file = await attachments.OpenAsync(id, ct);
+    if (file is null) return Results.NotFound();
+
+    // Range processing so a PDF viewer can seek inside a large document instead
+    // of pulling the whole file to show page 40.
+    if (inline == true && CanRenderInline(file.ContentType))
+    {
+        http.Response.Headers.ContentDisposition =
+            new System.Net.Mime.ContentDisposition { Inline = true, FileName = file.FileName }.ToString();
+        return Results.File(file.Content, file.ContentType, enableRangeProcessing: true);
+    }
+
+    return Results.File(file.Content, file.ContentType, file.FileName, enableRangeProcessing: true);
+});
+
+api.MapDelete("/attachments/{id}", async (string id, IAttachmentService attachments, CancellationToken ct) =>
+{
+    var ok = await attachments.DeleteAsync(id, ct);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
 api.MapGet("/books/{bookId}/collections", async (string bookId, IShapeCollectionService collections, CancellationToken ct) =>
     Results.Ok(await collections.ListByBookAsync(bookId, ct)));
 

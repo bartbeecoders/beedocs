@@ -50,13 +50,15 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
                    (SELECT COUNT(*) FROM chapter),
                    (SELECT COUNT(*) FROM page),
                    (SELECT COUNT(*) FROM diagram),
-                   (SELECT COUNT(*) FROM slide_deck)
+                   (SELECT COUNT(*) FROM slide_deck),
+                   (SELECT COUNT(*) FROM attachment)
             """;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         await reader.ReadAsync(ct);
         var pages = reader.GetInt32(3);
         var diagrams = reader.GetInt32(4);
         var decks = reader.GetInt32(5);
+        var attachments = reader.GetInt32(6);
         return new DocumentCountsDto(
             Shelves: reader.GetInt32(0),
             Books: reader.GetInt32(1),
@@ -64,7 +66,8 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
             Pages: pages,
             Diagrams: diagrams,
             SlideDecks: decks,
-            Total: pages + diagrams + decks);
+            Attachments: attachments,
+            Total: pages + diagrams + decks + attachments);
     }
 
     private async Task<StorageStatsDto> StorageAsync(SqliteConnection conn, CancellationToken ct)
@@ -97,7 +100,11 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
             ContentBytes: contentBytes,
             RevisionBytes: revisionBytes,
             DatabaseBytes: DatabaseFileBytes(logicalDbBytes),
-            UploadsBytes: UploadsBytes(),
+            UploadsBytes: DirectoryBytes(storage.UploadsRoot),
+            // The rows record what was written; the directory records what is
+            // there. Measuring the disk means an upload orphaned by a failed
+            // insert still shows up as space someone is paying for.
+            AttachmentBytes: DirectoryBytes(storage.AttachmentsRoot),
             ExternalBytes: externalBytes);
     }
 
@@ -122,11 +129,12 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
         return total > 0 ? total : logicalBytes;
     }
 
-    private long UploadsBytes()
+    /// <summary>Bytes on disk under one content directory, or 0 when it is missing or unreadable.</summary>
+    private static long DirectoryBytes(string root)
     {
         try
         {
-            var dir = new DirectoryInfo(storage.UploadsRoot);
+            var dir = new DirectoryInfo(root);
             if (!dir.Exists) return 0;
             return dir.EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
         }

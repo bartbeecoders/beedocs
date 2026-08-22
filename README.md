@@ -236,7 +236,7 @@ commit.
 | Version | `<Version>` in `BeeDocs.Api.csproj`, shown as a pill in the app header |
 | **NodePort — web** | **32095** → container `8080` |
 | **NodePort — MCP** | **32096** → container `5090` (`/mcp`) |
-| Storage | one PVC at `/data` — SQLite in `/data/sqlite`, uploads in `/data/uploads` |
+| Storage | one PVC at `/data` — SQLite in `/data/sqlite`, uploads in `/data/uploads`, book attachments in `/data/attachments` |
 | Health | `GET /api/health` and `GET /healthz` (startup, readiness, and liveness probes) |
 
 Manifests live in [`k8s/beedocs/`](k8s/beedocs/) and are applied by the script.

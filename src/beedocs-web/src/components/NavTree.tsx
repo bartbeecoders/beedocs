@@ -10,7 +10,16 @@ import { useAuth } from '../auth/AuthContext'
 import { TREE_DRAG_MIME } from '../markdownLinks'
 import { useWorkspace, type TreeBook, type TreeShelf } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
-import type { Chapter, DiagramSummary, PageSummary, SlideDeckSummary } from '../types'
+import type {
+  AttachmentSummary,
+  Chapter,
+  DiagramSummary,
+  PageSummary,
+  SlideDeckSummary,
+} from '../types'
+import { ATTACHMENT_ACCEPT, attachmentIcon, dragHasFiles, formatFileSize } from '../media/attachments'
+import { useAttachmentUpload } from '../hooks/useAttachmentUpload'
+import { useFileDropZone } from '../hooks/useFileDropZone'
 
 type CtxMenu =
   | {
@@ -62,6 +71,15 @@ type CtxMenu =
       x: number
       y: number
     }
+  | {
+      kind: 'attachment'
+      bookId: string
+      attachmentId: string
+      title: string
+      fileName: string
+      x: number
+      y: number
+    }
 
 /**
  * Tree drags double as "insert a link" drops in the page editor
@@ -102,6 +120,7 @@ export function NavTree() {
     deleteFolder,
     deleteDiagram,
     deleteSlideDeck,
+    deleteAttachment,
     renameFolder,
     movePage,
     moveFolder,
@@ -126,6 +145,32 @@ export function NavTree() {
   const [busyExport, setBusyExport] = useState(false)
   const [importOpen, setImportOpen] = useState<{ targetBookId?: string } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  /**
+   * One hidden file input for the whole tree, retargeted per book. Rendering one
+   * per book row would mean a DOM node for every book just to open a picker.
+   */
+  const uploadInputRef = useRef<HTMLInputElement>(null)
+  const uploadBookRef = useRef<string | null>(null)
+  const { uploadingIn, error: uploadError, clearError, upload } = useAttachmentUpload()
+
+  const openUploadPicker = (bookId: string) => {
+    uploadBookRef.current = bookId
+    uploadInputRef.current?.click()
+  }
+
+  /**
+   * Files dragged in from outside are handled once per book, by the drop zone
+   * wrapping the whole book node (see BookNode) — so a document can be dropped
+   * on the book row, a folder, a page, or the gap between them and still land
+   * in the same place. An attachment is filed against a book; being fussy about
+   * which row was under the pointer would only shrink the target for no gain.
+   *
+   * The row-level handlers below therefore *decline* file drags rather than
+   * handling them: they return before `stopPropagation`, letting the event
+   * reach that zone. The tree's own drags carry JSON on `text/plain`, so
+   * without this check a dropped PDF would be parsed as a page move.
+   */
+  const declinesFiles = (e: React.DragEvent) => dragHasFiles(e.dataTransfer)
 
   /**
    * Run one export from a context menu. PDF is rendered in the browser (it is
@@ -212,6 +257,10 @@ export function NavTree() {
     e.preventDefault()
     e.stopPropagation()
     setDragOver(null)
+    // A shelf holds no content of its own, so there is no book to file a
+    // dropped document against. Swallow it rather than letting the browser
+    // navigate to the file and take the workspace down with it.
+    if (dragHasFiles(e.dataTransfer)) return
     const payload = parseDrag(e)
     if (payload?.type !== 'book') return
     await moveBookToShelf(payload.bookId, shelfId)
@@ -260,6 +309,7 @@ export function NavTree() {
   }
 
   const dropOnFolder = async (bookId: string, chapterId: string | null, e: React.DragEvent) => {
+    if (declinesFiles(e)) return
     e.preventDefault()
     e.stopPropagation()
     setDragOver(null)
@@ -303,6 +353,7 @@ export function NavTree() {
     place: 'before' | 'after',
     e: React.DragEvent,
   ) => {
+    if (declinesFiles(e)) return
     const payload = parseDrag(e)
     // A folder dropped on a page should land on the enclosing book, not be
     // swallowed by the page's reorder gap.
@@ -456,6 +507,8 @@ export function NavTree() {
             dropOnShelf={dropOnShelf}
             dropOnFolder={dropOnFolder}
             dropReorderPage={dropReorderPage}
+            uploadingIn={uploadingIn}
+            uploadToBook={upload}
           />
         ))}
 
@@ -496,6 +549,8 @@ export function NavTree() {
             onDragStart={onDragStart}
             dropOnFolder={dropOnFolder}
             dropReorderPage={dropReorderPage}
+            uploadingIn={uploadingIn}
+            uploadToBook={upload}
           />
         ))}
       </ul>
@@ -609,6 +664,14 @@ export function NavTree() {
                 write
                 onClick={() => {
                   setCreatingIn({ bookId: menu.bookId, kind: 'slides' })
+                  setMenu(null)
+                }}
+              />
+              <MenuItem
+                label="Upload file…"
+                write
+                onClick={() => {
+                  openUploadPicker(menu.bookId)
                   setMenu(null)
                 }}
               />
@@ -796,6 +859,64 @@ export function NavTree() {
               />
             </>
           )}
+          {menu.kind === 'attachment' && (
+            <>
+              <div className="tree-context-heading">
+                {attachmentIcon(menu.fileName)} {menu.title}
+              </div>
+              <MenuItem
+                label="Open"
+                onClick={() => {
+                  void navigate(`/books/${menu.bookId}/files/${menu.attachmentId}`)
+                  setMenu(null)
+                }}
+              />
+              <MenuItem
+                label="Download"
+                onClick={() => {
+                  const a = document.createElement('a')
+                  a.href = api.attachmentUrl(menu.attachmentId)
+                  a.download = ''
+                  a.click()
+                  setMenu(null)
+                }}
+              />
+              <div className="tree-context-sep" />
+              <MenuItem
+                label="Delete file"
+                write
+                danger
+                onClick={() => {
+                  if (confirm(`Delete “${menu.title}”? The file is removed from the server.`)) {
+                    void deleteAttachment(menu.attachmentId, menu.bookId).then(() => {
+                      if (params.attachmentId === menu.attachmentId)
+                        void navigate(`/books/${menu.bookId}`)
+                    })
+                  }
+                  setMenu(null)
+                }}
+              />
+            </>
+          )}
+        </div>
+      )}
+
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept={ATTACHMENT_ACCEPT}
+        multiple
+        hidden
+        onChange={(e) => {
+          void upload(uploadBookRef.current ?? '', e.target.files)
+          // Reset, or picking the same file twice in a row fires no change event.
+          e.target.value = ''
+        }}
+      />
+
+      {uploadError && (
+        <div className="banner error compact" onClick={clearError} role="alert">
+          {uploadError}
         </div>
       )}
 
@@ -898,6 +1019,8 @@ function ShelfNode({
   dropOnShelf,
   dropOnFolder,
   dropReorderPage,
+  uploadingIn,
+  uploadToBook,
 }: {
   shelf: TreeShelf
   books: TreeBook[]
@@ -924,6 +1047,9 @@ function ShelfNode({
     place: 'before' | 'after',
     e: React.DragEvent,
   ) => Promise<void>
+  /** Passed straight through to the books on this shelf. */
+  uploadingIn: string | null
+  uploadToBook: (bookId: string, files: File[]) => void
 }) {
   const dropId = `shelf:${shelf.id}`
   const active =
@@ -997,6 +1123,8 @@ function ShelfNode({
               onDragStart={onDragStart}
               dropOnFolder={dropOnFolder}
               dropReorderPage={dropReorderPage}
+              uploadingIn={uploadingIn}
+              uploadToBook={uploadToBook}
             />
           ))}
           {books.length === 0 && (
@@ -1026,6 +1154,8 @@ function BookNode({
   onDragStart,
   dropOnFolder,
   dropReorderPage,
+  uploadingIn,
+  uploadToBook,
 }: {
   book: TreeBook
   params: Readonly<Partial<Record<string, string>>>
@@ -1049,8 +1179,18 @@ function BookNode({
     place: 'before' | 'after',
     e: React.DragEvent,
   ) => Promise<void>
+  /** Book id an upload is currently running for, so its row can say so. */
+  uploadingIn: string | null
+  uploadToBook: (bookId: string, files: File[]) => void
 }) {
   const { canWrite } = useAuth()
+  // One zone for the whole book node — row and children alike — so a document
+  // dropped anywhere under a book lands in it. The rows inside decline file
+  // drags so the event reaches here.
+  const fileDrop = useFileDropZone({
+    enabled: canWrite,
+    onFiles: (files) => uploadToBook(book.id, files),
+  })
   const bookActive =
     (params.bookId === book.id && !params.pageId && !params.diagramId) ||
     (selection.kind === 'book' && selection.bookId === book.id)
@@ -1063,7 +1203,11 @@ function BookNode({
   const rootDropId = `book-root:${book.id}`
 
   return (
-    <li key={book.id} className="tree-book">
+    <li
+      key={book.id}
+      className={`tree-book${fileDrop.dragging ? ' file-drop-over' : ''}`}
+      {...fileDrop.dropProps}
+    >
       <div
         className={`tree-row ${bookActive ? 'active' : ''}${dragOver === rootDropId ? ' drag-over' : ''}`}
         // Dragged to be shelved; also a drop target for pages and folders
@@ -1088,6 +1232,9 @@ function BookNode({
           })
         }
         onDragOver={(e) => {
+          // Files are the enclosing zone's business, and claiming them here
+          // would paint the move-highlight over a drop that is an upload.
+          if (dragHasFiles(e.dataTransfer)) return
           e.preventDefault()
           setDragOver(rootDropId)
         }}
@@ -1218,10 +1365,29 @@ function BookNode({
             />
           ))}
 
+          {book.attachments.length > 0 && <li className="tree-group-label">Files</li>}
+          {book.attachments.map((a) => (
+            <AttachmentRow
+              key={a.id}
+              bookId={book.id}
+              attachment={a}
+              active={
+                params.attachmentId === a.id ||
+                (selection.kind === 'attachment' && selection.attachmentId === a.id)
+              }
+              openMenu={openMenu}
+              onSelect={() =>
+                setSelection({ kind: 'attachment', bookId: book.id, attachmentId: a.id })
+              }
+            />
+          ))}
+          {uploadingIn === book.id && <li className="muted sm">Uploading…</li>}
+
           {!book.loading &&
             book.pages.length === 0 &&
             book.diagrams.length === 0 &&
             book.slideDecks.length === 0 &&
+            book.attachments.length === 0 &&
             book.chapters.length === 0 &&
             creatingIn?.bookId !== book.id && (
               <li className="muted sm tree-empty">
@@ -1304,6 +1470,8 @@ function FolderNode({
           })
         }
         onDragOver={(e) => {
+          // Files belong to the book zone around this row — see NavTree.
+          if (dragHasFiles(e.dataTransfer)) return
           e.preventDefault()
           e.stopPropagation()
           setDragOver(dropId)
@@ -1403,6 +1571,8 @@ function PageRow({
       <div
         className={`drop-line${dragOver === beforeId ? ' active' : ''}`}
         onDragOver={(e) => {
+          // Files belong to the book zone around this row — see NavTree.
+          if (dragHasFiles(e.dataTransfer)) return
           e.preventDefault()
           e.stopPropagation()
           setDragOver(beforeId)
@@ -1446,6 +1616,8 @@ function PageRow({
       <div
         className={`drop-line${dragOver === afterId ? ' active' : ''}`}
         onDragOver={(e) => {
+          // Files belong to the book zone around this row — see NavTree.
+          if (dragHasFiles(e.dataTransfer)) return
           e.preventDefault()
           e.stopPropagation()
           setDragOver(afterId)
@@ -1493,6 +1665,51 @@ function SlideDeckRow({
           <span className="tree-icon">🎞️</span>
           <span className="tree-text">{deck.title}</span>
           <span className="muted sm">({deck.slideCount})</span>
+        </NavLink>
+      </div>
+    </li>
+  )
+}
+
+function AttachmentRow({
+  bookId,
+  attachment,
+  active,
+  openMenu,
+  onSelect,
+}: {
+  bookId: string
+  attachment: AttachmentSummary
+  active: boolean
+  openMenu: (e: React.MouseEvent, next: CtxMenu) => void
+  onSelect: () => void
+}) {
+  return (
+    <li>
+      <div
+        className={`tree-row child ${active ? 'active' : ''}`}
+        onContextMenu={(e) =>
+          openMenu(e, {
+            kind: 'attachment',
+            bookId,
+            attachmentId: attachment.id,
+            title: attachment.title,
+            fileName: attachment.fileName,
+            x: e.clientX,
+            y: e.clientY,
+          })
+        }
+      >
+        <NavLink
+          to={`/books/${bookId}/files/${attachment.id}`}
+          className="tree-label"
+          onClick={onSelect}
+          title={`${attachment.fileName} · ${formatFileSize(attachment.sizeBytes)}`}
+        >
+          <span className="tree-icon">
+            {attachmentIcon(attachment.fileName, attachment.contentType)}
+          </span>
+          <span className="tree-text">{attachment.title}</span>
         </NavLink>
       </div>
     </li>

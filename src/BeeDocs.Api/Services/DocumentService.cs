@@ -85,7 +85,8 @@ public sealed class DocumentService(
     SqliteConnectionFactory db,
     ICurrentUserAccessor currentUser,
     ContentResolver resolver,
-    ShelfContentMover mover) : IDocumentService
+    ShelfContentMover mover,
+    StorageOptions storage) : IDocumentService
 {
     /// <summary>
     /// Book columns, plus the owner's display name and the shelf's title resolved
@@ -537,11 +538,13 @@ public sealed class DocumentService(
         if (existing is null) return false;
 
         // Refs first: the rows are gone after the cascade, and the cloud objects
-        // they point at are deleted best-effort only after the commit.
+        // they point at are deleted best-effort only after the commit. Attachment
+        // files on disk are collected here for the same reason.
         var cloudRefs = await CollectBookContentRefsAsync(conn, id, ct);
+        var attachmentFiles = await CollectBookAttachmentFilesAsync(conn, id, ct);
 
-        // Cascade pages, chapters, diagrams, slide decks and book-scoped shape
-        // collections.
+        // Cascade pages, chapters, diagrams, slide decks, attachments and
+        // book-scoped shape collections.
         await using (var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct))
         {
             // Revisions first: they are addressed by page id, so deleting the
@@ -555,6 +558,7 @@ public sealed class DocumentService(
             // longer reachable through any book, but still in the table.
             await ExecAsync(conn, tx, "DELETE FROM diagram WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx, "DELETE FROM slide_deck WHERE book_id = $id", ("$id", id), ct);
+            await ExecAsync(conn, tx, "DELETE FROM attachment WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx,
                 "DELETE FROM shape_collection WHERE book_id IS NOT NULL AND book_id != '' AND book_id = $id",
                 ("$id", id), ct);
@@ -563,7 +567,25 @@ public sealed class DocumentService(
         }
 
         await resolver.DeleteAllAsync(cloudRefs, ct);
+        AttachmentService.DeleteFiles(storage.AttachmentsRoot, attachmentFiles);
         return true;
+    }
+
+    /// <summary>
+    /// The on-disk names of every attachment in a book, read before the cascade
+    /// removes the rows that know them.
+    /// </summary>
+    private static async Task<IReadOnlyList<string>> CollectBookAttachmentFilesAsync(
+        SqliteConnection conn, string bookId, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT stored_name FROM attachment WHERE book_id = $id";
+        SqliteHelpers.Add(cmd, "$id", bookId);
+        var names = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            names.Add(reader.GetString(0));
+        return names;
     }
 
     public async Task<UpsertResult<BookDto>> UpsertBookBySlugAsync(

@@ -132,6 +132,27 @@ public static class DatabaseInitializer
               updated_at TEXT NOT NULL
             );
 
+            -- Files kept alongside a book's pages (PDF, Word, PowerPoint, …).
+            -- Only metadata: the bytes live on disk under BeeDocs:AttachmentsPath,
+            -- named stored_name, which is why there is no content_ref here — an
+            -- opaque binary is not something a storage provider offload covers.
+            CREATE TABLE IF NOT EXISTS attachment (
+              id TEXT PRIMARY KEY NOT NULL,
+              book_id TEXT NOT NULL,
+              title TEXT NOT NULL,
+              description TEXT,
+              -- What a download is served as; stored_name is {id}{ext} on disk.
+              file_name TEXT NOT NULL,
+              stored_name TEXT NOT NULL,
+              content_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+              size_bytes INTEGER NOT NULL DEFAULT 0,
+              -- Defaults from the owning book, then from the uploader. Not a
+              -- foreign key, for the same reason book.owner_id is not.
+              owner_id TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS shape_collection (
               id TEXT PRIMARY KEY NOT NULL,
               book_id TEXT,
@@ -228,6 +249,7 @@ public static class DatabaseInitializer
             CREATE INDEX IF NOT EXISTS idx_diagram_book ON diagram(book_id);
             CREATE INDEX IF NOT EXISTS idx_diagram_page ON diagram(page_id);
             CREATE INDEX IF NOT EXISTS idx_slide_deck_book ON slide_deck(book_id);
+            CREATE INDEX IF NOT EXISTS idx_attachment_book ON attachment(book_id);
             CREATE INDEX IF NOT EXISTS idx_shape_collection_book ON shape_collection(book_id);
             CREATE INDEX IF NOT EXISTS idx_page_revision_page ON page_revision(page_id);
 
@@ -315,6 +337,7 @@ public static class DatabaseInitializer
                 CREATE INDEX IF NOT EXISTS idx_page_revision_page_version ON page_revision(page_id, version DESC);
                 CREATE INDEX IF NOT EXISTS idx_book_owner ON book(owner_id);
                 CREATE INDEX IF NOT EXISTS idx_page_owner ON page(owner_id);
+                CREATE INDEX IF NOT EXISTS idx_attachment_owner ON attachment(owner_id);
                 CREATE INDEX IF NOT EXISTS idx_book_shelf ON book(shelf_id);
                 CREATE INDEX IF NOT EXISTS idx_shelf_owner ON shelf(owner_id);
                 """;
@@ -397,6 +420,19 @@ public static class DatabaseInitializer
         CREATE TRIGGER IF NOT EXISTS trg_slide_deck_search_delete AFTER DELETE ON slide_deck BEGIN
           INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
           VALUES ('slides', old.id, 'delete', datetime('now'));
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_attachment_search_insert AFTER INSERT ON attachment BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('attachment', new.id, 'upsert', datetime('now'));
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_attachment_search_update AFTER UPDATE ON attachment BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('attachment', new.id, 'upsert', datetime('now'));
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_attachment_search_delete AFTER DELETE ON attachment BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('attachment', old.id, 'delete', datetime('now'));
         END;
 
         CREATE TRIGGER IF NOT EXISTS trg_book_search_insert AFTER INSERT ON book BEGIN

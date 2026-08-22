@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <!-- Single source of truth for the container image tag (scripts/deploy-k3s.sh). -->
-    <Version>0.5.2</Version>
+    <Version>0.5.3</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
@@ -13,6 +13,11 @@
     <PackageReference Include="Azure.Storage.Blobs" Version="12.29.1" />
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.75.0.4218" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.8" />
+    <!-- Text extraction from uploaded PDFs, so an attachment is searchable by
+         what it says. Apache-2.0, pure managed, no transitive dependencies on
+         net9.0+. Every other document format the extractor handles is zip+XML,
+         which the BCL already covers. -->
+    <PackageReference Include="PdfPig" Version="0.1.16" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
   </ItemGroup>
 

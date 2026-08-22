@@ -413,6 +413,54 @@ public sealed record UpdateSlideTemplateRequest(
     string? Source
 );
 
+// --- Attachments (files kept alongside a book's pages) ---
+
+/// <param name="FileName">Original name as uploaded — what a download is served as.</param>
+/// <param name="DownloadUrl">Ready-made API route for fetching the bytes.</param>
+/// <param name="OwnerName">Display name the server resolved for <paramref name="OwnerId"/>.</param>
+public sealed record AttachmentDto(
+    string Id,
+    string BookId,
+    string Title,
+    string? Description,
+    string FileName,
+    string ContentType,
+    long SizeBytes,
+    string? OwnerId,
+    string? OwnerName,
+    string DownloadUrl,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+/// <summary>List projection. Same fields minus the description, which only the detail view shows.</summary>
+public sealed record AttachmentSummaryDto(
+    string Id,
+    string BookId,
+    string Title,
+    string FileName,
+    string ContentType,
+    long SizeBytes,
+    string? OwnerId,
+    string? OwnerName,
+    string DownloadUrl,
+    DateTimeOffset UpdatedAt
+);
+
+/// <summary>
+/// Properties only — the bytes are replaced through
+/// <c>POST /api/attachments/{id}/file</c>, never here.
+/// </summary>
+/// <param name="Description">null leaves it alone, "" clears it — same convention as <see cref="UpdateBookRequest"/>.</param>
+/// <param name="OwnerId">null leaves it alone, "" unassigns.</param>
+/// <param name="FileName">null keeps the stored name; otherwise renames the downloaded file.</param>
+public sealed record UpdateAttachmentRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Description,
+    string? OwnerId,
+    string? FileName
+);
+
 public sealed record ShapeCollectionDto(
     string Id,
     /// <summary>Owning book, or null when the collection is app-wide.</summary>
@@ -444,7 +492,7 @@ public sealed record UpdateShapeCollectionRequest(
     string? Source
 );
 
-/// <param name="Kind">shelf, book, folder, page, diagram or slides.</param>
+/// <param name="Kind">shelf, book, folder, page, diagram, slides or attachment.</param>
 /// <param name="Snippet">Matching excerpt. Matched terms are wrapped in U+E000/U+E001.</param>
 /// <param name="Url">Workspace route for the hit.</param>
 /// <param name="Score">bm25 rank — lower is a better match.</param>
@@ -480,6 +528,7 @@ public sealed record SearchStatusDto(
     int Pages,
     int Diagrams,
     int SlideDecks,
+    int Attachments,
     int Books,
     int Folders,
     int Shelves,
@@ -820,7 +869,7 @@ public sealed record AuthStateDto(
     bool SetupRequired
 );
 
-/// <summary>How many of each thing the library holds. Total counts content documents (pages + diagrams + slide decks), not the containers around them.</summary>
+/// <summary>How many of each thing the library holds. Total counts content documents (pages + diagrams + slide decks + attachments), not the containers around them.</summary>
 public sealed record DocumentCountsDto(
     int Shelves,
     int Books,
@@ -828,6 +877,7 @@ public sealed record DocumentCountsDto(
     int Pages,
     int Diagrams,
     int SlideDecks,
+    int Attachments,
     int Total
 );
 
@@ -835,12 +885,14 @@ public sealed record DocumentCountsDto(
 /// <param name="RevisionBytes">The page change log — every locally kept copy, the price of history.</param>
 /// <param name="DatabaseBytes">The SQLite files on disk (main + WAL), everything included.</param>
 /// <param name="UploadsBytes">Uploaded images and other files under /uploads.</param>
+/// <param name="AttachmentBytes">Book attachments on disk — the PDFs and Office documents themselves.</param>
 /// <param name="ExternalBytes">Bodies offloaded to storage providers, measured at upload time.</param>
 public sealed record StorageStatsDto(
     long ContentBytes,
     long RevisionBytes,
     long DatabaseBytes,
     long UploadsBytes,
+    long AttachmentBytes,
     long ExternalBytes
 );
 

@@ -33,6 +33,8 @@ import type {
   Shelf,
   BookshelfSite,
   BookshelfSitePage,
+  Attachment,
+  AttachmentSummary,
   SlideDeck,
   SlideDeckSummary,
   SlideTemplate,
@@ -90,6 +92,33 @@ async function uploadFile(file: File | Blob, fileName?: string) {
     contentType: string
     size: number
   }>
+}
+
+/**
+ * Multipart POST for the attachment routes.
+ *
+ * Not `request`: that sets a JSON Content-Type, and the boundary a multipart
+ * body needs can only be filled in by the browser from the FormData itself.
+ * Errors still come back through `errorText`, so a rejected file type reports
+ * the sentence the server wrote rather than a bare status line.
+ */
+async function postAttachmentFile(
+  path: string,
+  file: File,
+  fields?: Record<string, string | undefined>,
+): Promise<Attachment> {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  for (const [key, value] of Object.entries(fields ?? {})) {
+    if (value !== undefined) form.append(key, value)
+  }
+
+  // No shared 30s deadline: a 100 MB document over a slow link is a legitimate
+  // upload, not a stalled server, and there is a progress-free spinner either way.
+  const res = await fetch(withApiBase(path), { method: 'POST', body: form })
+  if (res.status === 401) notifyUnauthorized(path)
+  if (!res.ok) throw new Error(await errorText(res))
+  return res.json() as Promise<Attachment>
 }
 
 /**
@@ -433,6 +462,33 @@ export const api = {
    * Slides (Drive converts .pptx), so both export flows point here.
    */
   slideDeckPptxUrl: (id: string) => withApiBase(`/api/slides/${id}/export/pptx`),
+
+  /**
+   * Attachments — files filed against a book (PDF, Word, PowerPoint, …). The
+   * bytes go up as multipart and come back down through `attachmentUrl`; the
+   * JSON here is metadata only.
+   */
+  listAttachments: (bookId: string) =>
+    request<AttachmentSummary[]>(`/api/books/${bookId}/attachments`),
+  getAttachment: (id: string) => request<Attachment>(`/api/attachments/${id}`),
+  uploadAttachment: (bookId: string, file: File, meta?: { title?: string; description?: string }) =>
+    postAttachmentFile(`/api/books/${bookId}/attachments`, file, meta),
+  /** Properties only. `description`/`ownerId`: omit to leave alone, "" to clear. */
+  updateAttachment: (
+    id: string,
+    body: { title: string; description?: string; ownerId?: string; fileName?: string },
+  ) => request<Attachment>(`/api/attachments/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  /** Swap the bytes, keeping the id — links to the attachment stay valid. */
+  replaceAttachmentFile: (id: string, file: File) =>
+    postAttachmentFile(`/api/attachments/${id}/file`, file),
+  deleteAttachment: (id: string) => request<void>(`/api/attachments/${id}`, { method: 'DELETE' }),
+  /**
+   * Where the bytes are. `inline` asks the browser to render it in place rather
+   * than save it — honoured only for PDFs, plain text and raster images; the
+   * server forces a download for everything else.
+   */
+  attachmentUrl: (id: string, inline = false) =>
+    withApiBase(`/api/attachments/${id}/download${inline ? '?inline=true' : ''}`),
 
   /** Slide deck templates — app-wide layouts a new deck can start from. */
   listSlideTemplates: () => request<SlideTemplateSummary[]>('/api/slide-templates'),

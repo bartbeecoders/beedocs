@@ -14,6 +14,7 @@ data:
   # uploaded images survive pod restarts and image upgrades.
   BeeDocs__DataPath: "/data/sqlite"
   BeeDocs__UploadsPath: "/data/uploads"
+  BeeDocs__AttachmentsPath: "/data/attachments"
   # Optional: protect /api/v1 (external publish API). Prefer a Secret in production.
   # BeeDocs__ApiKey: ""
 

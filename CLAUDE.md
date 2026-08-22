@@ -95,13 +95,16 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `/api/books`,
   `/api/books/{id}/chapters`, `/api/books/{id}/pages`, `/api/pages/{id}`,
   `/api/books/{id}/diagrams`, `/api/diagrams/{id}`, `/api/books/{id}/slides`,
-  `/api/slides/{id}`, `/api/uploads`, `/api/search`,
+  `/api/slides/{id}`, `/api/books/{id}/attachments`, `/api/attachments/{id}`,
+  `/api/uploads`, `/api/search`,
   `/api/auth/*`, `/api/users/*`, `/api/stats`, plus `/api/health` and `/api/version`.
   Business logic lives in `Services/`
   (`DocumentService` for shelves/books/chapters/pages, `DiagramService` for
-  diagrams, `SlideDeckService` for slide decks);
+  diagrams, `SlideDeckService` for slide decks, `AttachmentService` for uploaded
+  documents);
   entities are in `Models/Entities.cs` (`Shelf`, `Book`, `Chapter`, `Page`,
-  `PageRevision`, `Diagram`, `SlideDeck` — plain POCOs with string ids).
+  `PageRevision`, `Diagram`, `SlideDeck`, `Attachment` — plain POCOs with string
+  ids).
 - **Shelves** are the level above books: `shelf` rows plus a nullable
   `book.shelf_id`, so a book sits on at most one shelf and a book with no shelf
   sits at the library root — which is where every book was before the feature, so
@@ -144,15 +147,20 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `ConnectionStrings:Sqlite`). There is no separate DB server.
 - **Search** is SQLite FTS5 over a `search_doc` projection built by
   `SearchIndexService`, which is also where Markdown is reduced to indexable text
-  (diagram JSON contributes only its shape labels). Nothing calls the indexer to
-  register a write: triggers on `page`/`diagram`/`book`/`chapter`/`shelf` record changes
-  in `search_queue`, and the queue is drained at startup and before each search,
+  (diagram JSON contributes only its shape labels, and uploaded documents are run
+  through `AttachmentTextExtractor` so a PDF or .docx is searchable by its
+  contents). Nothing calls the indexer to
+  register a write: triggers on `page`/`diagram`/`slide_deck`/`attachment`/`book`/
+  `chapter`/`shelf` record changes in `search_queue`, and the queue is drained at
+  startup and before each search,
   so the index stays correct whoever wrote the row — UI, MCP, import, or direct
   SQL. Exposed at `/api/search`, `/api/v1/search`, and the `beedocs_search` MCP
   tool; the UI opens it with Ctrl+K (`SearchPalette.tsx`).
 - **Uploaded images** are served from `BeeDocs:UploadsPath` (default
   `data/uploads`) at `/uploads/*`, separate from the SQLite data dir so
-  container deployments can point both at the same persistent volume.
+  container deployments can point both at the same persistent volume. Book
+  attachments are a *third* directory (`BeeDocs:AttachmentsPath`) and are never
+  served statically — see the attachments bullet below for why.
 - **Production hosting**: the Dockerfile builds the web app into the API's
   `wwwroot/`; `Program.cs` serves static files and falls back to `index.html`
   (SPA routing) when `wwwroot` exists — one process serves UI + API + uploads.
@@ -234,6 +242,53 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   and exported as a real PowerPoint file (`SlideDeckPptxExporter`, hand-built
   OOXML at `GET /api/slides/{id}/export/pptx`) — the same .pptx is the Google
   Slides path, since Slides imports it natively. See `Docs/SLIDES.md`.
+- **Attachments** are the fourth thing a book holds (`attachment` table,
+  `Services/AttachmentService.cs`, `components/AttachmentCanvas.tsx`, route
+  `/books/{bookId}/files/{id}`): an uploaded PDF, Word/PowerPoint/Excel or
+  OpenDocument file, archive or image that BeeDocs stores rather than authors.
+  The one structural difference from pages/diagrams/decks is that **the payload
+  is opaque bytes on disk, not text in SQLite** — so there is no `content_ref`
+  column and no `ContentResolver` here, because a storage provider offloads
+  bodies of text and a binary is not one. Files live under
+  `BeeDocs:AttachmentsPath` (default `data/attachments`) named
+  `{attachmentId}{ext}`, never a name the uploader chose; the original is kept
+  in `file_name` and is what a download is served as. That directory is
+  deliberately *not* inside `BeeDocs:UploadsPath`: static-file middleware serves
+  `/uploads` and opens GET to anonymous readers whenever a shelf is published,
+  whereas attachments are reachable only through
+  `GET /api/attachments/{id}/download` and stay behind the `/api` gate. Uploads
+  are gated by an **extension** allow-list (`AttachmentService.AllowedTypes`,
+  100 MB cap) and the stored content type is derived from that extension —
+  browsers spoof and omit content types, and the extension is what was actually
+  checked. `POST /api/attachments/{id}/file` replaces the bytes keeping the id,
+  so links survive a new version; `PUT` follows the `UpdateBookRequest`
+  convention (null leaves alone, `""` clears). **Search reads inside the
+  documents**: `AttachmentTextExtractor` pulls text from PDF (PdfPig — the one
+  added package, Apache-2.0), OOXML and OpenDocument (zip + `XmlReader`, BCL
+  only), RTF, plain text/XML, and zip entry names, running on the index drain in
+  the same no-transaction phase as a provider fetch. It never throws — a corrupt
+  or encrypted file degrades to metadata-only — skips files over 32 MB and caps
+  extracted text at 256 KB, because the drain runs *before a search*.
+  `AttachmentTextVersion` vs `app_setting['search.attachmentTextVersion']`
+  requeues every attachment when the extractor improves, which Reconcile cannot
+  spot on its own (it compares `updated_at`, and the document has not changed).
+  `media/attachments.ts`
+  in the web app mirrors the extension list and size cap so the picker can
+  filter and a too-large file is refused before upload; the server list is the
+  one that decides. Deleting a book cascades rows in the transaction and files
+  after the commit. **Drag-and-drop** (`hooks/useFileDropZone.ts`,
+  `hooks/useAttachmentUpload.ts`): dropping files anywhere under a book — tree
+  node or overview — files them there, and dropping on an attachment's canvas
+  replaces that file. Every target checks `dragHasFiles` first, because the
+  tree's own drags carry JSON on `text/plain` and would otherwise read a dropped
+  PDF as a page move; the tree's rows *decline* file drags (returning before
+  `stopPropagation`) so the book-wide zone around them gets the event.
+  `WorkspaceShell` cancels file drops at the window so a miss is swallowed
+  rather than navigating the browser away from unsaved work. **MCP**
+  (`BeeDocs.Mcp/Tools/AttachmentTools.cs`) exposes eight tools; the two shaped by
+  the medium are `beedocs_read_attachment` (text for text formats, base64
+  otherwise, and a refusal above 8 MB — base64 of a 100 MB PDF is ~133 MB of
+  context) and `beedocs_link_attachment_in_page`. See `Docs/ATTACHMENTS.md`.
 - **Ownership & page history** — `book.owner_id` / `page.owner_id` name the
   account answerable for a document (a page inherits its book's owner at
   creation, falling back to its creator); neither grants any permission, which
@@ -327,6 +382,7 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/MCP-TOOLS.md` — full MCP tool/resource/prompt catalog.
 - `Docs/DIAGRAM-STUDIO.md` — BeeDiagram Studio editor interactions and JSON format.
 - `Docs/SLIDES.md` — slide decks: document format, designer, presentation mode.
+- `Docs/ATTACHMENTS.md` — book attachments: storage, upload rules, and why they are not uploads.
 - `Docs/USERS-AND-ROLES.md` — accounts, roles, sessions, and the opt-in sign-in wall.
 - `Docs/LLM-PROVIDERS.md` — LLM providers, key storage, and the `/api/llm` security trade-off.
 - `Vibecoding/Instructions.md` — product goals/vision behind the MVP.

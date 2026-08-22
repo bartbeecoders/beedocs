@@ -1,4 +1,4 @@
-import { Children, useMemo, useState, type ReactNode } from 'react'
+import { Children, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { withBase } from '../basePath'
@@ -12,6 +12,9 @@ import { NamePromptDialog, type NamePromptSelect } from './NamePromptDialog'
 import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
 import type { SlideEditorState } from './SlideCanvas'
+import type { AttachmentEditorState } from './AttachmentCanvas'
+import { ATTACHMENT_ACCEPT, attachmentIcon } from '../media/attachments'
+import { useAttachmentUpload } from '../hooks/useAttachmentUpload'
 
 export type WorkspaceView =
   | 'welcome'
@@ -20,6 +23,7 @@ export type WorkspaceView =
   | 'page'
   | 'diagram'
   | 'slides'
+  | 'attachment'
   | 'settings'
   | 'users'
   | 'stats'
@@ -32,9 +36,11 @@ type Props = {
   pageId?: string
   diagramId?: string
   deckId?: string
+  attachmentId?: string
   pageState?: PageEditorState | null
   diagramState?: DiagramEditorState | null
   slideState?: SlideEditorState | null
+  attachmentState?: AttachmentEditorState | null
 }
 
 type NamePrompt = {
@@ -198,9 +204,11 @@ export function WorkspaceToolbar({
   pageId,
   diagramId,
   deckId,
+  attachmentId,
   pageState,
   diagramState,
   slideState,
+  attachmentState,
 }: Props) {
   const {
     books,
@@ -220,6 +228,7 @@ export function WorkspaceToolbar({
     deleteFolder,
     deleteDiagram,
     deleteSlideDeck,
+    deleteAttachment,
     renameFolder,
     movePage,
     refreshTree,
@@ -231,6 +240,10 @@ export function WorkspaceToolbar({
   const { canWrite } = useAuth()
   const [importOpen, setImportOpen] = useState<{ targetBookId?: string } | null>(null)
   const [namePrompt, setNamePrompt] = useState<NamePrompt | null>(null)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
+  const uploadBookRef = useRef<string | null>(null)
+  const { uploadingIn, error: uploadError, clearError, upload } = useAttachmentUpload()
+  const uploading = uploadingIn !== null
 
   const context = useMemo(
     () =>
@@ -244,8 +257,9 @@ export function WorkspaceToolbar({
         pageId,
         diagramId,
         deckId,
+        attachmentId,
       ),
-    [view, selection, books, shelves, shelfId, bookId, pageId, diagramId, deckId],
+    [view, selection, books, shelves, shelfId, bookId, pageId, diagramId, deckId, attachmentId],
   )
 
   if (view === 'settings' || view === 'users' || view === 'stats' || view === 'help') {
@@ -547,6 +561,18 @@ export function WorkspaceToolbar({
                 >
                   New slides
                 </button>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  disabled={uploading}
+                  onClick={() => {
+                    uploadBookRef.current = context.bookId
+                    uploadInputRef.current?.click()
+                  }}
+                  title="Upload a PDF, Word, PowerPoint or other document into this book"
+                >
+                  {uploading ? 'Uploading…' : 'Upload file'}
+                </button>
               </Group>
               <Sep />
             </>
@@ -836,6 +862,90 @@ export function WorkspaceToolbar({
         </>
       )}
 
+      {context.kind === 'attachment' && (
+        <>
+          <Group>
+            {(view !== 'attachment' || attachmentId !== context.attachmentId) && (
+              <button
+                type="button"
+                className="btn primary sm"
+                onClick={() =>
+                  void navigate(`/books/${context.bookId}/files/${context.attachmentId}`)
+                }
+              >
+                Open
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn sm"
+              onClick={() => {
+                const a = document.createElement('a')
+                a.href = api.attachmentUrl(context.attachmentId)
+                a.download = ''
+                a.click()
+              }}
+            >
+              Download
+            </button>
+            {canWrite && view === 'attachment' && attachmentId === context.attachmentId && attachmentState && (
+              <button
+                type="button"
+                className="btn ghost sm"
+                onClick={() => attachmentState.replaceFile()}
+              >
+                Replace file
+              </button>
+            )}
+          </Group>
+          {attachmentState?.dirty && (
+            <>
+              <Sep />
+              <span className="ws-toolbar-status muted sm">Unsaved changes</span>
+            </>
+          )}
+          <span className="ws-toolbar-spacer" />
+          {canWrite && (
+            <Group>
+              <button
+                type="button"
+                className="btn ghost danger sm"
+                onClick={() => {
+                  if (!confirm(`Delete “${context.title}”? The file is removed from the server.`))
+                    return
+                  void deleteAttachment(context.attachmentId, context.bookId).then(() => {
+                    setSelection({ kind: 'book', bookId: context.bookId })
+                    if (attachmentId === context.attachmentId)
+                      void navigate(`/books/${context.bookId}`)
+                  })
+                }}
+              >
+                Delete file
+              </button>
+            </Group>
+          )}
+        </>
+      )}
+
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept={ATTACHMENT_ACCEPT}
+        multiple
+        hidden
+        onChange={(e) => {
+          void upload(uploadBookRef.current ?? '', e.target.files)
+          // Reset, or picking the same file twice in a row fires no change event.
+          e.target.value = ''
+        }}
+      />
+
+      {uploadError && (
+        <span className="ws-toolbar-status error sm" onClick={clearError} role="alert">
+          {uploadError}
+        </span>
+      )}
+
       {importOpen && (
         <ImportDialog
           defaultTargetBookId={importOpen.targetBookId}
@@ -866,6 +976,7 @@ type BookLike = {
   pages: { id: string; title: string; chapterId?: string | null }[]
   diagrams: { id: string; title: string }[]
   slideDecks: { id: string; title: string }[]
+  attachments: { id: string; title: string; fileName: string; contentType: string; sizeBytes: number }[]
   chapters: { id: string; title: string }[]
 }
 
@@ -920,6 +1031,14 @@ type ToolbarContext =
       deckId: string
       dirtyHint?: string
     }
+  | {
+      kind: 'attachment'
+      icon: ReactNode
+      title: string
+      bookId: string
+      attachmentId: string
+      dirtyHint?: string
+    }
 
 /**
  * Prefer explicit tree selection (esp. folders); fall back to route params.
@@ -934,6 +1053,7 @@ function resolveToolbarContext(
   pageId?: string,
   diagramId?: string,
   deckId?: string,
+  attachmentId?: string,
 ): ToolbarContext {
   if (selection.kind === 'folder') {
     const book = books.find((b) => b.id === selection.bookId)
@@ -987,6 +1107,22 @@ function resolveToolbarContext(
       title: deck?.title ?? 'Slides',
       bookId: bId,
       deckId: dId,
+    }
+  }
+
+  if (selection.kind === 'attachment' || (view === 'attachment' && bookId && attachmentId)) {
+    const bId = selection.kind === 'attachment' ? selection.bookId : bookId!
+    const aId = selection.kind === 'attachment' ? selection.attachmentId : attachmentId!
+    const book = books.find((b) => b.id === bId)
+    const file = book?.attachments.find((a) => a.id === aId)
+    return {
+      kind: 'attachment',
+      // No SVG in ICONS for this one on purpose: a file's identity is its
+      // format, and the per-format glyph says more than one generic paperclip.
+      icon: <span aria-hidden>{attachmentIcon(file?.fileName ?? '', file?.contentType)}</span>,
+      title: file?.title ?? 'File',
+      bookId: bId,
+      attachmentId: aId,
     }
   }
 
