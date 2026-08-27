@@ -337,6 +337,35 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   in. That endpoint's emptiness check lives inside the `INSERT … WHERE NOT
   EXISTS`, so concurrent claims cannot both win; it answers 409 forever after.
   See `Docs/USERS-AND-ROLES.md`.
+- **RBA sign-in** (`Services/RbaAuthService.cs` + `RbaSettingsService.cs` +
+  `RbaOptions.cs`, UI `RbaPanel.tsx`) — a switchable login provider delegating
+  `POST /api/auth/login` to the central RBA service (application code `DOC`).
+  Toggled at runtime from Settings → Sign-in provider: settings live in
+  `app_setting` (`rba.settings`, admin-only `GET/PUT/DELETE /api/settings/rba`
+  plus `POST …/test`), win over the `BeeDocs:Rba` config fallback, and apply to
+  the next login — the admin's own session survives the switch, which is the
+  way back from a misconfiguration. The connection is client-side: the browser
+  posts credentials directly to RBA (`rbaBaseUrl` from `/api/auth/me`; RBA's
+  `CorsUrls` must list the BeeDocs origin) and hands only the RS256 JWT to
+  `POST /api/auth/rba`, where `RbaTokenValidator` (hand-rolled BCL, no
+  IdentityModel dependency) verifies it against RBA's JWKS — the signature
+  check is load-bearing because RBA itself doesn't verify its self-issued
+  tokens on lookup. DOC roles are not claims in the token, so the server then
+  fetches the `MultiAuthuser` from RBA via the `adfsToken` variant and maps
+  groups/actions to admin/editor/viewer (`_ADMIN`/`_EDITOR` group suffix,
+  `DOC_USER_MANAGE`, or any `*_WRITE` action);
+  `IUserService.ProvisionExternalUserAsync` upserts an ordinary `app_user` row
+  with an unusable random password — sessions, filters and the MCP API key
+  stay exactly as in local mode. In RBA mode setup answers 409, roles re-sync
+  each login unless `SyncRoles` is off, and a locally disabled account still
+  blocks a valid RBA login. Local (integrated) accounts remain a sign-in path
+  as deliberate break-glass — the login dialog offers a method switch, and
+  `/api/auth/login` checks local credentials *before* forwarding to RBA, so an
+  unreachable RBA (e.g. on-prem service, Azure-hosted BeeDocs) cannot lock the
+  local admin out; `/api/auth/password` stays open because the current-password
+  check already makes it unusable for RBA-provisioned accounts. `AuthStateDto.RbaEnabled`
+  drives the UI copy. RBA-side records: `scripts/rba/create-rba-doc-data.sql`.
+  See `Docs/RBA-INTEGRATION.md`.
 - **LLM writing help** (`/api/llm`, `Services/LlmProviderService.cs` +
   `LlmClient.cs`, `components/AiAssist.tsx` + `hooks/useLlmAssist.ts`) — inline
   autocomplete and selection actions (rewrite / grammar / format / summarize) in
@@ -384,5 +413,6 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/SLIDES.md` — slide decks: document format, designer, presentation mode.
 - `Docs/ATTACHMENTS.md` — book attachments: storage, upload rules, and why they are not uploads.
 - `Docs/USERS-AND-ROLES.md` — accounts, roles, sessions, and the opt-in sign-in wall.
+- `Docs/RBA-INTEGRATION.md` — delegating sign-in to the central RBA service (application DOC).
 - `Docs/LLM-PROVIDERS.md` — LLM providers, key storage, and the `/api/llm` security trade-off.
 - `Vibecoding/Instructions.md` — product goals/vision behind the MVP.

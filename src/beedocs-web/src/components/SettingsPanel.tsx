@@ -3,6 +3,7 @@ import { THEMES, useTheme, type ThemeId } from '../theme'
 import { loadPaneLayout, savePaneLayout } from '../workspace/layoutPrefs'
 import { useAuth } from '../auth/AuthContext'
 import { ApiKeyPanel } from './ApiKeyPanel'
+import { RbaPanel } from './RbaPanel'
 import { LlmProviders } from './LlmProviders'
 import { StorageProviders } from './StorageProviders'
 import { UsersPanel } from './UsersPanel'
@@ -121,6 +122,15 @@ export function SettingsPanel({ onResetPanes }: Props) {
         <h2>Your account</h2>
         <UsersPanel />
       </section>
+
+      {/* The login provider decides how everyone signs in — admin-only, and the
+          API answers /api/settings/rba only to admins anyway. */}
+      {canManageUsers && (
+        <section className="settings-section">
+          <h2>Sign-in provider</h2>
+          <RbaPanel />
+        </section>
+      )}
 
       {/* The publish API key is a credential — the API answers only to admins,
           so showing the section to an editor would just render a 403. */}

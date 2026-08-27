@@ -240,6 +240,49 @@ public sealed record ApiKeyStatusDto(bool HasKey, string? Source, string? KeyHin
 /// <summary>Null or empty clears the stored key (a configured fallback then applies again).</summary>
 public sealed record UpdateApiKeyRequest(string? ApiKey);
 
+/// <summary>
+/// The RBA login-provider settings as the admin UI sees them. Nothing here is a
+/// secret (URL and application code, no credentials), so unlike the API key the
+/// values are returned in full.
+/// </summary>
+/// <param name="Source"><c>settings</c> (stored, editable at runtime) or
+/// <c>config</c> (the BeeDocs:Rba fallback / defaults).</param>
+public sealed record RbaSettingsDto(
+    bool Enabled,
+    string BaseUrl,
+    string ApplicationCd,
+    string PlantCd,
+    bool SyncRoles,
+    int TimeoutSeconds,
+    string Source
+);
+
+/// <summary>Full replace of the stored RBA settings — the form always submits every field.</summary>
+public sealed record UpdateRbaSettingsRequest(
+    bool Enabled,
+    string? BaseUrl,
+    string? ApplicationCd,
+    string? PlantCd,
+    bool? SyncRoles,
+    int? TimeoutSeconds
+);
+
+/// <summary>Both optional: without credentials the test only checks reachability.</summary>
+public sealed record RbaTestRequest(string? Username, string? Password);
+
+/// <summary>The RBA JWT the browser obtained by talking to RBA directly (client-side login).</summary>
+public sealed record RbaTokenLoginRequest([property: Required, MinLength(1)] string Token);
+
+/// <param name="Status"><c>success</c> | <c>reachable</c> | <c>invalidCredentials</c> | <c>noAccess</c> | <c>unavailable</c>.</param>
+/// <param name="Role">The BeeDocs role the tested account would get — only on <c>success</c>.</param>
+public sealed record RbaTestResultDto(
+    bool Reachable,
+    string Status,
+    string? Role,
+    string? UserCd,
+    string Message
+);
+
 // --- External publish API (slug-based, /api/v1) ---
 
 /// <summary>Create or update a book addressed by slug.</summary>
@@ -866,7 +909,14 @@ public sealed record AuthStateDto(
     string Via,
     UserDto? User,
     AuthPermissionsDto Permissions,
-    bool SetupRequired
+    bool SetupRequired,
+    // Sign-in is delegated to the central RBA service: the login form should say
+    // so, and local password management is off (accounts have no usable password).
+    bool RbaEnabled = false,
+    // Where the browser sends credentials for the client-side RBA login. Only
+    // set while RBA is enabled — the URL itself is not a secret (every RBA
+    // client app ships it), but there is no reason to reveal it otherwise.
+    string? RbaBaseUrl = null
 );
 
 /// <summary>How many of each thing the library holds. Total counts content documents (pages + diagrams + slide decks + attachments), not the containers around them.</summary>

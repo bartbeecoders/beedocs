@@ -724,6 +724,18 @@ export type AuthState = {
    * {@link AuthState.authEnabled}.
    */
   setupRequired: boolean
+  /**
+   * Sign-in is delegated to the central RBA service: credentials are the user's
+   * corporate ones, accounts are provisioned on first login, and there is no
+   * local password to change or reset. Absent from servers that predate the
+   * field, hence optional.
+   */
+  rbaEnabled?: boolean
+  /**
+   * Where the browser sends credentials for the client-side RBA login
+   * (`POST {rbaBaseUrl}/v1/auth/token/basic`). Only set while RBA is enabled.
+   */
+  rbaBaseUrl?: string | null
 }
 
 /**
@@ -787,6 +799,31 @@ export type ApiKeyStatus = {
   hasKey: boolean
   source: 'settings' | 'config' | null
   keyHint: string | null
+}
+
+/**
+ * The RBA login-provider settings (admin-only, GET/PUT/DELETE /api/settings/rba).
+ * Nothing here is a secret, so unlike the API key the values come back in full.
+ * `source` says where the effective settings live: "settings" = stored via the
+ * Settings page (editable at runtime), "config" = the BeeDocs__Rba fallback.
+ */
+export type RbaSettings = {
+  enabled: boolean
+  baseUrl: string
+  applicationCd: string
+  plantCd: string
+  syncRoles: boolean
+  timeoutSeconds: number
+  source: 'settings' | 'config'
+}
+
+/** Result of POST /api/settings/rba/test — with credentials it also reports the mapped role. */
+export type RbaTestResult = {
+  reachable: boolean
+  status: 'success' | 'reachable' | 'invalidCredentials' | 'noAccess' | 'unavailable'
+  role: UserRole | null
+  userCd: string | null
+  message: string
 }
 
 /** Instance-wide numbers for the Statistics page (GET /api/stats). */

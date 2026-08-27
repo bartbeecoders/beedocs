@@ -55,7 +55,7 @@ export function UsersPanel() {
 
 /** Change your own password. Available to every role, including viewers. */
 function AccountCard() {
-  const { user, apply } = useAuth()
+  const { user, apply, rbaEnabled } = useAuth()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -103,6 +103,17 @@ function AccountCard() {
         </div>
       </header>
 
+      {/* In RBA mode the form stays: local (integrated) accounts remain a
+          supported sign-in path. An RBA-provisioned account cannot use it —
+          its stored password is a random token nobody knows. */}
+      {rbaEnabled && (
+        <p className="muted sm">
+          If you sign in with your corporate (RBA) account there is no BeeDocs password to change,
+          and roles come from the DOC groups in RBA. The form below applies only to local
+          (integrated) accounts.
+        </p>
+      )}
+      <>
       {user.mustChangePassword && (
         <p className="users-notice">
           This account still uses the password it was given. Set your own below.
@@ -158,6 +169,7 @@ function AccountCard() {
           )}
         </div>
       </form>
+      </>
     </section>
   )
 }

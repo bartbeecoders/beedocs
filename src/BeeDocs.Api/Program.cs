@@ -39,6 +39,18 @@ Directory.CreateDirectory(attachmentsRoot);
 builder.Services.AddSingleton(new StorageOptions(uploadsRoot, attachmentsRoot));
 builder.Services.Configure<ApiKeyOptions>(builder.Configuration.GetSection(ApiKeyOptions.SectionName));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
+builder.Services.Configure<RbaOptions>(builder.Configuration.GetSection(RbaOptions.SectionName));
+
+// RBA as a switchable login provider: settings saved on the Settings page live
+// in app_setting and win over the BeeDocs:Rba configuration fallback, so an
+// admin can turn the provider on or off with no restart. Registered
+// unconditionally — the login handler asks IsEnabledAsync per request.
+builder.Services.AddSingleton<RbaSettingsService>();
+builder.Services.AddHttpClient<IRbaAuthService, RbaAuthService>(
+    // The real per-call budget is the configurable TimeoutSeconds inside the
+    // service; this is only the backstop on the shared client.
+    client => client.Timeout = TimeSpan.FromSeconds(120));
+
 builder.Services.AddSingleton<ApiKeySettingsService>();
 builder.Services.AddSingleton<ApiKeyEndpointFilter>();
 builder.Services.AddSingleton<RequestAuthenticator>();
@@ -301,6 +313,37 @@ if (!apiKeyStatus.HasKey
 }
 
 var authOptions = app.Services.GetRequiredService<IOptions<AuthOptions>>().Value;
+var rbaSettings = app.Services.GetRequiredService<RbaSettingsService>();
+
+// A startup snapshot for logging only — the handlers below re-read per request,
+// because the Settings page can flip the provider while the process runs.
+var rbaAtStartup = await rbaSettings.GetEffectiveAsync();
+if (rbaAtStartup.Enabled)
+{
+    if (!authOptions.Enabled)
+    {
+        // RBA without the auth wall would verify passwords no request is ever
+        // asked for. Almost certainly a half-finished config, so say so.
+        app.Logger.LogWarning(
+            "RBA sign-in is enabled but BeeDocs:Auth:Enabled is off — nothing is gated, so RBA " +
+            "sign-in never runs. Enable BeeDocs:Auth:Enabled to use it.");
+    }
+    else if (string.IsNullOrWhiteSpace(rbaAtStartup.BaseUrl))
+    {
+        app.Logger.LogWarning(
+            "RBA sign-in is enabled but its base URL is empty — every sign-in will fail " +
+            "with 503 until one is set (Settings → Sign-in, or BeeDocs:Rba:BaseUrl).");
+    }
+    else
+    {
+        app.Logger.LogInformation(
+            "RBA sign-in is on: credentials go to {BaseUrl} for application '{App}'{Plant}. Accounts are " +
+            "provisioned on first login; local passwords are disabled.",
+            rbaAtStartup.BaseUrl, rbaAtStartup.ApplicationCd,
+            string.IsNullOrEmpty(rbaAtStartup.PlantCd) ? "" : $" (plant {rbaAtStartup.PlantCd})");
+    }
+}
+
 if (authOptions.Enabled)
 {
     app.Logger.LogInformation(
@@ -348,7 +391,10 @@ CookieOptions SessionCookie(HttpContext http, DateTimeOffset? expires) => new()
     Expires = expires,
 };
 
-static AuthStateDto AuthState(bool enabled, CurrentUser? caller, bool setupRequired = false) =>
+// Every auth answer carries whether RBA is the login provider, so the SPA can
+// word the login screen and hide password management. It is runtime state (the
+// Settings page can flip it), hence a parameter rather than a captured constant.
+static AuthStateDto AuthState(bool enabled, CurrentUser? caller, bool setupRequired = false, RbaSettings? rba = null) =>
     new(
         AuthEnabled: enabled,
         Authenticated: caller is not null,
@@ -358,22 +404,28 @@ static AuthStateDto AuthState(bool enabled, CurrentUser? caller, bool setupRequi
             CanRead: caller is not null,
             CanWrite: caller?.CanWrite ?? false,
             CanManageUsers: caller?.CanManageUsers ?? false),
-        SetupRequired: setupRequired);
+        SetupRequired: setupRequired,
+        RbaEnabled: rba?.Enabled ?? false,
+        // The browser needs the URL to run the client-side RBA login itself.
+        RbaBaseUrl: rba?.Enabled == true && rba.BaseUrl.Length > 0 ? rba.BaseUrl : null);
 
 // The SPA's first call: is sign-in switched on, and who am I? Never 401s —
 // "nobody" is a valid answer and the one that renders the login screen.
-auth.MapGet("/me", async (HttpContext http, RequestAuthenticator authenticator, IUserService users, CancellationToken ct) =>
+auth.MapGet("/me", async (HttpContext http, RequestAuthenticator authenticator, IUserService users, RbaSettingsService rba, CancellationToken ct) =>
 {
+    var rbaConfig = await rba.GetEffectiveAsync(ct);
+
     // One COUNT per page load, on a table with a handful of rows. Cheap enough
     // not to cache, and caching it would mean a stale "already set up" the first
-    // time someone claims the instance.
-    var unclaimed = await users.CountAsync(ct) == 0;
+    // time someone claims the instance. With RBA on there is never a first-run
+    // claim — the first successful RBA login provisions the first account.
+    var unclaimed = !rbaConfig.Enabled && await users.CountAsync(ct) == 0;
 
     if (!authenticator.Enabled)
-        return Results.Ok(AuthState(false, CurrentUser.Open, unclaimed));
+        return Results.Ok(AuthState(false, CurrentUser.Open, unclaimed, rbaConfig));
 
     var caller = await authenticator.ResolveAsync(http);
-    return Results.Ok(AuthState(true, caller, unclaimed));
+    return Results.Ok(AuthState(true, caller, unclaimed, rbaConfig));
 });
 
 // First-run claim. Open only while the account table is empty; the emptiness
@@ -383,8 +435,18 @@ auth.MapPost("/setup", async (
     HttpContext http,
     RequestAuthenticator authenticator,
     IUserService users,
+    RbaSettingsService rba,
     CancellationToken ct) =>
 {
+    // With RBA on the instance is never "unclaimed": accounts arrive from the
+    // directory, and a local admin created here would bypass it.
+    if (await rba.IsEnabledAsync(ct))
+    {
+        return Results.Json(
+            new { error = "This instance uses RBA sign-in. Sign in with your RBA account instead." },
+            statusCode: StatusCodes.Status409Conflict);
+    }
+
     try
     {
         var admin = await users.CreateFirstAdminAsync(body.Username, body.Password, body.DisplayName, ct);
@@ -411,12 +473,51 @@ auth.MapPost("/login", async (
     HttpContext http,
     RequestAuthenticator authenticator,
     IUserService users,
+    IRbaAuthService rba,
+    RbaSettingsService rbaSettings,
     CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(body.Username) || string.IsNullOrWhiteSpace(body.Password))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["username"] = ["Username and password are required."] });
 
-    var user = await users.AuthenticateAsync(body.Username, body.Password, ct);
+    var rbaConfig = await rbaSettings.GetEffectiveAsync(ct);
+
+    // Local accounts first, always — with RBA on this is the break-glass path:
+    // a misconfigured or unreachable RBA (an on-prem service an Azure instance
+    // cannot see, a typo'd URL) must never lock the local admin out of the very
+    // instance that configured it. RBA-provisioned accounts hold unusable
+    // random passwords, so this check cannot be satisfied for them.
+    UserDto? user = await users.AuthenticateAsync(body.Username, body.Password, ct);
+
+    if (user is null && rbaConfig.Enabled)
+    {
+        // Not a local account: forward the credentials to RBA; what comes back
+        // is an identity plus a mapped role, turned into an ordinary local
+        // account + session so everything downstream (filters, ownership, MCP)
+        // works unchanged.
+        var result = await rba.AuthenticateAsync(body.Username, body.Password, ct);
+        switch (result.Status)
+        {
+            case RbaAuthStatus.NoAccess:
+                return Results.Json(
+                    new { error = "Your account has no BeeDocs access. Ask to be added to a DOC group in RBA." },
+                    statusCode: StatusCodes.Status403Forbidden);
+            case RbaAuthStatus.Unavailable:
+                return Results.Json(
+                    new { error = "The sign-in service is unavailable. Try again in a moment, or sign in with a local account." },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            case RbaAuthStatus.InvalidCredentials:
+                break;
+            default:
+                var info = result.User!;
+                // Null when the account is disabled *locally* — deliberately
+                // folded into the generic 401 below, like a local disable is.
+                user = await users.ProvisionExternalUserAsync(
+                    info.UserCd, info.DisplayName, info.Email, info.Role, rbaConfig.SyncRoles, ct);
+                break;
+        }
+    }
+
     if (user is null)
     {
         // One message for a wrong username, a wrong password and a disabled
@@ -431,7 +532,66 @@ auth.MapPost("/login", async (
     var ticket = await users.CreateSessionAsync(user.Id, ct);
     http.Response.Cookies.Append(authenticator.CookieName, ticket.Token, SessionCookie(http, ticket.ExpiresAt));
 
-    return Results.Ok(AuthState(authenticator.Enabled, RequestAuthenticator.ToCurrentUser(user)));
+    return Results.Ok(AuthState(authenticator.Enabled, RequestAuthenticator.ToCurrentUser(user), rba: rbaConfig));
+});
+
+// The client-side RBA login: the browser exchanged credentials with RBA
+// directly (the password never touches BeeDocs) and hands over only the RBA
+// JWT. The service verifies its signature against RBA's JWKS, reads the
+// identity from the verified claims, and fetches the DOC roles from RBA —
+// then it becomes an ordinary local account + session like any other login.
+auth.MapPost("/rba", async (
+    RbaTokenLoginRequest body,
+    HttpContext http,
+    RequestAuthenticator authenticator,
+    IUserService users,
+    IRbaAuthService rba,
+    RbaSettingsService rbaSettings,
+    CancellationToken ct) =>
+{
+    var rbaConfig = await rbaSettings.GetEffectiveAsync(ct);
+    if (!rbaConfig.Enabled)
+    {
+        return Results.Json(
+            new { error = "RBA sign-in is not enabled on this instance." },
+            statusCode: StatusCodes.Status400BadRequest);
+    }
+
+    if (string.IsNullOrWhiteSpace(body.Token))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["token"] = ["A token is required."] });
+
+    var result = await rba.AuthenticateWithTokenAsync(body.Token, ct);
+    switch (result.Status)
+    {
+        case RbaAuthStatus.NoAccess:
+            return Results.Json(
+                new { error = "Your account has no BeeDocs access. Ask to be added to a DOC group in RBA." },
+                statusCode: StatusCodes.Status403Forbidden);
+        case RbaAuthStatus.Unavailable:
+            return Results.Json(
+                new { error = "The sign-in service is unavailable. Try again in a moment." },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        case RbaAuthStatus.InvalidCredentials:
+            return Results.Json(
+                new { error = "Your RBA sign-in could not be verified. Sign in again." },
+                statusCode: StatusCodes.Status401Unauthorized);
+    }
+
+    var info = result.User!;
+    var account = await users.ProvisionExternalUserAsync(
+        info.UserCd, info.DisplayName, info.Email, info.Role, rbaConfig.SyncRoles, ct);
+    if (account is null)
+    {
+        // Disabled locally — same wording as every other refused login.
+        return Results.Json(
+            new { error = "Incorrect username or password." },
+            statusCode: StatusCodes.Status401Unauthorized);
+    }
+
+    var ticket = await users.CreateSessionAsync(account.Id, ct);
+    http.Response.Cookies.Append(authenticator.CookieName, ticket.Token, SessionCookie(http, ticket.ExpiresAt));
+
+    return Results.Ok(AuthState(authenticator.Enabled, RequestAuthenticator.ToCurrentUser(account), rba: rbaConfig));
 });
 
 auth.MapPost("/logout", async (HttpContext http, RequestAuthenticator authenticator, IUserService users, CancellationToken ct) =>
@@ -454,6 +614,10 @@ auth.MapPost("/password", async (
     IUserService users,
     CancellationToken ct) =>
 {
+    // Deliberately not blocked in RBA mode: local (integrated) accounts remain
+    // a supported sign-in path alongside RBA, and this endpoint protects itself
+    // — an RBA-provisioned account holds an unusable random password, so its
+    // owner can never satisfy the current-password check below.
     var caller = authenticator.Enabled ? await authenticator.ResolveAsync(http) : http.GetCurrentUser();
     if (caller?.User is null)
     {
@@ -1386,6 +1550,33 @@ settingsAdmin.MapGet("/api-key", async (ApiKeySettingsService apiKeys, Cancellat
 
 settingsAdmin.MapPut("/api-key", async (UpdateApiKeyRequest body, ApiKeySettingsService apiKeys, CancellationToken ct) =>
     Results.Ok(await apiKeys.SetAsync(body.ApiKey, ct)));
+
+// The RBA login provider. Admin-only like the rest of the group; changes apply
+// to the next login, and the admin's own session survives the switch — which is
+// what makes flipping it back after a misconfiguration possible.
+settingsAdmin.MapGet("/rba", async (RbaSettingsService rba, CancellationToken ct) =>
+    Results.Ok(await rba.GetStatusAsync(ct)));
+
+settingsAdmin.MapPut("/rba", async (UpdateRbaSettingsRequest body, RbaSettingsService rba, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await rba.SetAsync(body, ct));
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["rba"] = [e.Message] });
+    }
+});
+
+// Back to whatever the server configuration (BeeDocs:Rba) says.
+settingsAdmin.MapDelete("/rba", async (RbaSettingsService rba, CancellationToken ct) =>
+    Results.Ok(await rba.ClearAsync(ct)));
+
+// Probe the configured RBA endpoint; with credentials it also reports the role
+// the account would get. Reads nothing back into the database.
+settingsAdmin.MapPost("/rba/test", async (RbaTestRequest body, IRbaAuthService rba, CancellationToken ct) =>
+    Results.Ok(await rba.TestConnectionAsync(body.Username, body.Password, ct)));
 
 // --- LLM providers & completion ---
 // Behind the same key as /api/v1, and not optional: a completion spends the user's

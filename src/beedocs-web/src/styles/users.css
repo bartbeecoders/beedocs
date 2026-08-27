@@ -358,6 +358,31 @@
   width: 100%;
 }
 
+/* The RBA/local method toggle: styled as a text link, not a second button —
+   it changes what the one Sign in button does rather than acting on its own. */
+.login-method-switch {
+  border: none;
+  background: none;
+  padding: 0;
+  align-self: center;
+  color: var(--accent, var(--text));
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.login-method-switch:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.login-method-switch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .login-hint {
   margin: 0;
   line-height: 1.5;

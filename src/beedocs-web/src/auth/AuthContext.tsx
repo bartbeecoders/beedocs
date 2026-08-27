@@ -43,7 +43,14 @@ type AuthCtx = {
   canManageUsers: boolean
   /** Whether to show sign-in affordances at all (hidden entirely when auth is off). */
   authEnabled: boolean
-  login: (username: string, password: string) => Promise<void>
+  /** Sign-in goes through RBA: corporate credentials, no local passwords to manage. */
+  rbaEnabled: boolean
+  /**
+   * Sign in. With RBA on, credentials go from the browser straight to RBA —
+   * unless `useLocalAccount`, which signs in against BeeDocs' own accounts
+   * (the pre-RBA "integrated" method, kept as an explicit fallback).
+   */
+  login: (username: string, password: string, useLocalAccount?: boolean) => Promise<void>
   /** Claim an unclaimed instance. Signs the new admin in on success. */
   setup: (username: string, password: string, displayName?: string) => Promise<void>
   logout: () => Promise<void>
@@ -91,9 +98,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // login screen with everything else left where it was.
   useEffect(() => onUnauthorized(() => void refresh()), [refresh])
 
-  const login = useCallback(async (username: string, password: string) => {
-    setState(await api.login(username, password))
-  }, [])
+  const login = useCallback(
+    async (username: string, password: string, useLocalAccount = false) => {
+      // Client-side RBA: this browser exchanges the credentials with RBA
+      // directly, so the password never transits the BeeDocs API — only the
+      // resulting token does. Local mode keeps the classic one-call login,
+      // which the server also treats as the break-glass path when RBA is on.
+      if (!useLocalAccount && state?.rbaEnabled && state.rbaBaseUrl) {
+        const token = await api.rbaBasicLogin(state.rbaBaseUrl, username, password)
+        setState(await api.loginWithRbaToken(token))
+      } else {
+        setState(await api.login(username, password))
+      }
+    },
+    [state],
+  )
 
   const setup = useCallback(async (username: string, password: string, displayName?: string) => {
     setState(await api.setup(username, password, displayName))
@@ -122,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       canWrite: resolved.permissions.canWrite,
       canManageUsers: resolved.permissions.canManageUsers,
       authEnabled: resolved.authEnabled,
+      rbaEnabled: resolved.rbaEnabled ?? false,
       login,
       setup,
       logout,

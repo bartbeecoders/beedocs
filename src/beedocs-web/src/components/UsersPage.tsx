@@ -35,7 +35,7 @@ function formatDate(value: string | null): string {
  * stays in Settings, which every role can reach.
  */
 export function UsersPage() {
-  const { authEnabled, canManageUsers, user: me } = useAuth()
+  const { authEnabled, canManageUsers, user: me, rbaEnabled } = useAuth()
 
   return (
     <div className="settings-panel users-page">
@@ -62,6 +62,13 @@ export function UsersPage() {
         </section>
       ) : (
         <section className="settings-section">
+          {rbaEnabled && (
+            <p className="users-notice">
+              Sign-in is delegated to RBA: accounts appear here after a person's first login, and
+              roles follow their DOC groups in RBA — a role edited here is overwritten at their next
+              sign-in. Passwords are not managed in BeeDocs. Disabling an account here does block it.
+            </p>
+          )}
           <UserList meId={me?.id ?? null} />
         </section>
       )}

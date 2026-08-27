@@ -1,6 +1,8 @@
 import type {
   ApiKeyStatus,
   AuthState,
+  RbaSettings,
+  RbaTestResult,
   Book,
   Chapter,
   CreateUserRequest,
@@ -208,6 +210,38 @@ export const api = {
     request<AuthState>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
+    }),
+
+  /**
+   * Step one of the client-side RBA login: credentials go from this browser
+   * straight to RBA — never through the BeeDocs API. A plain fetch rather than
+   * request(): it is cross-origin (RBA's CorsUrls must list this app's origin)
+   * and RBA's error shape ({message}) differs from BeeDocs' ({error}).
+   * Returns the RBA JWT.
+   */
+  rbaBasicLogin: async (baseUrl: string, username: string, password: string): Promise<string> => {
+    let res: Response
+    try {
+      res = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/auth/token/basic`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })
+    } catch {
+      throw new Error('The sign-in service could not be reached from your browser.')
+    }
+    if (res.status === 401) throw new Error('Incorrect username or password.')
+    if (!res.ok) throw new Error('The sign-in service is unavailable. Try again in a moment.')
+    const user = (await res.json()) as { token?: string }
+    if (!user.token) throw new Error('The sign-in service did not return a token.')
+    return user.token
+  },
+
+  /** Step two: hand the RBA JWT to BeeDocs, which verifies it and issues the session cookie. */
+  loginWithRbaToken: (token: string) =>
+    request<AuthState>('/api/auth/rba', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
     }),
 
   /**
@@ -614,6 +648,33 @@ export const api = {
     request<ApiKeyStatus>('/api/settings/api-key', {
       method: 'PUT',
       body: JSON.stringify({ apiKey }),
+    }),
+
+  /**
+   * The RBA login provider (admin-only). Saving takes effect on the next login
+   * — the admin's current session survives, which is what makes turning it back
+   * off after a misconfiguration possible. clearRbaSettings drops the stored
+   * settings so the server configuration (BeeDocs__Rba) applies again.
+   */
+  getRbaSettings: () => request<RbaSettings>('/api/settings/rba'),
+  updateRbaSettings: (settings: {
+    enabled: boolean
+    baseUrl: string
+    applicationCd: string
+    plantCd: string
+    syncRoles: boolean
+    timeoutSeconds: number
+  }) =>
+    request<RbaSettings>('/api/settings/rba', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+  clearRbaSettings: () => request<RbaSettings>('/api/settings/rba', { method: 'DELETE' }),
+  /** Without credentials: reachability only. With them: the full login path, reporting the mapped role. */
+  testRba: (username?: string, password?: string) =>
+    request<RbaTestResult>('/api/settings/rba/test', {
+      method: 'POST',
+      body: JSON.stringify({ username: username || undefined, password: password || undefined }),
     }),
 
   /**

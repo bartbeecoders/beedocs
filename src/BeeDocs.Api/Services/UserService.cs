@@ -111,6 +111,20 @@ public interface IUserService
     /// <summary>Null for an unknown user, a wrong password, or a disabled account — the caller cannot tell which.</summary>
     Task<UserDto?> AuthenticateAsync(string username, string password, CancellationToken ct = default);
 
+    /// <summary>
+    /// Upsert an account whose credentials live elsewhere (RBA): created on first
+    /// sign-in with an unusable random password, refreshed on every one after.
+    /// Null when the account exists but is locally disabled — disabling in the
+    /// Users page stays an effective block even for an externally valid login.
+    /// </summary>
+    Task<UserDto?> ProvisionExternalUserAsync(
+        string username,
+        string? displayName,
+        string? email,
+        string role,
+        bool syncRole,
+        CancellationToken ct = default);
+
     Task<SessionTicket> CreateSessionAsync(string userId, CancellationToken ct = default);
 
     /// <summary>
@@ -411,6 +425,91 @@ public sealed class UserService(SqliteConnectionFactory db, ILogger<UserService>
         return await SelectAsync(conn, id, ct);
     }
 
+    public async Task<UserDto?> ProvisionExternalUserAsync(
+        string username,
+        string? displayName,
+        string? email,
+        string role,
+        bool syncRole,
+        CancellationToken ct = default)
+    {
+        var normalized = SanitizeExternalUsername(username);
+        var now = DateTimeOffset.UtcNow;
+
+        await using var conn = await db.OpenConnectionAsync(ct);
+
+        string? id = null;
+        var enabled = true;
+        await using (var read = conn.CreateCommand())
+        {
+            read.CommandText = "SELECT id, enabled FROM app_user WHERE username = $username LIMIT 1";
+            SqliteHelpers.Add(read, "$username", normalized);
+            await using var reader = await read.ExecuteReaderAsync(ct);
+            if (await reader.ReadAsync(ct))
+            {
+                id = reader.GetString(0);
+                enabled = reader.GetInt64(1) != 0;
+            }
+        }
+
+        if (id is null)
+        {
+            id = SqliteHelpers.NewId();
+            await using var insert = conn.CreateCommand();
+            // A random token as the password: the row needs a hash, but nobody —
+            // including the account's owner — is meant to sign in with it while
+            // credentials are RBA's job.
+            insert.CommandText = """
+                INSERT INTO app_user
+                  (id, username, display_name, email, role, password_hash, enabled, must_change_password, last_login_at, created_at, updated_at)
+                VALUES
+                  ($id, $username, $display_name, $email, $role, $password_hash, 1, 0, $now, $now, $now)
+                """;
+            SqliteHelpers.Add(insert, "$id", id);
+            SqliteHelpers.Add(insert, "$username", normalized);
+            SqliteHelpers.Add(insert, "$display_name", Trimmed(displayName));
+            SqliteHelpers.Add(insert, "$email", Trimmed(email));
+            SqliteHelpers.Add(insert, "$role", role);
+            SqliteHelpers.Add(insert, "$password_hash", PasswordHasher.Hash(PasswordHasher.GenerateToken()));
+            SqliteHelpers.Add(insert, "$now", SqliteHelpers.FormatTimestamp(now));
+            await insert.ExecuteNonQueryAsync(ct);
+
+            logger.LogInformation("RBA sign-in provisioned account '{Username}' as {Role}.", normalized, role);
+            return await SelectAsync(conn, id, ct);
+        }
+
+        if (!enabled)
+        {
+            logger.LogInformation("RBA sign-in for '{Username}' refused: the account is disabled locally.", normalized);
+            return null;
+        }
+
+        await using (var update = conn.CreateCommand())
+        {
+            // Profile fields follow the directory; the role follows it only while
+            // syncRole says so, which is what lets a local override survive.
+            update.CommandText = syncRole
+                ? """
+                  UPDATE app_user SET display_name = COALESCE($display_name, display_name),
+                    email = COALESCE($email, email), role = $role, last_login_at = $now, updated_at = $now
+                  WHERE id = $id
+                  """
+                : """
+                  UPDATE app_user SET display_name = COALESCE($display_name, display_name),
+                    email = COALESCE($email, email), last_login_at = $now, updated_at = $now
+                  WHERE id = $id
+                  """;
+            SqliteHelpers.Add(update, "$id", id);
+            SqliteHelpers.Add(update, "$display_name", Trimmed(displayName));
+            SqliteHelpers.Add(update, "$email", Trimmed(email));
+            if (syncRole) SqliteHelpers.Add(update, "$role", role);
+            SqliteHelpers.Add(update, "$now", SqliteHelpers.FormatTimestamp(now));
+            await update.ExecuteNonQueryAsync(ct);
+        }
+
+        return await SelectAsync(conn, id, ct);
+    }
+
     public async Task<SessionTicket> CreateSessionAsync(string userId, CancellationToken ct = default)
     {
         var token = PasswordHasher.GenerateToken();
@@ -644,6 +743,21 @@ public sealed class UserService(SqliteConnectionFactory db, ILogger<UserService>
             throw new ArgumentException("Username must be between 2 and 64 characters.");
         if (value.Any(c => !UsernamePattern.Contains(c)))
             throw new ArgumentException("Username may contain only letters, digits, dot, underscore and hyphen.");
+        return value;
+    }
+
+    /// <summary>
+    /// An RBA user_cd is not typed by anyone here, so instead of rejecting it the
+    /// way <see cref="NormalizeUsername"/> rejects a bad form input, characters a
+    /// local username may not contain are folded to '-'.
+    /// </summary>
+    private static string SanitizeExternalUsername(string raw)
+    {
+        var value = new string((raw ?? "").Trim().ToLowerInvariant()
+            .Select(c => UsernamePattern.Contains(c) ? c : '-').ToArray());
+        if (value.Length > 64) value = value[..64];
+        if (value.Length < 2)
+            throw new ArgumentException("The external account name is too short to use as a username.");
         return value;
     }
 
