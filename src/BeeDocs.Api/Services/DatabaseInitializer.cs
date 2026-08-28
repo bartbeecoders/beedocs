@@ -282,6 +282,24 @@ public static class DatabaseInitializer
               queued_at TEXT NOT NULL,
               PRIMARY KEY (kind, entity_id)
             );
+
+            -- A caller's starred items, shown in the workspace's favorites panel.
+            -- kind reuses the search queue's names: book | page | diagram | slides
+            -- | attachment. user_id is app_user.id, or '' when nobody was
+            -- identified (sign-in off, or the API key) — it is half the primary
+            -- key, so unlike owner_id it cannot be NULL, and '' gives an open
+            -- instance one shared list, matching how ownership degrades
+            -- elsewhere. Not a foreign key, like every user reference here.
+            CREATE TABLE IF NOT EXISTS favorite (
+              user_id TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              entity_id TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              PRIMARY KEY (user_id, kind, entity_id)
+            );
+
+            -- The cleanup triggers below delete by target, across every user.
+            CREATE INDEX IF NOT EXISTS idx_favorite_entity ON favorite(kind, entity_id);
             """;
 
         await cmd.ExecuteNonQueryAsync(ct);
@@ -346,7 +364,7 @@ public static class DatabaseInitializer
 
         await using (var triggers = connection.CreateCommand())
         {
-            triggers.CommandText = QueueTriggerSql;
+            triggers.CommandText = QueueTriggerSql + FavoriteTriggerSql;
             await triggers.ExecuteNonQueryAsync(ct);
         }
     }
@@ -472,6 +490,35 @@ public static class DatabaseInitializer
         CREATE TRIGGER IF NOT EXISTS trg_chapter_search_delete AFTER DELETE ON chapter BEGIN
           INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
           VALUES ('folder', old.id, 'delete', datetime('now'));
+        END;
+        """;
+
+    /// <summary>
+    /// Drop favorites whose target — or owner — is gone. Triggers rather than
+    /// statements in each delete method, for the same reason the search queue
+    /// uses them: every writer is covered, including the one delete path someone
+    /// adds later without remembering this table exists. Deleting a book fires
+    /// the child-table triggers too, because its pages, diagrams, decks and
+    /// attachments are deleted row by row in the same transaction.
+    /// </summary>
+    private const string FavoriteTriggerSql = """
+        CREATE TRIGGER IF NOT EXISTS trg_book_favorite_delete AFTER DELETE ON book BEGIN
+          DELETE FROM favorite WHERE kind = 'book' AND entity_id = old.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_page_favorite_delete AFTER DELETE ON page BEGIN
+          DELETE FROM favorite WHERE kind = 'page' AND entity_id = old.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_diagram_favorite_delete AFTER DELETE ON diagram BEGIN
+          DELETE FROM favorite WHERE kind = 'diagram' AND entity_id = old.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_slide_deck_favorite_delete AFTER DELETE ON slide_deck BEGIN
+          DELETE FROM favorite WHERE kind = 'slides' AND entity_id = old.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_attachment_favorite_delete AFTER DELETE ON attachment BEGIN
+          DELETE FROM favorite WHERE kind = 'attachment' AND entity_id = old.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_app_user_favorite_delete AFTER DELETE ON app_user BEGIN
+          DELETE FROM favorite WHERE user_id = old.id;
         END;
         """;
 }

@@ -13,6 +13,8 @@ import type {
   Diagram,
   DiagramSummary,
   ExportFormat,
+  Favorite,
+  FavoriteKind,
   ImportNameMode,
   ImportPreview,
   ImportResult,
@@ -372,6 +374,14 @@ export const api = {
       { signal: options.signal },
     )
   },
+
+  /** The caller's starred items, newest first, titles resolved server-side. */
+  listFavorites: () => request<Favorite[]>('/api/favorites'),
+  /** Idempotent; 404s when the target does not exist. Viewers may star. */
+  addFavorite: (kind: FavoriteKind, entityId: string) =>
+    request<void>(`/api/favorites/${kind}/${entityId}`, { method: 'PUT' }),
+  removeFavorite: (kind: FavoriteKind, entityId: string) =>
+    request<void>(`/api/favorites/${kind}/${entityId}`, { method: 'DELETE' }),
 
   listBooks: () => request<Book[]>('/api/books'),
   getBook: (id: string) => request<Book>(`/api/books/${id}`),

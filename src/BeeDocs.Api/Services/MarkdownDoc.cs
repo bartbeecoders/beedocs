@@ -49,6 +49,13 @@ public static partial class MarkdownDoc
 
     public sealed record ImageRun(string Alt, string Url) : Inline;
 
+    /// <summary>
+    /// A hard line break: the <c>&lt;br&gt;</c> tag, which is how the table
+    /// designer stores a line break inside a pipe-table cell — the one HTML tag
+    /// pages contain on purpose.
+    /// </summary>
+    public sealed record BreakRun : Inline;
+
     [GeneratedRegex(@"^```([^\n`]*)\n([\s\S]*?)^```[ \t]*$", RegexOptions.Multiline)]
     private static partial Regex FenceRegex();
 
@@ -66,6 +73,10 @@ public static partial class MarkdownDoc
 
     [GeneratedRegex(@"^:?-{2,}:?$")]
     private static partial Regex TableSeparatorRegex();
+
+    // \G anchors at the search start, so Match(text, i) tests exactly position i.
+    [GeneratedRegex(@"\G<br[ \t]*/?>", RegexOptions.IgnoreCase)]
+    private static partial Regex BrTagRegex();
 
     /// <summary>Split Markdown into blocks, keeping fenced code verbatim.</summary>
     public static List<Block> Parse(string markdown)
@@ -255,6 +266,20 @@ public static partial class MarkdownDoc
                 continue;
             }
 
+            // Hard break: <br>, <br/> or <br /> becomes its own run so DOCX
+            // renders a real break and search does not glue two words together.
+            if (c == '<')
+            {
+                var br = BrTagRegex().Match(text, i);
+                if (br.Success)
+                {
+                    Flush();
+                    result.Add(new BreakRun());
+                    i += br.Length;
+                    continue;
+                }
+            }
+
             // Code span
             if (c == '`')
             {
@@ -405,6 +430,9 @@ public static partial class MarkdownDoc
                 case TextRun t: sb.Append(t.Text); break;
                 case LinkRun l: sb.Append(l.Text); break;
                 case ImageRun img: sb.Append(img.Alt); break;
+                // A space, not a newline: plain-text consumers (search, TOC
+                // labels) treat the flattened inlines as one line.
+                case BreakRun: sb.Append(' '); break;
             }
         }
         return sb.ToString();

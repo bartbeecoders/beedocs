@@ -431,6 +431,10 @@ function renderProse(text: string): string {
 
 function inlineMd(s: string): string {
   let t = esc(s)
+  // <br> is the one HTML tag pages carry on purpose — the table designer's
+  // line break inside a cell. Undo its escaping so it breaks instead of
+  // printing literally; everything else stays escaped text.
+  t = t.replace(/&lt;br\s*\/?\s*&gt;/gi, '<br/>')
   // images first
   t = t.replace(
     /!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,

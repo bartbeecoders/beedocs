@@ -977,3 +977,21 @@ public sealed record InstanceStatsDto(
     IReadOnlyList<UserActivityDto> Users,
     DateTimeOffset GeneratedAt
 );
+
+// --- Favorites ---
+
+/// <summary>
+/// One starred item, hydrated with what the favorites panel needs to render and
+/// navigate: the live title and, for anything inside a book, which book.
+/// </summary>
+/// <param name="Kind">book | page | diagram | slides | attachment.</param>
+/// <param name="EntityId">Id in that kind's own table.</param>
+/// <param name="BookId">Owning book, or null for a favorited book itself.</param>
+/// <param name="CreatedAt">When it was starred — the list's newest-first order.</param>
+public sealed record FavoriteDto(
+    string Kind,
+    string EntityId,
+    string Title,
+    string? BookId,
+    DateTimeOffset CreatedAt
+);

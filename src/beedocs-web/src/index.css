@@ -5706,7 +5706,7 @@ html[data-theme='high-contrast'] {
   background: var(--cell-bg, var(--tbl-alt-bg, var(--tbl-cell-bg, transparent)));
 }
 
-.md-table input {
+.md-table :is(input, textarea) {
   width: 100%;
   min-width: 5.5rem;
   border: none;
@@ -5717,6 +5717,14 @@ html[data-theme='high-contrast'] {
   line-height: 1.4;
   padding: 0.38rem 0.5rem;
   outline: none;
+}
+
+/* Body cells are textareas so Shift+Enter can break a line; they size by their
+   rows attribute (kept at the cell's line count), never by a drag handle. */
+.md-table textarea {
+  display: block;
+  resize: none;
+  overflow: hidden;
 }
 
 .md-table th input {
@@ -5810,7 +5818,7 @@ html[data-theme='high-contrast'] {
   outline-offset: 1px;
 }
 
-.md-table input:focus {
+.md-table :is(input, textarea):focus {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 

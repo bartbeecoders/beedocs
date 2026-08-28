@@ -93,6 +93,7 @@ builder.Services.AddSingleton<IShapeCollectionService, ShapeCollectionService>()
 builder.Services.AddSingleton<IExportService, ExportService>();
 builder.Services.AddSingleton<IImportService, ImportService>();
 builder.Services.AddSingleton<ISearchIndexService, SearchIndexService>();
+builder.Services.AddSingleton<IFavoriteService, FavoriteService>();
 builder.Services.AddSingleton<IStatsService, StatsService>();
 builder.Services.AddSingleton<ILlmProviderService, LlmProviderService>();
 builder.Services.AddSingleton<ILlmClient, LlmClient>();
@@ -800,6 +801,30 @@ static string[]? ParseKinds(string? raw) =>
     string.IsNullOrWhiteSpace(raw)
         ? null
         : raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+// --- Favorites ---
+// The caller's starred items — a preference about content, not content, so the
+// write verbs carry an explicit viewer requirement instead of inheriting the
+// write-for-editors default: a read-only account may star what it can read.
+// With sign-in off there is no caller id and the instance shares one list.
+api.MapGet("/favorites", async (IFavoriteService favorites, CancellationToken ct) =>
+    Results.Ok(await favorites.ListAsync(ct)));
+
+api.MapPut("/favorites/{kind}/{id}", async (string kind, string id, IFavoriteService favorites, CancellationToken ct) =>
+    {
+        if (!FavoriteService.IsValidKind(kind))
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["kind"] = [$"Unknown kind '{kind}'. Use one of: {FavoriteService.KindList}."],
+            });
+
+        return await favorites.AddAsync(kind, id, ct) ? Results.NoContent() : Results.NotFound();
+    })
+    .WithMetadata(new RequireRole(UserRoles.Viewer));
+
+api.MapDelete("/favorites/{kind}/{id}", async (string kind, string id, IFavoriteService favorites, CancellationToken ct) =>
+        await favorites.RemoveAsync(kind, id, ct) ? Results.NoContent() : Results.NotFound())
+    .WithMetadata(new RequireRole(UserRoles.Viewer));
 
 // --- Shelves ---
 // The level above books. A shelf holds no content, so deleting one unshelves its

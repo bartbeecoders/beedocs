@@ -14,6 +14,7 @@ import type {
   AttachmentSummary,
   Chapter,
   DiagramSummary,
+  FavoriteKind,
   PageSummary,
   SlideDeckSummary,
 } from '../types'
@@ -696,6 +697,7 @@ export function NavTree() {
                   setMenu(null)
                 }}
               />
+              <FavoriteMenuItem kind="book" entityId={menu.bookId} onDone={() => setMenu(null)} />
               {/* Shelving a book is a drag onto a shelf, or the picker in the
                   properties pane; only the way back out needs a menu item. */}
               <MenuItem
@@ -771,6 +773,7 @@ export function NavTree() {
                   setMenu(null)
                 }}
               />
+              <FavoriteMenuItem kind="page" entityId={menu.pageId} onDone={() => setMenu(null)} />
               <MenuItem
                 label="Move to book root"
                 write
@@ -815,6 +818,11 @@ export function NavTree() {
                   setMenu(null)
                 }}
               />
+              <FavoriteMenuItem
+                kind="diagram"
+                entityId={menu.diagramId}
+                onDone={() => setMenu(null)}
+              />
               <div className="tree-context-sep" />
               <MenuItem
                 label="Delete diagram"
@@ -842,6 +850,7 @@ export function NavTree() {
                   setMenu(null)
                 }}
               />
+              <FavoriteMenuItem kind="slides" entityId={menu.deckId} onDone={() => setMenu(null)} />
               <div className="tree-context-sep" />
               <MenuItem
                 label="Delete slides"
@@ -870,6 +879,11 @@ export function NavTree() {
                   void navigate(`/books/${menu.bookId}/files/${menu.attachmentId}`)
                   setMenu(null)
                 }}
+              />
+              <FavoriteMenuItem
+                kind="attachment"
+                entityId={menu.attachmentId}
+                onDone={() => setMenu(null)}
               />
               <MenuItem
                 label="Download"
@@ -990,6 +1004,33 @@ function MenuItem({
     >
       {label}
     </button>
+  )
+}
+
+/**
+ * Star/unstar for the five favoritable kinds, shown in each row's context menu.
+ * Deliberately not `write`-gated: favoriting is a personal preference, and the
+ * API lets every role star what it can read — viewers included.
+ */
+function FavoriteMenuItem({
+  kind,
+  entityId,
+  onDone,
+}: {
+  kind: FavoriteKind
+  entityId: string
+  onDone: () => void
+}) {
+  const { isFavorite, toggleFavorite } = useWorkspace()
+  const starred = isFavorite(kind, entityId)
+  return (
+    <MenuItem
+      label={starred ? 'Remove from favorites' : 'Add to favorites'}
+      onClick={() => {
+        void toggleFavorite(kind, entityId)
+        onDone()
+      }}
+    />
   )
 }
 

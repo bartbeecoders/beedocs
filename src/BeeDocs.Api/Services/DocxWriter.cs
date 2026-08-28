@@ -260,6 +260,10 @@ public sealed class DocxWriter(Func<string, DocxImage?>? imageResolver = null)
                 case MarkdownDoc.ImageRun image:
                     sb.Append(Image(image));
                     break;
+
+                case MarkdownDoc.BreakRun:
+                    sb.Append("<w:r><w:br/></w:r>");
+                    break;
             }
         }
         return sb.Length == 0 ? Run(string.Empty, raw: true) : sb.ToString();

@@ -548,10 +548,21 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
                     data-link-col={c}
                     {...cellTargetProps(r, c)}
                   >
-                    <input
+                    <textarea
                       value={cell}
+                      rows={Math.max(1, cell.split('\n').length)}
                       onChange={(e) => setCell(r, c, e.target.value)}
+                      onKeyDown={(e) => {
+                        // Shift+Enter is the line break (stored as <br> in the
+                        // Markdown — a pipe-table cell cannot hold a newline).
+                        // A textarea would also break on plain Enter, so that
+                        // one is swallowed: it is how people leave a cell, and
+                        // must not silently reshape it.
+                        if (e.key === 'Enter' && !e.shiftKey) e.preventDefault()
+                      }}
+                      spellCheck={false}
                       aria-label={`Row ${r + 1}, column ${c + 1}`}
+                      title="Shift+Enter for a line break"
                     />
                     {styleButton(r, c)}
                   </td>

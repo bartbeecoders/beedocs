@@ -7,6 +7,7 @@ import { loadPaneLayout, savePaneLayout, type PaneLayout } from '../workspace/la
 import { api } from '../api'
 import { withBase } from '../basePath'
 import { bookshelfSitePath } from '../markdownLinks'
+import { FavoritesPanel } from './FavoritesPanel'
 import { NavTree } from './NavTree'
 import { ResizablePane } from './ResizablePane'
 import { PageCanvas, type PageEditorState } from './PageCanvas'
@@ -266,6 +267,7 @@ export function WorkspaceShell() {
           onResize={(leftWidth) => patchLayout({ leftWidth })}
           onToggle={() => patchLayout({ leftCollapsed: !layout.leftCollapsed })}
         >
+          <FavoritesPanel />
           <NavTree />
         </ResizablePane>
 

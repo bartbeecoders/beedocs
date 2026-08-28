@@ -1,0 +1,125 @@
+import { useState } from 'react'
+import { NavLink } from 'react-router-dom'
+import { useWorkspace } from '../workspace/WorkspaceContext'
+import type { TreeSelection } from '../workspace/selection'
+import type { Favorite, FavoriteKind } from '../types'
+import '../styles/favorites.css'
+
+/** Same glyphs the tree rows use, so a favorite is recognisably the same thing. */
+const KIND_ICONS: Record<FavoriteKind, string> = {
+  book: '📘',
+  page: '📄',
+  diagram: '⬡',
+  slides: '🎞️',
+  attachment: '📎',
+}
+
+function favoritePath(f: Favorite): string | null {
+  if (f.kind === 'book') return `/books/${f.entityId}`
+  // Everything else lives inside a book; without one there is nowhere to go.
+  if (!f.bookId) return null
+  switch (f.kind) {
+    case 'page':
+      return `/books/${f.bookId}/pages/${f.entityId}`
+    case 'diagram':
+      return `/books/${f.bookId}/diagrams/${f.entityId}`
+    case 'slides':
+      return `/books/${f.bookId}/slides/${f.entityId}`
+    case 'attachment':
+      return `/books/${f.bookId}/files/${f.entityId}`
+  }
+}
+
+function favoriteSelection(f: Favorite): TreeSelection {
+  switch (f.kind) {
+    case 'book':
+      return { kind: 'book', bookId: f.entityId }
+    case 'page':
+      return { kind: 'page', bookId: f.bookId!, pageId: f.entityId }
+    case 'diagram':
+      return { kind: 'diagram', bookId: f.bookId!, diagramId: f.entityId }
+    case 'slides':
+      return { kind: 'slides', bookId: f.bookId!, deckId: f.entityId }
+    case 'attachment':
+      return { kind: 'attachment', bookId: f.bookId!, attachmentId: f.entityId }
+  }
+}
+
+/**
+ * The starred items above the library tree. Renders nothing until something is
+ * starred — an empty pinned section would only push the library down for
+ * everyone who never uses the feature. Starring happens in the tree's context
+ * menus; this panel is where favorites are opened and unstarred.
+ */
+export function FavoritesPanel() {
+  const { favorites, toggleFavorite, setSelection } = useWorkspace()
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('beedocs-favorites-collapsed') === '1'
+    } catch {
+      return false
+    }
+  })
+
+  if (favorites.length === 0) return null
+
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      const next = !c
+      try {
+        localStorage.setItem('beedocs-favorites-collapsed', next ? '1' : '0')
+      } catch {
+        // Preference only — losing it costs one extra click.
+      }
+      return next
+    })
+  }
+
+  return (
+    <div className="favorites-panel">
+      <button
+        type="button"
+        className="favorites-header"
+        aria-expanded={!collapsed}
+        onClick={toggleCollapsed}
+      >
+        <span className="tree-twist">{collapsed ? '▸' : '▾'}</span>
+        <span className="favorites-title">★ Favorites</span>
+        <span className="muted sm">({favorites.length})</span>
+      </button>
+      {!collapsed && (
+        <ul className="tree-root">
+          {favorites.map((f) => {
+            const path = favoritePath(f)
+            if (!path) return null
+            return (
+              <li key={`${f.kind}:${f.entityId}`}>
+                <div className="tree-row">
+                  <NavLink
+                    to={path}
+                    className="tree-label"
+                    onClick={() => setSelection(favoriteSelection(f))}
+                  >
+                    <span className="tree-icon">{KIND_ICONS[f.kind]}</span>
+                    <span className="tree-text">{f.title}</span>
+                  </NavLink>
+                  <div className="tree-row-actions">
+                    <button
+                      type="button"
+                      className="fav-remove"
+                      title="Remove from favorites"
+                      aria-label={`Remove “${f.title}” from favorites`}
+                      onClick={() => void toggleFavorite(f.kind, f.entityId)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}

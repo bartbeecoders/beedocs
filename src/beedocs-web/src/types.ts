@@ -45,6 +45,25 @@ export type Book = {
   updatedAt: string
 }
 
+/** What a favorite can point at. `slides` names a slide deck, as in search. */
+export type FavoriteKind = 'book' | 'page' | 'diagram' | 'slides' | 'attachment'
+
+/**
+ * One starred item as GET /api/favorites returns it: the target, its live
+ * title, and — for anything inside a book — which book, so the panel can
+ * build the route. Scoped server-side to the calling account (or one shared
+ * list when sign-in is off).
+ */
+export type Favorite = {
+  kind: FavoriteKind
+  entityId: string
+  title: string
+  /** Owning book; null for a favorited book itself. */
+  bookId?: string | null
+  /** When it was starred — the list's newest-first order. */
+  createdAt: string
+}
+
 export type Chapter = {
   id: string
   bookId: string

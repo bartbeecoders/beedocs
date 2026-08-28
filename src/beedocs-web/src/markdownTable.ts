@@ -119,6 +119,18 @@ export type TableMatch = {
   raw: string
 }
 
+/**
+ * A pipe-table cell cannot hold a real newline, so `<br>` is how a line break
+ * is stored — the GFM-standard encoding, which any other renderer of the page
+ * honours too. The designer's cell model uses real newlines (that is what a
+ * textarea edits), decoded here on parse and re-encoded in `esc` on serialize.
+ */
+const BR_TAG = /<br\s*\/?>/gi
+
+export function decodeCellBreaks(cell: string): string {
+  return cell.replace(BR_TAG, '\n')
+}
+
 /** Split one table row into trimmed cells, honouring `\|` escapes. */
 function splitRowCells(line: string): string[] {
   let t = line.trim()
@@ -227,7 +239,9 @@ export function parseMarkdownTable(raw: string): MarkdownTable | null {
   const header = splitRowCells(lines[0])
   const align = parseSeparator(lines[1])
   if (!align || align.length !== header.length) return null
-  const rows = lines.slice(2).map((l) => normalizeRow(splitRowCells(l), header.length))
+  const rows = lines
+    .slice(2)
+    .map((l) => normalizeRow(splitRowCells(l), header.length).map(decodeCellBreaks))
   // Styles live in arrays parallel to header/rows, so every structural edit
   // (add/remove/reorder) transforms them the same way and refs never desync.
   const headerStyles: (string | null)[] = header.map(() => null)
@@ -242,7 +256,7 @@ export function parseMarkdownTable(raw: string): MarkdownTable | null {
 
 /** Serialize a cell model back to padded, aligned pipe-table Markdown. */
 export function serializeMarkdownTable(table: MarkdownTable): string {
-  const esc = (s: string) => s.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
+  const esc = (s: string) => s.replace(/\r?\n/g, '<br>').replace(/\|/g, '\\|')
   const cols = table.header.length
   const grid = [table.header, ...table.rows].map((r) => normalizeRow(r, cols).map(esc))
   const widths = Array.from({ length: cols }, (_, c) =>
@@ -310,6 +324,28 @@ const addClass = (node: MdNode, cls: string) => {
  * itself is dropped (react-markdown skips raw HTML anyway, but not under a
  * future rehype-raw).
  */
+/**
+ * remark plugin: an inline `<br>` becomes a hard-break node. react-markdown
+ * drops raw HTML, so without this the line breaks the table designer stores in
+ * cells (Shift+Enter) would silently vanish from the reading view. Not scoped
+ * to tables — a hand-typed `<br>` in prose earns the same break.
+ */
+export function remarkHtmlBreaks() {
+  const isBrNode = (n: MdNode) =>
+    n.type === 'html' && n.value != null && /^<br\s*\/?>$/i.test(n.value.trim())
+  return (tree: MdNode) => {
+    const visit = (node: MdNode) => {
+      if (!node.children) return
+      for (let i = 0; i < node.children.length; i++) {
+        const n = node.children[i]
+        if (isBrNode(n)) node.children[i] = { type: 'break' }
+        else visit(n)
+      }
+    }
+    visit(tree)
+  }
+}
+
 export function remarkTableThemes() {
   return (tree: MdNode) => {
     const visit = (node: MdNode) => {

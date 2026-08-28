@@ -289,6 +289,21 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   the medium are `beedocs_read_attachment` (text for text formats, base64
   otherwise, and a refusal above 8 MB — base64 of a 100 MB PDF is ~133 MB of
   context) and `beedocs_link_attachment_in_page`. See `Docs/ATTACHMENTS.md`.
+- **Favorites** (`favorite` table, `Services/FavoriteService.cs`, UI
+  `FavoritesPanel.tsx` above the tree in the left pane) — per-user starred items
+  (kinds `book | page | diagram | slides | attachment`, the search queue's
+  names), keyed `(user_id, kind, entity_id)` with `user_id = ''` when sign-in is
+  off or the caller is the API key — one shared list for an open instance, the
+  same degradation ownership follows. `GET /api/favorites` returns the list
+  hydrated with live titles and owning book; `PUT`/`DELETE
+  /api/favorites/{kind}/{id}` star/unstar (PUT idempotent, 404 on a missing
+  target). Both write verbs carry `RequireRole(Viewer)` — favoriting is a
+  personal preference, not a content write, so read-only accounts may star.
+  Deleted targets (and deleted accounts) are cleaned by `AFTER DELETE` triggers
+  in `DatabaseInitializer`, search-queue-style, so every writer is covered.
+  UI entry points: "Add/Remove from favorites" in the tree context menus;
+  the panel (which renders nothing while empty, and collapses via
+  `beedocs-favorites-collapsed` in localStorage) opens and unstars.
 - **Ownership & page history** — `book.owner_id` / `page.owner_id` name the
   account answerable for a document (a page inherits its book's owner at
   creation, falling back to its creator); neither grants any permission, which

@@ -14,6 +14,8 @@ import type {
   Book,
   Chapter,
   DiagramSummary,
+  Favorite,
+  FavoriteKind,
   PageSummary,
   Shelf,
   SlideDeckSummary,
@@ -52,6 +54,11 @@ type WorkspaceCtx = {
    */
   books: TreeBook[]
   shelves: TreeShelf[]
+  /** The caller's starred items, newest first — what the favorites panel renders. */
+  favorites: Favorite[]
+  isFavorite: (kind: FavoriteKind, entityId: string) => boolean
+  /** Star or unstar. Adding re-fetches the list so the server resolves the title. */
+  toggleFavorite: (kind: FavoriteKind, entityId: string) => Promise<void>
   loading: boolean
   error: string | null
   /** Current library selection (route-synced + folder tree clicks) */
@@ -114,6 +121,7 @@ function sortAttachments(list: AttachmentSummary[]): AttachmentSummary[] {
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [books, setBooks] = useState<TreeBook[]>([])
   const [shelves, setShelves] = useState<TreeShelf[]>([])
+  const [favorites, setFavorites] = useState<Favorite[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selection, setSelectionState] = useState<TreeSelection>({ kind: 'none' })
@@ -186,10 +194,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const refreshTree = useCallback(async () => {
     setError(null)
     try {
-      const [shelfList, list] = await Promise.all([api.listShelves(), api.listBooks()])
+      const [shelfList, list, favoriteList] = await Promise.all([
+        api.listShelves(),
+        api.listBooks(),
+        api.listFavorites(),
+      ])
       setShelves(
         shelfList.map((s) => ({ ...s, expanded: !collapsedShelves.has(s.id) })),
       )
+      setFavorites(favoriteList)
       const next: TreeBook[] = await Promise.all(
         list.map(async (b) => {
           const expanded = expandedIds.has(b.id)
@@ -320,6 +333,29 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       prev.map((s) => (s.id === shelfId ? { ...s, expanded: !s.expanded } : s)),
     )
   }, [])
+
+  const isFavorite = useCallback(
+    (kind: FavoriteKind, entityId: string) =>
+      favorites.some((f) => f.kind === kind && f.entityId === entityId),
+    [favorites],
+  )
+
+  const toggleFavorite = useCallback(
+    async (kind: FavoriteKind, entityId: string) => {
+      if (favorites.some((f) => f.kind === kind && f.entityId === entityId)) {
+        await api.removeFavorite(kind, entityId)
+        setFavorites((prev) =>
+          prev.filter((f) => !(f.kind === kind && f.entityId === entityId)),
+        )
+        return
+      }
+      await api.addFavorite(kind, entityId)
+      // The server resolves the title and owning book; re-fetch rather than
+      // reconstruct so the panel shows exactly what a reload would.
+      setFavorites(await api.listFavorites())
+    },
+    [favorites],
+  )
 
   const createBook = useCallback(
     async (title: string, description?: string, shelfId?: string | null) => {
@@ -582,6 +618,9 @@ graph LR
           : b,
       ),
     )
+    setFavorites((prev) =>
+      prev.filter((f) => !(f.kind === 'attachment' && f.entityId === attachmentId)),
+    )
   }, [])
 
   const deleteBook = useCallback(
@@ -589,6 +628,13 @@ graph LR
       const shelfId = books.find((b) => b.id === bookId)?.shelfId ?? null
       await api.deleteBook(bookId)
       setBooks((prev) => prev.filter((b) => b.id !== bookId))
+      // The book's contents went with it — server-side triggers already dropped
+      // their favorite rows; mirror that instead of showing dead entries.
+      setFavorites((prev) =>
+        prev.filter(
+          (f) => f.bookId !== bookId && !(f.kind === 'book' && f.entityId === bookId),
+        ),
+      )
       if (shelfId) {
         setShelves((prev) =>
           prev.map((s) =>
@@ -607,6 +653,7 @@ graph LR
         b.id === bookId ? { ...b, pages: b.pages.filter((p) => p.id !== pageId) } : b,
       ),
     )
+    setFavorites((prev) => prev.filter((f) => !(f.kind === 'page' && f.entityId === pageId)))
   }, [])
 
   const deleteFolder = useCallback(async (chapterId: string, bookId: string) => {
@@ -639,6 +686,9 @@ graph LR
           : b,
       ),
     )
+    setFavorites((prev) =>
+      prev.filter((f) => !(f.kind === 'diagram' && f.entityId === diagramId)),
+    )
   }, [])
 
   const deleteSlideDeck = useCallback(async (deckId: string, bookId: string) => {
@@ -650,6 +700,7 @@ graph LR
           : b,
       ),
     )
+    setFavorites((prev) => prev.filter((f) => !(f.kind === 'slides' && f.entityId === deckId)))
   }, [])
 
   const renameFolder = useCallback(async (chapterId: string, bookId: string, title: string) => {
@@ -876,6 +927,9 @@ graph LR
     () => ({
       books,
       shelves,
+      favorites,
+      isFavorite,
+      toggleFavorite,
       loading,
       error,
       selection,
@@ -913,6 +967,9 @@ graph LR
     [
       books,
       shelves,
+      favorites,
+      isFavorite,
+      toggleFavorite,
       loading,
       error,
       selection,
