@@ -24,6 +24,8 @@ const KINDS: KindOption[] = [
   { kind: 'xai', label: 'xAI', hint: 'Grok, straight from x.ai', baseUrl: 'https://api.x.ai/v1' },
   { kind: 'openai', label: 'OpenAI', hint: 'GPT models, no middleman', baseUrl: 'https://api.openai.com/v1' },
   { kind: 'lmstudio', label: 'LM Studio', hint: 'Runs on this machine, no key', baseUrl: 'http://localhost:1234/v1' },
+  { kind: 'claude-cli', label: 'Claude Code', hint: 'Your installed claude CLI, its sign-in', baseUrl: '' },
+  { kind: 'grok-cli', label: 'Grok CLI', hint: 'Your installed grok CLI, its sign-in', baseUrl: '' },
 ]
 
 const KIND_LABELS: Record<LlmKind, string> = {
@@ -31,7 +33,21 @@ const KIND_LABELS: Record<LlmKind, string> = {
   xai: 'xAI',
   openai: 'OpenAI',
   lmstudio: 'LM Studio',
+  'claude-cli': 'Claude Code',
+  'grok-cli': 'Grok CLI',
 }
+
+/**
+ * The CLI kinds run a local command instead of calling an endpoint: no base URL,
+ * no key, and a blank model means "whatever the CLI's default model is". Value is
+ * the executable, resolved from the API process's PATH.
+ */
+const CLI_COMMANDS: Partial<Record<LlmKind, string>> = {
+  'claude-cli': 'claude',
+  'grok-cli': 'grok',
+}
+
+const isCliKind = (kind: LlmKind): boolean => kind in CLI_COMMANDS
 
 /**
  * A blank model means "whatever the provider lists first". It is a *setting*, not
@@ -97,6 +113,8 @@ type ModelFieldProps = {
   readOnly: boolean
   /** Mid-save or mid-row-request: buttons are genuinely unavailable. */
   busy: boolean
+  /** What a blank model means for this kind. Defaults to the listing's first model. */
+  autoSub?: string
 }
 
 /**
@@ -128,7 +146,8 @@ type ModelFieldProps = {
  *    the model. Being in flow, it has no placement, no clipping and no
  *    re-measure-on-pane-resize problem to get wrong.
  */
-function ModelField({ id, value, models, onChange, onRetry, readOnly, busy }: ModelFieldProps) {
+function ModelField({ id, value, models, onChange, onRetry, readOnly, busy, autoSub }: ModelFieldProps) {
+  const auto = autoSub ?? AUTO_MODEL_SUB
   const [browsing, setBrowsing] = useState(false)
   const [filter, setFilter] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -191,7 +210,7 @@ function ModelField({ id, value, models, onChange, onRetry, readOnly, busy }: Mo
           spellCheck={false}
           readOnly={readOnly}
           aria-describedby={hintId}
-          placeholder={`${AUTO_MODEL} — ${AUTO_MODEL_SUB}`}
+          placeholder={`${AUTO_MODEL} — ${auto}`}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -240,7 +259,7 @@ function ModelField({ id, value, models, onChange, onRetry, readOnly, busy }: Mo
                 onClick={() => pick('')}
               >
                 <span className="llm-browse-id">{AUTO_MODEL}</span>
-                <span className="llm-browse-note">the {AUTO_MODEL_SUB}</span>
+                <span className="llm-browse-note">the {auto}</span>
               </button>
             </li>
             {matches.map((m) => (
@@ -271,13 +290,13 @@ function ModelField({ id, value, models, onChange, onRetry, readOnly, busy }: Mo
       <p className="llm-hint" id={hintId}>
         {models.status === 'loading' ? 'Loading the model list…' : null}
         {models.status === 'ready'
-          ? `${listed} model${listed === 1 ? '' : 's'} suggested — any id you type is saved as written. Leave blank for the ${AUTO_MODEL_SUB}.`
+          ? `${listed} model${listed === 1 ? '' : 's'} suggested — any id you type is saved as written. Leave blank for the ${auto}.`
           : null}
         {models.status === 'needs-key'
-          ? `Add a key and save to list the models. You can type an id now — it is saved as written, or leave it blank for the ${AUTO_MODEL_SUB}.`
+          ? `Add a key and save to list the models. You can type an id now — it is saved as written, or leave it blank for the ${auto}.`
           : null}
         {models.status === 'idle' || models.status === 'error'
-          ? `Type the model id, or leave it blank for the ${AUTO_MODEL_SUB}.`
+          ? `Type the model id, or leave it blank for the ${auto}.`
           : null}
       </p>
 
@@ -409,12 +428,22 @@ export function LlmProviders() {
     // The server names a new provider after its kind, so repeating the kind
     // gives "LM Studio · LM Studio".
     if (p.name !== KIND_LABELS[p.kind]) parts.push(KIND_LABELS[p.kind])
-    parts.push(p.model || AUTO_MODEL_SUB)
+    const cli = CLI_COMMANDS[p.kind]
+    parts.push(p.model || (cli ? 'CLI default model' : AUTO_MODEL_SUB))
     // Unconditionally, even with a single provider: whether a key is stored is
     // the one thing you come to this screen to check, and it was previously only
-    // visible by expanding the card.
-    parts.push(endpointOf(p.baseUrl))
-    parts.push(p.hasKey ? `key ····${p.keyHint ?? ''}` : p.requiresKey ? 'no key' : 'no key needed')
+    // visible by expanding the card. A CLI kind has neither endpoint nor key —
+    // the command and its own sign-in are the whole story.
+    parts.push(cli ? `${cli} command` : endpointOf(p.baseUrl))
+    parts.push(
+      cli
+        ? 'uses the CLI sign-in'
+        : p.hasKey
+          ? `key ····${p.keyHint ?? ''}`
+          : p.requiresKey
+            ? 'no key'
+            : 'no key needed',
+    )
     return parts.join(' · ')
   }
 
@@ -595,8 +624,9 @@ export function LlmProviders() {
     const name = draft.name.trim()
     const baseUrl = draft.baseUrl.trim()
     // The server keeps the stored value for a blank name or URL, so saving one
-    // would look like it worked and quietly revert. Save is disabled too.
-    if (name === '' || baseUrl === '') return
+    // would look like it worked and quietly revert. Save is disabled too. A CLI
+    // kind has no base URL at all — blank is its only correct value.
+    if (name === '' || (baseUrl === '' && !isCliKind(p.kind))) return
     const turnOn = savingTurnsOn(p)
     setSavingId(target)
     setSaveError(null)
@@ -735,7 +765,9 @@ export function LlmProviders() {
                 {already > 0 ? <span className="llm-kind-count">{already} added</span> : null}
               </span>
               <span className="llm-kind-hint">{creating === k.kind ? 'Adding…' : k.hint}</span>
-              <span className="llm-kind-url">{endpointOf(k.baseUrl)}</span>
+              <span className="llm-kind-url">
+                {CLI_COMMANDS[k.kind] ? `${CLI_COMMANDS[k.kind]} command` : endpointOf(k.baseUrl)}
+              </span>
             </button>
           )
         })}
@@ -846,9 +878,10 @@ export function LlmProviders() {
             // fires a second write while it runs — the enable switch, or a
             // collapse that discards the draft — has to be out of bounds too.
             const formBusy = rowBusy || isSaving
+            const isCli = isCliKind(p.kind)
             const dirty = open && isDirty(draft, p)
             const nameMissing = open && draft.name.trim() === ''
-            const urlMissing = open && draft.baseUrl.trim() === ''
+            const urlMissing = open && !isCli && draft.baseUrl.trim() === ''
             const canSave = dirty && !formBusy && !nameMissing && !urlMissing
             const turnOn = open && savingTurnsOn(p)
             const mayEnable = canBeEnabled(p)
@@ -965,27 +998,49 @@ export function LlmProviders() {
                           </p>
                         ) : null}
                       </div>
-                      <div className="llm-field">
-                        <label htmlFor={`llm-url-${p.id}`}>Base URL</label>
-                        <input
-                          id={`llm-url-${p.id}`}
-                          className="llm-mono"
-                          spellCheck={false}
-                          autoComplete="off"
-                          value={draft.baseUrl}
-                          readOnly={formBusy}
-                          aria-invalid={urlMissing}
-                          aria-describedby={urlMissing ? urlErrId : undefined}
-                          onChange={(e) => editDraft({ baseUrl: e.target.value })}
-                        />
-                        {urlMissing ? (
-                          <p className="llm-hint is-warn" id={urlErrId}>
-                            Base URL is required.
-                          </p>
-                        ) : null}
-                      </div>
+                      {isCli ? (
+                        <div className="llm-field">
+                          <label htmlFor={`llm-cmd-${p.id}`}>Command</label>
+                          <input
+                            id={`llm-cmd-${p.id}`}
+                            className="llm-mono"
+                            value={CLI_COMMANDS[p.kind]}
+                            readOnly
+                            aria-describedby={`llm-cli-hint-${p.id}`}
+                          />
+                        </div>
+                      ) : (
+                        <div className="llm-field">
+                          <label htmlFor={`llm-url-${p.id}`}>Base URL</label>
+                          <input
+                            id={`llm-url-${p.id}`}
+                            className="llm-mono"
+                            spellCheck={false}
+                            autoComplete="off"
+                            value={draft.baseUrl}
+                            readOnly={formBusy}
+                            aria-invalid={urlMissing}
+                            aria-describedby={urlMissing ? urlErrId : undefined}
+                            onChange={(e) => editDraft({ baseUrl: e.target.value })}
+                          />
+                          {urlMissing ? (
+                            <p className="llm-hint is-warn" id={urlErrId}>
+                              Base URL is required.
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
 
+                    {isCli ? (
+                      <p className="llm-hint" id={`llm-cli-hint-${p.id}`}>
+                        Completions run the <code>{CLI_COMMANDS[p.kind]}</code> command on the
+                        machine the BeeDocs API runs on, with the account it is signed in with — no
+                        key to store. Leave the model blank to use the CLI’s own default model.
+                      </p>
+                    ) : null}
+
+                    {isCli ? null : (
                     <div className="llm-field">
                       <label htmlFor={`llm-key-${p.id}`}>API key</label>
                       <div className="llm-inline">
@@ -1060,6 +1115,7 @@ export function LlmProviders() {
                         </p>
                       ) : null}
                     </div>
+                    )}
 
                     <ModelField
                       id={`llm-model-${p.id}`}
@@ -1067,6 +1123,7 @@ export function LlmProviders() {
                       models={models}
                       readOnly={formBusy}
                       busy={formBusy}
+                      autoSub={isCli ? 'CLI’s own default model' : undefined}
                       onChange={(model) => editDraft({ model })}
                       onRetry={() => void loadModels(p.id)}
                     />

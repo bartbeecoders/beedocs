@@ -647,7 +647,7 @@ public sealed record BookshelfSitePageContentDto(
 /// is write-only, and <paramref name="KeyHint"/> is all a UI needs to tell two
 /// keys apart.
 /// </summary>
-/// <param name="Kind">openrouter | xai | openai | lmstudio.</param>
+/// <param name="Kind">openrouter | xai | openai | lmstudio | claude-cli | grok-cli.</param>
 /// <param name="Model">Preferred model id. Empty = whatever the provider lists first.</param>
 /// <param name="KeyHint">Last four characters of the stored key, or null when none is stored.</param>
 public sealed record LlmProviderDto(

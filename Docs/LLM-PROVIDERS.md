@@ -12,9 +12,10 @@ editor until one exists, is enabled, and answers.
 
 ## Supported providers
 
-All four speak the OpenAI chat-completions API, so there is one client in the
-API (`Services/LlmClient.cs`) and the providers differ only in base URL and
-whether a key is required.
+The four HTTP kinds speak the OpenAI chat-completions API, so there is one
+client in the API (`Services/LlmClient.cs`) and they differ only in base URL and
+whether a key is required. The two CLI kinds have no endpoint at all — see the
+next section.
 
 | Kind | Default base URL | Key | Default model |
 |---|---|---|---|
@@ -22,14 +23,50 @@ whether a key is required.
 | `xai` | `https://api.x.ai/v1` | required | `grok-3-mini` |
 | `openai` | `https://api.openai.com/v1` | required | `gpt-4o-mini` |
 | `lmstudio` | `http://localhost:1234/v1` | none | _(whatever is loaded)_ |
+| `claude-cli` | _(none — runs `claude`)_ | none | _(the CLI's own default)_ |
+| `grok-cli` | _(none — runs `grok`)_ | none | _(the CLI's own default)_ |
 
 The default model is a starting point only — the settings UI fills a picker from
 the provider's own `/models`. A blank model means "the first model the provider
 lists", which is the normal case for LM Studio.
 
-Anything OpenAI-compatible works if you point one of these kinds at it: add the
-provider, then edit its **Base URL**. `kind` only decides the defaults and
+Anything OpenAI-compatible works if you point one of the HTTP kinds at it: add
+the provider, then edit its **Base URL**. `kind` only decides the defaults and
 whether a key is demanded.
+
+---
+
+## The CLI kinds: Claude Code and Grok CLI
+
+`claude-cli` and `grok-cli` are for a machine that already runs
+[Claude Code](https://claude.com/claude-code) or xAI's Grok CLI: instead of an
+HTTP call signed with a stored key, the API spawns the locally installed command
+(`Services/LlmCli.cs`) and the CLI answers with whatever **account and default
+model it is signed in with**. No key is stored in BeeDocs, and a blank model —
+the recommended setting — means the CLI's own default, so changing the model in
+the CLI changes it here too. Typing a model id sends it through as `--model`
+(Claude accepts its aliases: `sonnet`, `opus`, `haiku`).
+
+Mechanics:
+
+- `claude-cli` runs `claude -p --output-format json --append-system-prompt …`
+  with the page text on stdin, and reads the answer plus token counts from the
+  JSON envelope.
+- `grok-cli` runs `grok --prompt-file … --rules …` (the prompt goes through an
+  owner-only temp file, not the world-readable process arg list) and reads
+  stdout.
+- Both run from a neutral working directory so the CLI does not load some
+  unrelated project's context (CLAUDE.md, settings) into a writing-help call.
+- **Test connection** runs `<command> --version` — it proves the command exists
+  and starts without spending anything from your plan.
+
+The command must be on the PATH **of the BeeDocs API process**, which makes
+these kinds a fit for local and desktop installs (the Omarchy app, `start.sh`
+on your own machine) and a poor fit for a hosted deployment — a container has
+no `claude` and no sign-in. Remember that completions billed to the CLI's
+account are spent by whoever can reach `/api/llm`: on anything but a private
+machine, put the port behind `BeeDocs:ApiKey` or the sign-in wall just as you
+would with a stored provider key.
 
 ---
 

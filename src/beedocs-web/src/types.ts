@@ -561,8 +561,12 @@ export type BeeDiagramDoc = {
   viewport: BeeViewport
 }
 
-/** All four speak the OpenAI chat-completions API; only base URL and auth differ. */
-export type LlmKind = 'openrouter' | 'xai' | 'openai' | 'lmstudio'
+/**
+ * The HTTP kinds speak the OpenAI chat-completions API; only base URL and auth
+ * differ. The `-cli` kinds run the locally installed `claude`/`grok` command on
+ * the machine the API runs on instead — no base URL, no key.
+ */
+export type LlmKind = 'openrouter' | 'xai' | 'openai' | 'lmstudio' | 'claude-cli' | 'grok-cli'
 
 /** Canonical task names. The API also accepts aliases, but send these. */
 export type LlmTask = 'continue' | 'rewrite' | 'grammar' | 'format' | 'summarize'
@@ -582,7 +586,7 @@ export type LlmProvider = {
   hasKey: boolean
   /** Last 4 characters of the stored key; null when there is none. */
   keyHint: string | null
-  /** false for lmstudio, which is unauthenticated. */
+  /** false for lmstudio and the CLI kinds, which authenticate on their own. */
   requiresKey: boolean
   sortOrder: number
   createdAt: string

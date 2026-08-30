@@ -387,7 +387,12 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   the page editor. OpenRouter, xAI, OpenAI and LM Studio all speak the OpenAI
   chat-completions API, so one client covers them; providers are rows in
   `llm_provider` and the key column is read only by `ResolveAsync`, never put in
-  a DTO. Every call is proxied by the API so no key reaches the browser.
+  a DTO. Every call is proxied by the API so no key reaches the browser. Two
+  more kinds, `claude-cli` and `grok-cli` (`Services/LlmCli.cs`), spawn the
+  locally installed `claude`/`grok` command instead of calling an endpoint — no
+  key, no base URL, and a blank model means the CLI's own default — for local
+  installs where Claude Code or Grok CLI is already signed in; the command must
+  be on the API process's PATH, so they don't work in a hosted container.
   `/api/llm` is behind the same `ApiKeyEndpointFilter` as `/api/v1`, which is
   inert unless `BeeDocs:ApiKey` is set — an open port with a stored key is a
   bill waiting to happen, and setting the key also switches the feature off in

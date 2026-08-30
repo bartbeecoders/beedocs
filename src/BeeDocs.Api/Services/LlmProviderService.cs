@@ -4,7 +4,9 @@ using Microsoft.Data.Sqlite;
 namespace BeeDocs.Api.Services;
 
 /// <summary>
-/// The four supported providers, and what to assume when the user only picks a kind.
+/// The supported providers, and what to assume when the user only picks a kind.
+/// Four speak the OpenAI chat-completions API over HTTP; the two CLI kinds hand
+/// the request to a locally installed agent CLI instead (see <see cref="LlmCli"/>).
 /// </summary>
 public static class LlmProviderKinds
 {
@@ -12,17 +14,24 @@ public static class LlmProviderKinds
     public const string XAi = "xai";
     public const string OpenAi = "openai";
     public const string LmStudio = "lmstudio";
+    public const string ClaudeCli = "claude-cli";
+    public const string GrokCli = "grok-cli";
 
-    public static readonly IReadOnlyList<string> All = [OpenRouter, XAi, OpenAi, LmStudio];
+    public static readonly IReadOnlyList<string> All =
+        [OpenRouter, XAi, OpenAi, LmStudio, ClaudeCli, GrokCli];
 
     /// <summary>Accepts the spellings a UI or a hand-written request is likely to send.</summary>
     public static string? Normalize(string? raw) =>
         (raw ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", "").Replace("-", "").Replace("_", "") switch
         {
             "openrouter" => OpenRouter,
+            // "grok" stays the hosted xAI API for compatibility; the CLI kind
+            // must be asked for by its full name.
             "xai" or "grok" or "x" => XAi,
             "openai" or "chatgpt" or "gpt" => OpenAi,
             "lmstudio" or "local" or "lm" => LmStudio,
+            "claudecli" or "claude" or "claudecode" => ClaudeCli,
+            "grokcli" => GrokCli,
             _ => null,
         };
 
@@ -41,12 +50,15 @@ public static class LlmProviderKinds
         XAi => "xAI",
         OpenAi => "OpenAI",
         LmStudio => "LM Studio",
+        ClaudeCli => "Claude Code",
+        GrokCli => "Grok CLI",
         _ => kind,
     };
 
     /// <summary>
     /// A starting point only — the UI fills a real picker from /models. LM Studio
-    /// serves whatever model is loaded, so it gets no default at all.
+    /// serves whatever model is loaded and the CLI kinds default to whatever model
+    /// the installed CLI is configured with, so those get no default at all.
     /// </summary>
     public static string DefaultModel(string kind) => kind switch
     {
@@ -56,8 +68,23 @@ public static class LlmProviderKinds
         _ => "",
     };
 
-    /// <summary>LM Studio is normally unauthenticated; the hosted providers are not.</summary>
-    public static bool RequiresKey(string kind) => kind != LmStudio;
+    /// <summary>
+    /// LM Studio is normally unauthenticated, and the CLI kinds authenticate with
+    /// whatever account the installed CLI is signed in with; the hosted providers
+    /// are not usable without a key.
+    /// </summary>
+    public static bool RequiresKey(string kind) => kind is not (LmStudio or ClaudeCli or GrokCli);
+
+    /// <summary>Kinds that spawn a local process instead of making an HTTP call.</summary>
+    public static bool IsCli(string kind) => kind is ClaudeCli or GrokCli;
+
+    /// <summary>The executable a CLI kind runs, resolved from the API process's PATH.</summary>
+    public static string CliCommand(string kind) => kind switch
+    {
+        ClaudeCli => "claude",
+        GrokCli => "grok",
+        _ => "",
+    };
 }
 
 /// <summary>
@@ -367,6 +394,11 @@ public sealed class LlmProviderService(SqliteConnectionFactory db) : ILlmProvide
 
     private static string NormalizeBaseUrl(string? raw, string kind)
     {
+        // A CLI kind talks to a local process, not an endpoint — whatever a
+        // client sends for it, the stored base URL stays empty.
+        if (LlmProviderKinds.IsCli(kind))
+            return string.Empty;
+
         var value = (raw ?? string.Empty).Trim().TrimEnd('/');
         if (value.Length == 0)
             return LlmProviderKinds.DefaultBaseUrl(kind);

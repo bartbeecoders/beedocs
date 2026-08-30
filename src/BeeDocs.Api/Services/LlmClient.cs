@@ -26,8 +26,10 @@ public interface ILlmClient
 }
 
 /// <summary>
-/// One OpenAI-compatible chat client for all four providers — they differ only in
-/// base URL and whether a key is required, so the wire format is shared.
+/// One OpenAI-compatible chat client for the four HTTP providers — they differ
+/// only in base URL and whether a key is required, so the wire format is shared.
+/// The two CLI kinds branch to <see cref="LlmCli"/> instead, which runs the
+/// locally installed `claude`/`grok` command with the same prompts.
 /// Keys are read from <see cref="ILlmProviderService.ResolveAsync"/> at call time
 /// and never held anywhere else.
 /// </summary>
@@ -56,6 +58,9 @@ public sealed class LlmClient(
         var provider = await providers.ResolveAsync(providerId, ct)
             ?? throw new KeyNotFoundException($"Provider '{providerId}' not found.");
 
+        if (LlmProviderKinds.IsCli(provider.Kind))
+            return LlmCli.Models(provider.Kind);
+
         return await FetchModelsAsync(provider, ct);
     }
 
@@ -68,6 +73,21 @@ public sealed class LlmClient(
 
         if (LlmProviderKinds.RequiresKey(provider.Kind) && string.IsNullOrEmpty(provider.ApiKey))
             return new LlmTestResultDto(false, $"No API key stored for {provider.Name}.", null, Elapsed(started));
+
+        if (LlmProviderKinds.IsCli(provider.Kind))
+        {
+            // There is no endpoint to reach — the test is "does the command exist
+            // and start". A model call would spend the user's plan for nothing.
+            try
+            {
+                var message = await LlmCli.ProbeAsync(provider.Kind, ct);
+                return new LlmTestResultDto(true, message, null, Elapsed(started));
+            }
+            catch (LlmException ex)
+            {
+                return new LlmTestResultDto(false, ex.Message, null, Elapsed(started));
+            }
+        }
 
         try
         {
@@ -117,8 +137,11 @@ public sealed class LlmClient(
         // returning nothing. So an empty answer that used the entire budget means
         // "cut off mid-reasoning", not "nothing to say" — the one case worth paying
         // for a second attempt, with room to get past the reasoning. Anything that
-        // stopped early genuinely had nothing to add and is left alone.
-        if (text.Length == 0 && completionTokens >= budget && budget < RetryBudget)
+        // stopped early genuinely had nothing to add and is left alone. A CLI
+        // kind never gets the retry: it ignores max_tokens, so the second run
+        // would be the same call at the same settings, paid for twice.
+        if (text.Length == 0 && completionTokens >= budget && budget < RetryBudget
+            && !LlmProviderKinds.IsCli(provider.Kind))
         {
             (text, promptTokens, completionTokens) =
                 await AttemptAsync(provider, model, task, request, RetryBudget, ct);
@@ -146,6 +169,20 @@ public sealed class LlmClient(
         int maxTokens,
         CancellationToken ct)
     {
+        // The CLI kinds are a different transport entirely: the same prompts, but
+        // handed to the local `claude`/`grok` process instead of an HTTP endpoint.
+        // maxTokens and temperature have no CLI equivalent and are ignored.
+        if (LlmProviderKinds.IsCli(provider.Kind))
+        {
+            return await LlmCli.CompleteAsync(
+                provider,
+                model,
+                LlmPrompts.SystemMessage(task),
+                LlmPrompts.UserMessage(task, request),
+                CompleteTimeout,
+                ct);
+        }
+
         // Anonymous objects cannot omit a property conditionally without building a
         // dictionary: LM Studio (and strict local servers) 400 on unknown fields, so
         // `reasoning` is only sent to cloud providers that understand it.
@@ -205,6 +242,10 @@ public sealed class LlmClient(
 
         model = (provider.Model ?? "").Trim();
         if (model.Length > 0) return model;
+
+        // For a CLI kind a blank model is the point, not a gap to fill from a
+        // listing: no --model flag means the CLI's own default model answers.
+        if (LlmProviderKinds.IsCli(provider.Kind)) return string.Empty;
 
         var models = await FetchModelsAsync(provider, ct);
         if (models.Count == 0)
