@@ -7,6 +7,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { useI18n, type MessageKey } from '../i18n'
 import type { BeeAnchor, BeeDiagramDoc, BeeEdgeRoute, BeeNode, BeeNodeType, BeePoint } from '../types'
 import {
   BEE_ANCHORS,
@@ -77,14 +78,8 @@ type OrthoHandleDrag = {
   axis: 'x' | 'y'
 }
 
-const ADD_OBJECTS: { type: BeeNodeType; label: string; hint: string }[] = [
-  { type: 'box', label: 'Box', hint: 'Generic component' },
-  { type: 'person', label: 'Person', hint: 'Actor / user' },
-  { type: 'system', label: 'System', hint: 'Software system' },
-  { type: 'database', label: 'Database', hint: 'Data store' },
-  { type: 'note', label: 'Note', hint: 'Annotation' },
-  { type: 'image', label: 'Image', hint: 'Or drag/drop / paste an image' },
-]
+/** Labels/hints resolve at render via `studio.obj.*` / `studio.objHint.*`. */
+const ADD_OBJECTS: BeeNodeType[] = ['box', 'person', 'system', 'database', 'note', 'image']
 
 type Props = {
   source: string
@@ -100,6 +95,7 @@ function inlineLabelBox(n: BeeNode): { x: number; y: number; w: number; h: numbe
 }
 
 export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props) {
+  const { t } = useI18n()
   const [doc, setDoc] = useState<BeeDiagramDoc>(() => parseBeeDoc(source))
   const [tool, setTool] = useState<Tool>('select')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -334,14 +330,14 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
   const commitLabelEdit = useCallback(() => {
     setLabelEdit((cur) => {
       if (!cur) return null
-      const next = cur.text.trim() || 'Untitled'
+      const next = cur.text.trim() || t('common.untitled')
       commit((prev) => ({
         ...prev,
         nodes: prev.nodes.map((n) => (n.id === cur.id ? { ...n, label: next } : n)),
       }))
       return null
     })
-  }, [commit])
+  }, [commit, t])
 
   const cancelLabelEdit = useCallback(() => {
     setLabelEdit(null)
@@ -667,14 +663,14 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
   }, [contextMenu])
 
   const tools: { id: Tool; label: string }[] = [
-    { id: 'select', label: 'Select' },
-    { id: 'connect', label: 'Connect' },
-    { id: 'box', label: 'Box' },
-    { id: 'person', label: 'Person' },
-    { id: 'system', label: 'System' },
-    { id: 'database', label: 'DB' },
-    { id: 'note', label: 'Note' },
-    { id: 'image', label: 'Image' },
+    { id: 'select', label: t('studio.tool.select') },
+    { id: 'connect', label: t('studio.tool.connect') },
+    { id: 'box', label: t('studio.tool.box') },
+    { id: 'person', label: t('studio.tool.person') },
+    { id: 'system', label: t('studio.tool.system') },
+    { id: 'database', label: t('studio.tool.database') },
+    { id: 'note', label: t('studio.tool.note') },
+    { id: 'image', label: t('studio.tool.image') },
   ]
 
   const showAnchorsFor = (id: string) =>
@@ -723,80 +719,80 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
     >
       {(imageDragging || imageUploading) && !readOnly && (
         <div className="image-drop-overlay" aria-live="polite">
-          {imageUploading ? 'Uploading image…' : 'Drop image onto the diagram'}
+          {imageUploading ? t('studio.uploadingImage') : t('studio.dropImageDiagram')}
         </div>
       )}
       {mediaError && !readOnly && (
         <div className="banner error compact">
           {mediaError}{' '}
           <button type="button" className="btn ghost sm" onClick={() => setMediaError(null)}>
-            Dismiss
+            {t('studio.dismiss')}
           </button>
         </div>
       )}
       {!readOnly && (
         <div className="bee-toolbar">
           <div className="segmented">
-            {tools.map((t) => (
+            {tools.map((tl) => (
               <button
-                key={t.id}
+                key={tl.id}
                 type="button"
-                className={tool === t.id ? 'active' : ''}
+                className={tool === tl.id ? 'active' : ''}
                 onClick={() => {
-                  if (t.id === 'image') {
+                  if (tl.id === 'image') {
                     setTool('select')
                     setContextMenu(null)
                     dropWorldRef.current = { x: 240, y: 180 }
                     pickImageFiles()
                     return
                   }
-                  setTool(t.id)
-                  if (t.id !== 'connect') setLinkDrag(null)
+                  setTool(tl.id)
+                  if (tl.id !== 'connect') setLinkDrag(null)
                   setContextMenu(null)
                 }}
               >
-                {t.label}
+                {tl.label}
               </button>
             ))}
           </div>
           <button type="button" className="btn danger ghost sm" disabled={!selectedId} onClick={deleteSelected}>
-            Delete
+            {t('common.delete')}
           </button>
-          <label className="bee-snap-toggle" title={`Snap position to ${BEE_GRID_SIZE}px grid`}>
+          <label className="bee-snap-toggle" title={t('studio.snapTitle', { size: BEE_GRID_SIZE })}>
             <input
               type="checkbox"
               checked={snapToGridEnabled}
               onChange={(e) => setSnapToGridEnabled(e.target.checked)}
             />
-            <span>Snap to grid</span>
+            <span>{t('studio.snapToGrid')}</span>
           </label>
           {selectedId && (
             <button
               type="button"
               className="btn sm"
-              title="Align selected node position and size to the grid"
+              title={t('studio.snapSelectedTip')}
               onClick={snapSelectedToGrid}
             >
-              Snap selected
+              {t('studio.snapSelected')}
             </button>
           )}
           <span className="meta">
             {orthoDrag
-              ? 'Drag to reshape right-angle path…'
+              ? t('studio.statusOrtho')
               : labelEdit
-                ? 'Edit label · Enter to save · Esc to cancel'
+                ? t('studio.statusLabelEdit')
                 : linkDrag
-                  ? 'Drop on a target anchor…'
+                  ? t('studio.statusLinkDrag')
                   : tool === 'connect'
-                    ? 'Drag from an anchor (•) to another node'
+                    ? t('studio.statusConnect')
                     : selectedEdge?.route === 'orthogonal'
-                      ? 'Drag square handles on the connection to move segments'
-                      : 'Double-click label · right-click connection for line style'}
+                      ? t('studio.statusOrthoSelected')
+                      : t('studio.statusDefault')}
           </span>
           {['box', 'person', 'system', 'database', 'note'].includes(tool) && (
-            <span className="meta">Click canvas to place</span>
+            <span className="meta">{t('studio.clickToPlace')}</span>
           )}
-          <span className="meta">Drop or paste images onto the canvas</span>
+          <span className="meta">{t('studio.dropPasteImages')}</span>
         </div>
       )}
 
@@ -1099,11 +1095,11 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
             className="bee-context-menu"
             style={menuStyle}
             role="menu"
-            aria-label={contextMenu.edgeId ? 'Connection options' : 'Diagram context menu'}
+            aria-label={contextMenu.edgeId ? t('studio.connectionOptions') : t('studio.diagramContextMenu')}
           >
             {contextMenu.edgeId ? (
               <>
-                <div className="bee-context-menu-heading">Connection</div>
+                <div className="bee-context-menu-heading">{t('studio.connection')}</div>
                 {BEE_EDGE_ROUTES.map((r) => {
                   const edge = doc.edges.find((x) => x.id === contextMenu.edgeId)
                   const current = edge?.route ?? 'straight'
@@ -1120,9 +1116,11 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                     >
                       <span className="bee-context-item-label">
                         {current === r.id ? '✓ ' : ''}
-                        {r.label}
+                        {t(`studio.routeLong.${r.id}` as MessageKey)}
                       </span>
-                      <span className="bee-context-item-hint">{r.hint}</span>
+                      <span className="bee-context-item-hint">
+                        {t(`studio.routeHint.${r.id}` as MessageKey)}
+                      </span>
                     </button>
                   )
                 })}
@@ -1140,8 +1138,8 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                       setContextMenu(null)
                     }}
                   >
-                    <span className="bee-context-item-label">Reset path</span>
-                    <span className="bee-context-item-hint">Clear custom bend points</span>
+                    <span className="bee-context-item-label">{t('studio.resetPath')}</span>
+                    <span className="bee-context-item-hint">{t('studio.resetPathHint')}</span>
                   </button>
                 )}
                 <button
@@ -1153,21 +1151,21 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                     setContextMenu(null)
                   }}
                 >
-                  <span className="bee-context-item-label">Delete connection</span>
-                  <span className="bee-context-item-hint">Remove this link</span>
+                  <span className="bee-context-item-label">{t('studio.deleteConnection')}</span>
+                  <span className="bee-context-item-hint">{t('studio.deleteConnectionHint')}</span>
                 </button>
               </>
             ) : (
               <>
-                <div className="bee-context-menu-heading">Add object</div>
-                {ADD_OBJECTS.map((item) => (
+                <div className="bee-context-menu-heading">{t('studio.addObject')}</div>
+                {ADD_OBJECTS.map((type) => (
                   <button
-                    key={item.type}
+                    key={type}
                     type="button"
                     role="menuitem"
                     className="bee-context-item"
                     onClick={() => {
-                      if (item.type === 'image') {
+                      if (type === 'image') {
                         dropWorldRef.current = {
                           x: contextMenu.worldX,
                           y: contextMenu.worldY,
@@ -1176,11 +1174,15 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                         pickImageFiles()
                         return
                       }
-                      placeObjectAt(item.type, contextMenu.worldX, contextMenu.worldY)
+                      placeObjectAt(type, contextMenu.worldX, contextMenu.worldY)
                     }}
                   >
-                    <span className="bee-context-item-label">{item.label}</span>
-                    <span className="bee-context-item-hint">{item.hint}</span>
+                    <span className="bee-context-item-label">
+                      {t(`studio.obj.${type}` as MessageKey)}
+                    </span>
+                    <span className="bee-context-item-hint">
+                      {t(`studio.objHint.${type}` as MessageKey)}
+                    </span>
                   </button>
                 ))}
                 {contextMenu.nodeId && (
@@ -1196,8 +1198,8 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                         if (id) beginLabelEdit(id)
                       }}
                     >
-                      <span className="bee-context-item-label">Edit label</span>
-                      <span className="bee-context-item-hint">Rename this object</span>
+                      <span className="bee-context-item-label">{t('studio.editLabel')}</span>
+                      <span className="bee-context-item-hint">{t('studio.editLabelHint')}</span>
                     </button>
                     <button
                       type="button"
@@ -1208,8 +1210,8 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                         setContextMenu(null)
                       }}
                     >
-                      <span className="bee-context-item-label">Delete object</span>
-                      <span className="bee-context-item-hint">Remove node &amp; links</span>
+                      <span className="bee-context-item-label">{t('studio.deleteObject')}</span>
+                      <span className="bee-context-item-hint">{t('studio.deleteObjectHint')}</span>
                     </button>
                   </>
                 )}
@@ -1220,18 +1222,15 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
 
         {!readOnly && (
           <aside className="bee-props card">
-            <h3>Properties</h3>
+            <h3>{t('studio.properties')}</h3>
             {!selected && !selectedEdge && (
-              <p className="muted sm">
-                Double-click a node to edit its label. Right-click a connection to change line style
-                (straight / curved / right-angle).
-              </p>
+              <p className="muted sm">{t('studio.propsEmptyHint')}</p>
             )}
             {selectedEdge && !selected && (
               <div className="stack">
-                <h4 className="bee-props-sub">Connection</h4>
+                <h4 className="bee-props-sub">{t('studio.connection')}</h4>
                 <label>
-                  Line style
+                  {t('studio.lineStyle')}
                   <select
                     value={selectedEdge.route ?? 'straight'}
                     onChange={(e) =>
@@ -1240,24 +1239,23 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                   >
                     {BEE_EDGE_ROUTES.map((r) => (
                       <option key={r.id} value={r.id}>
-                        {r.label}
+                        {t(`studio.routeLong.${r.id}` as MessageKey)}
                       </option>
                     ))}
                   </select>
                 </label>
                 <label>
-                  Label
+                  {t('studio.label')}
                   <input
                     value={selectedEdge.label ?? ''}
-                    placeholder="Edge label"
+                    placeholder={t('studio.edgeLabelPlaceholder')}
                     onChange={(e) => updateEdge(selectedEdge.id, { label: e.target.value })}
                   />
                 </label>
                 <p className="muted sm">
-                  {(selectedEdge.route ?? 'straight') === 'straight' && 'Direct line between anchors.'}
-                  {selectedEdge.route === 'curved' && 'Smooth curve leaving each anchor.'}
-                  {selectedEdge.route === 'orthogonal' &&
-                    '90° segments — drag the square handles on the line to reshape.'}
+                  {(selectedEdge.route ?? 'straight') === 'straight' && t('studio.routeDesc.straight')}
+                  {selectedEdge.route === 'curved' && t('studio.routeDesc.curved')}
+                  {selectedEdge.route === 'orthogonal' && t('studio.routeDesc.orthogonal')}
                 </p>
                 {selectedEdge.route === 'orthogonal' && (
                   <button
@@ -1267,7 +1265,7 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                       updateEdge(selectedEdge.id, { route: 'orthogonal', waypoints: undefined })
                     }
                   >
-                    Reset path bends
+                    {t('studio.resetPathBends')}
                   </button>
                 )}
                 <button
@@ -1275,14 +1273,14 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                   className="btn danger ghost sm"
                   onClick={() => deleteEdgeById(selectedEdge.id)}
                 >
-                  Delete connection
+                  {t('studio.deleteConnection')}
                 </button>
               </div>
             )}
             {selected && (
               <div className="stack">
                 <label>
-                  Label
+                  {t('studio.label')}
                   <div className="bee-label-row">
                     <input
                       value={labelEdit?.id === selected.id ? labelEdit.text : selected.label}
@@ -1312,32 +1310,32 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                     <button
                       type="button"
                       className="btn sm"
-                      title="Edit label on the shape (F2)"
+                      title={t('studio.inlineTip')}
                       onClick={() => beginLabelEdit(selected.id)}
                     >
-                      Inline
+                      {t('studio.inline')}
                     </button>
                   </div>
                 </label>
                 <label>
-                  Type
+                  {t('studio.type')}
                   <select
                     value={selected.type}
                     onChange={(e) =>
                       updateNode(selected.id, { type: e.target.value as BeeNodeType })
                     }
                   >
-                    <option value="box">Box</option>
-                    <option value="person">Person</option>
-                    <option value="system">System</option>
-                    <option value="database">Database</option>
-                    <option value="note">Note</option>
-                    <option value="image">Image</option>
+                    <option value="box">{t('studio.obj.box')}</option>
+                    <option value="person">{t('studio.obj.person')}</option>
+                    <option value="system">{t('studio.obj.system')}</option>
+                    <option value="database">{t('studio.obj.database')}</option>
+                    <option value="note">{t('studio.obj.note')}</option>
+                    <option value="image">{t('studio.obj.image')}</option>
                   </select>
                 </label>
                 {selected.type === 'image' && (
                   <label>
-                    Image URL
+                    {t('studio.imageUrl')}
                     <input
                       value={selected.imageUrl ?? ''}
                       placeholder="/uploads/…"
@@ -1380,11 +1378,11 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                       input.click()
                     }}
                   >
-                    Replace image…
+                    {t('studio.replaceImage')}
                   </button>
                 )}
                 <label>
-                  Color
+                  {t('studio.colour')}
                   <input
                     type="color"
                     value={selected.color || defaultColor(selected.type)}
@@ -1422,12 +1420,13 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                   </label>
                 </div>
                 <p className="muted sm">
-                  Grid {BEE_GRID_SIZE}px · snap {snapToGridEnabled ? 'on' : 'off'}
-                  {snapToGridEnabled ? ' (drag & place lock to cells)' : ''}.
+                  {snapToGridEnabled
+                    ? t('studio.gridSnapOn', { size: BEE_GRID_SIZE })
+                    : t('studio.gridSnapOff', { size: BEE_GRID_SIZE })}
                 </p>
-                <h4 className="bee-props-sub">Connections</h4>
+                <h4 className="bee-props-sub">{t('studio.connections')}</h4>
                 {doc.edges.filter((e) => e.from === selected.id || e.to === selected.id).length === 0 && (
-                  <p className="muted sm">No edges yet — drag an anchor to another node.</p>
+                  <p className="muted sm">{t('studio.noEdges')}</p>
                 )}
                 {doc.edges
                   .filter((e) => e.from === selected.id || e.to === selected.id)
@@ -1445,7 +1444,7 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                           </span>
                           <input
                             value={edge.label ?? ''}
-                            placeholder="Edge label"
+                            placeholder={t('studio.edgeLabelPlaceholder')}
                             onChange={(ev) =>
                               commit((prev) => ({
                                 ...prev,
@@ -1466,7 +1465,7 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
                             }))
                           }
                         >
-                          Unlink
+                          {t('studio.unlink')}
                         </button>
                       </div>
                     )
@@ -1476,11 +1475,11 @@ export function BeeDiagramEditor({ source, onChange, readOnly, compact }: Props)
             {!compact && (
               <>
                 <details className="bee-json">
-                  <summary>JSON source</summary>
+                  <summary>{t('studio.jsonSource')}</summary>
                   <pre>{serializeBeeDoc(doc)}</pre>
                 </details>
                 <div className="bee-mini-preview">
-                  <span className="meta">Thumbnail</span>
+                  <span className="meta">{t('studio.thumbnail')}</span>
                   <BeeDiagramView doc={doc} />
                 </div>
               </>

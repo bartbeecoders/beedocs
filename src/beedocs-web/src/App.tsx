@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router-dom'
 import { ThemeProvider } from './theme'
+import { I18nProvider } from './i18n'
+import { BrandingProvider } from './branding'
 import { WorkspaceProvider } from './workspace/WorkspaceContext'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { WorkspaceShell } from './components/WorkspaceShell'
@@ -89,7 +91,7 @@ const router = createBrowserRouter(
           element: <AuthGate />,
           children: [
             { path: '/', element: <WorkspaceShell /> },
-            { path: '/settings', element: <WorkspaceShell /> },
+            { path: '/settings/:tab?', element: <WorkspaceShell /> },
             { path: '/users', element: <WorkspaceShell /> },
             { path: '/stats', element: <WorkspaceShell /> },
             { path: '/help', element: <WorkspaceShell /> },
@@ -113,8 +115,14 @@ const router = createBrowserRouter(
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <RouterProvider router={router} />
-    </ThemeProvider>
+    <I18nProvider>
+      <ThemeProvider>
+        {/* Inside ThemeProvider (it feeds the Omarchy palette into the theme
+            layer), outside the router — the login screen needs branding too. */}
+        <BrandingProvider>
+          <RouterProvider router={router} />
+        </BrandingProvider>
+      </ThemeProvider>
+    </I18nProvider>
   )
 }

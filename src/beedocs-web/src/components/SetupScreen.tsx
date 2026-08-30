@@ -1,5 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n } from '../i18n'
+import { useBranding } from '../branding'
+import { withApiBase } from '../basePath'
 
 /**
  * The one-time first-run screen: an instance with no accounts is unclaimed, and
@@ -11,6 +14,8 @@ import { useAuth } from '../auth/AuthContext'
  */
 export function SetupScreen({ version }: { version?: string | null }) {
   const { setup } = useAuth()
+  const { t } = useI18n()
+  const { branding } = useBranding()
   const [username, setUsername] = useState('admin')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
@@ -25,7 +30,7 @@ export function SetupScreen({ version }: { version?: string | null }) {
     // The server only ever receives one of the two, so a typo would otherwise be
     // saved silently — and this is the one password nobody can reset for you.
     if (password !== confirm) {
-      setError('The two passwords do not match.')
+      setError(t('setup.mismatch'))
       return
     }
 
@@ -46,19 +51,22 @@ export function SetupScreen({ version }: { version?: string | null }) {
       <form className="login-card" onSubmit={submit}>
         <div className="login-brand">
           <span className="login-mark" aria-hidden>
-            🐝
+            {branding.logoUrl ? (
+              <img className="login-logo" src={withApiBase(branding.logoUrl)} alt="" />
+            ) : (
+              '🐝'
+            )}
           </span>
-          <span className="login-title">Welcome to BeeDocs</span>
+          <span className="login-title">{t('setup.welcome', { title: branding.title })}</span>
           {version && <span className="ws-version-pill">v{version}</span>}
         </div>
 
         <p className="muted sm login-lead">
-          This instance has no accounts yet. Create the administrator — you can add everyone else
-          from Settings afterwards.
+{t('setup.lead')}
         </p>
 
         <label className="login-field">
-          <span>Username</span>
+          <span>{t('auth.username')}</span>
           <input
             name="username"
             autoComplete="username"
@@ -71,7 +79,7 @@ export function SetupScreen({ version }: { version?: string | null }) {
         </label>
 
         <label className="login-field">
-          <span>Display name (optional)</span>
+          <span>{t('setup.displayName')}</span>
           <input
             name="displayName"
             autoComplete="name"
@@ -83,7 +91,7 @@ export function SetupScreen({ version }: { version?: string | null }) {
         </label>
 
         <label className="login-field">
-          <span>Password</span>
+          <span>{t('auth.password')}</span>
           <input
             type="password"
             name="password"
@@ -97,7 +105,7 @@ export function SetupScreen({ version }: { version?: string | null }) {
         </label>
 
         <label className="login-field">
-          <span>Repeat password</span>
+          <span>{t('setup.repeatPassword')}</span>
           <input
             type="password"
             autoComplete="new-password"
@@ -116,11 +124,11 @@ export function SetupScreen({ version }: { version?: string | null }) {
         )}
 
         <button type="submit" className="btn primary login-submit" disabled={busy}>
-          {busy ? 'Creating…' : 'Create account'}
+          {busy ? t('setup.creating') : t('setup.create')}
         </button>
 
         <p className="muted sm login-hint">
-          At least 8 characters. Nobody can reset this for you — there is no other account yet.
+{t('setup.hint')}
         </p>
       </form>
     </div>

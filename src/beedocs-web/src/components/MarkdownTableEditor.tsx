@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useI18n, type MessageKey, type TFunction } from '../i18n'
 import {
   isTreeDrag,
   markdownLinkForTreePayload,
@@ -44,6 +45,7 @@ type StylePopover = { r: number | 'h'; c: number; left: number; top: number } | 
  * equivalent.
  */
 export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
+  const { t } = useI18n()
   const [model, setModel] = useState<MarkdownTable | null>(() => parseMarkdownTable(raw))
   const [showSource, setShowSource] = useState(false)
   const [draft, setDraft] = useState(raw)
@@ -76,8 +78,8 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
   useEffect(() => {
     if (!stylePopover) return
     const onDown = (e: MouseEvent) => {
-      const t = e.target instanceof Element ? e.target : null
-      if (t?.closest('.md-table-stylepop, .md-table-stylebtn')) return
+      const target = e.target instanceof Element ? e.target : null
+      if (target?.closest('.md-table-stylepop, .md-table-stylebtn')) return
       setStylePopover(null)
     }
     const onKey = (e: KeyboardEvent) => {
@@ -202,7 +204,7 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
     return (
       <div className="md-table-editor" ref={rootRef}>
         <Chrome
-          summary={model ? summarize(model) : 'source'}
+          summary={model ? summarize(model, t) : t('editor.fence.source')}
           showSource
           canToggle={model != null}
           onToggleSource={() => setShowSource(false)}
@@ -215,7 +217,7 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
           spellCheck={false}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commitSource}
-          aria-label="Markdown table source"
+          aria-label={t('editor.table.sourceAria')}
         />
       </div>
     )
@@ -249,7 +251,7 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
   const addColumn = () =>
     commit({
       ...model,
-      header: [...model.header, `Column ${cols + 1}`],
+      header: [...model.header, t('editor.table.column', { n: cols + 1 })],
       align: [...model.align, null],
       rows: model.rows.map((row) => [...row, '']),
       headerStyles: [...model.headerStyles, null],
@@ -428,9 +430,11 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
       type="button"
       className="md-table-stylebtn"
       onClick={(e) => openStylePopover(e, r, c)}
-      title="Cell style"
+      title={t('editor.table.cellStyle')}
       aria-label={
-        r === 'h' ? `Style of column ${c + 1} header` : `Style of row ${r + 1}, column ${c + 1}`
+        r === 'h'
+          ? t('editor.table.styleHeaderAria', { n: c + 1 })
+          : t('editor.table.styleCellAria', { r: r + 1, c: c + 1 })
       }
       aria-expanded={stylePopover != null && stylePopover.r === r && stylePopover.c === c}
     />
@@ -439,11 +443,11 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
   return (
     <div className="md-table-editor" ref={rootRef}>
       <Chrome
-        summary={summarize(model)}
+        summary={summarize(model, t)}
         showSource={false}
         canToggle
         theme={model.theme}
-        onTheme={(t) => commit({ ...model, theme: t || null })}
+        onTheme={(th) => commit({ ...model, theme: th || null })}
         onToggleSource={() => {
           setDraft(serializeMarkdownTable(model))
           setShowSource(true)
@@ -483,16 +487,16 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
                           moveColumn(c, c + 2)
                         }
                       }}
-                      aria-label={`Move column ${c + 1}. Drag, or use arrow left and right.`}
-                      title="Drag to reorder · ← / → to move"
+                      aria-label={t('editor.table.moveColAria', { n: c + 1 })}
+                      title={t('editor.table.moveColTitle')}
                     >
                       <span aria-hidden="true">⠿</span>
                     </button>
                     <input
                       value={h}
-                      placeholder={`Column ${c + 1}`}
+                      placeholder={t('editor.table.column', { n: c + 1 })}
                       onChange={(e) => setHeader(c, e.target.value)}
-                      aria-label={`Header of column ${c + 1}`}
+                      aria-label={t('editor.table.headerAria', { n: c + 1 })}
                     />
                     {styleButton('h', c)}
                     <button
@@ -500,8 +504,8 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
                       className="md-table-x"
                       disabled={cols <= 1}
                       onClick={() => removeColumn(c)}
-                      title="Remove column"
-                      aria-label={`Remove column ${c + 1}`}
+                      title={t('editor.table.removeCol')}
+                      aria-label={t('editor.table.removeColAria', { n: c + 1 })}
                     >
                       ×
                     </button>
@@ -533,8 +537,8 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
                         moveRow(r, r + 2)
                       }
                     }}
-                    aria-label={`Move row ${r + 1}. Drag, or use arrow up and down.`}
-                    title="Drag to reorder · ↑ / ↓ to move"
+                    aria-label={t('editor.table.moveRowAria', { n: r + 1 })}
+                    title={t('editor.block.dragTitle')}
                   >
                     <span aria-hidden="true">⠿</span>
                   </button>
@@ -561,8 +565,8 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
                         if (e.key === 'Enter' && !e.shiftKey) e.preventDefault()
                       }}
                       spellCheck={false}
-                      aria-label={`Row ${r + 1}, column ${c + 1}`}
-                      title="Shift+Enter for a line break"
+                      aria-label={t('editor.table.cellAria', { r: r + 1, c: c + 1 })}
+                      title={t('editor.table.lineBreakTitle')}
                     />
                     {styleButton(r, c)}
                   </td>
@@ -572,8 +576,8 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
                     type="button"
                     className="md-table-x"
                     onClick={() => removeRow(r)}
-                    title="Remove row"
-                    aria-label={`Remove row ${r + 1}`}
+                    title={t('editor.table.removeRow')}
+                    aria-label={t('editor.table.removeRowAria', { n: r + 1 })}
                   >
                     ×
                   </button>
@@ -584,10 +588,10 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
         </table>
         <div className="md-table-footer">
           <button type="button" className="btn ghost sm" onClick={addRow}>
-            + Row
+            {t('editor.table.addRow')}
           </button>
           <button type="button" className="btn ghost sm" onClick={addColumn}>
-            + Column
+            {t('editor.table.addColumn')}
           </button>
         </div>
       </div>
@@ -596,37 +600,39 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
           className="md-table-stylepop"
           style={{ left: stylePopover.left, top: stylePopover.top }}
           role="menu"
-          aria-label="Cell style"
+          aria-label={t('editor.table.cellStyle')}
         >
-          {CELL_STYLES.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={popoverStyle === (s.id || null)}
-              className={
-                'md-table-swatch' +
-                (s.id ? ' ' + cellStyleClass(s.id) : ' md-table-swatch--none') +
-                (popoverStyle === (s.id || null) ? ' is-current' : '')
-              }
-              onClick={() => {
-                applyCellStyle(stylePopover, s.id)
-                setStylePopover(null)
-              }}
-              title={s.label}
-              aria-label={`Cell style: ${s.label}`}
-            />
-          ))}
+          {CELL_STYLES.map((s) => {
+            const styleLabel = t(`editor.table.cellStyle.${s.id || 'none'}` as MessageKey)
+            return (
+              <button
+                key={s.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={popoverStyle === (s.id || null)}
+                className={
+                  'md-table-swatch' +
+                  (s.id ? ' ' + cellStyleClass(s.id) : ' md-table-swatch--none') +
+                  (popoverStyle === (s.id || null) ? ' is-current' : '')
+                }
+                onClick={() => {
+                  applyCellStyle(stylePopover, s.id)
+                  setStylePopover(null)
+                }}
+                title={styleLabel}
+                aria-label={t('editor.table.cellStyleAria', { style: styleLabel })}
+              />
+            )
+          })}
         </div>
       )}
     </div>
   )
 }
 
-function summarize(t: MarkdownTable): string {
-  const cols = t.header.length
-  const rows = t.rows.length
-  return `${cols} column${cols === 1 ? '' : 's'} · ${rows} row${rows === 1 ? '' : 's'}`
+// The count phrasing sidesteps plural forms; the shape is the same in every language.
+function summarize(table: MarkdownTable, t: TFunction): string {
+  return t('editor.table.summary', { cols: table.header.length, rows: table.rows.length })
 }
 
 function Chrome({
@@ -648,10 +654,11 @@ function Chrome({
   onToggleSource: () => void
   onRemove: () => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="hybrid-fence-chrome">
       <div className="hybrid-fence-labels">
-        <span className="inline-diagram-badge">Table</span>
+        <span className="inline-diagram-badge">{t('editor.insert.table')}</span>
         <span className="muted sm">{summary}</span>
       </div>
       <div className="hybrid-fence-actions">
@@ -660,12 +667,12 @@ function Chrome({
             className="md-table-theme"
             value={theme ?? ''}
             onChange={(e) => onTheme(e.target.value)}
-            title="Table style"
-            aria-label="Table style"
+            title={t('editor.table.themeTitle')}
+            aria-label={t('editor.table.themeTitle')}
           >
-            {TABLE_THEMES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
+            {TABLE_THEMES.map((th) => (
+              <option key={th.id} value={th.id}>
+                {t(`editor.table.theme.${th.id || 'default'}` as MessageKey)}
               </option>
             ))}
           </select>
@@ -675,12 +682,17 @@ function Chrome({
           className="btn sm"
           disabled={showSource && !canToggle}
           onClick={onToggleSource}
-          title={showSource ? 'Back to the table designer' : 'Edit the Markdown source'}
+          title={showSource ? t('editor.table.toGridTitle') : t('editor.table.toSourceTitle')}
         >
-          {showSource ? 'Table' : 'Source'}
+          {showSource ? t('editor.insert.table') : t('editor.source')}
         </button>
-        <button type="button" className="btn ghost sm danger" onClick={onRemove} title="Remove table">
-          Remove
+        <button
+          type="button"
+          className="btn ghost sm danger"
+          onClick={onRemove}
+          title={t('editor.table.removeTable')}
+        >
+          {t('common.remove')}
         </button>
       </div>
     </div>

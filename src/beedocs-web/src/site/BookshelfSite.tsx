@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { withBase } from '../basePath'
+import { useI18n, type MessageKey, type TFunction } from '../i18n'
 import { MarkdownView } from '../components/MarkdownView'
 import { PageOutlineNav } from '../components/PageOutlineNav'
 import { bookshelfSitePath } from '../markdownLinks'
@@ -37,6 +38,15 @@ function withoutRedundantTitle(content: string, title: string): string {
   if (!match) return content
   if (match[1].trim().toLowerCase() !== title.trim().toLowerCase()) return content
   return content.slice(match[0].length)
+}
+
+/** Pick the .one/.other plural key for a count ("3 books", "1 result"). */
+function countLabel(
+  t: TFunction,
+  base: 'site.booksCount' | 'site.pagesCount' | 'site.resultsCount',
+  count: number,
+): string {
+  return t(`${base}.${count === 1 ? 'one' : 'other'}` as MessageKey, { count })
 }
 
 function flattenPages(site: SiteTree): FlatPage[] {
@@ -87,6 +97,7 @@ function buildResolver(site: SiteTree) {
 export function BookshelfSite() {
   const { shelfName = '', bookSlug, pageSlug } = useParams<RouteParams>()
   const navigate = useNavigate()
+  const { t } = useI18n()
   const { themeDef, setTheme, theme } = useTheme()
   const { authEnabled, needsLogin, user } = useAuth()
   const [site, setSite] = useState<SiteTree | null>(null)
@@ -176,7 +187,7 @@ export function BookshelfSite() {
   useEffect(() => {
     const previous = document.title
     if (!site) {
-      document.title = 'Bookshelf'
+      document.title = t('site.bookshelf')
       return () => {
         document.title = previous
       }
@@ -187,33 +198,37 @@ export function BookshelfSite() {
     return () => {
       document.title = previous
     }
-  }, [site, book, current])
+  }, [site, book, current, t])
 
   const cycleTheme = () => {
-    const i = THEMES.findIndex((t) => t.id === theme)
+    const i = THEMES.findIndex((th) => th.id === theme)
     setTheme(THEMES[(i + 1) % THEMES.length]!.id)
   }
 
   if (error && !site) {
+    // Split on the {name} token so the shelf name keeps its <code> styling in
+    // every language, wherever the sentence puts it.
+    const [leadBefore, leadAfter = ''] = t('site.notOnWebLead').split('{name}')
     return (
       <div className="bsite bsite--empty">
         <div className="bsite-missing">
           <p className="bsite-missing-mark" aria-hidden>
             📚
           </p>
-          <h1>This bookshelf is not on the web</h1>
+          <h1>{t('site.notOnWebTitle')}</h1>
           <p className="muted">
-            No published website matches <code>{decodeURIComponent(shelfName)}</code>. It may not
-            exist, or it has not been served as a website yet.
+            {leadBefore}
+            <code>{decodeURIComponent(shelfName)}</code>
+            {leadAfter}
           </p>
           <div className="bsite-missing-actions">
             {authEnabled && needsLogin && (
               <Link to="/" className="btn primary">
-                Sign in to preview
+                {t('site.signInToPreview')}
               </Link>
             )}
             <Link to="/" className="btn ghost">
-              Open workspace
+              {t('site.openWorkspace')}
             </Link>
           </div>
         </div>
@@ -224,7 +239,7 @@ export function BookshelfSite() {
   if (!site) {
     return (
       <div className="bsite bsite--empty">
-        <p className="muted">Loading website…</p>
+        <p className="muted">{t('site.loadingWebsite')}</p>
       </div>
     )
   }
@@ -243,7 +258,7 @@ export function BookshelfSite() {
             aria-controls="bsite-nav"
             onClick={() => setNavOpen((v) => !v)}
           >
-            {navOpen ? 'Close' : 'Menu'}
+            {navOpen ? t('common.close') : t('site.menu')}
           </button>
           <Link to={home} className="bsite-brand">
             <span className="bsite-brand-mark" aria-hidden>
@@ -256,22 +271,22 @@ export function BookshelfSite() {
               type="button"
               className="bsite-search-btn"
               onClick={() => setSearchOpen(true)}
-              title="Search this website (Ctrl+K)"
+              title={t('site.searchButtonTitle')}
             >
               <span aria-hidden>⌕</span>
-              <span className="bsite-search-label">Search</span>
+              <span className="bsite-search-label">{t('common.search')}</span>
               <kbd>Ctrl K</kbd>
             </button>
-            <button type="button" className="bsite-theme" onClick={cycleTheme} title="Switch theme">
+            <button type="button" className="bsite-theme" onClick={cycleTheme} title={t('site.switchTheme')}>
               {themeDef.label}
             </button>
             {canEdit && (
               <a
                 className="btn ghost sm"
                 href={withBase(`/shelves/${site.shelf.id}`)}
-                title="Open this shelf in the BeeDocs workspace"
+                title={t('site.openInWorkspace')}
               >
-                Workspace
+                {t('site.workspace')}
               </a>
             )}
             {user && <span className="bsite-user muted sm">{user.displayName || user.username}</span>}
@@ -280,8 +295,7 @@ export function BookshelfSite() {
 
         {!site.shelf.published && (
           <div className="bsite-preview-banner" role="status">
-            Preview — this bookshelf is not published as a public website yet. Visitors without a
-            session will not see it when sign-in is on.
+            {t('site.previewBanner')}
           </div>
         )}
 
@@ -290,7 +304,7 @@ export function BookshelfSite() {
             <button
               type="button"
               className="bsite-nav-backdrop"
-              aria-label="Close navigation"
+              aria-label={t('site.closeNav')}
               onClick={() => setNavOpen(false)}
             />
           )}
@@ -356,13 +370,14 @@ function SiteNav({
   expandedBooks: Set<string>
   onToggleBook: (id: string) => void
 }) {
+  const { t } = useI18n()
   const home = bookshelfSitePath(site.shelf.slug)
   return (
-    <nav className="bsite-toc" aria-label="Books on this shelf">
+    <nav className="bsite-toc" aria-label={t('site.navAria')}>
       <Link to={home} className={`bsite-toc-home${!bookSlug ? ' is-active' : ''}`}>
-        Overview
+        {t('site.overview')}
       </Link>
-      {site.books.length === 0 && <p className="muted sm">No books on this shelf yet.</p>}
+      {site.books.length === 0 && <p className="muted sm">{t('site.noBooksNav')}</p>}
       {site.books.map((book) => {
         const open = expandedBooks.has(book.id)
         const bookActive = book.slug === bookSlug && !pageSlug
@@ -432,6 +447,7 @@ function SiteNav({
 }
 
 function SiteHome({ site }: { site: SiteTree }) {
+  const { t } = useI18n()
   const pageCount = site.books.reduce(
     (n, b) => n + b.pages.length + b.chapters.reduce((m, c) => m + c.pages.length, 0),
     0,
@@ -439,17 +455,17 @@ function SiteHome({ site }: { site: SiteTree }) {
   return (
     <article className="bsite-article">
       <header className="bsite-hero">
-        <p className="bsite-kicker">Bookshelf</p>
+        <p className="bsite-kicker">{t('site.bookshelf')}</p>
         <h1>{site.shelf.title}</h1>
         {site.shelf.description && <p className="bsite-lead">{site.shelf.description}</p>}
         <p className="bsite-meta muted sm">
-          {site.books.length} {site.books.length === 1 ? 'book' : 'books'}
+          {countLabel(t, 'site.booksCount', site.books.length)}
           {' · '}
-          {pageCount} {pageCount === 1 ? 'page' : 'pages'}
+          {countLabel(t, 'site.pagesCount', pageCount)}
         </p>
       </header>
       {site.books.length === 0 ? (
-        <p className="muted">This bookshelf has no books yet.</p>
+        <p className="muted">{t('site.homeNoBooks')}</p>
       ) : (
         <ul className="bsite-book-grid">
           {site.books.map((book) => {
@@ -465,11 +481,11 @@ function SiteHome({ site }: { site: SiteTree }) {
                   <h2>{book.title}</h2>
                   {book.description && <p className="muted sm">{book.description}</p>}
                   <p className="bsite-card-meta">
-                    {count} {count === 1 ? 'page' : 'pages'}
+                    {countLabel(t, 'site.pagesCount', count)}
                     {first && (
                       <>
                         {' · '}
-                        Start with {first.page.title}
+                        {t('site.startWith', { title: first.page.title })}
                       </>
                     )}
                   </p>
@@ -484,6 +500,7 @@ function SiteHome({ site }: { site: SiteTree }) {
 }
 
 function SiteBookView({ site, book }: { site: SiteTree; book: BookshelfSiteBook }) {
+  const { t } = useI18n()
   const first = flattenPages({ shelf: site.shelf, books: [book] })[0]
   return (
     <article className="bsite-article">
@@ -498,14 +515,14 @@ function SiteBookView({ site, book }: { site: SiteTree; book: BookshelfSiteBook 
             className="btn primary"
             to={bookshelfSitePath(site.shelf.slug, book.slug, first.page.slug)}
           >
-            Start reading
+            {t('site.startReading')}
           </Link>
         )}
       </header>
       <section className="bsite-contents">
-        <h2>Contents</h2>
+        <h2>{t('site.contents')}</h2>
         {book.pages.length === 0 && book.chapters.length === 0 && (
-          <p className="muted">This book has no pages yet.</p>
+          <p className="muted">{t('site.bookNoPages')}</p>
         )}
         {book.pages.length > 0 && (
           <ol className="bsite-contents-list">
@@ -550,6 +567,7 @@ function SitePageView({
   prev?: FlatPage
   next?: FlatPage
 }) {
+  const { t } = useI18n()
   const [page, setPage] = useState<BookshelfSitePage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const articleRef = useRef<HTMLElement>(null)
@@ -587,7 +605,7 @@ function SitePageView({
   if (!page) {
     return (
       <article className="bsite-article">
-        <p className="muted">Loading page…</p>
+        <p className="muted">{t('site.loadingPage')}</p>
       </article>
     )
   }
@@ -613,15 +631,15 @@ function SitePageView({
             bookId={page.bookId}
           />
         ) : (
-          <p className="muted">This page is empty.</p>
+          <p className="muted">{t('site.pageEmpty')}</p>
         )}
-        <nav className="bsite-pager" aria-label="Page">
+        <nav className="bsite-pager" aria-label={t('common.page')}>
           {prev ? (
             <Link
               className="bsite-pager-link prev"
               to={bookshelfSitePath(shelfSlug, prev.book.slug, prev.page.slug)}
             >
-              <span className="muted sm">Previous</span>
+              <span className="muted sm">{t('site.previous')}</span>
               <span>{prev.page.title}</span>
             </Link>
           ) : (
@@ -632,7 +650,7 @@ function SitePageView({
               className="bsite-pager-link next"
               to={bookshelfSitePath(shelfSlug, next.book.slug, next.page.slug)}
             >
-              <span className="muted sm">Next</span>
+              <span className="muted sm">{t('site.next')}</span>
               <span>{next.page.title}</span>
             </Link>
           ) : (
@@ -660,6 +678,7 @@ function SiteSearch({
   onClose: () => void
   onOpen: (url: string) => void
 }) {
+  const { t } = useI18n()
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [response, setResponse] = useState<SearchResponse | null>(null)
@@ -706,15 +725,15 @@ function SiteSearch({
   const open = (hit: SearchHit) => onOpen(hit.url)
 
   return (
-    <div className="bsite-search" role="dialog" aria-label="Search this website">
-      <button type="button" className="bsite-search-backdrop" aria-label="Close search" onClick={onClose} />
+    <div className="bsite-search" role="dialog" aria-label={t('site.searchWebsite')}>
+      <button type="button" className="bsite-search-backdrop" aria-label={t('site.closeSearch')} onClick={onClose} />
       <div className="bsite-search-panel">
         <input
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search this website…"
-          aria-label="Search"
+          placeholder={t('site.searchPlaceholder')}
+          aria-label={t('common.search')}
           onKeyDown={(e) => {
             if (e.key === 'Escape') onClose()
             if (e.key === 'ArrowDown') {
@@ -730,11 +749,9 @@ function SiteSearch({
         />
         <div className="bsite-search-results">
           {error && <p className="banner error compact">{error}</p>}
-          {!query.trim() && <p className="muted sm">Search pages and books on this shelf.</p>}
+          {!query.trim() && <p className="muted sm">{t('site.searchHint')}</p>}
           {query.trim() && !error && response && hits.length === 0 && !busy && (
-            <p className="muted sm">
-              No matches for <strong>{query.trim()}</strong>.
-            </p>
+            <NoMatches text={t('site.noMatches')} query={query.trim()} />
           )}
           {hits.map((hit, i) => (
             <button
@@ -745,7 +762,7 @@ function SiteSearch({
               onMouseMove={() => setActive(i)}
               onClick={() => open(hit)}
             >
-              <span className="bsite-search-kind">{hit.kind}</span>
+              <span className="bsite-search-kind">{t(`site.kind.${hit.kind}` as MessageKey)}</span>
               <span className="bsite-search-hit-body">
                 <span className="bsite-search-title">{hit.title}</span>
                 {hit.snippet && (
@@ -760,9 +777,26 @@ function SiteSearch({
             </button>
           ))}
         </div>
-        <p className="bsite-search-foot muted sm">{busy ? 'Searching…' : response ? `${response.total} results` : ''}</p>
+        <p className="bsite-search-foot muted sm">
+          {busy ? t('site.searching') : response ? countLabel(t, 'site.resultsCount', response.total) : ''}
+        </p>
       </div>
     </div>
+  )
+}
+
+/**
+ * "No matches for <strong>query</strong>." — the message is split on its
+ * {query} token so the query keeps its emphasis wherever the sentence puts it.
+ */
+function NoMatches({ text, query }: { text: string; query: string }) {
+  const [before, after = ''] = text.split('{query}')
+  return (
+    <p className="muted sm">
+      {before}
+      <strong>{query}</strong>
+      {after}
+    </p>
   )
 }
 

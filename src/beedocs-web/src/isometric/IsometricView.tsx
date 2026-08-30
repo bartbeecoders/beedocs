@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useI18n } from '../i18n'
 import { IsoCanvas, type IsoCanvasHandle } from './IsoCanvas'
 import { useIsoController } from './useIsoController'
 
@@ -7,6 +8,7 @@ import { useIsoController } from './useIsoController'
  * accounts: pan and zoom stay available, editing does not.
  */
 export default function IsometricView({ source, title }: { source: string; title?: string }) {
+  const { t } = useI18n()
   const ctrl = useIsoController({ source, onChange: () => {}, readOnly: true })
   const canvasRef = useRef<IsoCanvasHandle>(null)
   const fitted = useRef(false)
@@ -20,7 +22,10 @@ export default function IsometricView({ source, title }: { source: string; title
   }, [])
 
   return (
-    <div className="iso-view" aria-label={title ? `Isometric diagram: ${title}` : 'Isometric diagram'}>
+    <div
+      className="iso-view"
+      aria-label={title ? t('isometric.view.diagramTitled', { title }) : t('isometric.view.diagram')}
+    >
       <IsoCanvas ref={canvasRef} ctrl={ctrl} />
     </div>
   )

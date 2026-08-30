@@ -20,6 +20,7 @@ import remarkGfm from 'remark-gfm'
 import mermaid from 'mermaid'
 import { api } from '../api'
 import { withApiBase } from '../basePath'
+import { useI18n } from '../i18n'
 import { replaceFenceBody, splitMarkdownSegments } from '../markdownFences'
 import { parsePageLayout, serializePageLayout } from '../pageLayout'
 import { isInternalDocHref } from '../markdownLinks'
@@ -113,6 +114,7 @@ function InlineShell({
   actions?: ReactNode
   children: ReactNode
 }) {
+  const { t } = useI18n()
   return (
     <figure className={`inline-diagram${editing ? ' is-editing' : ''}`}>
       <div className="inline-diagram-chrome">
@@ -124,7 +126,7 @@ function InlineShell({
           {actions}
           {onToggle && (
             <button type="button" className="btn sm" onClick={onToggle}>
-              {editing ? 'Done' : 'Edit'}
+              {editing ? t('common.done') : t('common.edit')}
             </button>
           )}
         </div>
@@ -151,6 +153,7 @@ function EditableMermaidFence({
   contentRef: React.MutableRefObject<string>
   onContentChange: (next: string) => void
 }) {
+  const { t } = useI18n()
   const [draft, setDraft] = useState(chart)
 
   useEffect(() => {
@@ -176,7 +179,7 @@ function EditableMermaidFence({
       actions={
         editing ? (
           <button type="button" className="btn primary sm" onClick={apply}>
-            Apply
+            {t('common.apply')}
           </button>
         ) : null
       }
@@ -188,7 +191,7 @@ function EditableMermaidFence({
           onChange={(e) => setDraft(e.target.value)}
           spellCheck={false}
           rows={Math.min(24, Math.max(8, draft.split('\n').length + 1))}
-          aria-label={`${fenceLang} source`}
+          aria-label={t('editor.fence.sourceAria', { lang: fenceLang })}
         />
       ) : fenceLang === 'plantuml' ? (
         <pre className="inline-diagram-readonly-source">{chart}</pre>
@@ -217,6 +220,7 @@ function InlineFreeDrawEditor({
   draft: string | undefined
   onDraftChange: (next: string) => void
 }) {
+  const { t } = useI18n()
   const live = draft ?? source
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -241,10 +245,10 @@ function InlineFreeDrawEditor({
     <figure className="inline-diagram is-editing inline-diagram--freedraw">
       <div className="inline-diagram-chrome">
         <div className="inline-diagram-labels">
-          <span className="inline-diagram-badge">Free draw</span>
-          <figcaption className="inline-diagram-title">Sketch pad</figcaption>
+          <span className="inline-diagram-badge">{t('editor.insert.freedraw')}</span>
+          <figcaption className="inline-diagram-title">{t('editor.freedraw.title')}</figcaption>
         </div>
-        <span className="muted sm">Pen · eraser · undo</span>
+        <span className="muted sm">{t('editor.freedraw.hint')}</span>
       </div>
       <div className="inline-diagram-body inline-diagram-body--freedraw">
         <FreeDrawCanvas source={live} onChange={commitSource} compact />
@@ -271,6 +275,7 @@ function InlineExcelGridEditor({
   draft: string | undefined
   onDraftChange: (next: string) => void
 }) {
+  const { t } = useI18n()
   const live = draft ?? source
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -295,10 +300,10 @@ function InlineExcelGridEditor({
     <figure className="inline-diagram is-editing inline-diagram--excelgrid">
       <div className="inline-diagram-chrome">
         <div className="inline-diagram-labels">
-          <span className="inline-diagram-badge">Spreadsheet</span>
-          <figcaption className="inline-diagram-title">Excel grid</figcaption>
+          <span className="inline-diagram-badge">{t('editor.insert.spreadsheet')}</span>
+          <figcaption className="inline-diagram-title">{t('editor.excelgrid.title')}</figcaption>
         </div>
-        <span className="muted sm">Cells · format · CSV</span>
+        <span className="muted sm">{t('editor.excelgrid.hint')}</span>
       </div>
       <div className="inline-diagram-body inline-diagram-body--excelgrid">
         <ExcelGridCanvas source={live} onChange={commitSource} compact />
@@ -323,6 +328,7 @@ function InlineBeeDiagramEditor({
   draft: string | undefined
   onDraftChange: (next: string) => void
 }) {
+  const { t } = useI18n()
   const live = draft ?? source
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -348,9 +354,9 @@ function InlineBeeDiagramEditor({
       <div className="inline-diagram-chrome">
         <div className="inline-diagram-labels">
           <span className="inline-diagram-badge">BeeDiagram</span>
-          <figcaption className="inline-diagram-title">Studio editor</figcaption>
+          <figcaption className="inline-diagram-title">{t('editor.studioEditor')}</figcaption>
         </div>
-        <span className="muted sm">Studio or Classic · palette · connections · format</span>
+        <span className="muted sm">{t('editor.studioHint')}</span>
       </div>
       <div className="inline-diagram-body inline-diagram-body--visual">
         <BeeDiagramWorkbench source={live} onChange={commitSource} />
@@ -373,6 +379,7 @@ function InlineBeeDiagramRefEditor({
   draft: string | undefined
   onDraftChange: (next: string) => void
 }) {
+  const { t } = useI18n()
   const [title, setTitle] = useState<string | null>(null)
   const [loadedSource, setLoadedSource] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -409,12 +416,12 @@ function InlineBeeDiagramRefEditor({
   }, [id, site.getDiagram])
 
   const persist = useCallback(async (nextSource: string) => {
-    const t = titleRef.current
-    if (!t) return
+    const currentTitle = titleRef.current
+    if (!currentTitle) return
     setSaving(true)
     setError(null)
     try {
-      const updated = await api.updateDiagram(id, { title: t, source: nextSource })
+      const updated = await api.updateDiagram(id, { title: currentTitle, source: nextSource })
       setLoadedSource(updated.source)
       latestSource.current = updated.source
       setSavedAt(new Date().toLocaleTimeString())
@@ -442,9 +449,9 @@ function InlineBeeDiagramRefEditor({
   }
 
   if (error && !loadedSource && !draft) {
-    return <div className="banner error">Diagram {id}: {error}</div>
+    return <div className="banner error">{t('editor.diagramError', { id, error })}</div>
   }
-  if (!loadedSource && !draft) return <p className="muted">Loading diagram…</p>
+  if (!loadedSource && !draft) return <p className="muted">{t('editor.loadingDiagram')}</p>
 
   const live = draft ?? loadedSource ?? ''
   const openHref = bookId ? `/books/${bookId}/diagrams/${id}` : undefined
@@ -463,20 +470,22 @@ function InlineBeeDiagramRefEditor({
       <div className="inline-diagram-chrome">
         <div className="inline-diagram-labels">
           <span className="inline-diagram-badge">BeeDiagram</span>
-          <figcaption className="inline-diagram-title">{title ?? 'Diagram'}</figcaption>
+          <figcaption className="inline-diagram-title">{title ?? t('common.diagram')}</figcaption>
         </div>
         <div className="inline-diagram-actions">
           <span className="inline-diagram-status-inline">
-            {saving && 'Saving…'}
-            {!saving && dirty && <span className="dirty-dot">Unsaved</span>}
-            {!saving && !dirty && savedAt && <span className="muted">Saved · {savedAt}</span>}
+            {saving && t('common.saving')}
+            {!saving && dirty && <span className="dirty-dot">{t('editor.unsaved')}</span>}
+            {!saving && !dirty && savedAt && (
+              <span className="muted">{t('editor.savedAt', { time: savedAt })}</span>
+            )}
           </span>
           <button type="button" className="btn primary sm" disabled={saving || !dirty} onClick={saveNow}>
-            {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+            {saving ? t('common.saving') : dirty ? t('common.save') : t('common.saved')}
           </button>
           {openHref && (
             <Link className="btn ghost sm" to={openHref}>
-              Full page
+              {t('editor.fullPage')}
             </Link>
           )}
         </div>
@@ -504,6 +513,7 @@ export function IsometricRefBlock({
   bookId?: string
   showOpenLink: boolean
 }) {
+  const { t } = useI18n()
   const [title, setTitle] = useState<string | null>(null)
   const [source, setSource] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -528,13 +538,9 @@ export function IsometricRefBlock({
   }, [id, getDiagram])
 
   if (error) {
-    return (
-      <div className="banner error">
-        Diagram {id}: {error}
-      </div>
-    )
+    return <div className="banner error">{t('editor.diagramError', { id, error })}</div>
   }
-  if (source === null) return <p className="muted">Loading diagram…</p>
+  if (source === null) return <p className="muted">{t('editor.loadingDiagram')}</p>
 
   const openHref = bookId ? `/books/${bookId}/diagrams/${id}` : undefined
   return (
@@ -544,12 +550,12 @@ export function IsometricRefBlock({
           <span>{title}</span>
           {showOpenLink && openHref && (
             <Link className="btn ghost sm" to={openHref}>
-              Open in editor
+              {t('editor.openInEditor')}
             </Link>
           )}
         </figcaption>
       )}
-      <Suspense fallback={<p className="muted">Loading isometric diagram…</p>}>
+      <Suspense fallback={<p className="muted">{t('editor.loadingIsometric')}</p>}>
         <IsometricView source={source} title={title ?? ''} />
       </Suspense>
     </figure>
@@ -672,6 +678,7 @@ const MarkdownBody = memo(function MarkdownBody({
   bookId,
   blockIndexOffset = 0,
 }: MarkdownBodyProps) {
+  const { t } = useI18n()
   const site = useMarkdownSite()
   const contentRef = useRef(content)
   contentRef.current = content
@@ -923,7 +930,7 @@ const MarkdownBody = memo(function MarkdownBody({
             'isometric',
             idx,
             <figure className="bee-embed isometric-embed">
-              <Suspense fallback={<p className="muted">Loading isometric diagram…</p>}>
+              <Suspense fallback={<p className="muted">{t('editor.loadingIsometric')}</p>}>
                 <IsometricView source={code} />
               </Suspense>
             </figure>,
@@ -998,6 +1005,7 @@ const MarkdownBody = memo(function MarkdownBody({
       outlineTargets,
       setBeeDraft,
       site,
+      t,
       toggleKey,
       wrapOutline,
     ],

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { useI18n, type TFunction } from '../i18n'
 import type { PageHistory, PageHistoryEntry, PageRevision } from '../types'
 import { MarkdownView } from './MarkdownView'
 
@@ -34,12 +35,12 @@ function formatChangedAt(value: string): string {
   })
 }
 
-function whoChanged(entry: PageHistoryEntry): string {
+function whoChanged(entry: PageHistoryEntry, t: TFunction): string {
   if (entry.changedByName) return entry.changedByName
   // Three different nobodies, and the distinction matters when auditing: a
   // change made by a machine, one made before sign-in was switched on, and a
   // revision that predates the log entirely.
-  return entry.changeKind === 'legacy' ? 'before history was kept' : 'unattributed'
+  return entry.changeKind === 'legacy' ? t('props.historyLegacy') : t('props.historyUnattributed')
 }
 
 /**
@@ -48,6 +49,7 @@ function whoChanged(entry: PageHistoryEntry): string {
  * change tracking switched on, each kept copy can be pulled up in full.
  */
 export function PageHistoryPanel({ pageId, version, updatedAt }: Props) {
+  const { t } = useI18n()
   const [history, setHistory] = useState<PageHistory | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** Entry whose full document is open in the viewer. */
@@ -76,15 +78,15 @@ export function PageHistoryPanel({ pageId, version, updatedAt }: Props) {
   if (error) {
     return (
       <p className="muted sm" role="alert">
-        History unavailable — {error}
+        {t('props.historyUnavailable', { error })}
       </p>
     )
   }
 
-  if (!history) return <p className="muted sm">Loading history…</p>
+  if (!history) return <p className="muted sm">{t('props.loadingHistory')}</p>
 
   if (history.entries.length === 0) {
-    return <p className="muted sm">No changes recorded yet.</p>
+    return <p className="muted sm">{t('props.noChangesYet')}</p>
   }
 
   // The synthetic "current:" entry has no revision row behind it, and the
@@ -99,13 +101,13 @@ export function PageHistoryPanel({ pageId, version, updatedAt }: Props) {
         {history.entries.map((entry) => {
           const row = (
             <>
-              <span className="page-history-version" title={`Version ${entry.version}`}>
+              <span className="page-history-version" title={t('props.versionTitle', { version: entry.version })}>
                 v{entry.version}
               </span>
               <span className="page-history-body">
-                <span className="page-history-who">{whoChanged(entry)}</span>
+                <span className="page-history-who">{whoChanged(entry, t)}</span>
                 <span className="muted sm">
-                  {entry.changeKind === 'created' ? 'created' : 'changed'}{' '}
+                  {entry.changeKind === 'created' ? t('props.createdWord') : t('props.changedWord')}{' '}
                   <time dateTime={entry.changedAt} title={new Date(entry.changedAt).toLocaleString()}>
                     {formatChangedAt(entry.changedAt)}
                   </time>
@@ -120,7 +122,7 @@ export function PageHistoryPanel({ pageId, version, updatedAt }: Props) {
                   type="button"
                   className="page-history-open"
                   onClick={() => setViewing(entry)}
-                  title="View this version"
+                  title={t('props.viewThisVersion')}
                 >
                   {row}
                 </button>
@@ -132,7 +134,7 @@ export function PageHistoryPanel({ pageId, version, updatedAt }: Props) {
         })}
       </ol>
       {history.trackChanges && history.entries.some(canView) && (
-        <p className="muted sm">Tracking is on — click a version to view that copy.</p>
+        <p className="muted sm">{t('props.trackingHint')}</p>
       )}
       {viewing && (
         <RevisionViewer pageId={pageId} entry={viewing} onClose={() => setViewing(null)} />
@@ -155,6 +157,7 @@ function RevisionViewer({
   entry: PageHistoryEntry
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const [revision, setRevision] = useState<PageRevision | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -189,28 +192,28 @@ function RevisionViewer({
       }}
       role="dialog"
       aria-modal="true"
-      aria-label={`Page version ${entry.version}`}
+      aria-label={t('props.pageVersionAria', { version: entry.version })}
     >
       <div className="modal modal--wide">
         <header className="modal-header">
           <h2>
             v{entry.version} · {revision?.title ?? entry.title}
           </h2>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
+          <button type="button" className="icon-btn" onClick={onClose} aria-label={t('common.close')}>
             ×
           </button>
         </header>
         <div className="modal-body">
           <p className="muted sm revision-meta">
-            {whoChanged(entry)} · {new Date(entry.changedAt).toLocaleString()} — read-only copy; the
-            live page is unaffected.
+            {whoChanged(entry, t)} · {new Date(entry.changedAt).toLocaleString()} —{' '}
+            {t('props.readOnlyCopy')}
           </p>
           {error && (
             <p className="users-error" role="alert">
               {error}
             </p>
           )}
-          {!revision && !error && <p className="muted sm">Loading version…</p>}
+          {!revision && !error && <p className="muted sm">{t('props.loadingVersion')}</p>}
           {revision && <MarkdownView content={revision.content} />}
         </div>
       </div>

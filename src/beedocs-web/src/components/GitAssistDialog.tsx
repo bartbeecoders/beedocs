@@ -1,30 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import { useI18n, type MessageKey } from '../i18n'
 import { bumpGitStatus } from '../hooks/useGitRepos'
 import { gitFilePath } from '../gitPaths'
+import { useWorkspace } from '../workspace/WorkspaceContext'
 import { MarkdownView } from './MarkdownView'
 import type { GitAssistKind, GitAssistResult, GitRepo } from '../types'
 import '../styles/git.css'
-
-const KIND_COPY: Record<GitAssistKind, { title: string; blurb: string }> = {
-  readme: {
-    title: 'Draft a README',
-    blurb: 'What the project is, how to build and run it, basic usage — grounded in the repo.',
-  },
-  documentation: {
-    title: 'Draft developer documentation',
-    blurb: 'Architecture overview, components and how they interact — for a developer new to the codebase.',
-  },
-  manual: {
-    title: 'Draft a user manual',
-    blurb: 'Getting started, features, how to accomplish the main tasks — for a user, not a developer.',
-  },
-  summary: {
-    title: 'Summarize the repository',
-    blurb: 'Purpose, tech stack, structure and notable details, in about a page.',
-  },
-}
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
@@ -47,6 +30,8 @@ export function GitAssistDialog({
   onClose: () => void
 }) {
   const navigate = useNavigate()
+  const { t } = useI18n()
+  const { shelves } = useWorkspace()
   const [instructions, setInstructions] = useState('')
   const [path, setPath] = useState('')
   const [result, setResult] = useState<GitAssistResult | null>(null)
@@ -54,9 +39,14 @@ export function GitAssistDialog({
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [background, setBackground] = useState(false)
+  const [publishBook, setPublishBook] = useState(false)
+  const [shelfId, setShelfId] = useState('')
+  const [starting, setStarting] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
 
-  const copy = KIND_COPY[kind]
+  const title = t(`gitadmin.assist.${kind}.title` as MessageKey)
+  const blurb = t(`gitadmin.assist.${kind}.blurb` as MessageKey)
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
@@ -89,6 +79,27 @@ export function GitAssistDialog({
       if (!ctrl.signal.aborted) setError(errText(e))
     } finally {
       if (abortRef.current === ctrl) setGenerating(false)
+    }
+  }
+
+  // The background path: the server answers immediately with a job row; the
+  // repo page's jobs panel is where progress and the finished draft live, so
+  // starting one lands the person there.
+  const startBackground = async () => {
+    setStarting(true)
+    setError(null)
+    try {
+      await api.startGitAssistJob(repo.id, {
+        kind,
+        instructions: instructions.trim() || undefined,
+        publishBook: publishBook || undefined,
+        shelfId: publishBook && shelfId ? shelfId : undefined,
+      })
+      onClose()
+      void navigate(`/git/${repo.id}`)
+    } catch (e) {
+      setError(errText(e))
+      setStarting(false)
     }
   }
 
@@ -130,43 +141,83 @@ export function GitAssistDialog({
         className="git-dialog git-assist-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label={copy.title}
+        aria-label={title}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <h3>
-          ✨ {copy.title} — {repo.name}
+          ✨ {title} — {repo.name}
         </h3>
-        <p className="muted sm">{copy.blurb}</p>
+        <p className="muted sm">{blurb}</p>
 
         {result === null ? (
           <>
             <label className="git-assist-field">
-              <span>Extra instructions (optional)</span>
+              <span>{t('gitadmin.extraInstructions')}</span>
               <textarea
                 rows={3}
-                placeholder="Audience, focus, tone, sections to include…"
+                placeholder={t('gitadmin.instructionsPlaceholder')}
                 value={instructions}
                 autoFocus
                 disabled={generating}
                 onChange={(e) => setInstructions(e.target.value)}
               />
             </label>
-            <p className="muted sm">
-              The server reads the repository (tree, README, manifests, docs, key sources) and asks
-              your default AI provider — configure providers under Settings → AI providers. Nothing
-              is written until you review and save the draft.
-            </p>
+            <p className="muted sm">{t('gitadmin.generateExplain')}</p>
+            <label className="check-row">
+              <input
+                type="checkbox"
+                checked={background}
+                disabled={generating || starting}
+                onChange={(e) => setBackground(e.target.checked)}
+              />
+              <span>{t('gitadmin.runInBackground')}</span>
+            </label>
+            <p className="muted sm settings-hint">{t('gitadmin.backgroundHint')}</p>
+            {background ? (
+              <>
+                <label className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={publishBook}
+                    disabled={starting}
+                    onChange={(e) => setPublishBook(e.target.checked)}
+                  />
+                  <span>{t('gitadmin.publishWhenDone')}</span>
+                </label>
+                {publishBook ? (
+                  <label className="git-assist-field">
+                    <span>{t('gitadmin.shelfForBook')}</span>
+                    <select
+                      value={shelfId}
+                      disabled={starting}
+                      onChange={(e) => setShelfId(e.target.value)}
+                    >
+                      <option value="">{t('gitadmin.libraryRoot')}</option>
+                      {shelves.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+              </>
+            ) : null}
           </>
         ) : (
           <>
             <p className="git-assist-meta muted sm">
               {result.providerName}
               {result.model ? ` · ${result.model}` : ''} · {(result.elapsedMs / 1000).toFixed(1)}s
-              {result.completionTokens != null ? ` · ${result.completionTokens} tokens` : ''} ·
-              grounded in {result.contextFiles.length} file
-              {result.contextFiles.length === 1 ? '' : 's'}
+              {result.completionTokens != null
+                ? ` · ${t('gitadmin.tokens', { count: result.completionTokens })}`
+                : ''}{' '}
+              ·{' '}
+              {result.contextFiles.length === 1
+                ? t('gitadmin.groundedIn.one', { count: result.contextFiles.length })
+                : t('gitadmin.groundedIn.other', { count: result.contextFiles.length })}
               <button type="button" className="btn ghost sm" onClick={() => setShowSource((v) => !v)}>
-                {showSource ? 'Preview' : 'Source'}
+                {showSource ? t('gitadmin.preview') : t('gitadmin.source')}
               </button>
             </p>
             <div className="git-assist-preview">
@@ -179,7 +230,7 @@ export function GitAssistDialog({
               )}
             </div>
             <label className="git-assist-field git-assist-path">
-              <span>Save in the repo as</span>
+              <span>{t('gitadmin.saveInRepoAs')}</span>
               <input
                 className="llm-mono"
                 spellCheck={false}
@@ -199,7 +250,7 @@ export function GitAssistDialog({
 
         <div className="git-dialog-actions">
           <button type="button" className="btn sm" disabled={saving} onClick={onClose}>
-            {result ? 'Discard' : 'Cancel'}
+            {result ? t('gitadmin.discard') : t('common.cancel')}
           </button>
           {result !== null ? (
             <>
@@ -209,7 +260,7 @@ export function GitAssistDialog({
                 disabled={generating || saving}
                 onClick={() => void navigator.clipboard?.writeText(result.markdown)}
               >
-                Copy Markdown
+                {t('gitadmin.copyMarkdown')}
               </button>
               <button
                 type="button"
@@ -220,7 +271,7 @@ export function GitAssistDialog({
                   setError(null)
                 }}
               >
-                Adjust &amp; regenerate
+                {t('gitadmin.adjustRegenerate')}
               </button>
               <button
                 type="button"
@@ -228,9 +279,18 @@ export function GitAssistDialog({
                 disabled={saving || path.trim() === ''}
                 onClick={() => void save()}
               >
-                {saving ? 'Saving…' : 'Save draft to repo'}
+                {saving ? t('common.saving') : t('gitadmin.saveDraftToRepo')}
               </button>
             </>
+          ) : background ? (
+            <button
+              type="button"
+              className="btn primary sm"
+              disabled={starting}
+              onClick={() => void startBackground()}
+            >
+              {starting ? t('gitadmin.starting') : t('gitadmin.startBackgroundJob')}
+            </button>
           ) : (
             <button
               type="button"
@@ -238,7 +298,7 @@ export function GitAssistDialog({
               disabled={generating}
               onClick={() => void generate()}
             >
-              {generating ? 'Generating… (can take a minute)' : 'Generate draft'}
+              {generating ? t('gitadmin.generating') : t('gitadmin.generateDraft')}
             </button>
           )}
         </div>

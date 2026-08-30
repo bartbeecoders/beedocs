@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n, type MessageKey, type TFunction } from '../i18n'
 import type { InstanceStats } from '../types'
 
 const WINDOWS = [14, 30, 90]
@@ -22,8 +23,13 @@ function formatInt(n: number): string {
   return n.toLocaleString()
 }
 
-function plural(n: number, singular: string, pluralForm = `${singular}s`): string {
-  return `${formatInt(n)} ${n === 1 ? singular : pluralForm}`
+type CountKind = 'page' | 'diagram' | 'slideDeck' | 'file' | 'book' | 'shelf' | 'document'
+
+/** "3 pages" via the stats.count.* .one/.other key pairs. */
+function plural(t: TFunction, kind: CountKind, n: number): string {
+  return t(`stats.count.${kind}.${n === 1 ? 'one' : 'other'}` as MessageKey, {
+    count: formatInt(n),
+  })
 }
 
 /** "2026-08-15" → "Aug 15" in the viewer's locale. */
@@ -47,6 +53,7 @@ function formatWhen(value: string): string {
  */
 export function StatsPage() {
   const { authEnabled, canManageUsers } = useAuth()
+  const { t } = useI18n()
   const [days, setDays] = useState(30)
   const [stats, setStats] = useState<InstanceStats | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -69,15 +76,16 @@ export function StatsPage() {
   return (
     <div className="settings-panel stats-page">
       <header className="settings-header">
-        <h1>Statistics</h1>
-        <p className="muted">What this instance holds, and who has been writing to it.</p>
+        <h1>{t('stats.title')}</h1>
+        <p className="muted">{t('stats.lead')}</p>
       </header>
 
       {blocked ? (
         <section className="settings-section">
           <p className="muted sm">
-            Only an admin can see instance statistics — the activity list names who works on what.
-            Per-book numbers are on each book&apos;s <Link to="/">overview page</Link>.
+            {t('stats.adminOnly')} {t('stats.perBookPrefix')}{' '}
+            <Link to="/">{t('stats.overviewPage')}</Link>
+            {t('stats.perBookSuffix')}
           </p>
         </section>
       ) : error ? (
@@ -88,47 +96,50 @@ export function StatsPage() {
         </section>
       ) : !stats ? (
         <section className="settings-section">
-          <p className="muted sm">Loading statistics…</p>
+          <p className="muted sm">{t('stats.loading')}</p>
         </section>
       ) : (
         <>
-          <section className="settings-section stats-tiles" aria-label="Totals">
+          <section className="settings-section stats-tiles" aria-label={t('stats.totals')}>
             <div className="stats-tile">
               <span className="stats-tile-value">{formatInt(stats.documents.total)}</span>
-              <span className="stats-tile-label">Documents</span>
+              <span className="stats-tile-label">{t('stats.documents')}</span>
               <span className="stats-tile-detail muted sm">
-                {plural(stats.documents.pages, 'page')} · {plural(stats.documents.diagrams, 'diagram')} ·{' '}
-                {plural(stats.documents.slideDecks, 'slide deck')} ·{' '}
-                {plural(stats.documents.attachments, 'file')}
+                {plural(t, 'page', stats.documents.pages)} ·{' '}
+                {plural(t, 'diagram', stats.documents.diagrams)} ·{' '}
+                {plural(t, 'slideDeck', stats.documents.slideDecks)} ·{' '}
+                {plural(t, 'file', stats.documents.attachments)}
               </span>
               <span className="stats-tile-detail muted sm">
-                in {plural(stats.documents.books, 'book')}
+                {t('stats.inBooks', { books: plural(t, 'book', stats.documents.books) })}
                 {stats.documents.shelves > 0 &&
-                  ` on ${plural(stats.documents.shelves, 'shelf', 'shelves')}`}
+                  ` ${t('stats.onShelves', { shelves: plural(t, 'shelf', stats.documents.shelves) })}`}
               </span>
             </div>
             <div className="stats-tile">
               <span className="stats-tile-value">{formatBytes(stats.storage.contentBytes)}</span>
-              <span className="stats-tile-label">Document content</span>
+              <span className="stats-tile-label">{t('stats.contentLabel')}</span>
               <span className="stats-tile-detail muted sm">
-                + {formatBytes(stats.storage.revisionBytes)} of page history
+                {t('stats.revisionDetail', { size: formatBytes(stats.storage.revisionBytes) })}
               </span>
             </div>
             <div className="stats-tile">
               <span className="stats-tile-value">{formatBytes(stats.storage.databaseBytes)}</span>
-              <span className="stats-tile-label">Database on disk</span>
-              <span className="stats-tile-detail muted sm">SQLite file incl. WAL</span>
+              <span className="stats-tile-label">{t('stats.databaseLabel')}</span>
+              <span className="stats-tile-detail muted sm">{t('stats.databaseDetail')}</span>
             </div>
             <div className="stats-tile">
               <span className="stats-tile-value">{formatBytes(stats.storage.uploadsBytes)}</span>
-              <span className="stats-tile-label">Uploads</span>
-              <span className="stats-tile-detail muted sm">Images embedded in pages</span>
+              <span className="stats-tile-label">{t('stats.uploadsLabel')}</span>
+              <span className="stats-tile-detail muted sm">{t('stats.uploadsDetail')}</span>
             </div>
             <div className="stats-tile">
               <span className="stats-tile-value">{formatBytes(stats.storage.attachmentBytes)}</span>
-              <span className="stats-tile-label">Attached files</span>
+              <span className="stats-tile-label">{t('stats.attachmentsLabel')}</span>
               <span className="stats-tile-detail muted sm">
-                {plural(stats.documents.attachments, 'document')} filed in books
+                {t('stats.attachmentsDetail', {
+                  count: plural(t, 'document', stats.documents.attachments),
+                })}
               </span>
             </div>
           </section>
@@ -136,17 +147,15 @@ export function StatsPage() {
           <section className="settings-section">
             <div className="stats-chart-head">
               <div>
-                <h3>Activity per day</h3>
-                <p className="muted sm">
-                  New documents, and documents changed — one count per page per editing sitting.
-                </p>
+                <h3>{t('stats.activityTitle')}</h3>
+                <p className="muted sm">{t('stats.activityLead')}</p>
               </div>
               <label className="stats-window">
-                <span className="muted sm">Window</span>
+                <span className="muted sm">{t('stats.window')}</span>
                 <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
                   {WINDOWS.map((w) => (
                     <option key={w} value={w}>
-                      {w} days
+                      {t('stats.daysOption', { count: w })}
                     </option>
                   ))}
                 </select>
@@ -156,23 +165,20 @@ export function StatsPage() {
           </section>
 
           <section className="settings-section">
-            <h3>Authors</h3>
-            <p className="muted sm">
-              From the page change log. A change is an editing sitting — rapid auto-saves count
-              once. Diagram and slide edits keep no log yet, so they are not listed here.
-            </p>
+            <h3>{t('stats.authors')}</h3>
+            <p className="muted sm">{t('stats.authorsLead')}</p>
             {stats.users.length === 0 ? (
-              <p className="muted sm">No page changes recorded yet.</p>
+              <p className="muted sm">{t('stats.noChanges')}</p>
             ) : (
               <div className="stats-table-wrap">
                 <table className="stats-table">
                   <thead>
                     <tr>
-                      <th>Author</th>
-                      <th className="num">Last {stats.windowDays} days</th>
-                      <th className="num">All time</th>
-                      <th className="num">Pages touched</th>
-                      <th>Last active</th>
+                      <th>{t('stats.author')}</th>
+                      <th className="num">{t('stats.lastNDays', { count: stats.windowDays })}</th>
+                      <th className="num">{t('stats.allTime')}</th>
+                      <th className="num">{t('stats.pagesTouched')}</th>
+                      <th>{t('stats.lastActive')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -181,7 +187,7 @@ export function StatsPage() {
                         <td>
                           {u.name}
                           {u.userId === null && (
-                            <span className="muted sm"> (no account)</span>
+                            <span className="muted sm"> {t('stats.noAccount')}</span>
                           )}
                         </td>
                         <td className="num">{formatInt(u.changesInWindow)}</td>
@@ -197,7 +203,7 @@ export function StatsPage() {
           </section>
 
           <p className="muted sm stats-generated">
-            Snapshot taken {formatWhen(stats.generatedAt)} · days are UTC
+            {t('stats.snapshot', { when: formatWhen(stats.generatedAt) })}
           </p>
         </>
       )}
@@ -211,6 +217,7 @@ export function StatsPage() {
  * tooltip do not justify a dependency.
  */
 function ActivityChart({ stats }: { stats: InstanceStats }) {
+  const { t } = useI18n()
   const [hover, setHover] = useState<number | null>(null)
   const days = stats.activity
   const max = Math.max(1, ...days.map((d) => Math.max(d.created, d.updated)))
@@ -220,14 +227,16 @@ function ActivityChart({ stats }: { stats: InstanceStats }) {
     <div>
       <div className="stats-legend" aria-hidden>
         <span className="stats-legend-item">
-          <span className="stats-swatch created" /> Created
+          <span className="stats-swatch created" /> {t('stats.created')}
         </span>
         <span className="stats-legend-item">
-          <span className="stats-swatch updated" /> Updated
+          <span className="stats-swatch updated" /> {t('stats.updated')}
         </span>
-        <span className="muted sm stats-legend-max">max {formatInt(max)}/day</span>
+        <span className="muted sm stats-legend-max">
+          {t('stats.maxPerDay', { count: formatInt(max) })}
+        </span>
       </div>
-      <div className="stats-chart" role="img" aria-label="Documents created and updated per day">
+      <div className="stats-chart" role="img" aria-label={t('stats.chartAria')}>
         {hovered && hover !== null && (
           <div
             className="stats-tooltip"
@@ -235,10 +244,12 @@ function ActivityChart({ stats }: { stats: InstanceStats }) {
           >
             <strong>{formatDay(hovered.day)}</strong>
             <span>
-              <span className="stats-swatch created" /> {formatInt(hovered.created)} created
+              <span className="stats-swatch created" />{' '}
+              {t('stats.createdCount', { count: formatInt(hovered.created) })}
             </span>
             <span>
-              <span className="stats-swatch updated" /> {formatInt(hovered.updated)} updated
+              <span className="stats-swatch updated" />{' '}
+              {t('stats.updatedCount', { count: formatInt(hovered.updated) })}
             </span>
           </div>
         )}

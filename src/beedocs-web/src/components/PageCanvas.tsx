@@ -9,6 +9,7 @@ import {
   type PageViewMode,
 } from '../workspace/pageViewPrefs'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n, type MessageKey } from '../i18n'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { Page } from '../types'
 import { HybridPageEditor } from './HybridPageEditor'
@@ -58,6 +59,7 @@ export function PageCanvas({ onStateChange }: Props) {
   const { renameInTree, deletePage: deleteFromTree } = useWorkspace()
   const { showPreviewDefault, autoSaveEnabled } = useTheme()
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   const [page, setPage] = useState<Page | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -223,7 +225,7 @@ export function PageCanvas({ onStateChange }: Props) {
   }, [])
 
   const remove = async () => {
-    if (!confirm('Delete this page?')) return
+    if (!confirm(t('canvas.deletePageConfirm'))) return
     await deleteFromTree(pageId, bookId)
     void navigate(`/books/${bookId}`)
   }
@@ -275,17 +277,17 @@ export function PageCanvas({ onStateChange }: Props) {
     return <div className="canvas-message error">{error}</div>
   }
   if (!page) {
-    return <div className="canvas-message muted">Loading page…</div>
+    return <div className="canvas-message muted">{t('canvas.loadingPage')}</div>
   }
 
   const statusLabel = saving
-    ? 'Saving…'
+    ? t('common.saving')
     : dirty
       ? autoSaveEnabled
-        ? 'Unsaved · auto-save pending'
-        : 'Unsaved'
+        ? t('canvas.unsavedAutoSave')
+        : t('canvas.unsaved')
       : savedAt
-        ? `Saved · ${savedAt}`
+        ? t('canvas.savedAt', { time: savedAt })
         : null
 
   const showOutline = mode !== 'source'
@@ -302,7 +304,7 @@ export function PageCanvas({ onStateChange }: Props) {
                 setTitle(next)
                 setDirty(true)
               }}
-              placeholder="Page title"
+              placeholder={t('canvas.pageTitlePlaceholder')}
             />
           ) : (
             <span className="canvas-title">{title}</span>
@@ -313,50 +315,35 @@ export function PageCanvas({ onStateChange }: Props) {
               <span className={dirty && !saving ? 'dirty-dot' : undefined}>· {statusLabel}</span>
             )}
             {autoSaveEnabled && canWrite && (
-              <span className="muted save-hint" title="Ctrl/Cmd+S to save immediately">
-                · auto-save on
+              <span className="muted save-hint" title={t('canvas.saveShortcutHint')}>
+                · {t('canvas.autoSaveOn')}
               </span>
             )}
           </div>
         </div>
         <div className="toolbar-group">
           {!canWrite && (
-            <span className="ws-theme-pill" title="Your account has read-only access">
-              Read-only
+            <span className="ws-theme-pill" title={t('canvas.readOnlyHint')}>
+              {t('canvas.readOnly')}
             </span>
           )}
           {canWrite && (
             <>
               <div className="segmented">
-                {(
-                  [
-                    { id: 'edit' as const, label: 'edit' },
-                    { id: 'source' as const, label: 'source' },
-                    { id: 'split' as const, label: 'split' },
-                    { id: 'preview' as const, label: 'preview' },
-                  ] as const
-                ).map((m) => (
+                {(['edit', 'source', 'split', 'preview'] as const).map((m) => (
                   <button
-                    key={m.id}
+                    key={m}
                     type="button"
-                    className={mode === m.id ? 'active' : ''}
-                    onClick={() => setMode(m.id)}
-                    title={
-                      m.id === 'edit'
-                        ? 'Visual page edit — diagrams are canvases on the page'
-                        : m.id === 'source'
-                          ? 'Raw Markdown only'
-                          : m.id === 'split'
-                            ? 'Visual edit + live preview'
-                            : 'Rendered preview'
-                    }
+                    className={mode === m ? 'active' : ''}
+                    onClick={() => setMode(m)}
+                    title={t(`canvas.modeHint.${m}` as MessageKey)}
                   >
-                    {m.label}
+                    {t(`canvas.mode.${m}` as MessageKey)}
                   </button>
                 ))}
               </div>
               <button type="button" className="btn primary sm" disabled={saving || !dirty} onClick={() => void save()}>
-                {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+                {saving ? t('common.saving') : dirty ? t('common.save') : t('common.saved')}
               </button>
             </>
           )}
@@ -377,7 +364,7 @@ export function PageCanvas({ onStateChange }: Props) {
                 content={content}
                 bookId={bookId}
                 pageId={pageId}
-                placeholder="Write Markdown… or use Add to insert sections and diagrams."
+                placeholder={t('canvas.pageEditorPlaceholder')}
                 onChange={(next) => {
                   setContent(next)
                   setDirty(true)
@@ -394,7 +381,7 @@ export function PageCanvas({ onStateChange }: Props) {
                 setDirty(true)
               }}
               spellCheck={false}
-              placeholder="Raw Markdown source…"
+              placeholder={t('canvas.sourcePlaceholder')}
             />
           )}
           {(mode === 'preview' || mode === 'split') && (

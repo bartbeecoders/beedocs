@@ -5,6 +5,7 @@ import type { Shelf, StorageProvider } from '../types'
 import { withBase } from '../basePath'
 import { bookshelfSitePath } from '../markdownLinks'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n } from '../i18n'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
@@ -50,6 +51,7 @@ export function PropertiesPane({
 }: Props) {
   const { bookId, shelfId } = useParams()
   const { canWrite, authEnabled, canManageUsers, user } = useAuth()
+  const { t } = useI18n()
   const { books, shelves, setShelfPublished } = useWorkspace()
   const book = books.find((b) => b.id === bookId)
   const shelf = shelves.find((s) => s.id === shelfId)
@@ -57,23 +59,20 @@ export function PropertiesPane({
   if (view === 'help') {
     return (
       <div className="props-pane">
-        <h3>About &amp; Help</h3>
-        <p className="muted sm">
-          Workspace guide, diagram shortcuts, and how to connect an AI agent to this instance over
-          MCP.
-        </p>
+        <h3>{t('props.helpTitle')}</h3>
+        <p className="muted sm">{t('props.helpLead')}</p>
         <ul className="props-links">
           <li>
-            <a href="#help-mcp">Connect an AI agent (MCP)</a>
+            <a href="#help-mcp">{t('props.helpLinkMcp')}</a>
           </li>
           <li>
-            <a href="#help-diagrams">Diagrams</a>
+            <a href="#help-diagrams">{t('common.diagrams')}</a>
           </li>
           <li>
-            <a href="#help-shortcuts">Keyboard shortcuts</a>
+            <a href="#help-shortcuts">{t('props.helpLinkShortcuts')}</a>
           </li>
           <li>
-            <a href="#help-troubleshooting">Troubleshooting</a>
+            <a href="#help-troubleshooting">{t('props.helpLinkTroubleshooting')}</a>
           </li>
         </ul>
       </div>
@@ -83,10 +82,8 @@ export function PropertiesPane({
   if (view === 'settings') {
     return (
       <div className="props-pane">
-        <h3>Settings</h3>
-        <p className="muted sm">
-          Theme, density, and editor defaults are configured in the center panel.
-        </p>
+        <h3>{t('common.settings')}</h3>
+        <p className="muted sm">{t('props.settingsLead')}</p>
       </div>
     )
   }
@@ -94,11 +91,8 @@ export function PropertiesPane({
   if (view === 'users') {
     return (
       <div className="props-pane">
-        <h3>Users</h3>
-        <p className="muted sm">
-          Accounts and roles are managed in the center panel. Only admins can make changes; your
-          own password lives in Settings.
-        </p>
+        <h3>{t('common.users')}</h3>
+        <p className="muted sm">{t('props.usersLead')}</p>
       </div>
     )
   }
@@ -106,11 +100,8 @@ export function PropertiesPane({
   if (view === 'stats') {
     return (
       <div className="props-pane">
-        <h3>Statistics</h3>
-        <p className="muted sm">
-          Instance-wide totals and activity. Per-book numbers live on each book&apos;s overview
-          page; page-level history is in the History list of each page.
-        </p>
+        <h3>{t('props.statsTitle')}</h3>
+        <p className="muted sm">{t('props.statsLead')}</p>
       </div>
     )
   }
@@ -126,37 +117,37 @@ export function PropertiesPane({
       canWrite && (canManageUsers || (!!user?.id && user.id === (p?.ownerId ?? null)))
     return (
       <div className="props-pane">
-        <h3>Page</h3>
-        <Field label="Title">
+        <h3>{t('common.page')}</h3>
+        <Field label={t('common.title')}>
           {canWrite ? (
             <SyncedInput value={pageState.title} onValueChange={pageState.setTitle} />
           ) : (
             <span>{pageState.title}</span>
           )}
         </Field>
-        <Field label="Slug">
+        <Field label={t('props.slug')}>
           <code className="mono-block">{p?.slug ?? '—'}</code>
         </Field>
-        <Field label="Version">
+        <Field label={t('props.version')}>
           <span>{p?.version ?? '—'}</span>
         </Field>
-        <Field label="Owner">
+        <Field label={t('common.owner')}>
           <OwnerField
             value={pageState.ownerId}
             fallbackName={p?.ownerName}
             onChange={pageState.setOwnerId}
           />
         </Field>
-        <Field label="Updated">
+        <Field label={t('props.updated')}>
           <span className="sm">{p ? new Date(p.updatedAt).toLocaleString() : '—'}</span>
         </Field>
         {p?.updatedByName && (
-          <Field label="Last changed by">
+          <Field label={t('props.lastChangedBy')}>
             <span className="sm">{p.updatedByName}</span>
           </Field>
         )}
         {canConfigureTracking ? (
-          <Field label="Track changes">
+          <Field label={t('props.trackChanges')}>
             <div className="props-tracking">
               <label className="check-row">
                 <input
@@ -164,11 +155,11 @@ export function PropertiesPane({
                   checked={pageState.trackChanges}
                   onChange={(e) => pageState.setTrackChanges(e.target.checked)}
                 />
-                <span className="sm">Keep every saved version</span>
+                <span className="sm">{t('props.keepEveryVersion')}</span>
               </label>
               {pageState.trackChanges && (
                 <label className="props-tracking-limit">
-                  <span className="sm">Copies to keep</span>
+                  <span className="sm">{t('props.copiesToKeep')}</span>
                   <input
                     type="number"
                     min={0}
@@ -179,24 +170,26 @@ export function PropertiesPane({
                       pageState.setMaxRevisions(Number.isFinite(n) && n > 0 ? n : 0)
                     }}
                   />
-                  <span className="muted sm">0 = unlimited</span>
+                  <span className="muted sm">{t('props.zeroUnlimited')}</span>
                 </label>
               )}
-              <p className="muted sm">Applies when you save the page.</p>
+              <p className="muted sm">{t('props.appliesOnSave')}</p>
             </div>
           </Field>
         ) : (
           p?.trackChanges && (
-            <Field label="Track changes">
+            <Field label={t('props.trackChanges')}>
               <span className="sm">
-                On{p.maxRevisions > 0 ? ` · keeps ${p.maxRevisions} copies` : ' · unlimited copies'}
-                <span className="muted sm"> — only the owner can change this</span>
+                {p.maxRevisions > 0
+                  ? t('props.trackOnKeeps', { count: p.maxRevisions })
+                  : t('props.trackOnUnlimited')}
+                <span className="muted sm"> {t('props.ownerOnlyChange')}</span>
               </span>
             </Field>
           )
         )}
         <div className="props-hint">
-          <h4>History</h4>
+          <h4>{t('props.history')}</h4>
           <PageHistoryPanel pageId={p?.id ?? ''} version={p?.version} updatedAt={p?.updatedAt} />
         </div>
         {/* View mode, saving and the how-to-add-content note are all about
@@ -204,15 +197,15 @@ export function PropertiesPane({
             it cannot act on. */}
         {canWrite && (
           <>
-            <Field label="View mode">
+            <Field label={t('props.viewMode')}>
               <select
                 value={pageState.mode}
                 onChange={(e) => pageState.setMode(e.target.value as PageEditorState['mode'])}
               >
-                <option value="edit">Edit (visual diagrams)</option>
-                <option value="source">Source (raw Markdown)</option>
-                <option value="split">Split</option>
-                <option value="preview">Preview</option>
+                <option value="edit">{t('props.modeEdit')}</option>
+                <option value="source">{t('props.modeSource')}</option>
+                <option value="split">{t('props.modeSplit')}</option>
+                <option value="preview">{t('props.modePreview')}</option>
               </select>
             </Field>
             <div className="props-actions">
@@ -222,23 +215,19 @@ export function PropertiesPane({
                 disabled={pageState.saving || !pageState.dirty}
                 onClick={() => void pageState.save()}
               >
-                {pageState.saving ? 'Saving…' : 'Save page'}
+                {pageState.saving ? t('common.saving') : t('props.savePage')}
               </button>
               <button
                 type="button"
                 className="btn danger ghost sm"
                 onClick={() => void pageState.deletePage()}
               >
-                Delete
+                {t('common.delete')}
               </button>
             </div>
             <div className="props-hint">
-              <h4>Add content</h4>
-              <p className="muted sm">
-                In <strong>edit</strong> mode use the sticky <strong>Add</strong> bar (or{' '}
-                <strong>+</strong> between blocks): sections, lists, tables, BeeDiagram, Mermaid.
-                Linked diagrams are book entities; inline BeeDiagram lives only on this page.
-              </p>
+              <h4>{t('props.addContent')}</h4>
+              <p className="muted sm">{t('props.addContentHint')}</p>
             </div>
           </>
         )}
@@ -250,22 +239,22 @@ export function PropertiesPane({
     const d = diagramState.diagram
     return (
       <div className="props-pane">
-        <h3>Diagram</h3>
-        <Field label="Title">
+        <h3>{t('common.diagram')}</h3>
+        <Field label={t('common.title')}>
           {canWrite ? (
             <SyncedInput value={diagramState.title} onValueChange={diagramState.setTitle} />
           ) : (
             <span>{diagramState.title}</span>
           )}
         </Field>
-        <Field label="Kind">
+        <Field label={t('props.kind')}>
           {canWrite ? (
             <select
               value={diagramState.kind}
               onChange={(e) => diagramState.setKind(e.target.value)}
             >
               <option value="beediagram">BeeDiagram</option>
-              <option value="isometric">Isometric</option>
+              <option value="isometric">{t('props.kindIsometric')}</option>
               <option value="mermaid">Mermaid</option>
               <option value="c4">C4 (Mermaid)</option>
             </select>
@@ -273,7 +262,7 @@ export function PropertiesPane({
             <span>{diagramState.kind}</span>
           )}
         </Field>
-        <Field label="Updated">
+        <Field label={t('props.updated')}>
           <span className="sm">{d ? new Date(d.updatedAt).toLocaleString() : '—'}</span>
         </Field>
         {canWrite && (
@@ -284,26 +273,26 @@ export function PropertiesPane({
               disabled={diagramState.saving || !diagramState.dirty}
               onClick={() => void diagramState.save()}
             >
-              {diagramState.saving ? 'Saving…' : 'Save diagram'}
+              {diagramState.saving ? t('common.saving') : t('props.saveDiagram')}
             </button>
             <button
               type="button"
               className="btn danger ghost sm"
               onClick={() => void diagramState.deleteDiagram()}
             >
-              Delete
+              {t('common.delete')}
             </button>
           </div>
         )}
         <div className="props-hint">
-          <h4>Markdown embed</h4>
+          <h4>{t('props.markdownEmbed')}</h4>
           <pre className="embed-snippet sm">{diagramState.embedSnippet}</pre>
           <button
             type="button"
             className="btn sm"
             onClick={() => void navigator.clipboard.writeText(diagramState.embedSnippet)}
           >
-            Copy embed
+            {t('props.copyEmbed')}
           </button>
         </div>
       </div>
@@ -314,23 +303,23 @@ export function PropertiesPane({
     const d = slideState.deck
     return (
       <div className="props-pane">
-        <h3>Slides</h3>
-        <Field label="Title">
+        <h3>{t('props.slides')}</h3>
+        <Field label={t('common.title')}>
           {canWrite ? (
             <SyncedInput value={slideState.title} onValueChange={slideState.setTitle} />
           ) : (
             <span>{slideState.title}</span>
           )}
         </Field>
-        <Field label="Slides">
+        <Field label={t('props.slides')}>
           <span>{slideState.slideCount}</span>
         </Field>
-        <Field label="Updated">
+        <Field label={t('props.updated')}>
           <span className="sm">{d ? new Date(d.updatedAt).toLocaleString() : '—'}</span>
         </Field>
         <div className="props-actions">
           <button type="button" className="btn primary sm" onClick={() => slideState.present()}>
-            ▶ Present
+            ▶ {t('props.present')}
           </button>
           {canWrite && (
             <>
@@ -340,24 +329,21 @@ export function PropertiesPane({
                 disabled={slideState.saving || !slideState.dirty}
                 onClick={() => void slideState.save()}
               >
-                {slideState.saving ? 'Saving…' : 'Save slides'}
+                {slideState.saving ? t('common.saving') : t('props.saveSlides')}
               </button>
               <button
                 type="button"
                 className="btn danger ghost sm"
                 onClick={() => void slideState.deleteDeck()}
               >
-                Delete
+                {t('common.delete')}
               </button>
             </>
           )}
         </div>
         <div className="props-hint">
-          <h4>Presenting</h4>
-          <p className="muted sm">
-            Arrow keys or click to advance, right-click to go back, <strong>Esc</strong> to end.
-            Presenting starts from the selected slide.
-          </p>
+          <h4>{t('props.presenting')}</h4>
+          <p className="muted sm">{t('props.presentingHint')}</p>
         </div>
       </div>
     )
@@ -367,35 +353,35 @@ export function PropertiesPane({
     const a = attachmentState.attachment
     return (
       <div className="props-pane">
-        <h3>File</h3>
-        <Field label="Title">
+        <h3>{t('props.file')}</h3>
+        <Field label={t('common.title')}>
           {canWrite ? (
             <SyncedInput value={attachmentState.title} onValueChange={attachmentState.setTitle} />
           ) : (
             <span>{attachmentState.title}</span>
           )}
         </Field>
-        <Field label="Description">
+        <Field label={t('common.description')}>
           {canWrite ? (
             <textarea
               className="props-textarea"
               rows={3}
               value={attachmentState.description}
-              placeholder="What this document is, and when it applies"
+              placeholder={t('props.descriptionPlaceholder')}
               onChange={(e) => attachmentState.setDescription(e.target.value)}
             />
           ) : (
             <span>{a?.description || '—'}</span>
           )}
         </Field>
-        <Field label="Owner">
+        <Field label={t('common.owner')}>
           <OwnerField
             value={attachmentState.ownerId}
             fallbackName={a?.ownerName}
             onChange={attachmentState.setOwnerId}
           />
         </Field>
-        <Field label="File name">
+        <Field label={t('props.fileName')}>
           {canWrite ? (
             <SyncedInput
               value={attachmentState.fileName}
@@ -405,7 +391,7 @@ export function PropertiesPane({
             <code className="mono-block">{a?.fileName ?? '—'}</code>
           )}
         </Field>
-        <Field label="Type">
+        <Field label={t('props.type')}>
           <span>
             {a ? (
               <>
@@ -417,18 +403,18 @@ export function PropertiesPane({
             )}
           </span>
         </Field>
-        <Field label="Size">
+        <Field label={t('props.size')}>
           <span>{a ? formatFileSize(a.sizeBytes) : '—'}</span>
         </Field>
-        <Field label="Added">
+        <Field label={t('props.added')}>
           <span className="sm">{a ? new Date(a.createdAt).toLocaleString() : '—'}</span>
         </Field>
-        <Field label="Updated">
+        <Field label={t('props.updated')}>
           <span className="sm">{a ? new Date(a.updatedAt).toLocaleString() : '—'}</span>
         </Field>
         <div className="props-actions">
           <button type="button" className="btn sm" onClick={() => attachmentState.download()}>
-            Download
+            {t('common.download')}
           </button>
           {canWrite && (
             <>
@@ -438,27 +424,27 @@ export function PropertiesPane({
                 disabled={attachmentState.saving || !attachmentState.dirty}
                 onClick={() => void attachmentState.save()}
               >
-                {attachmentState.saving ? 'Saving…' : 'Save properties'}
+                {attachmentState.saving ? t('common.saving') : t('props.saveProperties')}
               </button>
               <button
                 type="button"
                 className="btn ghost sm"
                 onClick={() => attachmentState.replaceFile()}
               >
-                Replace file
+                {t('props.replaceFile')}
               </button>
               <button
                 type="button"
                 className="btn danger ghost sm"
                 onClick={() => void attachmentState.deleteAttachment()}
               >
-                Delete
+                {t('common.delete')}
               </button>
             </>
           )}
         </div>
         <div className="props-hint">
-          <h4>Markdown link</h4>
+          <h4>{t('props.markdownLink')}</h4>
           {/* The route, not the download URL: it opens the file in the workspace
               with its properties, which is what a reader following a link wants. */}
           <pre className="embed-snippet sm">
@@ -473,7 +459,7 @@ export function PropertiesPane({
               void navigator.clipboard.writeText(`[${a.title}](/books/${a.bookId}/files/${a.id})`)
             }
           >
-            Copy link
+            {t('props.copyLink')}
           </button>
         </div>
       </div>
@@ -483,22 +469,22 @@ export function PropertiesPane({
   if (view === 'shelf' && shelf) {
     return (
       <div className="props-pane">
-        <h3>Shelf</h3>
-        <Field label="Title">
+        <h3>{t('common.shelf')}</h3>
+        <Field label={t('common.title')}>
           <span>{shelf.title}</span>
         </Field>
-        <Field label="Slug">
+        <Field label={t('props.slug')}>
           <code className="mono-block">{shelf.slug}</code>
         </Field>
         {shelf.description && (
-          <Field label="Description">
+          <Field label={t('common.description')}>
             <span className="sm">{shelf.description}</span>
           </Field>
         )}
-        <Field label="Books">
+        <Field label={t('common.books')}>
           <span>{shelf.bookCount}</span>
         </Field>
-        <Field label="Owner">
+        <Field label={t('common.owner')}>
           <ShelfOwnerField
             shelfId={shelf.id}
             title={shelf.title}
@@ -506,10 +492,10 @@ export function PropertiesPane({
             ownerName={shelf.ownerName}
           />
         </Field>
-        <Field label="Storage">
+        <Field label={t('props.storage')}>
           <ShelfStorageField shelf={shelf} />
         </Field>
-        <Field label="Website">
+        <Field label={t('props.website')}>
           <div className="shelf-site-props">
             <label className="check-row">
               <input
@@ -519,14 +505,14 @@ export function PropertiesPane({
                 onChange={(e) => void setShelfPublished(shelf.id, e.target.checked)}
               />
               <span>
-                Serve as a public website
+                {t('props.serveAsSite')}
                 <span className="muted sm" style={{ display: 'block' }}>
-                  {withBase(bookshelfSitePath(shelf.slug))}
+                  {withBase(bookshelfSitePath(shelf.slug))}{' '}
                   {authEnabled
                     ? shelf.published
-                      ? ' — visitors do not need to sign in.'
-                      : ' — unpublished; only people who can already read the workspace can preview it.'
-                    : ' — this instance is open, so the URL already works.'}
+                      ? t('props.siteNoSignIn')
+                      : t('props.siteUnpublished')
+                    : t('props.siteOpenInstance')}
                 </span>
               </span>
             </label>
@@ -536,14 +522,11 @@ export function PropertiesPane({
               target="_blank"
               rel="noreferrer"
             >
-              Open website
+              {t('props.openWebsite')}
             </a>
           </div>
         </Field>
-        <p className="muted sm">
-          A shelf groups books; it holds no pages of its own. Deleting it keeps every book —
-          they move back to the library root.
-        </p>
+        <p className="muted sm">{t('props.shelfNote')}</p>
       </div>
     )
   }
@@ -551,37 +534,35 @@ export function PropertiesPane({
   if (view === 'book' && book) {
     return (
       <div className="props-pane">
-        <h3>Book</h3>
-        <Field label="Title">
+        <h3>{t('common.book')}</h3>
+        <Field label={t('common.title')}>
           <span>{book.title}</span>
         </Field>
-        <Field label="Slug">
+        <Field label={t('props.slug')}>
           <code className="mono-block">{book.slug}</code>
         </Field>
         {book.description && (
-          <Field label="Description">
+          <Field label={t('common.description')}>
             <span className="sm">{book.description}</span>
           </Field>
         )}
-        <Field label="Shelf">
+        <Field label={t('common.shelf')}>
           <BookShelfField bookId={book.id} title={book.title} shelfId={book.shelfId ?? ''} />
         </Field>
-        <Field label="Pages">
+        <Field label={t('common.pages')}>
           <span>{book.pages.length}</span>
         </Field>
-        <Field label="Diagrams">
+        <Field label={t('common.diagrams')}>
           <span>{book.diagrams.length}</span>
         </Field>
-        <Field label="Slide decks">
+        <Field label={t('common.slideDecks')}>
           <span>{book.slideDecks.length}</span>
         </Field>
-        <Field label="Owner">
+        <Field label={t('common.owner')}>
           <BookOwnerField bookId={book.id} title={book.title} ownerId={book.ownerId ?? ''} ownerName={book.ownerName} />
         </Field>
         <p className="muted sm">
-          {canWrite
-            ? 'Select a page to edit in the canvas, or create one from the tree.'
-            : 'Select a page or diagram in the tree to read it.'}
+          {canWrite ? t('props.bookHintWrite') : t('props.bookHintRead')}
         </p>
       </div>
     )
@@ -593,21 +574,19 @@ export function PropertiesPane({
 
   return (
     <div className="props-pane">
-      <h3>Properties</h3>
+      <h3>{t('props.propertiesTitle')}</h3>
       <p className="muted sm">
-        {canWrite
-          ? 'Select a book, page, or diagram in the library to inspect and edit metadata.'
-          : 'Select a book, page, or diagram in the library to inspect its details.'}
+        {canWrite ? t('props.defaultHintWrite') : t('props.defaultHintRead')}
       </p>
       <ul className="props-legend">
         <li>
-          <strong>Left</strong> — library tree
+          <strong>{t('props.legendLeft')}</strong> — {t('props.legendLeftDesc')}
         </li>
         <li>
-          <strong>Center</strong> — editor canvas
+          <strong>{t('props.legendCenter')}</strong> — {t('props.legendCenterDesc')}
         </li>
         <li>
-          <strong>Right</strong> — properties & actions
+          <strong>{t('props.legendRight')}</strong> — {t('props.legendRightDesc')}
         </li>
       </ul>
     </div>
@@ -628,12 +607,13 @@ function BookShelfField({
   shelfId: string
 }) {
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   const { shelves, moveBookToShelf } = useWorkspace()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   if (!canWrite) {
-    return <span>{shelves.find((s) => s.id === shelfId)?.title ?? 'Library root'}</span>
+    return <span>{shelves.find((s) => s.id === shelfId)?.title ?? t('props.libraryRoot')}</span>
   }
 
   const assign = async (next: string) => {
@@ -656,14 +636,14 @@ function BookShelfField({
         onChange={(e) => void assign(e.target.value)}
         title={title}
       >
-        <option value="">Library root (no shelf)</option>
+        <option value="">{t('props.libraryRootOption')}</option>
         {shelves.map((s) => (
           <option key={s.id} value={s.id}>
             {s.title}
           </option>
         ))}
       </select>
-      {shelves.length === 0 && <span className="muted sm">No shelves yet.</span>}
+      {shelves.length === 0 && <span className="muted sm">{t('props.noShelvesYet')}</span>}
       {error && (
         <span className="users-error" role="alert">
           {error}
@@ -682,6 +662,7 @@ function BookShelfField({
  */
 function ShelfStorageField({ shelf }: { shelf: Shelf }) {
   const { canManageUsers } = useAuth()
+  const { t } = useI18n()
   const { refreshTree } = useWorkspace()
   const [providers, setProviders] = useState<StorageProvider[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -690,7 +671,7 @@ function ShelfStorageField({ shelf }: { shelf: Shelf }) {
   const [moving, setMoving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const currentLabel = shelf.storageProviderName ?? 'Local (SQLite)'
+  const currentLabel = shelf.storageProviderName ?? t('props.storageLocal')
 
   useEffect(() => {
     if (!canManageUsers) return
@@ -716,8 +697,8 @@ function ShelfStorageField({ shelf }: { shelf: Shelf }) {
   // must be able to show the truth.
   const options = (providers ?? []).filter((p) => ready(p) || p.id === shelf.storageProviderId)
   const pendingName = pending
-    ? (options.find((p) => p.id === pending)?.name ?? 'that provider')
-    : 'Local (SQLite)'
+    ? (options.find((p) => p.id === pending)?.name ?? t('props.thatProvider'))
+    : t('props.storageLocal')
 
   return (
     <>
@@ -732,7 +713,7 @@ function ShelfStorageField({ shelf }: { shelf: Shelf }) {
           }
         }}
       >
-        <option value="">Local (SQLite)</option>
+        <option value="">{t('props.storageLocal')}</option>
         {options.map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}
@@ -740,7 +721,7 @@ function ShelfStorageField({ shelf }: { shelf: Shelf }) {
         ))}
       </select>
       {providers !== null && options.length === 0 && (
-        <span className="muted sm">Add a provider in Settings → Storage providers.</span>
+        <span className="muted sm">{t('props.addProviderHint')}</span>
       )}
       {loadError && (
         <span className="users-error" role="alert">
@@ -798,6 +779,7 @@ function ShelfStorageConfirm({
   onCancel: () => void
   onConfirm: () => void
 }) {
+  const { t } = useI18n()
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape' && !moving) onCancel()
@@ -813,37 +795,32 @@ function ShelfStorageConfirm({
     <div className="modal-backdrop" onClick={moving ? undefined : onCancel}>
       <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Move shelf storage</h2>
+          <h2>{t('props.moveShelfStorage')}</h2>
         </div>
         <div className="modal-body">
           <p>
-            Move the content of <strong>{shelf.title}</strong> ({shelf.bookCount}{' '}
-            {shelf.bookCount === 1 ? 'book' : 'books'}) from <strong>{currentLabel}</strong> to{' '}
-            <strong>{targetName}</strong>?
+            {t(shelf.bookCount === 1 ? 'props.moveQuestion.one' : 'props.moveQuestion.other', {
+              shelf: shelf.title,
+              count: shelf.bookCount,
+              from: currentLabel,
+              to: targetName,
+            })}
           </p>
-          <p className="muted sm">
-            Every page, revision, diagram and slide deck body is moved to the new location. This
-            runs on the server and can take several minutes for a large shelf. If it is
-            interrupted, running the same move again resumes where it stopped.
-          </p>
-          {moving && (
-            <p className="banner warn compact">Moving content… keep this tab open.</p>
-          )}
+          <p className="muted sm">{t('props.moveExplain')}</p>
+          {moving && <p className="banner warn compact">{t('props.movingKeepOpen')}</p>}
           {error && (
             <p className="banner error compact">
               {error}
-              {timedOut
-                ? ' The move may still be finishing on the server — wait a moment, then run the same move again; finished items are skipped.'
-                : ''}
+              {timedOut ? ` ${t('props.moveTimedOut')}` : ''}
             </p>
           )}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn" disabled={moving} onClick={onCancel}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button type="button" className="btn primary" disabled={moving} onClick={onConfirm}>
-            {moving ? 'Moving…' : 'Move content'}
+            {moving ? t('props.moving') : t('props.moveContent')}
           </button>
         </div>
       </div>
@@ -963,48 +940,46 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
  */
 function GitRepoProps() {
   const { repoId } = useParams()
+  const { t } = useI18n()
   const repos = useGitRepos()
   const repo = repos?.find((r) => r.id === repoId)
 
   if (!repo) {
     return (
       <div className="props-pane">
-        <h3>Repository</h3>
-        <p className="muted sm">Loading…</p>
+        <h3>{t('common.repository')}</h3>
+        <p className="muted sm">{t('common.loading')}</p>
       </div>
     )
   }
 
   return (
     <div className="props-pane">
-      <h3>Repository</h3>
-      <Field label="Name">
+      <h3>{t('common.repository')}</h3>
+      <Field label={t('common.name')}>
         <span>{repo.name}</span>
       </Field>
-      <Field label="Connection">
+      <Field label={t('props.connection')}>
         <span>{repo.connectionName}</span>
       </Field>
-      <Field label="Remote">
+      <Field label={t('props.remote')}>
         <code className="mono-block">{repo.cloneUrl}</code>
       </Field>
-      <Field label="Branch">
+      <Field label={t('props.branch')}>
         <span>{repo.defaultBranch || '—'}</span>
       </Field>
-      <Field label="Status">
+      <Field label={t('props.status')}>
         <span>{repo.status}</span>
       </Field>
       {repo.fetchedAt && (
-        <Field label="Last synced">
+        <Field label={t('props.lastSynced')}>
           <span>{new Date(repo.fetchedAt).toLocaleString()}</span>
         </Field>
       )}
-      <Field label="In search">
-        <span>{repo.indexed ? 'Yes' : 'No'}</span>
+      <Field label={t('props.inSearch')}>
+        <span>{repo.indexed ? t('common.yes') : t('common.no')}</span>
       </Field>
-      <p className="muted sm">
-        Content comes live from the server-side clone — git history is this repo’s change log.
-        Manage connections and repos in Settings.
-      </p>
+      <p className="muted sm">{t('props.gitRepoNote')}</p>
     </div>
   )
 }

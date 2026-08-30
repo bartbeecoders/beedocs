@@ -307,6 +307,16 @@
 
 .login-mark {
   font-size: 1.4rem;
+  display: inline-flex;
+  align-items: center;
+}
+
+.login-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+  border-radius: 5px;
 }
 
 .login-title {

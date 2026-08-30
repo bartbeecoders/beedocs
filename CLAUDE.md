@@ -398,6 +398,44 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   bill waiting to happen, and setting the key also switches the feature off in
   the UI (the browser has nowhere to keep the secret). See
   `Docs/LLM-PROVIDERS.md`.
+- **Branding & themes** (`Services/BrandingService.cs`; UI `branding.tsx` +
+  `components/BrandingPanel.tsx`, theme layer `theme.tsx` + `omarchyTheme.ts`)
+  — an admin can rename the instance and replace the 🐝 mark. The title lives in
+  `app_setting` (`branding.settings`, RbaSettingsService-style cached), the logo
+  is a single file under `BeeDocs:BrandingPath` (default `data/branding`) —
+  deliberately *not* under uploads, because the login screen must show it and
+  `/uploads` is only anonymous while a shelf is published. Reads are anonymous
+  (`GET /api/branding`, `GET /api/branding/logo?v=N` — the version cache-busts);
+  every write is admin under `/api/settings/branding`. "Generate with AI" is the
+  `logo` task in `LlmPrompts` through the default LLM provider: the endpoint
+  returns a *preview* and nothing is stored until the admin applies it — and
+  because the logo is served to everyone and the SVG is model output,
+  `SanitizeSvg` (no scripts/handlers/external refs, lone `<svg>` only) gates
+  both the generated and the uploaded path. Client side, `BrandingProvider`
+  (inside ThemeProvider, outside the router — the login screen consumes it)
+  fetches once, sets `document.title`/favicon, and feeds the **Omarchy desktop
+  palette** into the theme layer: the server reads
+  `~/.local/state/omarchy/current/theme/colors.toml` (older Omarchy:
+  `~/.config/omarchy/current/theme/alacritty.toml`) and ships raw colors;
+  `deriveOmarchyVars` computes the full token set, applied as inline CSS custom
+  properties under `data-theme='omarchy'` — the one theme not declared in
+  index.css, offered in the settings grid only when the palette exists, and
+  auto-adopted only for a browser that never chose a theme
+  (`storedThemeAtBoot`). The static theme list grew to 13
+  (`nord`/`gruvbox`/`catppuccin`/`tokyo-night`/`rose-pine`/`solarized-light`
+  added); each is one variable block in index.css plus a swatch rule and a
+  `THEMES` row. See `Docs/BRANDING.md`.
+- **UI languages** (`src/i18n/` — `index.tsx` provider + `useI18n()`,
+  `langs.ts`, per-feature dictionaries in `messages/*.ts`) — the web UI ships
+  in en/fr/de/es/nl/ja/zh, hand-rolled like theme.tsx (no i18n library).
+  Per-browser choice (`beedocs-lang`, picker in Settings → Appearance),
+  `navigator.languages` on first visit, English as runtime fallback. The
+  completeness check is the type system: each messages file types its six
+  non-English dictionaries as `Record<keyof typeof en, string>`, so a missing
+  translation is a compile error in the file that owns the key. `common.ts` is
+  the shared verb/noun glossary every namespace reuses; content, server
+  messages, catalog shape names (serialized for MCP) and exported-document
+  chrome deliberately stay untranslated. See `Docs/I18N.md`.
 - **Git integration** (`/api/git`, `Services/GitCli.cs` + `GitConnectionService.cs`
   + `GitRepoService.cs` + `GitProviderCatalog.cs` + `GitSearchIndexer.cs`; UI
   `GitConnections.tsx`, `GitTree.tsx`, `GitCanvas.tsx`, routes `/git/:repoId[/files/*]`)
@@ -438,8 +476,20 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `…/assist`, editor-gated) draft README/docs/manual/summary grounded in a
   server-built repo bundle (≤40 KB, most-informative-first) through the
   configured LLM provider via the `docdraft` task in `LlmPrompts` (own 240s
-  budget); drafts land only through the ordinary review→save→commit gate. See
-  `Docs/GIT-INTEGRATION.md`.
+  budget); drafts land only through the ordinary review→save→commit gate.
+  The same generation also runs as a **background job** (`GitAssistJobService`,
+  POST `…/assist/jobs`, rows in `git_assist_job`, status
+  queued→running→completed|failed polled by `GitAssistJobs.tsx` on the repo
+  front page — the clone pattern): the Markdown is stored on the row *before*
+  publishing so a publish failure never costs the generation,
+  restart-orphaned jobs are swept to failed at startup, and deleting a
+  running job cancels it. A job can publish its result into the library as a
+  book page (book named after the repo on a chosen shelf, page titled by
+  kind; publishing the same kind into the same book updates the page in
+  place), and `…/jobs/{id}/rerun` copies parameters *and* page linkage so
+  regenerated docs land on the same page as a new revision. `AmbientActor`
+  (`CurrentUserAccessor.cs`) carries the queuing user into the background
+  task so page history names them. See `Docs/GIT-INTEGRATION.md`.
 - **BeeDocs.Mcp** wraps the whole REST API for AI agents (official C# MCP SDK
   2.1.0, protocol revision `2026-07-28` with fallback to older ones).
   Tools/resources/prompts live under `Tools/`, `Resources/`, `Prompts/`; both
@@ -478,4 +528,6 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/USERS-AND-ROLES.md` — accounts, roles, sessions, and the opt-in sign-in wall.
 - `Docs/RBA-INTEGRATION.md` — delegating sign-in to the central RBA service (application DOC).
 - `Docs/LLM-PROVIDERS.md` — LLM providers, key storage, and the `/api/llm` security trade-off.
+- `Docs/BRANDING.md` — instance title/logo, AI logo generation, themes, the Omarchy desktop theme.
+- `Docs/I18N.md` — the seven UI languages, the typed message-dictionary layer, glossary rules.
 - `Vibecoding/Instructions.md` — product goals/vision behind the MVP.

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n } from '../i18n'
 import {
   useGitRepos,
   refreshGitRepos,
@@ -10,6 +11,7 @@ import {
 } from '../hooks/useGitRepos'
 import { highlightCode } from '../syntaxHighlight'
 import { MarkdownView } from './MarkdownView'
+import { GitAssistJobs } from './GitAssistJobs'
 import { gitFilePath } from '../gitPaths'
 import type { GitBranch, GitCommitDetail, GitFile, GitLogEntry, GitStatus, GitTreeEntry } from '../types'
 import '../styles/git.css'
@@ -62,6 +64,7 @@ function prUrl(repo: { connectionKind: string; cloneUrl: string }, branch: strin
  */
 function GitToolbar({ repoId }: { repoId: string }) {
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   const repos = useGitRepos()
   const repo = repos?.find((r) => r.id === repoId) ?? null
   const statusVersion = useGitStatusVersion()
@@ -115,8 +118,8 @@ function GitToolbar({ repoId }: { repoId: string }) {
       {canWrite && branches !== null ? (
         <select
           className="git-branch-select"
-          aria-label="Checked-out branch (shared by everyone on this server)"
-          title="Switching branches affects everyone using this server"
+          aria-label={t('git.branchAria')}
+          title={t('git.branchSwitchTitle')}
           value={branch}
           disabled={busy !== null || !ready}
           onChange={(e) => {
@@ -137,13 +140,13 @@ function GitToolbar({ repoId }: { repoId: string }) {
           {branches.map((b) => (
             <option key={`${b.isRemote ? 'r' : 'l'}:${b.name}`} value={b.name}>
               ⎇ {b.name}
-              {b.isRemote ? ' (remote)' : ''}
+              {b.isRemote ? ` ${t('git.remoteSuffix')}` : ''}
             </option>
           ))}
-          <option value="__new__">＋ New branch…</option>
+          <option value="__new__">＋ {t('git.newBranchOption')}</option>
         </select>
       ) : (
-        <span className="git-toolbar-branch" title="Checked-out branch">
+        <span className="git-toolbar-branch" title={t('git.checkedOutBranch')}>
           ⎇ {branch || '…'}
         </span>
       )}
@@ -151,19 +154,21 @@ function GitToolbar({ repoId }: { repoId: string }) {
       {status && (status.ahead > 0 || status.behind > 0) ? (
         <span
           className="git-toolbar-ab"
-          title={`${status.ahead} ahead, ${status.behind} behind the remote`}
+          title={t('git.aheadBehind', { ahead: status.ahead, behind: status.behind })}
         >
           {status.ahead > 0 ? `↑${status.ahead}` : ''}
           {status.behind > 0 ? `↓${status.behind}` : ''}
         </span>
       ) : null}
       {dirtyCount > 0 ? (
-        <span className="git-toolbar-dirty" title="Uncommitted changes in the server's working copy">
-          {dirtyCount} changed
+        <span className="git-toolbar-dirty" title={t('git.dirtyTitle')}>
+          {t('git.changedCount', { count: dirtyCount })}
         </span>
       ) : null}
       {repo.fetchedAt ? (
-        <span className="muted sm">synced {new Date(repo.fetchedAt).toLocaleString()}</span>
+        <span className="muted sm">
+          {t('git.syncedAt', { date: new Date(repo.fetchedAt).toLocaleString() })}
+        </span>
       ) : null}
       <span className="git-toolbar-spacer" />
 
@@ -176,7 +181,7 @@ function GitToolbar({ repoId }: { repoId: string }) {
               disabled={busy !== null || !ready}
               onClick={() => setCommitting(true)}
             >
-              Commit ({dirtyCount})
+              {t('git.commitCount', { count: dirtyCount })}
             </button>
           ) : null}
           <button
@@ -185,16 +190,24 @@ function GitToolbar({ repoId }: { repoId: string }) {
             disabled={busy !== null || !ready}
             onClick={() => void run('pull', () => api.pullGitRepo(repoId))}
           >
-            {busy === 'pull' ? 'Pulling…' : 'Pull'}
+            {busy === 'pull' ? t('git.pulling') : t('git.pull')}
           </button>
           <button
             type="button"
             className="btn sm"
             disabled={busy !== null || !ready}
-            title={status && status.ahead > 0 ? `${status.ahead} commit(s) to push` : 'Push the current branch'}
+            title={
+              status && status.ahead > 0
+                ? t('git.commitsToPush', { count: status.ahead })
+                : t('git.pushCurrentBranch')
+            }
             onClick={() => void run('push', () => api.pushGitRepo(repoId))}
           >
-            {busy === 'push' ? 'Pushing…' : status && status.ahead > 0 ? `Push ↑${status.ahead}` : 'Push'}
+            {busy === 'push'
+              ? t('git.pushing')
+              : status && status.ahead > 0
+                ? `${t('git.push')} ↑${status.ahead}`
+                : t('git.push')}
           </button>
           {(() => {
             const url = prUrl(repo, branch)
@@ -204,9 +217,12 @@ function GitToolbar({ repoId }: { repoId: string }) {
                 href={url}
                 target="_blank"
                 rel="noreferrer"
-                title={`Create a pull request for ${branch} on ${repo.connectionKind === 'github' ? 'GitHub' : 'Azure DevOps'}`}
+                title={t('git.prTitle', {
+                  branch,
+                  host: repo.connectionKind === 'github' ? 'GitHub' : 'Azure DevOps',
+                })}
               >
-                PR ↗
+                {t('git.prButton')}
               </a>
             ) : null
           })()}
@@ -224,19 +240,19 @@ function GitToolbar({ repoId }: { repoId: string }) {
                 type="button"
                 className="btn sm"
                 disabled={busy !== null}
-                title="Re-pull, resolving conflicting lines in favour of this server's version"
+                title={t('git.keepOursTitle')}
                 onClick={() => void run('pull', () => api.pullGitRepo(repoId, 'ours'))}
               >
-                Keep ours
+                {t('git.keepOurs')}
               </button>
               <button
                 type="button"
                 className="btn sm"
                 disabled={busy !== null}
-                title="Re-pull, resolving conflicting lines in favour of the remote's version"
+                title={t('git.takeTheirsTitle')}
                 onClick={() => void run('pull', () => api.pullGitRepo(repoId, 'theirs'))}
               >
-                Take theirs
+                {t('git.takeTheirs')}
               </button>
             </>
           ) : null}
@@ -271,6 +287,8 @@ function CommitDialog({
   dirty: string[]
   onClose: () => void
 }) {
+  const { t } = useI18n()
+  // The prefilled commit message is repo content, not UI copy — kept English.
   const [message, setMessage] = useState(
     dirty.length === 1 ? `Update ${dirty[0].split('/').pop()}` : '',
   )
@@ -310,19 +328,18 @@ function CommitDialog({
         className="git-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Commit changes"
+        aria-label={t('git.commitChanges')}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <h3>Commit changes</h3>
+        <h3>{t('git.commitChanges')}</h3>
         {done ? (
           <>
             <p className="git-dialog-ok">
-              Committed as <code>{done}</code>. Use <strong>Push</strong> in the toolbar to send it
-              to the remote.
+              {t('git.committedAs', { sha: done })} {t('git.committedPushHint')}
             </p>
             <div className="git-dialog-actions">
               <button type="button" className="btn primary sm" onClick={onClose}>
-                Close
+                {t('common.close')}
               </button>
             </div>
           </>
@@ -330,7 +347,7 @@ function CommitDialog({
           <>
             <textarea
               className="git-commit-message"
-              placeholder="What changed, and why"
+              placeholder={t('git.commitPlaceholder')}
               value={message}
               autoFocus
               rows={3}
@@ -359,7 +376,7 @@ function CommitDialog({
             ) : null}
             <div className="git-dialog-actions">
               <button type="button" className="btn sm" disabled={busy} onClick={onClose}>
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -368,8 +385,10 @@ function CommitDialog({
                 onClick={() => void commit()}
               >
                 {busy
-                  ? 'Committing…'
-                  : `Commit ${selected.size} file${selected.size === 1 ? '' : 's'}`}
+                  ? t('git.committing')
+                  : t(selected.size === 1 ? 'git.commitFiles.one' : 'git.commitFiles.other', {
+                      count: selected.size,
+                    })}
               </button>
             </div>
           </>
@@ -380,6 +399,7 @@ function CommitDialog({
 }
 
 function NewBranchDialog({ repoId, onClose }: { repoId: string; onClose: () => void }) {
+  const { t } = useI18n()
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -406,16 +426,14 @@ function NewBranchDialog({ repoId, onClose }: { repoId: string; onClose: () => v
         className="git-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="New branch"
+        aria-label={t('git.newBranch')}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <h3>New branch</h3>
-        <p className="muted sm">
-          Created from the current branch and checked out — for everyone on this server.
-        </p>
+        <h3>{t('git.newBranch')}</h3>
+        <p className="muted sm">{t('git.newBranchLead')}</p>
         <input
           className="llm-mono"
-          placeholder="e.g. docs/update-readme"
+          placeholder={t('git.newBranchPlaceholder')}
           value={name}
           autoFocus
           spellCheck={false}
@@ -435,7 +453,7 @@ function NewBranchDialog({ repoId, onClose }: { repoId: string; onClose: () => v
         ) : null}
         <div className="git-dialog-actions">
           <button type="button" className="btn sm" disabled={busy} onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -443,7 +461,7 @@ function NewBranchDialog({ repoId, onClose }: { repoId: string; onClose: () => v
             disabled={busy || name.trim() === ''}
             onClick={() => void create()}
           >
-            {busy ? 'Creating…' : 'Create and switch'}
+            {busy ? t('git.creating') : t('git.createAndSwitch')}
           </button>
         </div>
       </div>
@@ -457,6 +475,7 @@ function NewBranchDialog({ repoId, onClose }: { repoId: string; onClose: () => v
  * literal.
  */
 export function GitRepoCanvas() {
+  const { t } = useI18n()
   const { repoId } = useParams()
   const repos = useGitRepos()
   const repo = repos?.find((r) => r.id === repoId) ?? null
@@ -494,8 +513,8 @@ export function GitRepoCanvas() {
   }, [repoId, ready, repo?.fetchedAt, statusVersion])
 
   if (!repoId) return null
-  if (repos === null) return <div className="canvas-message muted">Loading repository…</div>
-  if (!repo) return <div className="canvas-message muted">This repository is no longer on the shelf.</div>
+  if (repos === null) return <div className="canvas-message muted">{t('git.loadingRepo')}</div>
+  if (!repo) return <div className="canvas-message muted">{t('git.repoGone')}</div>
 
   return (
     <div className="git-canvas">
@@ -507,10 +526,10 @@ export function GitRepoCanvas() {
         <p className="muted sm git-clone-url">{repo.cloneUrl}</p>
 
         {repo.status === 'cloning' ? (
-          <p className="muted">Cloning… the tree appears as soon as the clone finishes.</p>
+          <p className="muted">{t('git.cloningNote')}</p>
         ) : null}
         {repo.status === 'error' ? (
-          <p className="banner error">{repo.lastError ?? 'The clone failed.'}</p>
+          <p className="banner error">{repo.lastError ?? t('git.cloneFailed')}</p>
         ) : null}
         {error ? <p className="banner error">{error}</p> : null}
 
@@ -521,7 +540,7 @@ export function GitRepoCanvas() {
                 {entry.type === 'dir' ? (
                   <span className="git-root-entry">
                     <span aria-hidden>📁</span> {entry.name}
-                    <span className="muted sm"> — expand it in the left tree</span>
+                    <span className="muted sm"> — {t('git.expandHint')}</span>
                   </span>
                 ) : (
                   <Link to={gitFilePath(repoId, entry.path)} className="git-root-entry">
@@ -534,6 +553,10 @@ export function GitRepoCanvas() {
           </ul>
         ) : null}
 
+        {/* Background AI-drafting jobs for this repo — renders nothing until
+            the first job exists. */}
+        <GitAssistJobs repoId={repoId} />
+
         {ready ? (
           <div className="git-readme">
             <button
@@ -542,7 +565,7 @@ export function GitRepoCanvas() {
               aria-expanded={showHistory}
               onClick={() => setShowHistory((v) => !v)}
             >
-              {showHistory ? 'Hide history' : 'History'}
+              {showHistory ? t('git.hideHistory') : t('git.history')}
             </button>
             {/* Keyed by fetchedAt so a pull refreshes the list. */}
             {showHistory ? <HistoryList key={repo.fetchedAt ?? ''} repoId={repoId} /> : null}
@@ -569,6 +592,7 @@ export function GitRepoCanvas() {
  */
 export function GitFileCanvas() {
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   const navigate = useNavigate()
   const { repoId, '*': splat } = useParams()
   const path = useMemo(
@@ -659,7 +683,7 @@ export function GitFileCanvas() {
   }
 
   const stopEdit = () => {
-    if (dirty && !window.confirm('Discard the unsaved changes to this file?')) return
+    if (dirty && !window.confirm(t('git.discardConfirm'))) return
     setEditing(false)
     setSaveError(null)
   }
@@ -682,11 +706,7 @@ export function GitFileCanvas() {
   }
 
   const removeFile = async () => {
-    if (
-      !window.confirm(
-        `Delete ${path} from the working copy? The deletion stays uncommitted until you commit it.`,
-      )
-    ) {
+    if (!window.confirm(t('git.deleteConfirm', { path }))) {
       return
     }
     setActionError(null)
@@ -708,15 +728,15 @@ export function GitFileCanvas() {
             {path}
           </h1>
           {file ? <span className="muted sm">{formatSize(file.size)}</span> : null}
-          {dirty ? <span className="llm-badge is-dirty">Unsaved</span> : null}
+          {dirty ? <span className="llm-badge is-dirty">{t('git.unsaved')}</span> : null}
           <span className={`llm-flash${savedFlash ? ' is-on' : ''}`} aria-live="polite">
-            {savedFlash ? 'Saved — commit when ready' : ''}
+            {savedFlash ? t('git.savedFlash') : ''}
           </span>
           <span className="git-toolbar-spacer" />
           {editing ? (
             <>
               {markdown ? (
-                <span className="git-view-switch" role="group" aria-label="Markdown view">
+                <span className="git-view-switch" role="group" aria-label={t('git.markdownViewAria')}>
                   {(['edit', 'split', 'preview'] as const).map((mode) => (
                     <button
                       key={mode}
@@ -725,7 +745,11 @@ export function GitFileCanvas() {
                       aria-pressed={mdView === mode}
                       onClick={() => setMdView(mode)}
                     >
-                      {mode === 'edit' ? 'Edit' : mode === 'split' ? 'Split' : 'Preview'}
+                      {mode === 'edit'
+                        ? t('common.edit')
+                        : mode === 'split'
+                          ? t('git.split')
+                          : t('git.preview')}
                     </button>
                   ))}
                 </span>
@@ -736,27 +760,27 @@ export function GitFileCanvas() {
                 disabled={saving || !dirty}
                 onClick={() => void save()}
               >
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? t('common.saving') : t('common.save')}
               </button>
               <button type="button" className="btn sm" onClick={stopEdit}>
-                Done
+                {t('common.done')}
               </button>
             </>
           ) : refView !== null ? null : (
             <>
               {editable ? (
                 <button type="button" className="btn sm" onClick={startEdit}>
-                  Edit
+                  {t('common.edit')}
                 </button>
               ) : null}
               <button
                 type="button"
                 className="btn sm"
                 aria-expanded={panel === 'diff'}
-                title="Uncommitted changes to this file"
+                title={t('git.fileChangesTitle')}
                 onClick={() => setPanel((p) => (p === 'diff' ? 'none' : 'diff'))}
               >
-                Changes
+                {t('git.changes')}
               </button>
               <button
                 type="button"
@@ -764,31 +788,34 @@ export function GitFileCanvas() {
                 aria-expanded={panel === 'history'}
                 onClick={() => setPanel((p) => (p === 'history' ? 'none' : 'history'))}
               >
-                History
+                {t('git.history')}
               </button>
               {canWrite ? (
                 <>
                   <button type="button" className="btn sm" onClick={() => setRenaming(true)}>
-                    Rename
+                    {t('common.rename')}
                   </button>
                   <button type="button" className="btn ghost danger sm" onClick={() => void removeFile()}>
-                    Delete
+                    {t('common.delete')}
                   </button>
                 </>
               ) : null}
             </>
           )}
           <a className="btn sm" href={rawUrl} download>
-            Download
+            {t('common.download')}
           </a>
         </div>
 
         {refView !== null ? (
           <p className="git-refview-banner" role="status">
-            Viewing <code>{refView.entry.shortSha}</code> from{' '}
-            {new Date(refView.entry.date).toLocaleString()} ({refView.entry.author}) — read-only.
+            {t('git.viewingAt', {
+              sha: refView.entry.shortSha,
+              date: new Date(refView.entry.date).toLocaleString(),
+              author: refView.entry.author,
+            })}
             <button type="button" className="btn sm" onClick={() => setRefView(null)}>
-              Back to current
+              {t('git.backToCurrent')}
             </button>
           </p>
         ) : null}
@@ -804,7 +831,7 @@ export function GitFileCanvas() {
             {saveError}
           </p>
         ) : null}
-        {file === null && error === null ? <p className="muted">Loading…</p> : null}
+        {file === null && error === null ? <p className="muted">{t('common.loading')}</p> : null}
 
         {refView !== null ? (
           refView.file.content !== null && markdown ? (
@@ -814,7 +841,7 @@ export function GitFileCanvas() {
           ) : refView.file.content !== null ? (
             <CodeView name={refView.file.name} content={refView.file.content} />
           ) : (
-            <p className="muted">This version cannot be shown inline (binary or too large).</p>
+            <p className="muted">{t('git.versionNotInline')}</p>
           )
         ) : editing && file !== null ? (
           (() => {
@@ -862,22 +889,20 @@ export function GitFileCanvas() {
           <CodeView name={file.name} content={file.content} />
         ) : file !== null ? (
           <p className="muted">
-            {file.tooLarge
-              ? 'This file is too large to show inline — use Download.'
-              : 'This is a binary file — use Download.'}
+            {file.tooLarge ? t('git.tooLargeInline') : t('git.binaryInline')}
           </p>
         ) : null}
 
         {panel === 'diff' && refView === null ? (
           <div className="git-panel">
-            <h2 className="book-overview-subhead">Uncommitted changes</h2>
+            <h2 className="book-overview-subhead">{t('git.uncommittedChanges')}</h2>
             {/* Keyed by blobSha so a save refreshes the diff. */}
             <FileDiffPanel key={file?.blobSha ?? ''} repoId={repoId} path={path} />
           </div>
         ) : null}
         {panel === 'history' && refView === null ? (
           <div className="git-panel">
-            <h2 className="book-overview-subhead">History</h2>
+            <h2 className="book-overview-subhead">{t('git.history')}</h2>
             <HistoryList repoId={repoId} path={path} onViewAt={(entry) => void viewAt(entry)} />
           </div>
         ) : null}
@@ -900,6 +925,7 @@ export function GitFileCanvas() {
 
 /** The file's working-tree diff against HEAD, fetched when shown. */
 function FileDiffPanel({ repoId, path }: { repoId: string; path: string }) {
+  const { t } = useI18n()
   const [patch, setPatch] = useState<{ text: string; truncated: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -919,7 +945,7 @@ function FileDiffPanel({ repoId, path }: { repoId: string; path: string }) {
   }, [repoId, path])
 
   if (error !== null) return <p className="banner error">{error}</p>
-  if (patch === null) return <p className="muted sm">Loading…</p>
+  if (patch === null) return <p className="muted sm">{t('common.loading')}</p>
   return <DiffView patch={patch.text} truncated={patch.truncated} />
 }
 
@@ -934,6 +960,7 @@ function RenameDialog({
   onClose: () => void
   onRenamed: (to: string) => void
 }) {
+  const { t } = useI18n()
   const [to, setTo] = useState(from)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -960,14 +987,11 @@ function RenameDialog({
         className="git-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Rename file"
+        aria-label={t('git.renameFile')}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <h3>Rename / move</h3>
-        <p className="muted sm">
-          The full path inside the repository — changing a folder segment moves the file. Stays
-          uncommitted until you commit it.
-        </p>
+        <h3>{t('git.renameMove')}</h3>
+        <p className="muted sm">{t('git.renameLead')}</p>
         <input
           className="llm-mono"
           value={to}
@@ -989,7 +1013,7 @@ function RenameDialog({
         ) : null}
         <div className="git-dialog-actions">
           <button type="button" className="btn sm" disabled={busy} onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -997,7 +1021,7 @@ function RenameDialog({
             disabled={busy || to.trim() === '' || to.trim() === from}
             onClick={() => void rename()}
           >
-            {busy ? 'Renaming…' : 'Rename'}
+            {busy ? t('git.renaming') : t('common.rename')}
           </button>
         </div>
       </div>
@@ -1010,10 +1034,11 @@ function RenameDialog({
  * a patch is ever interpreted as markup.
  */
 function DiffView({ patch, truncated }: { patch: string; truncated?: boolean }) {
+  const { t } = useI18n()
   const lines = useMemo(() => patch.replace(/\n$/, '').split('\n'), [patch])
 
   if (patch.trim() === '') {
-    return <p className="muted sm">No changes.</p>
+    return <p className="muted sm">{t('git.noChanges')}</p>
   }
 
   return (
@@ -1038,7 +1063,7 @@ function DiffView({ patch, truncated }: { patch: string; truncated?: boolean }) 
           </span>
         )
       })}
-      {truncated ? <span className="git-diff-line is-meta">… patch truncated at 256 KB</span> : null}
+      {truncated ? <span className="git-diff-line is-meta">{t('git.patchTruncated')}</span> : null}
     </pre>
   )
 }
@@ -1057,6 +1082,7 @@ function HistoryList({
   path?: string
   onViewAt?: (entry: GitLogEntry) => void
 }) {
+  const { t } = useI18n()
   const [entries, setEntries] = useState<GitLogEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [openSha, setOpenSha] = useState<string | null>(null)
@@ -1098,8 +1124,8 @@ function HistoryList({
   }
 
   if (error !== null) return <p className="banner error">{error}</p>
-  if (entries === null) return <p className="muted sm">Loading history…</p>
-  if (entries.length === 0) return <p className="muted sm">No commits yet.</p>
+  if (entries === null) return <p className="muted sm">{t('git.loadingHistory')}</p>
+  if (entries.length === 0) return <p className="muted sm">{t('git.noCommitsYet')}</p>
 
   return (
     <ul className="git-history">
@@ -1120,12 +1146,12 @@ function HistoryList({
             <div className="git-history-detail">
               {onViewAt ? (
                 <button type="button" className="btn sm" onClick={() => onViewAt(entry)}>
-                  View the file at this commit
+                  {t('git.viewFileAtCommit')}
                 </button>
               ) : null}
               {detailError ? <p className="banner error">{detailError}</p> : null}
               {detail === null && detailError === null ? (
-                <p className="muted sm">Loading patch…</p>
+                <p className="muted sm">{t('git.loadingPatch')}</p>
               ) : null}
               {detail !== null ? (
                 <>

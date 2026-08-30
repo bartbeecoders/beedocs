@@ -533,3 +533,102 @@ a.git-root-entry:hover {
   flex-wrap: wrap;
   margin: 0;
 }
+
+/* --- AI assist background jobs (repo page) --- */
+
+.git-assist-jobs {
+  margin-top: 1.25rem;
+}
+
+.git-job-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.git-job-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  background: var(--bg-elevated);
+}
+
+.git-job-chip {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  margin-top: 0.1rem;
+}
+
+.git-job-chip.queued {
+  color: var(--muted);
+}
+
+.git-job-chip.running {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.git-job-chip.completed {
+  color: var(--ok, #2e7d32);
+  border-color: currentColor;
+}
+
+.git-job-chip.failed {
+  color: var(--danger, #c62828);
+  border-color: currentColor;
+}
+
+.git-job-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.git-job-error {
+  font-size: 0.78rem;
+  color: var(--danger, #c62828);
+}
+
+.git-job-actions {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+/* The two exits out of a finished draft: into the library, into the repo. */
+.git-job-exits {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.git-job-exit {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.git-job-exit .git-assist-field {
+  flex: 1;
+  min-width: 14rem;
+}
+
+.git-assist-field select {
+  font: inherit;
+  padding: 0.4rem 0.5rem;
+}

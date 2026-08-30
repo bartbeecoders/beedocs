@@ -10,6 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from 'react'
+import { useI18n, type MessageKey, type TFunction } from '../../i18n'
 import type { BeeAnchor, BeeEdge, BeeNode, BeePoint } from '../../types'
 import {
   BEE_ANCHORS_PRIMARY,
@@ -66,6 +67,16 @@ import { findLibraryItem, nodeFromLibraryItem } from '../../diagram/shapeLibrary
 import type { StudioController } from './useStudioController'
 
 export const STUDIO_GRID = 10
+
+/**
+ * Catalog labels stay English in diagram/shapeLibrary.ts (serialized for the
+ * MCP server); known ids translate at render time, unknown ids fall back.
+ */
+function shapeName(t: TFunction, id: string, fallback: string): string {
+  const key = `studio.shape.${id}` as MessageKey
+  const text = t(key)
+  return text === key ? fallback : text
+}
 export const SHAPE_DRAG_MIME = 'application/x-bee-shape'
 export const COLLECTION_DRAG_MIME = 'application/x-beedocs-shape-collection'
 const MIN_ZOOM = 0.2
@@ -1621,6 +1632,7 @@ function SelectionHandles({
   onResizeStart: (e: ReactPointerEvent, handle: ResizeHandle) => void
   onRotateStart: (e: ReactPointerEvent) => void
 }) {
+  const { t } = useI18n()
   const size = 8 * inv
   const rotateAt = (() => {
     const p = { x: node.x + node.w / 2, y: node.y - 24 * inv }
@@ -1651,7 +1663,7 @@ function SelectionHandles({
         style={{ cursor: 'grab' }}
         onPointerDown={onRotateStart}
       >
-        <title>Rotate (Shift snaps to 15°)</title>
+        <title>{t('studio.rotateTip')}</title>
       </circle>
       {RESIZE_HANDLES.map((h) => {
         const p = handleWorldPoint(node, h)
@@ -1686,6 +1698,7 @@ function GroupSelectionHandles({
   inv: number
   onResizeStart: (e: ReactPointerEvent, handle: ResizeHandle) => void
 }) {
+  const { t } = useI18n()
   const size = 8 * inv
   const grab = 16 * inv
   const points: Record<ResizeHandle, BeePoint> = {
@@ -1704,7 +1717,7 @@ function GroupSelectionHandles({
         const p = points[h]
         return (
           <g key={h} style={{ cursor: HANDLE_CURSOR[h] }} onPointerDown={(e) => onResizeStart(e, h)}>
-            <title>Resize selection (Shift keeps ratio)</title>
+            <title>{t('studio.resizeSelectionTip')}</title>
             <rect x={p.x - grab / 2} y={p.y - grab / 2} width={grab} height={grab} fill="transparent" />
             <rect
               x={p.x - size / 2}
@@ -1738,6 +1751,7 @@ function HoverAffordances({
   onArrowDown: (e: ReactPointerEvent, anchor: BeeAnchor) => void
   onAnchorDown: (e: ReactPointerEvent, anchor: BeeAnchor) => void
 }) {
+  const { t } = useI18n()
   const dirs: { anchor: BeeAnchor; dx: number; dy: number; rotate: number }[] = [
     { anchor: 'n', dx: 0, dy: -1, rotate: -90 },
     { anchor: 'e', dx: 1, dy: 0, rotate: 0 },
@@ -1772,7 +1786,7 @@ function HoverAffordances({
                 stroke="#ffffff"
                 strokeWidth={1}
               />
-              <title>Drag to connect · click to add a connected copy</title>
+              <title>{t('studio.connectTip')}</title>
             </g>
           )
         })}
@@ -1890,6 +1904,7 @@ function LabelEditor({
   onChange: (text: string) => void
   onCommit: () => void
 }) {
+  const { t } = useI18n()
   const rect = (() => {
     if (labelEdit.kind === 'node') {
       const n = nodeById.get(labelEdit.id)
@@ -1964,7 +1979,7 @@ function LabelEditor({
         }
       }}
       onDoubleClick={(e) => e.stopPropagation()}
-      aria-label="Shape label"
+      aria-label={t('studio.shapeLabel')}
     />
   )
 }
@@ -1988,6 +2003,7 @@ function StudioContextMenu({
   onAddShape: (world: BeePoint, clientX: number, clientY: number) => void
   onSaveAsCollection?: () => void
 }) {
+  const { t } = useI18n()
   const hasSelection = ctrl.selection.nodes.length > 0 || ctrl.selection.edges.length > 0
   const item = (label: string, action: () => void, opts?: { hint?: string; danger?: boolean }) => (
     <button
@@ -2013,40 +2029,40 @@ function StudioContextMenu({
     >
       {hasSelection ? (
         <>
-          {item('Cut', () => ctrl.cutSelection(), { hint: 'Ctrl+X' })}
-          {item('Copy', () => ctrl.copySelection(), { hint: 'Ctrl+C' })}
-          {item('Duplicate', () => ctrl.duplicateSelection(), { hint: 'Ctrl+D' })}
+          {item(t('studio.cut'), () => ctrl.cutSelection(), { hint: 'Ctrl+X' })}
+          {item(t('common.copy'), () => ctrl.copySelection(), { hint: 'Ctrl+C' })}
+          {item(t('studio.duplicate'), () => ctrl.duplicateSelection(), { hint: 'Ctrl+D' })}
           {onSaveAsCollection &&
             ctrl.selection.nodes.length > 0 &&
-            item('Save as collection…', onSaveAsCollection)}
+            item(t('studio.menuSaveCollection'), onSaveAsCollection)}
           <div className="studio-menu-sep" />
-          {state.nodeId && item('Edit label', () => onEditLabel('node', state.nodeId!), { hint: 'F2' })}
-          {state.edgeId && item('Edit label', () => onEditLabel('edge', state.edgeId!), { hint: 'F2' })}
+          {state.nodeId && item(t('studio.editLabel'), () => onEditLabel('node', state.nodeId!), { hint: 'F2' })}
+          {state.edgeId && item(t('studio.editLabel'), () => onEditLabel('edge', state.edgeId!), { hint: 'F2' })}
           {ctrl.selection.nodes.length > 0 && (
             <>
-              {item('Bring to front', () => ctrl.orderSelection('front'), { hint: 'Ctrl+Shift+F' })}
-              {item('Send to back', () => ctrl.orderSelection('back'), { hint: 'Ctrl+Shift+B' })}
+              {item(t('studio.bringToFront'), () => ctrl.orderSelection('front'), { hint: 'Ctrl+Shift+F' })}
+              {item(t('studio.sendToBack'), () => ctrl.orderSelection('back'), { hint: 'Ctrl+Shift+B' })}
             </>
           )}
           {state.edgeId && (
             <>
               <div className="studio-menu-sep" />
-              {item('Straight', () => ctrl.updateEdges([state.edgeId!], { route: 'straight', waypoints: undefined }))}
-              {item('Orthogonal', () => ctrl.updateEdges([state.edgeId!], { route: 'orthogonal', waypoints: undefined }))}
-              {item('Curved', () => ctrl.updateEdges([state.edgeId!], { route: 'curved', waypoints: undefined }))}
-              {item('Clear waypoints', () => ctrl.updateEdges([state.edgeId!], { waypoints: undefined }))}
+              {item(t('studio.route.straight'), () => ctrl.updateEdges([state.edgeId!], { route: 'straight', waypoints: undefined }))}
+              {item(t('studio.route.orthogonal'), () => ctrl.updateEdges([state.edgeId!], { route: 'orthogonal', waypoints: undefined }))}
+              {item(t('studio.route.curved'), () => ctrl.updateEdges([state.edgeId!], { route: 'curved', waypoints: undefined }))}
+              {item(t('studio.clearWaypoints'), () => ctrl.updateEdges([state.edgeId!], { waypoints: undefined }))}
             </>
           )}
           <div className="studio-menu-sep" />
-          {item('Delete', () => ctrl.deleteSelection(), { hint: 'Del', danger: true })}
+          {item(t('common.delete'), () => ctrl.deleteSelection(), { hint: 'Del', danger: true })}
         </>
       ) : (
         <>
-          {item('Paste here', () => onPaste(state.world), { hint: 'Ctrl+V' })}
-          {item('Add shape…', () => onAddShape(state.world, state.clientX, state.clientY))}
+          {item(t('studio.pasteHere'), () => onPaste(state.world), { hint: 'Ctrl+V' })}
+          {item(t('studio.addShapeMenu'), () => onAddShape(state.world, state.clientX, state.clientY))}
           <div className="studio-menu-sep" />
-          {item('Select all', () => ctrl.selectAll(), { hint: 'Ctrl+A' })}
-          {item('Fit page', onFit, { hint: 'Ctrl+Shift+H' })}
+          {item(t('studio.selectAll'), () => ctrl.selectAll(), { hint: 'Ctrl+A' })}
+          {item(t('studio.fitPage'), onFit, { hint: 'Ctrl+Shift+H' })}
         </>
       )}
     </div>
@@ -2077,11 +2093,12 @@ function ShapePicker({
   onPick: (itemId: string) => void
   onClose: () => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="studio-shape-picker" style={{ left: state.clientX, top: state.clientY }}>
       <div className="studio-shape-picker-head">
-        <span>{state.pending ? 'Connect to a new shape' : 'Pick a shape'}</span>
-        <button type="button" className="btn ghost sm" onClick={onClose} aria-label="Close">
+        <span>{state.pending ? t('studio.connectToNewShape') : t('studio.pickShape')}</span>
+        <button type="button" className="btn ghost sm" onClick={onClose} aria-label={t('common.close')}>
           ✕
         </button>
       </div>
@@ -2089,16 +2106,17 @@ function ShapePicker({
         {QUICK_SHAPES.map((id) => {
           const item = findLibraryItem(id)
           if (!item) return null
+          const name = shapeName(t, id, item.label)
           return (
             <button
               key={id}
               type="button"
               className="studio-shape-picker-item"
-              title={item.label}
+              title={name}
               onClick={() => onPick(id)}
             >
               <ShapeThumb itemId={id} />
-              <span>{item.label}</span>
+              <span>{name}</span>
             </button>
           )
         })}

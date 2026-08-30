@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { useI18n } from '../i18n'
 import type { ApiKeyStatus } from '../types'
 
 /** 40 URL-safe characters from the browser's CSPRNG — same shape as a generated secret elsewhere. */
@@ -16,6 +17,7 @@ function randomKey(): string {
  * be copied to the publishing app before it leaves this screen.
  */
 export function ApiKeyPanel() {
+  const { t } = useI18n()
   const [status, setStatus] = useState<ApiKeyStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -55,27 +57,23 @@ export function ApiKeyPanel() {
   }
 
   const statusLine = !status
-    ? 'Loading…'
+    ? t('common.loading')
     : status.source === 'settings'
-      ? `A key is set from this page (ends in …${status.keyHint}).`
+      ? t('providers.apiKeySetFromPage', { hint: status.keyHint ?? '' })
       : status.source === 'config'
-        ? `A key from the server configuration (BeeDocs__ApiKey) is active (ends in …${status.keyHint}). Saving one here overrides it — no restart needed.`
-        : 'No key set — apps can publish without authentication, and with sign-in enabled they cannot publish at all.'
+        ? t('providers.apiKeyFromConfig', { hint: status.keyHint ?? '' })
+        : t('providers.apiKeyNone')
 
   return (
     <div className="api-key-panel">
-      <p className="muted sm">
-        Apps and the MCP server authenticate with this key (<code>Authorization: Bearer</code> or{' '}
-        <code>X-Api-Key</code>). It is stored server-side and never shown again after saving —
-        copy it to the publishing app first.
-      </p>
+      <p className="muted sm">{t('providers.apiKeyIntro')}</p>
       <p className={status && !status.hasKey ? 'sm' : 'muted sm'}>{statusLine}</p>
 
       <div className="field-row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
           type="text"
           value={draft}
-          placeholder="New API key"
+          placeholder={t('providers.apiKeyPlaceholder')}
           autoComplete="off"
           spellCheck={false}
           style={{ flex: '1 1 260px', fontFamily: 'monospace' }}
@@ -85,10 +83,10 @@ export function ApiKeyPanel() {
           }}
         />
         <button type="button" className="btn sm" disabled={busy} onClick={() => setDraft(randomKey())}>
-          Generate
+          {t('providers.generate')}
         </button>
         <button type="button" className="btn sm" disabled={busy || draft.trim() === ''} onClick={copy}>
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? t('providers.copied') : t('common.copy')}
         </button>
         <button
           type="button"
@@ -96,20 +94,17 @@ export function ApiKeyPanel() {
           disabled={busy || draft.trim() === ''}
           onClick={() => submit(draft)}
         >
-          Save key
+          {t('providers.saveKey')}
         </button>
         {status?.source === 'settings' && (
           <button type="button" className="btn sm" disabled={busy} onClick={() => submit('')}>
-            Clear stored key
+            {t('providers.clearStoredKey')}
           </button>
         )}
       </div>
 
       {savedNote && (
-        <p className="muted sm settings-hint">
-          Saved — it takes effect immediately. Update every publishing app (and the MCP server&apos;s{' '}
-          <code>BEEDOCS_API_KEY</code>) with the new key.
-        </p>
+        <p className="muted sm settings-hint">{t('providers.apiKeySavedNote')}</p>
       )}
       {error && (
         <p className="sm" style={{ color: 'var(--danger)' }}>

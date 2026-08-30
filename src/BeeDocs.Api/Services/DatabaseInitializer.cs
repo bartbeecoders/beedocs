@@ -336,6 +336,50 @@ public static class DatabaseInitializer
             );
 
             CREATE INDEX IF NOT EXISTS idx_git_repo_connection ON git_repo(connection_id);
+
+            CREATE TABLE IF NOT EXISTS git_assist_job (
+              id TEXT PRIMARY KEY NOT NULL,
+              repo_id TEXT NOT NULL,
+              -- readme | documentation | manual | summary (GitAssistService.Kinds).
+              kind TEXT NOT NULL,
+              instructions TEXT,
+              provider_id TEXT,
+              model TEXT,
+              -- queued | running | completed | failed. Generation runs in the
+              -- background (LLM calls are minutes-scale); the row is the status.
+              status TEXT NOT NULL DEFAULT 'queued',
+              error TEXT,
+              -- The generated Markdown stays on the job even when publishing
+              -- fails, so a completed draft is never lost to a bad shelf id.
+              markdown TEXT,
+              provider_name TEXT,
+              model_used TEXT,
+              prompt_tokens INTEGER,
+              completion_tokens INTEGER,
+              elapsed_ms INTEGER,
+              context_files TEXT,
+              -- 1 = publish the result into the library when generation ends.
+              publish_book INTEGER NOT NULL DEFAULT 0,
+              shelf_id TEXT,
+              -- Once published, the created/updated targets — a re-run updates
+              -- the same page in place (a new revision) instead of forking.
+              book_id TEXT,
+              page_id TEXT,
+              created_by TEXT,
+              created_by_name TEXT,
+              created_at TEXT NOT NULL,
+              started_at TEXT,
+              finished_at TEXT,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_git_assist_job_repo ON git_assist_job(repo_id);
+
+            -- Jobs are about a repo; when the repo goes, its job history goes too
+            -- (search-queue trigger style, so every writer is covered).
+            CREATE TRIGGER IF NOT EXISTS trg_git_repo_assist_job_delete AFTER DELETE ON git_repo BEGIN
+              DELETE FROM git_assist_job WHERE repo_id = OLD.id;
+            END;
             """;
 
         await cmd.ExecuteNonQueryAsync(ct);
@@ -407,6 +451,23 @@ public static class DatabaseInitializer
         {
             triggers.CommandText = QueueTriggerSql + FavoriteTriggerSql;
             await triggers.ExecuteNonQueryAsync(ct);
+        }
+
+        // Assist jobs run as in-process tasks, so a job still queued or running
+        // in the database can only be a leftover from a process that died —
+        // marked failed here rather than left "running" forever.
+        await using (var sweep = connection.CreateCommand())
+        {
+            sweep.CommandText = """
+                UPDATE git_assist_job
+                SET status = 'failed',
+                    error = 'Interrupted by a server restart — run it again.',
+                    finished_at = $now,
+                    updated_at = $now
+                WHERE status IN ('queued', 'running')
+                """;
+            SqliteHelpers.Add(sweep, "$now", SqliteHelpers.FormatTimestamp(DateTimeOffset.UtcNow));
+            await sweep.ExecuteNonQueryAsync(ct);
         }
     }
 

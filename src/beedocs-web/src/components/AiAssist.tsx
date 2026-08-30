@@ -26,24 +26,23 @@ import {
   type TextSelection,
 } from '../hooks/useLlmAssist'
 import type { LlmTask } from '../types'
+import { useI18n, type MessageKey, type TFunction } from '../i18n'
 import '../styles/ai-assist.css'
 
-const TASK_ACTIONS: readonly (readonly [LlmTask, string])[] = [
-  ['rewrite', 'Rewrite'],
-  ['grammar', 'Fix grammar'],
-  ['format', 'Format as Markdown'],
-  ['summarize', 'Summarize'],
-]
+/** The four selection actions, labelled at render via `editor.ai.task.*`. */
+const TASK_ACTIONS: readonly LlmTask[] = ['rewrite', 'grammar', 'format', 'summarize']
 
 /** The chord that accepts a continuation, written the way the keyboard has it. */
 const ACCEPT_KEY = IS_APPLE ? '⌘' : 'Ctrl'
 /** Spelled out for the live region: a screen reader reads "⌘" as nothing useful. */
-const ACCEPT_SPOKEN = IS_APPLE ? 'Command Enter' : 'Control Enter'
+const ACCEPT_SPOKEN_KEY: MessageKey = IS_APPLE
+  ? 'editor.ai.spokenAcceptMac'
+  : 'editor.ai.spokenAcceptWin'
 /** A superseded suggestion must not queue an utterance of its own. */
 const ANNOUNCE_DELAY_MS = 700
 
-function taskLabel(task: LlmTask): string {
-  return TASK_ACTIONS.find(([t]) => t === task)?.[1] ?? task
+function taskLabel(t: TFunction, task: LlmTask): string {
+  return t(`editor.ai.task.${task}` as MessageKey)
 }
 
 /**
@@ -70,6 +69,7 @@ function useAssistAnnouncement(
   proposal: LlmProposal | null,
   inserted: number,
 ): string {
+  const { t } = useI18n()
   const [message, setMessage] = useState('')
   // Two suggestions in a row can be identical, and identical state is no state
   // change — so the live region never spoke the second one. An alternating
@@ -84,11 +84,16 @@ function useAssistAnnouncement(
   useEffect(() => {
     if (inserted !== lastInserted.current) {
       lastInserted.current = inserted
-      say('Suggestion inserted.')
+      say(t('editor.ai.announceInserted'))
       return
     }
     if (proposal) {
-      say(`${taskLabel(proposal.task)} suggestion ready: ${speakable(proposal.text)}`)
+      say(
+        t('editor.ai.announceReady', {
+          task: taskLabel(t, proposal.task),
+          text: speakable(proposal.text),
+        }),
+      )
       return
     }
     if (!ghost) {
@@ -98,11 +103,14 @@ function useAssistAnnouncement(
     // Debounced, so a suggestion replaced a moment later is never spoken at all.
     const timer = setTimeout(() => {
       say(
-        `Suggestion: ${speakable(ghost.text)}. Press ${ACCEPT_SPOKEN} to accept, Escape to dismiss.`,
+        t('editor.ai.announceGhost', {
+          text: speakable(ghost.text),
+          keys: t(ACCEPT_SPOKEN_KEY),
+        }),
       )
     }, ANNOUNCE_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [ghost, proposal, inserted, say])
+  }, [ghost, proposal, inserted, say, t])
 
   return message
 }
@@ -170,6 +178,7 @@ function GhostPanel({
   busy: boolean
   cut: number | null
 }) {
+  const { t } = useI18n()
   // Exactly the characters the field could not draw. Leading blank lines are the
   // joiner rather than the suggestion — the field already shows the break that
   // will be committed, so repeating it here would open the strip with empty rows.
@@ -180,7 +189,7 @@ function GhostPanel({
       {busy ? (
         <span className="ai-assist-hud-keys">
           <span className="ai-assist-spark" />
-          Thinking
+          {t('editor.ai.thinking')}
         </span>
       ) : (
         <>
@@ -192,7 +201,7 @@ function GhostPanel({
           )}
           <span className="ai-assist-hud-keys">
             <kbd>{ACCEPT_KEY}</kbd>
-            <kbd>Enter</kbd> accept · <kbd>Esc</kbd> dismiss
+            <kbd>Enter</kbd> {t('editor.ai.hudAccept')} · <kbd>Esc</kbd> {t('editor.ai.hudDismiss')}
           </span>
         </>
       )}
@@ -211,6 +220,7 @@ function GhostPanel({
  * message names actually works.
  */
 function InsertFallback({ text, onDismiss }: { text: string; onDismiss: () => void }) {
+  const { t } = useI18n()
   const textRef = useRef<HTMLPreElement>(null)
   const [copied, setCopied] = useState(false)
 
@@ -243,17 +253,17 @@ function InsertFallback({ text, onDismiss }: { text: string; onDismiss: () => vo
   return (
     <div className="ai-assist-fallback" role="alert">
       <p className="ai-assist-fallback-msg sm">
-        Couldn't insert here — press {ACCEPT_KEY}+C to copy the suggestion.
+        {t('editor.ai.copyFallback', { key: ACCEPT_KEY })}
       </p>
       <pre className="ai-assist-text is-proposed" ref={textRef} tabIndex={-1}>
         {text}
       </pre>
       <div className="ai-assist-proposal-actions">
         <button type="button" className="btn sm" onClick={copy}>
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? t('editor.ai.copied') : t('common.copy')}
         </button>
         <button type="button" className="btn ghost sm" onClick={onDismiss}>
-          Dismiss
+          {t('editor.ai.dismiss')}
         </button>
       </div>
     </div>
@@ -279,15 +289,16 @@ function SelectionMenu({
   onRun: (task: LlmTask) => void
   onCancel: () => void
 }) {
+  const { t } = useI18n()
   const point = useCaretAnchor(el, selection.end, true)
   const [active, setActive] = useState(0)
   const [box, setBox] = useState<{ top: number; left: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const buttonsRef = useRef<(HTMLButtonElement | null)[]>([])
 
-  const items: MenuItem[] = TASK_ACTIONS.map(([task, label]) => ({
+  const items: MenuItem[] = TASK_ACTIONS.map((task) => ({
     key: task,
-    label: busy === task ? `${label}…` : label,
+    label: busy === task ? `${taskLabel(t, task)}…` : taskLabel(t, task),
     run: () => onRun(task),
     // Not `disabled`: disabling the button under the pointer that just pressed
     // it drops focus to <body>, which took Escape, Tab order and the announced
@@ -297,7 +308,7 @@ function SelectionMenu({
   // Always mounted, for the same reason. Pushing it only while busy meant the
   // click that cancelled unmounted the button under the pointer — re-creating
   // the exact focus drop aria-disabled is here to prevent.
-  items.push({ key: 'cancel', label: 'Cancel', run: onCancel, inert: busy == null })
+  items.push({ key: 'cancel', label: t('common.cancel'), run: onCancel, inert: busy == null })
 
   // Measured, not assumed: the old clamp hardcoded the width of four English
   // labels, and never flipped, so a selection on the last line put the menu off
@@ -355,7 +366,7 @@ function SelectionMenu({
     <div
       className="ai-assist-menu"
       role="toolbar"
-      aria-label="AI actions for the selected text"
+      aria-label={t('editor.ai.menuLabel')}
       aria-orientation="horizontal"
       aria-busy={busy != null}
       ref={menuRef}
@@ -408,7 +419,8 @@ function ProposalCard({
   onAccept: () => void
   onReject: () => void
 }) {
-  const label = taskLabel(proposal.task)
+  const { t } = useI18n()
+  const label = taskLabel(t, proposal.task)
   const cardRef = useRef<HTMLDivElement>(null)
 
   // The menu button that started this may have unmounted, so without this focus
@@ -425,7 +437,7 @@ function ProposalCard({
     <div
       className="ai-assist-proposal"
       role="group"
-      aria-label={`${label} suggestion`}
+      aria-label={t('editor.ai.proposalLabel', { task: label })}
       ref={cardRef}
       tabIndex={-1}
     >
@@ -435,26 +447,23 @@ function ProposalCard({
       </div>
       <div className="ai-assist-proposal-body">
         <div className="ai-assist-proposal-col">
-          <span className="ai-assist-col-label">Selected</span>
+          <span className="ai-assist-col-label">{t('editor.ai.colSelected')}</span>
           <pre className="ai-assist-text is-original">{proposal.original}</pre>
         </div>
         <div className="ai-assist-proposal-col">
-          <span className="ai-assist-col-label">Proposed</span>
+          <span className="ai-assist-col-label">{t('editor.ai.colProposed')}</span>
           <pre className="ai-assist-text is-proposed">{proposal.text}</pre>
         </div>
       </div>
       {stale && (
-        <p className="ai-assist-note sm">
-          The block changed while this was generating, so the original range no longer applies.
-          Discard it and run the action again.
-        </p>
+        <p className="ai-assist-note sm">{t('editor.ai.staleNote')}</p>
       )}
       <div className="ai-assist-proposal-actions">
         <button type="button" className="btn primary sm" disabled={stale} onClick={onAccept}>
-          Replace selection
+          {t('editor.ai.replaceSelection')}
         </button>
         <button type="button" className="btn ghost sm" onClick={onReject}>
-          Discard
+          {t('editor.ai.discard')}
         </button>
       </div>
     </div>
@@ -483,6 +492,7 @@ type FieldProps = {
  * below it instead.
  */
 export function AiAssistField({ context, children }: FieldProps) {
+  const { t } = useI18n()
   const wrapRef = useRef<HTMLDivElement>(null)
   const [el, setEl] = useState<HTMLTextAreaElement | null>(null)
   /** Where the field ran out of room for the suggestion, in its characters. */
@@ -602,7 +612,7 @@ export function AiAssistField({ context, children }: FieldProps) {
         <div className="ai-assist-error" role="alert">
           <span className="ai-assist-error-text">{actions.error}</span>
           <button type="button" className="btn ghost sm" onClick={actions.dismissError}>
-            Dismiss
+            {t('editor.ai.dismiss')}
           </button>
         </div>
       )}
@@ -614,48 +624,22 @@ type AssistState = {
   key: 'inline' | 'selection' | 'paused' | 'snoozed'
   /** Shape as well as colour, so the state survives a monochrome reading. */
   glyph: string
-  word: string
-  /** What it means for the user's prose, in the words they would use. */
-  plain: string
 }
 
+/**
+ * The state's word lives at `editor.ai.state.{key}` and what it means for the
+ * user's prose at `editor.ai.stateDesc.{key}` — looked up where it is rendered.
+ */
 function assistState(inlineOn: boolean, degraded: boolean, snoozed: boolean): AssistState {
   // The deliberate choice wins over the failure: someone who turned inline
   // suggestions off was being told the feature was "paused", which reads as a
   // fault they should do something about.
-  if (!inlineOn) {
-    return {
-      key: 'selection',
-      glyph: '○',
-      word: 'Selection only',
-      plain: 'Nothing is sent anywhere until you select text and pick an action.',
-    }
-  }
-  if (degraded) {
-    return {
-      key: 'paused',
-      glyph: '⚠',
-      word: 'Paused',
-      plain: 'A request failed, so continuations are waiting before trying again.',
-    }
-  }
-  if (snoozed) {
-    return {
-      key: 'snoozed',
-      glyph: '◐',
-      word: 'Snoozed',
-      // Scoped honestly: the lockout belongs to a block, and it lifts by itself
-      // when you leave that block.
-      plain:
-        'Three suggestions were dismissed in a block, so it has stopped offering there until you leave it.',
-    }
-  }
-  return {
-    key: 'inline',
-    glyph: '●',
-    word: 'Inline',
-    plain: 'When you pause typing, the block you are in and the text around it on this page are sent to the provider below.',
-  }
+  if (!inlineOn) return { key: 'selection', glyph: '○' }
+  if (degraded) return { key: 'paused', glyph: '⚠' }
+  // The snoozed copy is scoped honestly: the lockout belongs to a block, and it
+  // lifts by itself when you leave that block.
+  if (snoozed) return { key: 'snoozed', glyph: '◐' }
+  return { key: 'inline', glyph: '●' }
 }
 
 /**
@@ -665,6 +649,7 @@ function assistState(inlineOn: boolean, degraded: boolean, snoozed: boolean): As
  * so a workspace that never sets one up never hears about it.
  */
 export function AiAssistBar() {
+  const { t } = useI18n()
   const { active } = useLlmAvailability()
   const [inlineOn, setInlineOn] = useInlineSuggestions()
   const chosen = useInlineSuggestionsChosen()
@@ -707,6 +692,7 @@ export function AiAssistBar() {
   if (!active) return null
 
   const state = assistState(inlineOn, health.degraded, snoozed)
+  const stateWord = t(`editor.ai.state.${state.key}` as MessageKey)
 
   return (
     <div
@@ -733,15 +719,15 @@ export function AiAssistBar() {
         ref={buttonRef}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        aria-label={`AI help — ${state.word}`}
+        aria-label={t('editor.ai.helpAria', { state: stateWord })}
         onClick={() => (open ? close(true) : setOpen(true))}
       >
         {/* No "AI" badge beside the words "AI help": the token was printed twice
             inside seven characters and took half the control's width. The badge
             still marks generated text, where it means something. */}
-        <span>AI help</span>
+        <span>{t('editor.ai.help')}</span>
         <span className={`ai-assist-pill is-${state.key}`}>
-          <span aria-hidden="true">{state.glyph}</span> {state.word}
+          <span aria-hidden="true">{state.glyph}</span> {stateWord}
         </span>
         <span className="ai-assist-chevron" aria-hidden="true">
           ▾
@@ -756,29 +742,27 @@ export function AiAssistBar() {
               checked={inlineOn}
               onChange={(e) => setInlineOn(e.target.checked)}
             />
-            <span>Inline suggestions</span>
+            <span>{t('editor.ai.inlineSwitch')}</span>
           </label>
-          <p className="ai-assist-popover-state sm">{state.plain}</p>
+          <p className="ai-assist-popover-state sm">
+            {t(`editor.ai.stateDesc.${state.key}` as MessageKey)}
+          </p>
           {!chosen && (
             // The one and only offer. Turning a provider on is a different
             // decision, made on a different screen, and it used to switch this
             // on by itself.
-            <p className="ai-assist-popover-hint muted sm">
-              Inline suggestions are off until you turn them on here.
-            </p>
+            <p className="ai-assist-popover-hint muted sm">{t('editor.ai.inlineOffHint')}</p>
           )}
           {/* Only when there is something to pause for: with the switch off, the
               panel promised a continuation one line after saying nothing is sent
               until you select text. */}
           {inlineOn && (
             <p className="ai-assist-popover-hint muted sm">
-              Pause while typing for a continuation at the caret — {ACCEPT_KEY}+Enter accepts, Esc
-              dismisses.
+              {t('editor.ai.inlineHint', { key: ACCEPT_KEY })}
             </p>
           )}
           <p className="ai-assist-popover-hint muted sm">
-            Select text for rewrite, grammar, Markdown or summary; {ACCEPT_KEY}+. opens the actions
-            for it.
+            {t('editor.ai.selectHint', { key: ACCEPT_KEY })}
           </p>
           {snoozed && (
             // Both of these buttons remove themselves — the state they undo is
@@ -792,15 +776,14 @@ export function AiAssistBar() {
                 buttonRef.current?.focus()
               }}
             >
-              Resume in every block
+              {t('editor.ai.resumeAll')}
             </button>
           )}
           {health.degraded && (
             <>
               <p className="ai-assist-popover-note sm">
-                Continuations are paused after a failed request.
-                {health.reason ? ` ${health.reason}` : ''} Resuming clears the wait; the next
-                continuation goes out when you pause typing.
+                {t('editor.ai.pausedNote')}
+                {health.reason ? ` ${health.reason}` : ''} {t('editor.ai.pausedResumeNote')}
               </p>
               <button
                 type="button"
@@ -810,12 +793,12 @@ export function AiAssistBar() {
                   buttonRef.current?.focus()
                 }}
               >
-                Resume now
+                {t('editor.ai.resumeNow')}
               </button>
             </>
           )}
-          <Link className="btn ghost sm" to="/settings">
-            {active.name} · {active.model || 'first listed model'}
+          <Link className="btn ghost sm" to="/settings/ai">
+            {active.name} · {active.model || t('editor.ai.firstListedModel')}
           </Link>
         </div>
       )}

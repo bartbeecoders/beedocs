@@ -1,4 +1,5 @@
 import { useCallback, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useI18n } from '../i18n'
 
 type Props = {
   side: 'left' | 'right'
@@ -23,6 +24,7 @@ export function ResizablePane({
   title,
   children,
 }: Props) {
+  const { t } = useI18n()
   const dragging = useRef(false)
 
   const onPointerDown = useCallback(
@@ -52,7 +54,7 @@ export function ResizablePane({
   if (collapsed) {
     return (
       <div className={`pane-rail pane-rail-${side}`}>
-        <button type="button" className="pane-rail-btn" onClick={onToggle} title={`Show ${title}`}>
+        <button type="button" className="pane-rail-btn" onClick={onToggle} title={t('canvas.pane.show', { title })}>
           <span className="pane-rail-label">{title}</span>
         </button>
       </div>
@@ -63,7 +65,7 @@ export function ResizablePane({
     <div className={`pane pane-${side}`} style={{ width }}>
       <div className="pane-header">
         <span className="pane-title">{title}</span>
-        <button type="button" className="icon-btn" onClick={onToggle} title={`Collapse ${title}`} aria-label={`Collapse ${title}`}>
+        <button type="button" className="icon-btn" onClick={onToggle} title={t('canvas.pane.collapse', { title })} aria-label={t('canvas.pane.collapse', { title })}>
           {side === 'left' ? '‹' : '›'}
         </button>
       </div>
@@ -73,7 +75,7 @@ export function ResizablePane({
         onPointerDown={onPointerDown}
         role="separator"
         aria-orientation="vertical"
-        aria-label={`Resize ${title}`}
+        aria-label={t('canvas.pane.resize', { title })}
       />
     </div>
   )

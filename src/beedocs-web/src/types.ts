@@ -1055,9 +1055,81 @@ export type GitAssistResult = {
   contextFiles: string[]
 }
 
+export type GitAssistJobStatus = 'queued' | 'running' | 'completed' | 'failed'
+
+/**
+ * One background AI-drafting run against a repo. Lists omit `markdown`; the
+ * single-job GET carries it. `bookId`/`pageId` are set once the result was
+ * published into the library — a re-run updates that same page in place.
+ */
+export type GitAssistJob = {
+  id: string
+  repoId: string
+  repoName: string
+  kind: GitAssistKind
+  status: GitAssistJobStatus
+  error: string | null
+  instructions: string | null
+  providerName: string | null
+  model: string | null
+  completionTokens: number | null
+  elapsedMs: number | null
+  contextFiles: string[]
+  publishBook: boolean
+  shelfId: string | null
+  bookId: string | null
+  pageId: string | null
+  createdByName: string | null
+  createdAt: string
+  startedAt: string | null
+  finishedAt: string | null
+  markdown: string | null
+}
+
 export type GitCommitResult = {
   commitSha: string
   /** "Name <email>" as recorded in the commit. */
   author: string
   status: GitStatus
+}
+
+/**
+ * Raw palette of the active Omarchy desktop theme, reported by /api/branding
+ * when the API runs on an Omarchy machine. Only colors the theme actually
+ * declared are present — omarchyTheme.ts derives the full token set.
+ */
+export type OmarchyTheme = {
+  name: string
+  scheme: 'light' | 'dark'
+  background: string
+  foreground: string
+  accent?: string | null
+  muted?: string | null
+  bgLighter?: string | null
+  bgDarker?: string | null
+  selection?: string | null
+  red?: string | null
+  green?: string | null
+  yellow?: string | null
+  blue?: string | null
+  magenta?: string | null
+  cyan?: string | null
+}
+
+/** Instance branding — anonymous read, the login screen renders it pre-session. */
+export type Branding = {
+  title: string
+  /** True when an admin stored a title (the settings form shows "reset"). */
+  customTitle: boolean
+  /** Cache-busted logo URL, or null for the default 🐝 mark. */
+  logoUrl: string | null
+  omarchy: OmarchyTheme | null
+}
+
+export type GenerateLogoResult = {
+  /** Sanitized server-side — safe to preview inline. Stored only on apply. */
+  svg: string
+  providerName: string
+  model: string
+  elapsedMs: number
 }

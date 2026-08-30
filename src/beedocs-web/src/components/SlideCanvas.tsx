@@ -4,6 +4,7 @@ import { api } from '../api'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { useTheme } from '../theme'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n } from '../i18n'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { SlideDeck } from '../types'
 import { parseDeck } from '../slides/slideModel'
@@ -44,6 +45,7 @@ export function SlideCanvas({ onStateChange }: Props) {
   const { renameInTree, deleteSlideDeck: deleteFromTree } = useWorkspace()
   const { autoSaveEnabled } = useTheme()
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   const [deck, setDeck] = useState<SlideDeck | null>(null)
   const [title, setTitle] = useState('')
   const [source, setSource] = useState('')
@@ -168,10 +170,10 @@ export function SlideCanvas({ onStateChange }: Props) {
   }, [])
 
   const remove = useCallback(async () => {
-    if (!confirm('Delete this slide deck?')) return
+    if (!confirm(t('canvas.deleteDeckConfirm'))) return
     await deleteFromTree(deckIdRef.current, bookId)
     void navigate(`/books/${bookId}`)
-  }, [deleteFromTree, bookId, navigate])
+  }, [t, deleteFromTree, bookId, navigate])
 
   /**
    * Both menu items download the same server-rendered .pptx — Google Slides
@@ -223,17 +225,17 @@ export function SlideCanvas({ onStateChange }: Props) {
     return <div className="canvas-message error">{error}</div>
   }
   if (!deck) {
-    return <div className="canvas-message muted">Loading slides…</div>
+    return <div className="canvas-message muted">{t('canvas.loadingSlides')}</div>
   }
 
   const statusLabel = saving
-    ? 'Saving…'
+    ? t('common.saving')
     : dirty
       ? autoSaveEnabled
-        ? 'Unsaved · auto-save pending'
-        : 'Unsaved'
+        ? t('canvas.unsavedAutoSave')
+        : t('canvas.unsaved')
       : savedAt
-        ? `Saved · ${savedAt}`
+        ? t('canvas.savedAt', { time: savedAt })
         : null
 
   return (
@@ -248,21 +250,23 @@ export function SlideCanvas({ onStateChange }: Props) {
                 setTitle(e.target.value)
                 setDirty(true)
               }}
-              placeholder="Presentation title"
+              placeholder={t('canvas.deckTitlePlaceholder')}
             />
           ) : (
             <span className="canvas-title">{title}</span>
           )}
           <div className="canvas-meta">
             <span>
-              {parsed.slides.length} slide{parsed.slides.length === 1 ? '' : 's'}
+              {parsed.slides.length === 1
+                ? t('canvas.slideCount.one')
+                : t('canvas.slideCount.other', { count: parsed.slides.length })}
             </span>
             {statusLabel && (
               <span className={dirty && !saving ? 'dirty-dot' : undefined}>· {statusLabel}</span>
             )}
             {autoSaveEnabled && canWrite && (
-              <span className="muted save-hint" title="Ctrl/Cmd+S to save immediately">
-                · auto-save on
+              <span className="muted save-hint" title={t('canvas.saveShortcutHint')}>
+                · {t('canvas.autoSaveOn')}
               </span>
             )}
           </div>
@@ -273,9 +277,9 @@ export function SlideCanvas({ onStateChange }: Props) {
               type="button"
               className="btn ghost sm"
               onClick={() => setTemplatePromptOpen(true)}
-              title="Save this deck's slides as a reusable layout for new decks"
+              title={t('canvas.saveAsTemplateHint')}
             >
-              Save as template
+              {t('canvas.saveAsTemplate')}
             </button>
           )}
           <div className="slide-shape-menu">
@@ -285,7 +289,7 @@ export function SlideCanvas({ onStateChange }: Props) {
               onClick={() => setExportOpen((v) => !v)}
               aria-expanded={exportOpen}
             >
-              Export ▾
+              {t('canvas.export')} ▾
             </button>
             {exportOpen && (
               <div
@@ -296,7 +300,7 @@ export function SlideCanvas({ onStateChange }: Props) {
                   type="button"
                   className="slide-shape-item"
                   onClick={() => void exportPptx('powerpoint')}
-                  title="Download as a PowerPoint file"
+                  title={t('canvas.exportPptxHint')}
                 >
                   PowerPoint (.pptx)
                 </button>
@@ -304,7 +308,7 @@ export function SlideCanvas({ onStateChange }: Props) {
                   type="button"
                   className="slide-shape-item"
                   onClick={() => void exportPptx('google')}
-                  title="Downloads the .pptx and opens Google Slides — import it there via File → Open → Upload"
+                  title={t('canvas.exportGoogleHint')}
                 >
                   Google Slides
                 </button>
@@ -318,10 +322,10 @@ export function SlideCanvas({ onStateChange }: Props) {
                 className="btn primary sm"
                 onClick={() => setPresentFrom(0)}
               >
-                ▶ Present
+                ▶ {t('canvas.present')}
               </button>
-              <span className="ws-theme-pill" title="Your account has read-only access">
-                Read-only
+              <span className="ws-theme-pill" title={t('canvas.readOnlyHint')}>
+                {t('canvas.readOnly')}
               </span>
             </>
           )}
@@ -332,7 +336,7 @@ export function SlideCanvas({ onStateChange }: Props) {
               disabled={saving || !dirty}
               onClick={() => void save()}
             >
-              {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+              {saving ? t('common.saving') : dirty ? t('common.save') : t('common.saved')}
             </button>
           )}
         </div>
@@ -372,11 +376,11 @@ export function SlideCanvas({ onStateChange }: Props) {
 
       <NamePromptDialog
         open={templatePromptOpen}
-        title="Save as template"
-        label="Template name"
-        placeholder="e.g. Company pitch layout"
+        title={t('canvas.saveAsTemplate')}
+        label={t('canvas.templateName')}
+        placeholder={t('canvas.templateNamePlaceholder')}
         defaultValue={title}
-        confirmLabel="Save template"
+        confirmLabel={t('canvas.saveTemplate')}
         onSubmit={async (name) => {
           await api.createSlideTemplate({ name, source: sourceRef.current })
         }}

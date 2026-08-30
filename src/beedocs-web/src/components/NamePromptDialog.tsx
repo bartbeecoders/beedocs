@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useI18n } from '../i18n'
 
 export type NamePromptSelect = {
   label: string
@@ -25,14 +26,15 @@ export type NamePromptDialogProps = {
 export function NamePromptDialog({
   open,
   title,
-  label = 'Name',
+  label,
   placeholder,
   defaultValue = '',
-  confirmLabel = 'Create',
+  confirmLabel,
   select,
   onSubmit,
   onClose,
 }: NamePromptDialogProps) {
+  const { t } = useI18n()
   const titleId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
   const [value, setValue] = useState(defaultValue)
@@ -46,11 +48,11 @@ export function NamePromptDialog({
     setSelected(select?.defaultValue ?? '')
     setBusy(false)
     setError(null)
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       inputRef.current?.focus()
       inputRef.current?.select()
     }, 0)
-    return () => window.clearTimeout(t)
+    return () => window.clearTimeout(timer)
   }, [open, defaultValue, select?.defaultValue])
 
   useEffect(() => {
@@ -96,13 +98,13 @@ export function NamePromptDialog({
       >
         <header className="modal-header">
           <h2 id={titleId}>{title}</h2>
-          <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="Close">
+          <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label={t('common.close')}>
             ✕
           </button>
         </header>
         <div className="modal-body">
           <label className="field">
-            <span className="field-label">{label}</span>
+            <span className="field-label">{label ?? t('common.name')}</span>
             <input
               ref={inputRef}
               value={value}
@@ -134,10 +136,10 @@ export function NamePromptDialog({
         </div>
         <footer className="modal-footer">
           <button type="button" className="btn ghost" disabled={busy} onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button type="submit" className="btn primary" disabled={busy || !value.trim()}>
-            {busy ? 'Working…' : confirmLabel}
+            {busy ? t('dialogs.working') : (confirmLabel ?? t('common.create'))}
           </button>
         </footer>
       </form>

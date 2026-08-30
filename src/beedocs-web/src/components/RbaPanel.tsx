@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n } from '../i18n'
 import type { RbaSettings, RbaTestResult } from '../types'
 
 function errText(e: unknown): string {
@@ -15,6 +16,7 @@ function errText(e: unknown): string {
  */
 export function RbaPanel() {
   const { refresh } = useAuth()
+  const { t } = useI18n()
 
   const [settings, setSettings] = useState<RbaSettings | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -102,35 +104,24 @@ export function RbaPanel() {
     }
   }
 
-  if (!settings && !error) return <p className="muted sm">Loading…</p>
+  if (!settings && !error) return <p className="muted sm">{t('common.loading')}</p>
 
   return (
     <div className="rba-panel">
-      <p className="muted sm">
-        With RBA on, sign-in uses corporate credentials: the browser sends them directly to the RBA
-        service (never through BeeDocs) and hands BeeDocs the resulting token, which is verified and
-        mapped from the account&apos;s <code>{applicationCd || 'DOC'}</code> groups to a role
-        (admin / editor / viewer); the account is provisioned on first login. Local passwords are
-        disabled while it is on. The base URL must be reachable from users&apos; browsers <em>and</em>{' '}
-        from the BeeDocs server, and RBA&apos;s <code>CorsUrls</code> must include this app&apos;s
-        origin.
-      </p>
+      <p className="muted sm">{t('providers.rbaIntro', { code: applicationCd || 'DOC' })}</p>
 
       {settings?.source === 'config' && (
-        <p className="muted sm">
-          Current values come from the server configuration (<code>BeeDocs__Rba</code>). Saving here
-          stores them in BeeDocs and overrides the configuration — no restart needed.
-        </p>
+        <p className="muted sm">{t('providers.rbaConfigNote')}</p>
       )}
 
       <label className="check-row">
         <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} disabled={busy} />
-        <span>Use RBA (corporate sign-in) as the login provider</span>
+        <span>{t('providers.rbaEnable')}</span>
       </label>
 
       <div className="users-form" style={{ marginTop: 8 }}>
         <label className="users-field">
-          <span>RBA base URL</span>
+          <span>{t('providers.rbaBaseUrl')}</span>
           <input
             type="url"
             placeholder="https://rba.example.com"
@@ -141,7 +132,7 @@ export function RbaPanel() {
           />
         </label>
         <label className="users-field">
-          <span>Application code</span>
+          <span>{t('providers.rbaAppCode')}</span>
           <input
             value={applicationCd}
             onChange={(e) => setApplicationCd(e.target.value)}
@@ -151,7 +142,7 @@ export function RbaPanel() {
           />
         </label>
         <label className="users-field">
-          <span>Plant code (optional — empty accepts any plant)</span>
+          <span>{t('providers.rbaPlantCode')}</span>
           <input value={plantCd} onChange={(e) => setPlantCd(e.target.value)} disabled={busy} spellCheck={false} />
         </label>
         <label className="check-row">
@@ -161,39 +152,37 @@ export function RbaPanel() {
             onChange={(e) => setSyncRoles(e.target.checked)}
             disabled={busy}
           />
-          <span>Re-sync roles from RBA groups on every login</span>
+          <span>{t('providers.rbaSyncRoles')}</span>
         </label>
       </div>
 
       {enabled && !settings?.enabled && (
         <p className="users-notice">
-          Before signing out, make sure your own RBA account holds an admin group (e.g.{' '}
-          <code>{(applicationCd || 'DOC').toUpperCase()}_ADMIN</code>) — with RBA on, it is the only
-          way back to this page. Your current session stays valid either way.
+          {t('providers.rbaAdminNotice', {
+            group: `${(applicationCd || 'DOC').toUpperCase()}_ADMIN`,
+          })}
         </p>
       )}
 
       <div className="users-form-actions" style={{ marginTop: 8 }}>
         <button type="button" className="btn sm primary" disabled={busy} onClick={save}>
-          {busy ? 'Saving…' : 'Save sign-in settings'}
+          {busy ? t('common.saving') : t('providers.rbaSave')}
         </button>
         {settings?.source === 'settings' && (
           <button type="button" className="btn sm" disabled={busy} onClick={revert}>
-            Revert to server configuration
+            {t('providers.rbaRevert')}
           </button>
         )}
-        {saved && <span className="users-ok">Saved — applies to the next sign-in.</span>}
+        {saved && <span className="users-ok">{t('providers.rbaSaved')}</span>}
       </div>
 
       <div className="users-form" style={{ marginTop: 12 }}>
         <p className="muted sm" style={{ marginBottom: 4 }}>
-          Test the connection using the settings saved above. Leave the fields empty to only check
-          that RBA is reachable; with credentials it reports the role that account would get.
-          Nothing is created or changed by a test.
+          {t('providers.rbaTestBlurb')}
         </p>
         <div className="field-row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <input
-            placeholder="Username (optional)"
+            placeholder={t('providers.rbaTestUser')}
             value={testUser}
             onChange={(e) => setTestUser(e.target.value)}
             disabled={testing}
@@ -202,7 +191,7 @@ export function RbaPanel() {
           />
           <input
             type="password"
-            placeholder="Password (optional)"
+            placeholder={t('providers.rbaTestPassword')}
             value={testPassword}
             onChange={(e) => setTestPassword(e.target.value)}
             disabled={testing}
@@ -210,7 +199,7 @@ export function RbaPanel() {
             style={{ flex: '1 1 160px' }}
           />
           <button type="button" className="btn sm" disabled={testing} onClick={test}>
-            {testing ? 'Testing…' : 'Test connection'}
+            {testing ? t('providers.testing') : t('providers.testConnection')}
           </button>
         </div>
         {testResult && (

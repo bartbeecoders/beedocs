@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { useI18n } from '../i18n'
 import type { Slide, SlideDeckDoc, SlideElement, SlideTheme } from './slideModel'
 
 /**
@@ -92,6 +93,7 @@ export function SlideElementVisual({
   element: SlideElement
   theme: SlideTheme
 }) {
+  const { t } = useI18n()
   const opacity = element.opacity != null ? element.opacity / 100 : 1
 
   if (element.kind === 'image') {
@@ -103,7 +105,7 @@ export function SlideElementVisual({
         style={{ width: '100%', height: '100%', objectFit: 'fill', opacity, display: 'block' }}
       />
     ) : (
-      <div className="slide-image-placeholder">Image</div>
+      <div className="slide-image-placeholder">{t('slidesEditor.imagePlaceholder')}</div>
     )
   }
 

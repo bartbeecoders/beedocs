@@ -1,6 +1,8 @@
 import type {
   ApiKeyStatus,
   AuthState,
+  Branding,
+  GenerateLogoResult,
   RbaSettings,
   RbaTestResult,
   Book,
@@ -52,6 +54,7 @@ import type {
   GitAvailableRepo,
   GitBranch,
   GitConnection,
+  GitAssistJob,
   GitAssistKind,
   GitAssistResult,
   GitCommitDetail,
@@ -696,6 +699,50 @@ export const api = {
       body: JSON.stringify(settings),
     }),
   clearRbaSettings: () => request<RbaSettings>('/api/settings/rba', { method: 'DELETE' }),
+
+  /**
+   * Instance branding. The read is anonymous (the login screen renders the
+   * name and logo before there is a session); everything that changes it is
+   * admin-only under /api/settings/branding. Mutations return the fresh
+   * branding so callers can apply it without a second round trip.
+   */
+  getBranding: () => request<Branding>('/api/branding'),
+  updateBranding: (title: string | null) =>
+    request<Branding>('/api/settings/branding', {
+      method: 'PUT',
+      body: JSON.stringify({ title }),
+    }),
+  uploadBrandingLogo: async (file: File): Promise<Branding> => {
+    // Multipart, so no `request`: the boundary only the browser can write.
+    const form = new FormData()
+    form.append('file', file, file.name)
+    const res = await fetch(withApiBase('/api/settings/branding/logo'), {
+      method: 'POST',
+      body: form,
+    })
+    if (res.status === 401) notifyUnauthorized('/api/settings/branding/logo')
+    if (!res.ok) throw new Error(await errorText(res))
+    return res.json() as Promise<Branding>
+  },
+  /** Store an SVG the admin approved in the generate preview. */
+  setBrandingLogoSvg: (svg: string) =>
+    request<Branding>('/api/settings/branding/logo', {
+      method: 'PUT',
+      body: JSON.stringify({ svg }),
+    }),
+  deleteBrandingLogo: () => request<Branding>('/api/settings/branding/logo', { method: 'DELETE' }),
+  /** Draft only — nothing is stored until setBrandingLogoSvg applies the preview. */
+  generateBrandingLogo: (prompt: string, providerId?: string, model?: string) =>
+    request<GenerateLogoResult>('/api/settings/branding/logo/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        prompt: prompt || undefined,
+        providerId: providerId || undefined,
+        model: model || undefined,
+      }),
+      // Same class of call as the git AI actions: a slow model is not a stall.
+      timeoutMs: 300_000,
+    }),
   /** Without credentials: reachability only. With them: the full login path, reporting the mapped role. */
   testRba: (username?: string, password?: string) =>
     request<RbaTestResult>('/api/settings/rba/test', {
@@ -894,6 +941,47 @@ export const api = {
       timeoutMs: 300_000,
       signal,
     }),
+  /** Start an AI draft as a background job — answers immediately; poll the job list. */
+  startGitAssistJob: (
+    id: string,
+    body: {
+      kind: GitAssistKind
+      instructions?: string
+      providerId?: string
+      model?: string
+      publishBook?: boolean
+      shelfId?: string
+      bookId?: string
+    },
+  ) =>
+    request<GitAssistJob>(`/api/git/repos/${id}/assist/jobs`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  /** Jobs for one repo (or all repos when id is omitted), newest first, without markdown. */
+  listGitAssistJobs: (id?: string, signal?: AbortSignal) =>
+    request<GitAssistJob[]>(
+      id ? `/api/git/repos/${id}/assist/jobs` : '/api/git/assist/jobs',
+      { signal },
+    ),
+  /** One job in full — this is the call that carries the generated markdown. */
+  getGitAssistJob: (jobId: string, signal?: AbortSignal) =>
+    request<GitAssistJob>(`/api/git/assist/jobs/${jobId}`, { signal }),
+  /** Re-generate: a fresh job with the prior one's parameters and page linkage. */
+  rerunGitAssistJob: (jobId: string, instructions?: string) =>
+    request<GitAssistJob>(`/api/git/assist/jobs/${jobId}/rerun`, {
+      method: 'POST',
+      body: JSON.stringify({ instructions }),
+    }),
+  /** Publish a completed job's draft into the library as a book page. */
+  publishGitAssistJob: (jobId: string, body: { shelfId?: string; bookId?: string }) =>
+    request<GitAssistJob>(`/api/git/assist/jobs/${jobId}/publish`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  /** Delete the job record; a still-running job is cancelled first. */
+  deleteGitAssistJob: (jobId: string) =>
+    request<void>(`/api/git/assist/jobs/${jobId}`, { method: 'DELETE' }),
   /** Working-tree delete — shows as dirty until committed. */
   deleteGitFile: (id: string, path: string) =>
     request<void>(`/api/git/repos/${id}/file?path=${encodeURIComponent(path)}`, {

@@ -1,6 +1,7 @@
 import mermaid from 'mermaid'
 import { api } from '../api'
 import { withApiBase } from '../basePath'
+import { getBrandTitle } from '../branding'
 import { excelGridToHtml } from '../excelgrid/model'
 import { freeDrawToSvg } from '../freedraw/model'
 import { cellStyleClass, parseTableMarker, tableThemeClass, type TableMarker } from '../markdownTable'
@@ -80,7 +81,7 @@ export async function exportPageToPdf(pageId: string, onProgress?: ExportProgres
 <body>
   <section class="export-page">
     <h1 class="export-page-title">${esc(page.title)}</h1>
-    <p class="export-meta">Exported from BeeDocs ${esc(generated)}</p>
+    <p class="export-meta">Exported from ${esc(getBrandTitle())} ${esc(generated)}</p>
     <div class="export-page-body">${body}</div>
   </section>
   ${AUTO_PRINT_SCRIPT}
@@ -154,7 +155,7 @@ export async function exportBookToPdf(bookId: string, onProgress?: ExportProgres
 </head>
 <body>
   <header class="export-cover">
-    <p class="export-brand">BeeDocs</p>
+    <p class="export-brand">${esc(getBrandTitle())}</p>
     <h1>${esc(book.title)}</h1>
     ${book.description ? `<p class="export-desc">${esc(book.description)}</p>` : ''}
     ${chapterNote}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../../api'
+import { useI18n, type MessageKey, type TFunction } from '../../i18n'
 import {
   fragmentBounds,
   parseFragment,
@@ -44,6 +45,23 @@ const DEFAULT_COLLAPSED: Record<string, boolean> = {
 
 type PaletteGroup = CollectionGroup | ShapeGroup
 
+/**
+ * Catalog names live in diagram/shapeLibrary.ts (serialized for the MCP
+ * server, so never edited there). Known ids are translated at render time;
+ * anything without a key — e.g. the Azure stencils — keeps its catalog label.
+ */
+export function shapeDisplayName(t: TFunction, id: string, fallback: string): string {
+  const key = `studio.shape.${id}` as MessageKey
+  const text = t(key)
+  return text === key ? fallback : text
+}
+
+const SHAPE_GROUP_TITLE_KEYS: Record<string, MessageKey> = {
+  general: 'studio.group.general',
+  flowchart: 'studio.group.flowchart',
+  beedocs: 'studio.group.beedocs',
+}
+
 function matchesQuery(c: ShapeCollection, terms: string[]): boolean {
   if (terms.length === 0) return true
   const hay = `${c.name} ${c.description ?? ''} collection snippet`.toLowerCase()
@@ -58,6 +76,7 @@ export function ShapePalette({
   collectionsVersion = 0,
   disabled,
 }: Props) {
+  const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(DEFAULT_COLLAPSED)
   const [bookCollections, setBookCollections] = useState<ShapeCollection[]>([])
@@ -104,22 +123,20 @@ export function ShapePalette({
     if (!filtering || appItems.length > 0) {
       collectionGroups.push({
         id: 'app-collections',
-        title: 'App collections',
+        title: t('studio.appCollections'),
         kind: 'collections',
         items: appItems,
-        emptyHint:
-          'Save a selection as an app collection to reuse it in every book.',
+        emptyHint: t('studio.appCollectionsEmpty'),
       })
     }
 
     if (bookId && (!filtering || bookItems.length > 0)) {
       collectionGroups.push({
         id: 'book-collections',
-        title: 'Book collections',
+        title: t('studio.bookCollections'),
         kind: 'collections',
         items: bookItems,
-        emptyHint:
-          'Select shapes and use Save collection → This book to add reusable groups here.',
+        emptyHint: t('studio.bookCollectionsEmpty'),
       })
     }
 
@@ -128,11 +145,13 @@ export function ShapePalette({
     }
 
     return [...collectionGroups, ...builtIn]
-  }, [appCollections, bookCollections, bookId, query])
+  }, [appCollections, bookCollections, bookId, query, t])
 
   const deleteCollection = async (c: ShapeCollection) => {
-    const scope = c.bookId ? 'book' : 'app'
-    if (!confirm(`Delete ${scope} collection “${c.name}”?`)) return
+    const message = c.bookId
+      ? t('studio.deleteBookCollectionConfirm', { name: c.name })
+      : t('studio.deleteAppCollectionConfirm', { name: c.name })
+    if (!confirm(message)) return
     try {
       await api.deleteShapeCollection(c.id)
       if (c.bookId) {
@@ -146,23 +165,23 @@ export function ShapePalette({
   }
 
   return (
-    <aside className="studio-palette" aria-label="Shapes">
+    <aside className="studio-palette" aria-label={t('studio.shapes')}>
       <div className="studio-palette-search">
         <input
           type="search"
           value={query}
-          placeholder="Search shapes"
+          placeholder={t('studio.searchShapes')}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search shapes"
+          aria-label={t('studio.searchShapes')}
         />
       </div>
       <div className="studio-palette-scroll">
         {groups.length === 0 && (
-          <p className="muted sm studio-palette-empty">No shapes match “{query}”.</p>
+          <p className="muted sm studio-palette-empty">{t('studio.noShapesMatch', { query })}</p>
         )}
         {collectionsError && (
           <p className="muted sm studio-palette-empty" role="alert">
-            Collections: {collectionsError}
+            {t('studio.collectionsError', { error: collectionsError })}
           </p>
         )}
         {groups.map((group) => {
@@ -179,7 +198,9 @@ export function ShapePalette({
                 <span className={`studio-caret${isCollapsed ? ' is-collapsed' : ''}`} aria-hidden>
                   ▾
                 </span>
-                {group.title}
+                {group.kind === 'shapes' && SHAPE_GROUP_TITLE_KEYS[group.id]
+                  ? t(SHAPE_GROUP_TITLE_KEYS[group.id])
+                  : group.title}
               </button>
               {!isCollapsed && (
                 <div className={isCollections ? 'studio-palette-collections' : 'studio-palette-grid'}>
@@ -195,7 +216,7 @@ export function ShapePalette({
                             title={
                               c.description
                                 ? `${c.name} — ${c.description}`
-                                : `${c.name} — drag onto the canvas`
+                                : t('studio.dragHint', { name: c.name })
                             }
                             draggable={!disabled}
                             onDragStart={(e) => {
@@ -217,7 +238,7 @@ export function ShapePalette({
                           <button
                             type="button"
                             className="studio-palette-collection-del"
-                            title={`Delete “${c.name}”`}
+                            title={t('studio.deleteNamed', { name: c.name })}
                             disabled={disabled}
                             onClick={() => void deleteCollection(c)}
                           >
@@ -225,24 +246,27 @@ export function ShapePalette({
                           </button>
                         </div>
                       ))
-                    : group.items.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          className="studio-palette-item"
-                          title={`${item.label} — drag onto the canvas`}
-                          draggable={!disabled}
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData(SHAPE_DRAG_MIME, item.id)
-                            e.dataTransfer.effectAllowed = 'copy'
-                          }}
-                          onClick={() => !disabled && onPlace(item)}
-                          disabled={disabled}
-                        >
-                          <ShapeThumb itemId={item.id} size={22} />
-                          <span className="studio-palette-label">{item.label}</span>
-                        </button>
-                      ))}
+                    : group.items.map((item) => {
+                        const name = shapeDisplayName(t, item.id, item.label)
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className="studio-palette-item"
+                            title={t('studio.dragHint', { name })}
+                            draggable={!disabled}
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData(SHAPE_DRAG_MIME, item.id)
+                              e.dataTransfer.effectAllowed = 'copy'
+                            }}
+                            onClick={() => !disabled && onPlace(item)}
+                            disabled={disabled}
+                          >
+                            <ShapeThumb itemId={item.id} size={22} />
+                            <span className="studio-palette-label">{name}</span>
+                          </button>
+                        )
+                      })}
                 </div>
               )}
             </section>

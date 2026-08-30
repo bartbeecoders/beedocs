@@ -5,6 +5,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { withApiBase } from '../../basePath'
+import { useI18n } from '../../i18n'
 import {
   detectModelFormat,
   filenameFromPath,
@@ -124,6 +125,7 @@ function setWireframe(root: THREE.Object3D, enabled: boolean) {
  * Three.js GLB/GLTF/OBJ viewer with orbit controls, auto-fit, and clean disposal.
  */
 export function ModelViewer({ url, title, format, className }: ModelViewerProps) {
+  const { t } = useI18n()
   const hostRef = useRef<HTMLDivElement>(null)
   const canvasHostRef = useRef<HTMLDivElement>(null)
 
@@ -147,7 +149,7 @@ export function ModelViewer({ url, title, format, className }: ModelViewerProps)
   const [hintFaded, setHintFaded] = useState(false)
 
   const resolved = resolveModelUrl(url)
-  const displayName = title?.trim() || filenameFromPath(url) || '3D model'
+  const displayName = title?.trim() || filenameFromPath(url) || t('canvas.media.model3d')
   const resolvedFormat: Model3dFormat =
     detectModelFormat({ url, format }) ?? 'glb'
 
@@ -412,7 +414,7 @@ export function ModelViewer({ url, title, format, className }: ModelViewerProps)
     const onError = (err: unknown) => {
       if (cancelled || state.disposed) return
       console.error('[ModelViewer] load failed', err)
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to load 3D model')
+      setErrorMsg(err instanceof Error ? err.message : t('canvas.media.modelLoadFailed'))
       setStatus('error')
     }
 
@@ -479,59 +481,61 @@ export function ModelViewer({ url, title, format, className }: ModelViewerProps)
     >
       <header className="media-embed-chrome">
         <div className="media-embed-chrome-left">
-          <span className="media-embed-badge media-embed-badge--model" title="3D model">
+          <span className="media-embed-badge media-embed-badge--model" title={t('canvas.media.model3d')}>
             {formatLabel}
           </span>
           <span className="media-embed-title" title={displayName}>
             {displayName}
           </span>
         </div>
-        <div className="media-embed-chrome-actions" role="toolbar" aria-label="3D model controls">
+        <div className="media-embed-chrome-actions" role="toolbar" aria-label={t('canvas.media.modelControls')}>
           <button
             type="button"
             className="btn sm ghost media-embed-action"
             onClick={resetView}
             disabled={status !== 'ready'}
-            title="Reset camera"
-            aria-label="Reset camera view"
+            title={t('canvas.media.resetCamera')}
+            aria-label={t('canvas.media.resetCamera')}
           >
             <ResetIcon />
-            <span className="media-embed-action-label">Reset</span>
+            <span className="media-embed-action-label">{t('common.reset')}</span>
           </button>
           <button
             type="button"
             className={`btn sm ghost media-embed-action${wireframe ? ' is-active' : ''}`}
             onClick={() => setWireframeState((v) => !v)}
             disabled={status !== 'ready'}
-            title="Toggle wireframe"
+            title={t('canvas.media.toggleWireframe')}
             aria-pressed={wireframe}
-            aria-label="Toggle wireframe"
+            aria-label={t('canvas.media.toggleWireframe')}
           >
             <WireframeIcon />
-            <span className="media-embed-action-label">Wire</span>
+            <span className="media-embed-action-label">{t('canvas.media.wire')}</span>
           </button>
           <button
             type="button"
             className={`btn sm ghost media-embed-action${autoRotate ? ' is-active' : ''}`}
             onClick={() => setAutoRotate((v) => !v)}
             disabled={status !== 'ready'}
-            title="Toggle auto-rotate"
+            title={t('canvas.media.toggleAutoRotate')}
             aria-pressed={autoRotate}
-            aria-label="Toggle auto-rotate"
+            aria-label={t('canvas.media.toggleAutoRotate')}
           >
             <RotateIcon />
-            <span className="media-embed-action-label">Spin</span>
+            <span className="media-embed-action-label">{t('canvas.media.spin')}</span>
           </button>
           <button
             type="button"
             className={`btn sm ghost media-embed-action${fullscreen ? ' is-active' : ''}`}
             onClick={toggleFullscreen}
-            title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
+            title={fullscreen ? t('canvas.media.exitFullscreenEsc') : t('canvas.media.fullscreen')}
             aria-pressed={fullscreen}
-            aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            aria-label={fullscreen ? t('canvas.media.exitFullscreen') : t('canvas.media.enterFullscreen')}
           >
             <FullscreenIcon expanded={fullscreen} />
-            <span className="media-embed-action-label">{fullscreen ? 'Exit' : 'Full'}</span>
+            <span className="media-embed-action-label">
+              {fullscreen ? t('canvas.media.exit') : t('canvas.media.full')}
+            </span>
           </button>
           <a
             className="btn sm ghost media-embed-action"
@@ -539,11 +543,11 @@ export function ModelViewer({ url, title, format, className }: ModelViewerProps)
             target="_blank"
             rel="noopener noreferrer"
             download={displayName}
-            title="Download model"
-            aria-label="Download 3D model"
+            title={t('canvas.media.downloadModel')}
+            aria-label={t('canvas.media.downloadModel')}
           >
             <DownloadIcon />
-            <span className="media-embed-action-label">Download</span>
+            <span className="media-embed-action-label">{t('common.download')}</span>
           </a>
         </div>
       </header>
@@ -553,14 +557,14 @@ export function ModelViewer({ url, title, format, className }: ModelViewerProps)
         {status === 'loading' && (
           <div className="media-embed-status" role="status" aria-live="polite">
             <span className="media-embed-spinner" aria-hidden />
-            <span>Loading model…</span>
+            <span>{t('canvas.media.loadingModel')}</span>
           </div>
         )}
         {status === 'error' && (
           <div className="media-embed-status media-embed-status--error" role="alert">
-            <span>{errorMsg || 'Could not load this 3D model.'}</span>
+            <span>{errorMsg || t('canvas.media.modelLoadError')}</span>
             <a className="btn sm" href={resolved} target="_blank" rel="noopener noreferrer">
-              Open file
+              {t('canvas.media.openFile')}
             </a>
           </div>
         )}
@@ -569,7 +573,7 @@ export function ModelViewer({ url, title, format, className }: ModelViewerProps)
             className={['model-viewer-hint', hintFaded ? 'is-faded' : ''].filter(Boolean).join(' ')}
             aria-hidden
           >
-            Drag to orbit · Scroll to zoom · Right-drag to pan
+            {t('canvas.media.orbitHint')}
           </div>
         )}
       </div>

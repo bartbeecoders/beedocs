@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n'
 import type { BeeEdgeRoute } from '../../types'
 import type { StudioController } from './useStudioController'
 
@@ -24,17 +25,18 @@ export function StudioToolbar({
   onPickImage,
   onSaveAsCollection,
 }: Props) {
+  const { t } = useI18n()
   const nodeIds = ctrl.selection.nodes
   const edgeIds = ctrl.selection.edges
   const hasSelection = nodeIds.length > 0 || edgeIds.length > 0
 
   return (
-    <div className="studio-toolbar" role="toolbar" aria-label="Diagram tools">
+    <div className="studio-toolbar" role="toolbar" aria-label={t('studio.diagramTools')}>
       <div className="studio-toolbar-group">
         <button
           type="button"
           className="studio-tool"
-          title="Undo (Ctrl+Z)"
+          title={t('studio.tipUndo')}
           disabled={!ctrl.canUndo}
           onClick={ctrl.undo}
         >
@@ -43,7 +45,7 @@ export function StudioToolbar({
         <button
           type="button"
           className="studio-tool"
-          title="Redo (Ctrl+Shift+Z)"
+          title={t('studio.tipRedo')}
           disabled={!ctrl.canRedo}
           onClick={ctrl.redo}
         >
@@ -52,16 +54,16 @@ export function StudioToolbar({
       </div>
 
       <div className="studio-toolbar-group">
-        <button type="button" className="studio-tool" title="Zoom out (Ctrl+-)" onClick={onZoomOut}>
+        <button type="button" className="studio-tool" title={t('studio.tipZoomOut')} onClick={onZoomOut}>
           −
         </button>
-        <button type="button" className="studio-tool studio-tool--wide" title="Actual size (Ctrl+Shift+0)" onClick={onActualSize}>
+        <button type="button" className="studio-tool studio-tool--wide" title={t('studio.tipActualSize')} onClick={onActualSize}>
           {Math.round(zoom * 100)}%
         </button>
-        <button type="button" className="studio-tool" title="Zoom in (Ctrl++)" onClick={onZoomIn}>
+        <button type="button" className="studio-tool" title={t('studio.tipZoomIn')} onClick={onZoomIn}>
           +
         </button>
-        <button type="button" className="studio-tool" title="Fit page (Ctrl+Shift+H)" onClick={onFit}>
+        <button type="button" className="studio-tool" title={t('studio.tipFitPage')} onClick={onFit}>
           ⤢
         </button>
       </div>
@@ -70,7 +72,7 @@ export function StudioToolbar({
         <button
           type="button"
           className="studio-tool"
-          title="Delete (Del)"
+          title={t('studio.tipDelete')}
           disabled={!hasSelection}
           onClick={ctrl.deleteSelection}
         >
@@ -79,7 +81,7 @@ export function StudioToolbar({
         <button
           type="button"
           className="studio-tool"
-          title="Duplicate (Ctrl+D)"
+          title={t('studio.tipDuplicate')}
           disabled={!hasSelection}
           onClick={ctrl.duplicateSelection}
         >
@@ -89,17 +91,17 @@ export function StudioToolbar({
           <button
             type="button"
             className="studio-tool studio-tool--wide"
-            title="Save selection as a book collection"
+            title={t('studio.tipSaveCollection')}
             disabled={nodeIds.length === 0}
             onClick={onSaveAsCollection}
           >
-            Save collection
+            {t('studio.saveCollection')}
           </button>
         )}
         <button
           type="button"
           className="studio-tool"
-          title="Bring to front (Ctrl+Shift+F)"
+          title={t('studio.tipBringFront')}
           disabled={nodeIds.length === 0}
           onClick={() => ctrl.orderSelection('front')}
         >
@@ -108,7 +110,7 @@ export function StudioToolbar({
         <button
           type="button"
           className="studio-tool"
-          title="Send to back (Ctrl+Shift+B)"
+          title={t('studio.tipSendBack')}
           disabled={nodeIds.length === 0}
           onClick={() => ctrl.orderSelection('back')}
         >
@@ -117,7 +119,7 @@ export function StudioToolbar({
       </div>
 
       <div className="studio-toolbar-group">
-        <label className="studio-tool-color" title="Fill colour">
+        <label className="studio-tool-color" title={t('studio.tipFillColor')}>
           <span aria-hidden>▣</span>
           <input
             type="color"
@@ -125,7 +127,7 @@ export function StudioToolbar({
             onChange={(e) => ctrl.updateNodeStyle(nodeIds, { fill: e.target.value })}
           />
         </label>
-        <label className="studio-tool-color" title="Line colour">
+        <label className="studio-tool-color" title={t('studio.tipLineColor')}>
           <span aria-hidden>▤</span>
           <input
             type="color"
@@ -137,7 +139,7 @@ export function StudioToolbar({
         </label>
         <select
           className="studio-tool-select"
-          title="Connection style"
+          title={t('studio.tipConnectionStyle')}
           value={edgeIds.length > 0 ? (ctrl.selectedEdges[0]?.route ?? 'straight') : ''}
           disabled={edgeIds.length === 0}
           onChange={(e) =>
@@ -145,22 +147,22 @@ export function StudioToolbar({
           }
         >
           <option value="" disabled>
-            Line
+            {t('studio.line')}
           </option>
-          <option value="orthogonal">Orthogonal</option>
-          <option value="straight">Straight</option>
-          <option value="curved">Curved</option>
+          <option value="orthogonal">{t('studio.route.orthogonal')}</option>
+          <option value="straight">{t('studio.route.straight')}</option>
+          <option value="curved">{t('studio.route.curved')}</option>
         </select>
       </div>
 
       <div className="studio-toolbar-group">
-        <button type="button" className="studio-tool" title="Insert image" onClick={onPickImage}>
+        <button type="button" className="studio-tool" title={t('studio.tipInsertImage')} onClick={onPickImage}>
           🖼
         </button>
         <button
           type="button"
           className={`studio-tool${ctrl.prefs.grid ? ' is-active' : ''}`}
-          title="Toggle grid"
+          title={t('studio.tipToggleGrid')}
           onClick={() => ctrl.setPrefs({ grid: !ctrl.prefs.grid })}
         >
           ▦
@@ -168,7 +170,7 @@ export function StudioToolbar({
         <button
           type="button"
           className={`studio-tool${ctrl.prefs.snap ? ' is-active' : ''}`}
-          title="Snap to grid"
+          title={t('studio.snapToGrid')}
           onClick={() => ctrl.setPrefs({ snap: !ctrl.prefs.snap })}
         >
           🧲
@@ -179,18 +181,18 @@ export function StudioToolbar({
         <button
           type="button"
           className={`studio-tool${ctrl.prefs.paletteOpen ? ' is-active' : ''}`}
-          title="Toggle shape panel"
+          title={t('studio.tipTogglePalette')}
           onClick={() => ctrl.setPrefs({ paletteOpen: !ctrl.prefs.paletteOpen })}
         >
-          ▤ Shapes
+          ▤ {t('studio.shapes')}
         </button>
         <button
           type="button"
           className={`studio-tool${ctrl.prefs.formatOpen ? ' is-active' : ''}`}
-          title="Toggle format panel"
+          title={t('studio.tipToggleFormat')}
           onClick={() => ctrl.setPrefs({ formatOpen: !ctrl.prefs.formatOpen })}
         >
-          Format ▤
+          {t('studio.format')} ▤
         </button>
       </div>
     </div>

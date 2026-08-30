@@ -1,5 +1,6 @@
 import { useAuth } from '../auth/AuthContext'
 import { useUserDirectory, userLabel } from '../hooks/useUserDirectory'
+import { useI18n } from '../i18n'
 
 type Props = {
   /** Account id, or "" for unassigned. */
@@ -24,22 +25,23 @@ type Props = {
 export function OwnerField({ value, onChange, fallbackName, disabled }: Props) {
   const { canWrite } = useAuth()
   const { users } = useUserDirectory()
+  const { t } = useI18n()
 
   // The server already resolved the owner's name, so the read-only view needs
   // no directory at all.
   if (!canWrite) {
-    return <span>{value ? fallbackName || 'Unknown account' : 'Unassigned'}</span>
+    return <span>{value ? fallbackName || t('props.unknownAccount') : t('props.unassigned')}</span>
   }
 
   const known = users.some((u) => u.id === value)
 
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
-      <option value="">Unassigned</option>
+      <option value="">{t('props.unassigned')}</option>
       {/* An owner whose account was deleted or disabled is still the owner. Keep
           it as an option so opening the picker cannot silently reassign it. */}
       {value !== '' && !known && (
-        <option value={value}>{fallbackName || 'Unknown account'}</option>
+        <option value={value}>{fallbackName || t('props.unknownAccount')}</option>
       )}
       {users.map((u) => (
         <option key={u.id} value={u.id}>

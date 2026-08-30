@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import { useI18n, type MessageKey } from '../i18n'
 import { useGitRepos, refreshGitRepos } from '../hooks/useGitRepos'
 import type {
   GitAvailableRepo,
@@ -9,23 +10,8 @@ import type {
   GitRepo,
 } from '../types'
 
-type KindOption = {
-  kind: GitConnectionKind
-  label: string
-  hint: string
-}
-
-const KINDS: KindOption[] = [
-  { kind: 'github', label: 'GitHub', hint: 'List and clone with a fine-grained PAT' },
-  { kind: 'azure-devops', label: 'Azure DevOps', hint: 'One connection per organization' },
-  { kind: 'git', label: 'Any git URL', hint: 'Paste clone URLs, https only' },
-]
-
-const KIND_LABELS: Record<GitConnectionKind, string> = {
-  github: 'GitHub',
-  'azure-devops': 'Azure DevOps',
-  git: 'Git repository',
-}
+/** Names and hints render via `gitadmin.kindName.*` / `gitadmin.kindHint.*`. */
+const KINDS: GitConnectionKind[] = ['github', 'azure-devops', 'git']
 
 type Draft = { name: string; baseUrl: string; username: string; token: string }
 
@@ -44,12 +30,6 @@ function isDirty(d: Draft, c: GitConnection): boolean {
   )
 }
 
-const STATUS_LABEL: Record<GitRepo['status'], string> = {
-  cloning: 'Cloning…',
-  ready: 'Ready',
-  error: 'Failed',
-}
-
 /**
  * Settings → Git repositories: connections ("the bookshelf") and which repos
  * are added to each. Reuses the llm-* card chrome like StorageProviders does.
@@ -57,6 +37,7 @@ const STATUS_LABEL: Record<GitRepo['status'], string> = {
  * box starts empty on every open and an untouched box omits the field.
  */
 export function GitConnections() {
+  const { t } = useI18n()
   const [connections, setConnections] = useState<GitConnection[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [creating, setCreating] = useState<GitConnectionKind | null>(null)
@@ -267,20 +248,14 @@ export function GitConnections() {
 
   return (
     <div className="llm-providers git-connections">
-      <p className="llm-intro">
-        Browse and search git repositories like books on a shelf. Repos are cloned server-side;
-        tokens are stored on the server and never sent back to the browser.
-      </p>
+      <p className="llm-intro">{t('gitadmin.intro')}</p>
 
       {loadError ? <p className="banner error">{loadError}</p> : null}
 
       {connections !== null && connections.length === 0 ? (
         <div className="llm-empty">
-          <h3>No git connection configured</h3>
-          <p>
-            Add a connection below, store its access token, then pick which repositories go on the
-            shelf. They appear in the left pane under “Repositories”.
-          </p>
+          <h3>{t('gitadmin.emptyTitle')}</h3>
+          <p>{t('gitadmin.emptyBody', { repositories: t('common.repositories') })}</p>
         </div>
       ) : null}
 
@@ -310,13 +285,17 @@ export function GitConnections() {
                     <span className="llm-card-title">
                       <span className="llm-name-row">
                         <span className="llm-name">{c.name}</span>
-                        {dirty ? <span className="llm-badge is-dirty">Unsaved</span> : null}
+                        {dirty ? <span className="llm-badge is-dirty">{t('gitadmin.unsaved')}</span> : null}
                       </span>
                       <span className="llm-card-sub">
                         {[
-                          KIND_LABELS[c.kind],
-                          `${c.repoCount} repo${c.repoCount === 1 ? '' : 's'}`,
-                          c.hasToken ? `token ····${c.tokenHint ?? ''}` : 'no token',
+                          t(`gitadmin.kindLabel.${c.kind}` as MessageKey),
+                          c.repoCount === 1
+                            ? t('gitadmin.repoCount.one', { count: c.repoCount })
+                            : t('gitadmin.repoCount.other', { count: c.repoCount }),
+                          c.hasToken
+                            ? t('gitadmin.tokenShort', { hint: c.tokenHint ?? '' })
+                            : t('gitadmin.noToken'),
                         ].join(' · ')}
                       </span>
                     </span>
@@ -334,7 +313,7 @@ export function GitConnections() {
                   >
                     <div className="llm-grid">
                       <div className="llm-field">
-                        <label htmlFor={`git-name-${c.id}`}>Name</label>
+                        <label htmlFor={`git-name-${c.id}`}>{t('common.name')}</label>
                         <input
                           id={`git-name-${c.id}`}
                           value={draft.name}
@@ -345,7 +324,7 @@ export function GitConnections() {
                       {c.kind !== 'git' ? (
                         <div className="llm-field">
                           <label htmlFor={`git-url-${c.id}`}>
-                            {c.kind === 'github' ? 'Organization or user' : 'Organization URL'}
+                            {c.kind === 'github' ? t('gitadmin.orgOrUser') : t('gitadmin.orgUrl')}
                           </label>
                           <input
                             id={`git-url-${c.id}`}
@@ -354,7 +333,7 @@ export function GitConnections() {
                             autoComplete="off"
                             placeholder={
                               c.kind === 'github'
-                                ? 'blank = repos your token can access'
+                                ? t('gitadmin.githubUrlPlaceholder')
                                 : 'https://dev.azure.com/my-org'
                             }
                             value={draft.baseUrl}
@@ -367,20 +346,20 @@ export function GitConnections() {
 
                     <div className="llm-grid">
                       <div className="llm-field">
-                        <label htmlFor={`git-user-${c.id}`}>Username</label>
+                        <label htmlFor={`git-user-${c.id}`}>{t('auth.username')}</label>
                         <input
                           id={`git-user-${c.id}`}
                           className="llm-mono"
                           spellCheck={false}
                           autoComplete="off"
-                          placeholder="optional — sent with the token"
+                          placeholder={t('gitadmin.usernamePlaceholder')}
                           value={draft.username}
                           readOnly={isSaving}
                           onChange={(e) => setDraft((d) => ({ ...d, username: e.target.value }))}
                         />
                       </div>
                       <div className="llm-field">
-                        <label htmlFor={`git-token-${c.id}`}>Personal access token</label>
+                        <label htmlFor={`git-token-${c.id}`}>{t('gitadmin.patLabel')}</label>
                         <input
                           id={`git-token-${c.id}`}
                           type="password"
@@ -393,7 +372,7 @@ export function GitConnections() {
                           placeholder={
                             c.hasToken
                               ? `•••••••• ${c.tokenHint ?? ''}`.trim()
-                              : 'needed for private repos and push'
+                              : t('gitadmin.tokenPlaceholder')
                           }
                           value={draft.token}
                           onChange={(e) => setDraft((d) => ({ ...d, token: e.target.value }))}
@@ -401,13 +380,7 @@ export function GitConnections() {
                       </div>
                     </div>
                     <p className="llm-hint">
-                      {c.kind === 'github'
-                        ? 'A fine-grained PAT with Contents read (write for later phases) is enough.'
-                        : c.kind === 'azure-devops'
-                          ? 'A PAT with Code (Read) for this organization. Organization URL or just the org name.'
-                          : 'Only https clone URLs are supported. Leave the token empty for public repos.'}{' '}
-                      A token is stored server-side; leave the box blank to keep it, or save with a
-                      new one to replace it.
+                      {t(`gitadmin.patHint.${c.kind}` as MessageKey)} {t('gitadmin.patHintCommon')}
                     </p>
 
                     {result ? (
@@ -423,19 +396,19 @@ export function GitConnections() {
                     <div className="llm-actions">
                       <div className="llm-actions-main">
                         <button type="submit" className="btn primary" disabled={!dirty || isSaving}>
-                          {isSaving ? 'Saving…' : 'Save changes'}
+                          {isSaving ? t('common.saving') : t('gitadmin.saveChanges')}
                         </button>
                         <button
                           type="button"
                           className="btn"
                           disabled={testingId === c.id || isSaving || dirty}
-                          title={dirty ? 'Save first — the test runs against saved settings.' : undefined}
+                          title={dirty ? t('gitadmin.testNeedsSave') : undefined}
                           onClick={() => void runTest(c)}
                         >
-                          {testingId === c.id ? 'Testing…' : 'Test connection'}
+                          {testingId === c.id ? t('gitadmin.testing') : t('gitadmin.testConnection')}
                         </button>
                         <span className={`llm-flash${savedFlash ? ' is-on' : ''}`} aria-live="polite">
-                          {savedFlash ? 'Saved' : ''}
+                          {savedFlash ? t('common.saved') : ''}
                         </span>
                       </div>
                       <div className="llm-actions-side">
@@ -445,7 +418,7 @@ export function GitConnections() {
                           disabled={isSaving || confirmId === c.id}
                           onClick={() => setConfirmId(c.id)}
                         >
-                          Delete
+                          {t('common.delete')}
                         </button>
                       </div>
                     </div>
@@ -453,14 +426,14 @@ export function GitConnections() {
                     {confirmId === c.id ? (
                       <div className="llm-confirm">
                         <span>
-                          Delete <strong>{c.name}</strong>?{' '}
+                          {t('gitadmin.deleteConfirm', { name: c.name })}{' '}
                           {c.repoCount > 0
-                            ? 'Remove its repositories first — the server refuses otherwise.'
-                            : 'Its stored token goes with it.'}
+                            ? t('gitadmin.deleteHasRepos')
+                            : t('gitadmin.deleteTokenGone')}
                         </span>
                         <span className="llm-confirm-actions">
                           <button type="button" className="btn" onClick={() => setConfirmId(null)}>
-                            Cancel
+                            {t('common.cancel')}
                           </button>
                           <button
                             type="button"
@@ -468,22 +441,22 @@ export function GitConnections() {
                             disabled={isSaving}
                             onClick={() => void remove(c)}
                           >
-                            Delete connection
+                            {t('gitadmin.deleteConnection')}
                           </button>
                         </span>
                       </div>
                     ) : null}
 
                     <div className="git-repos-block">
-                      <h4>Repositories on the shelf</h4>
+                      <h4>{t('gitadmin.reposOnShelf')}</h4>
                       {mine.length === 0 ? (
-                        <p className="llm-hint">None yet.</p>
+                        <p className="llm-hint">{t('gitadmin.noneYet')}</p>
                       ) : (
                         <ul className="git-repo-rows">
                           {mine.map((r) => (
                             <li key={r.id} className="git-repo-row">
                               <span className={`git-repo-status is-${r.status}`}>
-                                {STATUS_LABEL[r.status]}
+                                {t(`gitadmin.status.${r.status}` as MessageKey)}
                               </span>
                               <span className="git-repo-name" title={r.cloneUrl}>
                                 {r.name}
@@ -493,14 +466,14 @@ export function GitConnections() {
                                   {r.lastError}
                                 </span>
                               ) : null}
-                              <label className="git-repo-indexed" title="Include this repo's text files in Ctrl+K search">
+                              <label className="git-repo-indexed" title={t('gitadmin.indexedTitle')}>
                                 <input
                                   type="checkbox"
                                   checked={r.indexed}
                                   disabled={addBusy === r.id}
                                   onChange={() => void toggleIndexed(r)}
                                 />
-                                <span>Search</span>
+                                <span>{t('common.search')}</span>
                               </label>
                               <button
                                 type="button"
@@ -508,7 +481,7 @@ export function GitConnections() {
                                 disabled={addBusy === r.id}
                                 onClick={() => void removeRepo(c, r)}
                               >
-                                Remove
+                                {t('common.remove')}
                               </button>
                             </li>
                           ))}
@@ -523,14 +496,14 @@ export function GitConnections() {
                               className="btn sm"
                               onClick={() => void browse(c)}
                             >
-                              {availableError ? 'Retry listing' : 'Browse repositories'}
+                              {availableError ? t('gitadmin.retryListing') : t('gitadmin.browseRepos')}
                             </button>
                           ) : null}
                           {availableError ? (
                             <p className="llm-hint is-warn">{availableError}</p>
                           ) : null}
                           {browsing && !availableError && available === null ? (
-                            <p className="llm-hint">Listing repositories…</p>
+                            <p className="llm-hint">{t('gitadmin.listingRepos')}</p>
                           ) : null}
                           {available !== null ? (
                             <ul className="git-available-list">
@@ -548,12 +521,16 @@ export function GitConnections() {
                                     disabled={r.added || addBusy === r.cloneUrl}
                                     onClick={() => void addRepo(c, r.cloneUrl, r.name)}
                                   >
-                                    {r.added ? 'Added' : addBusy === r.cloneUrl ? 'Adding…' : 'Add'}
+                                    {r.added
+                                      ? t('gitadmin.added')
+                                      : addBusy === r.cloneUrl
+                                        ? t('gitadmin.adding')
+                                        : t('common.add')}
                                   </button>
                                 </li>
                               ))}
                               {available.length === 0 ? (
-                                <li className="llm-hint">The provider lists no repositories.</li>
+                                <li className="llm-hint">{t('gitadmin.providerEmpty')}</li>
                               ) : null}
                             </ul>
                           ) : null}
@@ -580,7 +557,7 @@ export function GitConnections() {
                             disabled={addingUrl.trim() === '' || addBusy !== null}
                             onClick={() => void addRepo(c, addingUrl.trim())}
                           >
-                            {addBusy !== null ? 'Adding…' : 'Add repository'}
+                            {addBusy !== null ? t('gitadmin.adding') : t('gitadmin.addRepository')}
                           </button>
                         </div>
                       )}
@@ -596,18 +573,22 @@ export function GitConnections() {
 
       {connections !== null ? (
         <div className="llm-add">
-          <h3 className="llm-add-title">Add a connection</h3>
+          <h3 className="llm-add-title">{t('gitadmin.addConnection')}</h3>
           <div className="llm-add-grid">
-            {KINDS.map((k) => (
+            {KINDS.map((kind) => (
               <button
-                key={k.kind}
+                key={kind}
                 type="button"
                 className="llm-kind-btn"
                 disabled={creating !== null}
-                onClick={() => void create(k.kind)}
+                onClick={() => void create(kind)}
               >
-                <span className="llm-kind-name">{k.label}</span>
-                <span className="llm-kind-hint">{creating === k.kind ? 'Adding…' : k.hint}</span>
+                <span className="llm-kind-name">{t(`gitadmin.kindName.${kind}` as MessageKey)}</span>
+                <span className="llm-kind-hint">
+                  {creating === kind
+                    ? t('gitadmin.adding')
+                    : t(`gitadmin.kindHint.${kind}` as MessageKey)}
+                </span>
               </button>
             ))}
           </div>

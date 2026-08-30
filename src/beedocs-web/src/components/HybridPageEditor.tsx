@@ -4,6 +4,7 @@ import { api } from '../api'
 import { withApiBase } from '../basePath'
 import { sameGap, useBlockReorder, type BlockAddr, type GapAddr } from '../hooks/useBlockReorder'
 import { useImageIntake, type ImageIntakeContext } from '../hooks/useImageIntake'
+import { useI18n, type MessageKey, type TFunction } from '../i18n'
 import {
   isExcelGridFenceLang,
   isFreedrawFenceLang,
@@ -70,7 +71,10 @@ import { MediaEmbed, parseMediaFenceBody } from './media/MediaEmbed'
 // Lazy so pages without an isometric section don't load the iso editor module.
 const IsometricEditor = lazy(() => import('../isometric/IsometricEditor'))
 
-const isometricLoading = <p className="muted sm">Loading isometric editor…</p>
+function IsometricLoading() {
+  const { t } = useI18n()
+  return <p className="muted sm">{t('editor.loadingIsometricEditor')}</p>
+}
 import { SyncedTextarea } from './SyncedText'
 
 /** Build markdown segments for an uploaded PDF / 3D model fence. */
@@ -216,6 +220,7 @@ type ReorderGapProps = {
  * reorders them.
  */
 export function HybridPageEditor({ content, onChange, bookId, pageId, placeholder }: Props) {
+  const { t } = useI18n()
   const lastEmitted = useRef(content)
   const rootRef = useRef<HTMLDivElement>(null)
   const [doc, setDoc] = useState<EditorDoc>(() => parseEditorDoc(content))
@@ -410,10 +415,12 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       const target = at ?? { cell: activeCellRef.current, at: 'end' as const }
       if (kind === 'beediagram-linked') {
         if (!bookId) {
-          setInsertError('Open a page inside a book to add a linked diagram.')
+          setInsertError(t('editor.linkedNeedBook'))
           return
         }
-        const title = window.prompt('Diagram title', 'Architecture')?.trim()
+        const title = window
+          .prompt(t('editor.promptDiagramTitle'), t('editor.diagramTitleDefault'))
+          ?.trim()
         if (!title) return
         setBusy(true)
         try {
@@ -435,8 +442,14 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       }
 
       if (kind === 'section' || kind === 'subsection') {
-        const label = kind === 'section' ? 'Section title' : 'Subsection title'
-        const title = window.prompt(label, kind === 'section' ? 'Overview' : 'Details')?.trim()
+        const label =
+          kind === 'section' ? t('editor.promptSectionTitle') : t('editor.promptSubsectionTitle')
+        const title = window
+          .prompt(
+            label,
+            kind === 'section' ? t('editor.sectionTitleDefault') : t('editor.subsectionTitleDefault'),
+          )
+          ?.trim()
         if (!title) return
         // Toolbar inserts prepend — new sections belong at the top of their cell.
         insertAt(at ?? { cell: activeCellRef.current, at: 0 }, segmentsForInsert(kind, { title }))
@@ -445,7 +458,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
 
       insertAt(target, segmentsForInsert(kind))
     },
-    [bookId, insertAt, pageId, renameInTree],
+    [bookId, insertAt, pageId, renameInTree, t],
   )
 
   /** Insert image markdown into a specific text segment at a character offset. */
@@ -716,7 +729,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       // Must stay within the tree drag's effectAllowed ('move') or the drop is cancelled.
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
       setLinkDragging(true)
-      setDropHint('Drop to insert a link to that document')
+      setDropHint(t('editor.dropLinkHint'))
     }
 
     const onDrop = (e: DragEvent) => {
@@ -768,7 +781,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       el.removeEventListener('drop', onDrop)
       document.removeEventListener('dragend', onDragEnd, true)
     }
-  }, [defaultTarget, insertAt, updateSegment])
+  }, [defaultTarget, insertAt, t, updateSegment])
 
   /** Remove one embedded piece (image or table) from a text segment by its raw Markdown. */
   const removePieceFromSegment = useCallback(
@@ -808,7 +821,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         data-outline-id={outlineId(globalIndex)}
       >
         <BlockHandle
-          label={blockLabel(seg)}
+          label={blockLabel(seg, t)}
           canMoveUp={index > 0}
           canMoveDown={index < cellSegs.length - 1}
           canMoveLeft={gridMode && cellIdx > 0}
@@ -833,7 +846,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             segmentIndex={index}
             value={seg.text}
             pageContext={content}
-            placeholder={globalIndex === 0 ? placeholder : 'Continue Markdown…'}
+            placeholder={globalIndex === 0 ? placeholder : t('editor.continueMarkdown')}
             dragging={dragging || linkDragging}
             onChange={(text) => updateSegment(cellIdx, index, { type: 'text', text })}
             onBlur={normalizeBlocks}
@@ -882,7 +895,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
           busy={busy}
           onInsert={(k) => void handleInsert(k, { cell: cellIdx, at: index + 1 })}
           dropSlot={`before:${cellIdx}:${index + 1}`}
-          dropLabel="Insert image here"
+          dropLabel={t('editor.insertImageHere')}
           dragging={dragging}
           reorderProps={reorder.gapProps({ cell: cellIdx, gap: index + 1 })}
           reorderActive={sameGap(reorder.overGap, { cell: cellIdx, gap: index + 1 })}
@@ -900,14 +913,14 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         const slot = (e.target as Element).closest?.('[data-drop-slot]')
         if (slot) {
           const label = slot.getAttribute('data-drop-label')
-          setDropHint(label || 'Drop image or media here')
+          setDropHint(label || t('editor.dropMediaHint'))
         }
       }}
       onDragLeave={() => setDropHint(null)}
     >
       {uploading && (
         <div className="image-upload-banner" aria-live="polite">
-          Uploading image…
+          {t('editor.uploadingImage')}
         </div>
       )}
       {(dragging || linkDragging) && dropHint && (
@@ -927,19 +940,8 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
       {insertError && <div className="banner error compact">{insertError}</div>}
       <AiAssistBar />
       <p className="hybrid-hint muted sm">
-        Drop or paste images <strong>where you want them</strong> — they preview in edit mode. Use Add for
-        sections, <strong>tables</strong> (edited as a grid — add/remove rows and columns in place),
-        diagrams, <strong>PDF</strong>, and <strong>3D models</strong> (or drop <code>.pdf</code> /{' '}
-        <code>.glb</code> / <code>.obj</code> files). Dropping <code>.json</code> / <code>.xml</code> inlines
-        the file as a code block you can reformat; <code>.csv</code> / <code>.tsv</code> becomes a
-        spreadsheet section. Drag a <strong>page or book from the library</strong>{' '}
-        into a section to insert a link to it.
-        {gridMode && (
-          <>
-            {' '}This page uses a <strong>{layout!.cols}×{layout!.rows} grid</strong> — drag blocks between
-            cells with their handle, or use ←/→ on a focused handle.
-          </>
-        )}
+        {t('editor.hint.images')} {t('editor.hint.add')} {t('editor.hint.data')} {t('editor.hint.link')}
+        {gridMode && <> {t('editor.hint.grid', { cols: layout!.cols, rows: layout!.rows })}</>}
       </p>
 
       <div
@@ -953,17 +955,21 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             className={`hybrid-cell${gridMode ? ' hybrid-cell--grid' : ''}${
               gridMode && activeCellRef.current === cellIdx ? ' is-active' : ''
             }`}
-            aria-label={gridMode ? `Layout cell ${cellIdx + 1}` : undefined}
+            aria-label={gridMode ? t('editor.cellAria', { n: cellIdx + 1 }) : undefined}
             onFocusCapture={() => setActiveCell(cellIdx)}
             onMouseDownCapture={() => setActiveCell(cellIdx)}
           >
-            {gridMode && <div className="hybrid-cell-tag">Cell {cellIdx + 1}</div>}
+            {gridMode && <div className="hybrid-cell-tag">{t('editor.cellTag', { n: cellIdx + 1 })}</div>}
             <InsertGap
               busy={busy}
               onInsert={(k) => void handleInsert(k, { cell: cellIdx, at: 0 })}
-              label={gridMode ? `Insert at top of cell ${cellIdx + 1}` : 'Insert at top'}
+              label={gridMode ? t('editor.insertTopCell', { n: cellIdx + 1 }) : t('editor.insertTop')}
               dropSlot={`before:${cellIdx}:0`}
-              dropLabel={gridMode ? `Insert image at top of cell ${cellIdx + 1}` : 'Insert image at top of page'}
+              dropLabel={
+                gridMode
+                  ? t('editor.insertImageTopCell', { n: cellIdx + 1 })
+                  : t('editor.insertImageTopPage')
+              }
               dragging={dragging}
               reorderProps={reorder.gapProps({ cell: cellIdx, gap: 0 })}
               reorderActive={sameGap(reorder.overGap, { cell: cellIdx, gap: 0 })}
@@ -977,12 +983,12 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
 }
 
 /** Short description of a block, for the drag handle's accessible name. */
-function blockLabel(seg: ContentSegment): string {
-  if (seg.type === 'fence') return `${seg.lang} block`
+function blockLabel(seg: ContentSegment, t: TFunction): string {
+  if (seg.type === 'fence') return t('editor.block.fence', { lang: seg.lang })
   const heading = seg.text.split('\n').find((l) => /^#{1,6}\s+\S/.test(l))
   if (heading) return heading.replace(/^#+\s+/, '')
   const firstWords = seg.text.trim().split(/\s+/).slice(0, 6).join(' ')
-  return firstWords || 'Empty block'
+  return firstWords || t('editor.block.empty')
 }
 
 /**
@@ -1022,7 +1028,7 @@ function BlockHandle({
   onMoveRight: () => void
   onRemove: () => void
 }) {
-  const cellHint = canMoveLeft || canMoveRight ? ' · ← / → to another cell' : ''
+  const { t } = useI18n()
   return (
     <div className="block-controls">
       <button
@@ -1050,8 +1056,10 @@ function BlockHandle({
             onRemove()
           }
         }}
-        aria-label={`Move block: ${label}. Drag, or use arrow keys.`}
-        title={`Drag to reorder · ↑ / ↓ to move${cellHint}`}
+        aria-label={t('editor.block.moveAria', { label })}
+        title={
+          canMoveLeft || canMoveRight ? t('editor.block.dragTitleCells') : t('editor.block.dragTitle')
+        }
       >
         <span aria-hidden="true">{'⠿'}</span>
       </button>
@@ -1060,8 +1068,8 @@ function BlockHandle({
           type="button"
           className="block-remove"
           onClick={onRemove}
-          aria-label={`Remove block: ${label}`}
-          title="Remove block"
+          aria-label={t('editor.block.removeAria', { label })}
+          title={t('editor.block.remove')}
         >
           ×
         </button>
@@ -1187,6 +1195,7 @@ function RichTextBlock({
   placeholder?: string
   dragging: boolean
 }) {
+  const { t } = useI18n()
   const pieces = splitTextWithImagesAndTables(value)
 
   // Latest text this block knows about — edits compose off this rather than off
@@ -1224,7 +1233,7 @@ function RichTextBlock({
       <div
         className={`rich-text-block${dragging ? ' drop-active' : ''}`}
         data-drop-slot={`segment:${cellIndex}:${segmentIndex}`}
-        data-drop-label="Insert image in this section"
+        data-drop-label={t('editor.insertImageSection')}
       >
         <AiAssistField context={pageContext}>
           <SyncedTextarea
@@ -1236,7 +1245,7 @@ function RichTextBlock({
             onValueChange={onChange}
             onBlur={onBlur}
             spellCheck={false}
-            placeholder={placeholder ?? 'Write Markdown…'}
+            placeholder={placeholder ?? t('editor.writeMarkdown')}
           />
         </AiAssistField>
       </div>
@@ -1247,13 +1256,13 @@ function RichTextBlock({
     <div
       className={`rich-text-block has-images${dragging ? ' drop-active' : ''}`}
       data-drop-slot={`segment:${cellIndex}:${segmentIndex}`}
-      data-drop-label="Insert image in this section"
+      data-drop-label={t('editor.insertImageSection')}
     >
       {pieces.map((p, i) => {
         if (p.kind === 'image') {
           return (
             <figure key={`img-${i}-${p.url}`} className="edit-image-preview">
-              <img src={withApiBase(p.url)} alt={p.alt || 'image'} loading="lazy" />
+              <img src={withApiBase(p.url)} alt={p.alt || t('editor.imageAlt')} loading="lazy" />
               <figcaption>
                 <span className="muted sm" title={p.url}>
                   {p.alt || p.url}
@@ -1263,7 +1272,7 @@ function RichTextBlock({
                   className="btn ghost sm danger"
                   onClick={() => onRemovePiece(p.raw)}
                 >
-                  Remove
+                  {t('common.remove')}
                 </button>
               </figcaption>
             </figure>
@@ -1319,58 +1328,59 @@ function InsertToolbar({
   onPickPdf?: () => void
   onPickModel?: () => void
 }) {
+  const { t } = useI18n()
   const presets = LAYOUT_PRESETS.some((p) => p.spec === layoutSpec)
     ? LAYOUT_PRESETS
     : [...LAYOUT_PRESETS, { spec: layoutSpec, label: layoutSpec.replace('x', ' × ') }]
   return (
-    <div className="insert-toolbar" role="toolbar" aria-label="Insert content">
-      <span className="insert-toolbar-label">Add</span>
+    <div className="insert-toolbar" role="toolbar" aria-label={t('editor.toolbar.aria')}>
+      <span className="insert-toolbar-label">{t('common.add')}</span>
       <div className="insert-toolbar-group">
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('section')}>
-          Section
+          {t('editor.insert.section')}
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('subsection')}>
-          Subsection
+          {t('editor.insert.subsection')}
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('paragraph')}>
-          Paragraph
+          {t('editor.insert.paragraph')}
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('bullet-list')}>
-          List
+          {t('editor.insert.list')}
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('table')}>
-          Table
+          {t('editor.insert.table')}
         </button>
         <button
           type="button"
           className="btn sm"
           disabled={busy}
           onClick={() => onInsert('excelgrid')}
-          title="Insert an Excel-style spreadsheet stored on this page"
+          title={t('editor.insert.spreadsheetTitle')}
         >
-          Spreadsheet
+          {t('editor.insert.spreadsheet')}
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('callout')}>
-          Callout
+          {t('editor.insert.callout')}
         </button>
       </div>
       <div className="insert-toolbar-divider" aria-hidden />
-      <div className="insert-toolbar-group insert-toolbar-group--media" aria-label="Media">
+      <div className="insert-toolbar-group insert-toolbar-group--media" aria-label={t('editor.toolbar.media')}>
         <button
           type="button"
           className="btn sm"
           disabled={busy}
           onClick={() => onPickImage?.()}
-          title="Upload image file(s) — or drag/drop / paste where you want them"
+          title={t('editor.insert.imageTitle')}
         >
-          Image
+          {t('editor.insert.image')}
         </button>
         <button
           type="button"
           className="btn sm"
           disabled={busy}
           onClick={() => onPickPdf?.()}
-          title="Upload a PDF document embed"
+          title={t('editor.insert.pdfTitle')}
         >
           PDF
         </button>
@@ -1379,9 +1389,9 @@ function InsertToolbar({
           className="btn sm"
           disabled={busy}
           onClick={() => onPickModel?.()}
-          title="Upload a 3D model (.glb / .gltf / .obj)"
+          title={t('editor.insert.modelTitle')}
         >
-          3D model
+          {t('editor.insert.model3d')}
         </button>
       </div>
       <div className="insert-toolbar-divider" aria-hidden />
@@ -1391,7 +1401,7 @@ function InsertToolbar({
           className="btn sm primary"
           disabled={busy}
           onClick={() => onInsert('beediagram')}
-          title="Insert an inline BeeDiagram (Studio by default) stored on this page"
+          title={t('editor.insert.beediagramTitle')}
         >
           {busy ? '…' : 'BeeDiagram'}
         </button>
@@ -1400,42 +1410,42 @@ function InsertToolbar({
           className="btn sm"
           disabled={busy}
           onClick={() => onInsert('beediagram-linked')}
-          title="Create a reusable diagram entity and embed it (Studio by default, tree-visible)"
+          title={t('editor.insert.linkedTitle')}
         >
-          Linked diagram
+          {t('editor.insert.linkedDiagram')}
         </button>
         <button
           type="button"
           className="btn sm"
           disabled={busy}
           onClick={() => onInsert('isometric')}
-          title="Insert an inline isometric (tile-grid) diagram stored on this page"
+          title={t('editor.insert.isometricTitle')}
         >
-          Isometric
+          {t('editor.insert.isometric')}
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('mermaid-flow')}>
-          Flowchart
+          {t('editor.insert.flowchart')}
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('mermaid-sequence')}>
-          Sequence
+          {t('editor.insert.sequence')}
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('mermaid-er')}>
-          ER diagram
+          {t('editor.insert.erDiagram')}
         </button>
         <button
           type="button"
           className="btn sm"
           disabled={busy}
           onClick={() => onInsert('freedraw')}
-          title="Insert a free-draw sketch pad stored on this page"
+          title={t('editor.insert.freedrawTitle')}
         >
-          Free draw
+          {t('editor.insert.freedraw')}
         </button>
       </div>
       <div className="insert-toolbar-divider" aria-hidden />
       <div className="insert-toolbar-group insert-toolbar-group--layout">
         <label className="insert-toolbar-label" htmlFor="page-layout-picker">
-          Layout
+          {t('editor.layout.label')}
         </label>
         <select
           id="page-layout-picker"
@@ -1443,11 +1453,13 @@ function InsertToolbar({
           value={layoutSpec}
           disabled={busy}
           onChange={(e) => onLayoutChange(e.target.value)}
-          title="Arrange this page's sections in a grid — drag blocks into any cell"
+          title={t('editor.layout.title')}
         >
           {presets.map((p) => (
             <option key={p.spec} value={p.spec}>
-              {p.label}
+              {LAYOUT_PRESETS.some((q) => q.spec === p.spec)
+                ? t(`editor.layout.preset.${p.spec}` as MessageKey)
+                : p.label}
             </option>
           ))}
         </select>
@@ -1478,6 +1490,7 @@ function InsertGap({
   /** The dragged block is currently hovering this gap. */
   reorderActive?: boolean
 }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const canAcceptBlock = Boolean(reorderProps)
   return (
@@ -1494,29 +1507,29 @@ function InsertGap({
         type="button"
         className="insert-gap-btn"
         aria-expanded={open}
-        aria-label={label ?? 'Insert block here'}
+        aria-label={label ?? t('editor.insertBlockHere')}
         disabled={busy}
         onClick={() => setOpen((v) => !v)}
       >
         +
       </button>
-      {dragging && <span className="insert-gap-drop-label muted sm">Drop image</span>}
-      {reorderActive && <span className="insert-gap-drop-label muted sm">Move here</span>}
+      {dragging && <span className="insert-gap-drop-label muted sm">{t('editor.dropImage')}</span>}
+      {reorderActive && <span className="insert-gap-drop-label muted sm">{t('editor.moveHere')}</span>}
       {open && (
         <div className="insert-gap-menu">
           {(
             [
-              ['section', 'Section'],
-              ['subsection', 'Subsection'],
+              ['section', t('editor.insert.section')],
+              ['subsection', t('editor.insert.subsection')],
               ['beediagram', 'BeeDiagram'],
-              ['beediagram-linked', 'Linked diagram'],
-              ['isometric', 'Isometric'],
-              ['freedraw', 'Free draw'],
-              ['excelgrid', 'Spreadsheet'],
-              ['mermaid-flow', 'Flowchart'],
-              ['mermaid-sequence', 'Sequence'],
-              ['table', 'Table'],
-              ['callout', 'Callout'],
+              ['beediagram-linked', t('editor.insert.linkedDiagram')],
+              ['isometric', t('editor.insert.isometric')],
+              ['freedraw', t('editor.insert.freedraw')],
+              ['excelgrid', t('editor.insert.spreadsheet')],
+              ['mermaid-flow', t('editor.insert.flowchart')],
+              ['mermaid-sequence', t('editor.insert.sequence')],
+              ['table', t('editor.insert.table')],
+              ['callout', t('editor.insert.callout')],
             ] as const
           ).map(([kind, text]) => (
             <button
@@ -1546,6 +1559,7 @@ function SourceFenceBlock({
   onChange: (s: FenceSegment) => void
   onRemove: () => void
 }) {
+  const { t } = useI18n()
   const rows = Math.min(20, Math.max(4, segment.body.split('\n').length + 1))
   const [formatError, setFormatError] = useState<string | null>(null)
 
@@ -1569,19 +1583,19 @@ function SourceFenceBlock({
     <div className="hybrid-fence-source">
       <div className="hybrid-fence-chrome">
         <span className="inline-diagram-badge">{segment.lang}</span>
-        <span className="muted sm">source</span>
+        <span className="muted sm">{t('editor.fence.source')}</span>
         {formatter && (
           <button
             type="button"
             className="btn sm"
             onClick={reformat}
-            title={`Re-indent this ${lang.toUpperCase()} block`}
+            title={t('editor.fence.formatTitle', { lang: lang.toUpperCase() })}
           >
-            Format
+            {t('editor.fence.format')}
           </button>
         )}
         <button type="button" className="btn ghost sm danger" onClick={onRemove}>
-          Remove
+          {t('common.remove')}
         </button>
       </div>
       {formatError && <div className="banner error compact">{formatError}</div>}
@@ -1611,6 +1625,7 @@ function MediaFenceBlock({
   onChange: (s: FenceSegment) => void
   onRemove: () => void
 }) {
+  const { t } = useI18n()
   const [replacing, setReplacing] = useState(false)
   const [showSource, setShowSource] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1663,21 +1678,21 @@ function MediaFenceBlock({
             type="button"
             className="btn sm"
             onClick={() => setShowSource((v) => !v)}
-            title={showSource ? 'Show embedded preview' : 'Edit fence source'}
+            title={showSource ? t('editor.media.previewTitle') : t('editor.media.sourceTitle')}
           >
-            {showSource ? 'Preview' : 'Source'}
+            {showSource ? t('editor.preview') : t('editor.source')}
           </button>
           <button
             type="button"
             className="btn sm"
             disabled={replacing}
             onClick={replaceFile}
-            title="Upload a different file for this embed"
+            title={t('editor.media.replaceTitle')}
           >
-            {replacing ? 'Uploading…' : 'Replace file'}
+            {replacing ? t('editor.uploading') : t('editor.media.replace')}
           </button>
           <button type="button" className="btn ghost sm danger" onClick={onRemove}>
-            Remove
+            {t('common.remove')}
           </button>
         </div>
       </div>
@@ -1689,7 +1704,7 @@ function MediaFenceBlock({
           rows={rows}
           spellCheck={false}
           onValueChange={(body) => onChange({ ...segment, body })}
-          aria-label={`${segment.lang} fence source`}
+          aria-label={t('editor.fence.sourceAria', { lang: segment.lang })}
         />
       ) : (
         <div className="hybrid-media-body">
@@ -1709,13 +1724,14 @@ function FreeDrawFenceBlock({
   onBodyChange: (body: string) => void
   onRemove: () => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="hybrid-visual-diagram hybrid-freedraw-block">
       <div className="hybrid-fence-chrome">
-        <span className="inline-diagram-badge">Free draw</span>
-        <span className="hybrid-fence-title">Sketch pad · stored on this page</span>
+        <span className="inline-diagram-badge">{t('editor.insert.freedraw')}</span>
+        <span className="hybrid-fence-title">{t('editor.freedraw.storedTitle')}</span>
         <button type="button" className="btn ghost sm danger" onClick={onRemove}>
-          Remove
+          {t('common.remove')}
         </button>
       </div>
       <div className="hybrid-visual-body hybrid-visual-body--freedraw">
@@ -1734,13 +1750,14 @@ function ExcelGridFenceBlock({
   onBodyChange: (body: string) => void
   onRemove: () => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="hybrid-visual-diagram hybrid-excelgrid-block">
       <div className="hybrid-fence-chrome">
-        <span className="inline-diagram-badge">Spreadsheet</span>
-        <span className="hybrid-fence-title">Excel grid · stored on this page</span>
+        <span className="inline-diagram-badge">{t('editor.insert.spreadsheet')}</span>
+        <span className="hybrid-fence-title">{t('editor.excelgrid.storedTitle')}</span>
         <button type="button" className="btn ghost sm danger" onClick={onRemove}>
-          Remove
+          {t('common.remove')}
         </button>
       </div>
       <div className="hybrid-visual-body hybrid-visual-body--excelgrid">
@@ -1766,6 +1783,7 @@ function IsometricFenceBlock({
   onBodyChange: (body: string) => void
   onRemove: () => void
 }) {
+  const { t } = useI18n()
   if (segment.lang === 'isometric-ref') {
     return <RefDiagramBlock diagramId={segment.body} bookId={bookId} onRemove={onRemove} />
   }
@@ -1773,14 +1791,14 @@ function IsometricFenceBlock({
   return (
     <div className="hybrid-visual-diagram">
       <div className="hybrid-fence-chrome">
-        <span className="inline-diagram-badge">Isometric</span>
-        <span className="hybrid-fence-title">Isometric · stored on this page</span>
+        <span className="inline-diagram-badge">{t('editor.insert.isometric')}</span>
+        <span className="hybrid-fence-title">{t('editor.isometric.storedTitle')}</span>
         <button type="button" className="btn ghost sm danger" onClick={onRemove}>
-          Remove
+          {t('common.remove')}
         </button>
       </div>
       <div className="hybrid-visual-body hybrid-visual-body--studio">
-        <Suspense fallback={isometricLoading}>
+        <Suspense fallback={<IsometricLoading />}>
           <IsometricEditor source={segment.body} onChange={onBodyChange} />
         </Suspense>
       </div>
@@ -1799,6 +1817,7 @@ function VisualFenceBlock({
   onBodyChange: (body: string) => void
   onRemove: () => void
 }) {
+  const { t } = useI18n()
   if (segment.lang === 'beediagram-ref') {
     return <RefDiagramBlock diagramId={segment.body} bookId={bookId} onRemove={onRemove} />
   }
@@ -1807,9 +1826,9 @@ function VisualFenceBlock({
     <div className="hybrid-visual-diagram">
       <div className="hybrid-fence-chrome">
         <span className="inline-diagram-badge">BeeDiagram</span>
-        <span className="hybrid-fence-title">Studio · stored on this page</span>
+        <span className="hybrid-fence-title">{t('editor.studioStoredTitle')}</span>
         <button type="button" className="btn ghost sm danger" onClick={onRemove}>
-          Remove
+          {t('common.remove')}
         </button>
       </div>
       <div className="hybrid-visual-body hybrid-visual-body--studio">
@@ -1828,6 +1847,7 @@ function RefDiagramBlock({
   bookId?: string
   onRemove: () => void
 }) {
+  const { t } = useI18n()
   const id = diagramId.trim().split(/\s+/)[0] ?? ''
   const [title, setTitle] = useState<string | null>(null)
   const [source, setSource] = useState<string | null>(null)
@@ -1868,12 +1888,12 @@ function RefDiagramBlock({
 
   const persist = useCallback(
     async (next: string) => {
-      const t = titleRef.current
-      if (!t) return
+      const currentTitle = titleRef.current
+      if (!currentTitle) return
       setSaving(true)
       setError(null)
       try {
-        const updated = await api.updateDiagram(id, { title: t, source: next })
+        const updated = await api.updateDiagram(id, { title: currentTitle, source: next })
         setSource(updated.source)
         latestRef.current = updated.source
         setSavedAt(new Date().toLocaleTimeString())
@@ -1899,9 +1919,9 @@ function RefDiagramBlock({
     return (
       <div className="hybrid-visual-diagram">
         <div className="banner error compact">
-          Diagram ref <code>{id}</code>: {error}{' '}
+          {t('editor.ref.errorLabel')} <code>{id}</code>: {error}{' '}
           <button type="button" className="btn ghost sm" onClick={onRemove}>
-            Remove block
+            {t('editor.block.remove')}
           </button>
         </div>
       </div>
@@ -1910,7 +1930,7 @@ function RefDiagramBlock({
   if (!source) {
     return (
       <div className="hybrid-visual-diagram">
-        <p className="muted sm">Loading diagram {id}…</p>
+        <p className="muted sm">{t('editor.loadingDiagramId', { id })}</p>
       </div>
     )
   }
@@ -1922,15 +1942,17 @@ function RefDiagramBlock({
       <div className="hybrid-fence-chrome">
         <div className="hybrid-fence-labels">
           <span className="inline-diagram-badge">
-            {kind === 'isometric' ? 'Isometric' : 'BeeDiagram'}
+            {kind === 'isometric' ? t('editor.insert.isometric') : 'BeeDiagram'}
           </span>
           <span className="hybrid-fence-title">{title ?? id}</span>
-          <span className="muted sm">linked · reusable</span>
+          <span className="muted sm">{t('editor.ref.linkedBadge')}</span>
         </div>
         <div className="hybrid-fence-actions">
-          {saving && <span className="muted sm">Saving…</span>}
-          {!saving && dirty && <span className="dirty-dot sm">Unsaved</span>}
-          {!saving && !dirty && savedAt && <span className="muted sm">Saved · {savedAt}</span>}
+          {saving && <span className="muted sm">{t('common.saving')}</span>}
+          {!saving && dirty && <span className="dirty-dot sm">{t('editor.unsaved')}</span>}
+          {!saving && !dirty && savedAt && (
+            <span className="muted sm">{t('editor.savedAt', { time: savedAt })}</span>
+          )}
           <button
             type="button"
             className="btn primary sm"
@@ -1940,22 +1962,22 @@ function RefDiagramBlock({
               void persist(latestRef.current)
             }}
           >
-            {saving ? 'Saving…' : dirty ? 'Save diagram' : 'Saved'}
+            {saving ? t('common.saving') : dirty ? t('editor.saveDiagram') : t('common.saved')}
           </button>
           {openHref && (
             <Link className="btn ghost sm" to={openHref}>
-              Full page
+              {t('editor.fullPage')}
             </Link>
           )}
           <button type="button" className="btn ghost sm danger" onClick={onRemove}>
-            Remove
+            {t('common.remove')}
           </button>
         </div>
       </div>
       {error && <div className="banner error compact">{error}</div>}
       <div className="hybrid-visual-body hybrid-visual-body--studio">
         {kind === 'isometric' ? (
-          <Suspense fallback={isometricLoading}>
+          <Suspense fallback={<IsometricLoading />}>
             <IsometricEditor key={id} source={source} onChange={onEditorChange} />
           </Suspense>
         ) : (

@@ -1,5 +1,7 @@
+import { useI18n } from '../i18n'
+import { isoShapeName } from './IsoPalette'
 import { ISO_COLOR_SWATCHES } from './isoModel'
-import { ISO_SHAPES, isoShape } from './isoShapes'
+import { ISO_SHAPES } from './isoShapes'
 import { selectionSize, type IsoController } from './useIsoController'
 
 type Props = {
@@ -16,12 +18,13 @@ function Swatches({
   value: string | undefined
   onPick: (color: string | undefined) => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="studio-swatches">
       <button
         type="button"
         className={`studio-swatch studio-swatch--none${value === undefined ? ' is-active' : ''}`}
-        title="Default colour"
+        title={t('isometric.format.defaultColour')}
         onClick={() => onPick(undefined)}
       />
       {ISO_COLOR_SWATCHES.map((c) => (
@@ -34,7 +37,7 @@ function Swatches({
           onClick={() => onPick(c)}
         />
       ))}
-      <label className="studio-swatch studio-swatch--custom" title="Custom colour">
+      <label className="studio-swatch studio-swatch--custom" title={t('isometric.format.customColour')}>
         <input
           type="color"
           value={value ?? '#6c8ebf'}
@@ -47,6 +50,7 @@ function Swatches({
 
 /** Right-hand format panel — label, colour and per-kind options for the selection. */
 export function IsoFormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
+  const { t } = useI18n()
   const sel = ctrl.selection
   const items = ctrl.selectedItems
   const connectors = ctrl.selectedConnectors
@@ -55,13 +59,13 @@ export function IsoFormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
   const total = selectionSize(sel)
 
   return (
-    <aside className="studio-format" aria-label="Format">
+    <aside className="studio-format" aria-label={t('isometric.toolbar.format')}>
       <div className="studio-format-body">
         {total === 0 && (
           <section className="studio-format-section">
-            <h4>Diagram</h4>
+            <h4>{t('common.diagram')}</h4>
             <label className="studio-field">
-              <span>Zoom</span>
+              <span>{t('isometric.format.zoom')}</span>
               <input
                 type="range"
                 min={15}
@@ -72,7 +76,7 @@ export function IsoFormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
             </label>
             <div className="studio-btn-row">
               <button type="button" className="btn sm" onClick={onFit}>
-                Fit content
+                {t('isometric.format.fitContent')}
               </button>
               <button type="button" className="btn sm" onClick={() => onZoom(1)}>
                 100%
@@ -84,24 +88,25 @@ export function IsoFormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                 checked={ctrl.prefs.grid}
                 onChange={(e) => ctrl.setPrefs({ grid: e.target.checked })}
               />
-              Show grid
+              {t('isometric.format.showGrid')}
             </label>
-            <p className="muted sm studio-tips">
-              Hover a shape for the connect arrows — drag one to another shape, or click it for a
-              connected copy. Space-drag pans, Ctrl+wheel zooms, double-click renames.
-            </p>
+            <p className="muted sm studio-tips">{t('isometric.format.tips')}</p>
           </section>
         )}
 
         {items.length > 0 && (
           <section className="studio-format-section">
-            <h4>{items.length === 1 ? isoShape(items[0].shape).label : `${items.length} shapes`}</h4>
+            <h4>
+              {items.length === 1
+                ? isoShapeName(t, items[0].shape)
+                : t('isometric.count.shapes.other', { count: items.length })}
+            </h4>
             {items.length === 1 && (
               <label className="studio-field studio-field--stack">
-                <span>Label</span>
+                <span>{t('isometric.format.label')}</span>
                 <input
                   value={items[0].label ?? ''}
-                  placeholder="Label under the shape"
+                  placeholder={t('isometric.format.labelUnderShape')}
                   onChange={(e) =>
                     ctrl.updateItems([items[0].id], { label: e.target.value || undefined })
                   }
@@ -110,21 +115,21 @@ export function IsoFormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
             )}
             {items.length === 1 && (
               <label className="studio-field studio-field--stack">
-                <span>Shape</span>
+                <span>{t('isometric.format.shape')}</span>
                 <select
                   value={items[0].shape in ISO_SHAPES ? items[0].shape : 'block'}
                   onChange={(e) => ctrl.updateItems([items[0].id], { shape: e.target.value })}
                 >
                   {Object.values(ISO_SHAPES).map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.label}
+                      {isoShapeName(t, s.id)}
                     </option>
                   ))}
                 </select>
               </label>
             )}
             <div className="studio-field studio-field--stack">
-              <span>Colour</span>
+              <span>{t('isometric.format.colour')}</span>
               <Swatches
                 value={items[0].color}
                 onPick={(color) =>
@@ -140,13 +145,17 @@ export function IsoFormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
 
         {connectors.length > 0 && (
           <section className="studio-format-section">
-            <h4>{connectors.length === 1 ? 'Connection' : `${connectors.length} connections`}</h4>
+            <h4>
+              {connectors.length === 1
+                ? t('isometric.connection')
+                : t('isometric.count.connections.other', { count: connectors.length })}
+            </h4>
             {connectors.length === 1 && (
               <label className="studio-field studio-field--stack">
-                <span>Label</span>
+                <span>{t('isometric.format.label')}</span>
                 <input
                   value={connectors[0].label ?? ''}
-                  placeholder="Label on the line"
+                  placeholder={t('isometric.format.labelOnLine')}
                   onChange={(e) =>
                     ctrl.updateConnectors([connectors[0].id], {
                       label: e.target.value || undefined,
@@ -166,10 +175,10 @@ export function IsoFormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                   )
                 }
               />
-              Dashed
+              {t('isometric.format.dashed')}
             </label>
             <div className="studio-field studio-field--stack">
-              <span>Colour</span>
+              <span>{t('isometric.format.colour')}</span>
               <Swatches
                 value={connectors[0].color}
                 onPick={(color) =>
@@ -185,13 +194,17 @@ export function IsoFormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
 
         {zones.length > 0 && (
           <section className="studio-format-section">
-            <h4>{zones.length === 1 ? 'Zone' : `${zones.length} zones`}</h4>
+            <h4>
+              {zones.length === 1
+                ? t('isometric.shape.zone')
+                : t('isometric.count.zones.other', { count: zones.length })}
+            </h4>
             {zones.length === 1 && (
               <label className="studio-field studio-field--stack">
-                <span>Label</span>
+                <span>{t('isometric.format.label')}</span>
                 <input
                   value={zones[0].label ?? ''}
-                  placeholder="Zone name"
+                  placeholder={t('isometric.format.zoneName')}
                   onChange={(e) =>
                     ctrl.updateZones([zones[0].id], { label: e.target.value || undefined })
                   }
@@ -199,7 +212,7 @@ export function IsoFormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
               </label>
             )}
             <div className="studio-field studio-field--stack">
-              <span>Colour</span>
+              <span>{t('isometric.format.colour')}</span>
               <Swatches
                 value={zones[0].color}
                 onPick={(color) =>
@@ -210,16 +223,20 @@ export function IsoFormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                 }
               />
             </div>
-            <p className="muted sm">Drag the corner handles on the canvas to resize.</p>
+            <p className="muted sm">{t('isometric.format.resizeHint')}</p>
           </section>
         )}
 
         {texts.length > 0 && (
           <section className="studio-format-section">
-            <h4>{texts.length === 1 ? 'Text' : `${texts.length} texts`}</h4>
+            <h4>
+              {texts.length === 1
+                ? t('isometric.shape.text')
+                : t('isometric.count.texts.other', { count: texts.length })}
+            </h4>
             {texts.length === 1 && (
               <label className="studio-field studio-field--stack">
-                <span>Text</span>
+                <span>{t('isometric.shape.text')}</span>
                 <input
                   value={texts[0].text}
                   onChange={(e) => ctrl.updateTexts([texts[0].id], { text: e.target.value })}
@@ -233,10 +250,10 @@ export function IsoFormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
           <section className="studio-format-section">
             <div className="studio-btn-row">
               <button type="button" className="btn sm" onClick={ctrl.duplicateSelection}>
-                Duplicate
+                {t('isometric.duplicate')}
               </button>
               <button type="button" className="btn danger ghost sm" onClick={ctrl.deleteSelection}>
-                Delete
+                {t('common.delete')}
               </button>
             </div>
           </section>

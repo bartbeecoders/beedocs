@@ -1,4 +1,5 @@
 import { useId, useMemo } from 'react'
+import { useI18n } from '../i18n'
 import type { BeeDiagramDoc } from '../types'
 import { edgePathD, parseBeeDoc } from '../diagram/beeModel'
 import { diagramPaintOrder } from '../diagram/containers'
@@ -13,6 +14,7 @@ type Props = {
 
 /** Read-only BeeDiagram rendering used in pages, previews and thumbnails. */
 export function BeeDiagramView({ source, doc: docProp, className }: Props) {
+  const { t } = useI18n()
   const doc = useMemo(() => docProp ?? parseBeeDoc(source), [docProp, source])
   const prefix = useId().replace(/[^a-zA-Z0-9]/g, '')
 
@@ -126,7 +128,7 @@ export function BeeDiagramView({ source, doc: docProp, className }: Props) {
           )
         })}
       </svg>
-      {doc.nodes.length === 0 && <p className="muted bee-empty">Empty diagram</p>}
+      {doc.nodes.length === 0 && <p className="muted bee-empty">{t('studio.emptyDiagram')}</p>}
     </div>
   )
 }

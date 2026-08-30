@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import { useI18n, type MessageKey } from '../i18n'
 import {
   HIGHLIGHT_CLOSE,
   HIGHLIGHT_OPEN,
@@ -9,16 +10,16 @@ import {
   type SearchResponse,
 } from '../types'
 
-/** Kind order and labels for the grouped result list. */
-const KIND_GROUPS: { kind: SearchKind; label: string }[] = [
-  { kind: 'page', label: 'Pages' },
-  { kind: 'diagram', label: 'Diagrams' },
-  { kind: 'slides', label: 'Slides' },
-  { kind: 'attachment', label: 'Files' },
-  { kind: 'book', label: 'Books' },
-  { kind: 'folder', label: 'Folders' },
-  { kind: 'shelf', label: 'Shelves' },
-  { kind: 'gitfile', label: 'Repository files' },
+/** Kind order for the grouped result list — labels come from `search.kind.*`. */
+const KIND_ORDER: SearchKind[] = [
+  'page',
+  'diagram',
+  'slides',
+  'attachment',
+  'book',
+  'folder',
+  'shelf',
+  'gitfile',
 ]
 
 const KIND_ICON: Record<SearchKind, string> = {
@@ -42,6 +43,7 @@ type Props = {
 
 export function SearchPalette({ open, onClose }: Props) {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
@@ -53,7 +55,7 @@ export function SearchPalette({ open, onClose }: Props) {
   // Flat, in group order — arrow keys walk this while the list renders grouped.
   const hits = useMemo(() => {
     if (!response) return []
-    return KIND_GROUPS.flatMap((g) => response.hits.filter((h) => h.kind === g.kind))
+    return KIND_ORDER.flatMap((kind) => response.hits.filter((h) => h.kind === kind))
   }, [response])
 
   useEffect(() => {
@@ -142,9 +144,9 @@ export function SearchPalette({ open, onClose }: Props) {
   if (!open) return null
 
   const trimmed = query.trim()
-  const groups = KIND_GROUPS.map((g) => ({
-    ...g,
-    items: (response?.hits ?? []).filter((h) => h.kind === g.kind),
+  const groups = KIND_ORDER.map((kind) => ({
+    kind,
+    items: (response?.hits ?? []).filter((h) => h.kind === kind),
   })).filter((g) => g.items.length > 0)
 
   return (
@@ -154,7 +156,7 @@ export function SearchPalette({ open, onClose }: Props) {
         onMouseDown={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="Search documentation"
+        aria-label={t('search.dialogAria')}
       >
         <div className="search-field">
           <span className="search-field-icon" aria-hidden="true">
@@ -167,8 +169,8 @@ export function SearchPalette({ open, onClose }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search pages, diagrams and books…"
-            aria-label="Search query"
+            placeholder={t('search.placeholder')}
+            aria-label={t('search.queryAria')}
             autoComplete="off"
             spellCheck={false}
             autoFocus
@@ -183,20 +185,23 @@ export function SearchPalette({ open, onClose }: Props) {
 
           {!trimmed && !error && (
             <p className="search-empty muted sm">
-              Type to search across every book. Wrap a phrase in <code>"quotes"</code> to match it
-              exactly.
+              {t('search.emptyBefore')}
+              <code>{t('search.emptyQuotes')}</code>
+              {t('search.emptyAfter')}
             </p>
           )}
 
           {trimmed && !error && response && hits.length === 0 && !busy && (
             <p className="search-empty muted sm">
-              No matches for <strong>{trimmed}</strong>.
+              {t('search.noMatchesBefore')}
+              <strong>{trimmed}</strong>
+              {t('search.noMatchesAfter')}
             </p>
           )}
 
           {groups.map((group) => (
             <div key={group.kind} className="search-group">
-              <div className="search-group-label">{group.label}</div>
+              <div className="search-group-label">{t(`search.kind.${group.kind}` as MessageKey)}</div>
               {group.items.map((hit) => {
                 const index = hits.indexOf(hit)
                 return (
@@ -232,15 +237,18 @@ export function SearchPalette({ open, onClose }: Props) {
         <div className="search-footer muted sm">
           <span>
             <kbd>{'\u2191'}</kbd>
-            <kbd>{'\u2193'}</kbd> navigate <kbd>{'\u21B5'}</kbd> open
+            <kbd>{'\u2193'}</kbd> {t('search.footerNavigate')} <kbd>{'\u21B5'}</kbd> {t('search.footerOpen')}
           </span>
           <span>
             {busy
-              ? 'Searching…'
+              ? t('search.searching')
               : response
-                ? `${response.total} result${response.total === 1 ? '' : 's'}${
-                    response.total > response.hits.length ? ` · showing ${response.hits.length}` : ''
-                  }`
+                ? t(response.total === 1 ? 'search.results.one' : 'search.results.other', {
+                    count: response.total,
+                  }) +
+                  (response.total > response.hits.length
+                    ? ` · ${t('search.showing', { count: response.hits.length })}`
+                    : '')
                 : ''}
           </span>
         </div>

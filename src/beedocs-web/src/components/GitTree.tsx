@@ -2,18 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n, type MessageKey } from '../i18n'
 import { gitFilePath } from '../gitPaths'
 import { GitAssistDialog } from './GitAssistDialog'
 import { bumpGitStatus, refreshGitRepos, useGitRepos } from '../hooks/useGitRepos'
 import type { GitAssistKind, GitRepo, GitTreeEntry } from '../types'
 import '../styles/git.css'
 
-const ASSIST_ITEMS: { kind: GitAssistKind; label: string }[] = [
-  { kind: 'readme', label: '✨ Draft README…' },
-  { kind: 'documentation', label: '✨ Draft documentation…' },
-  { kind: 'manual', label: '✨ Draft user manual…' },
-  { kind: 'summary', label: '✨ Summarize repository…' },
-]
+// Labels come from `git.assist.${kind}` at render time.
+const ASSIST_KINDS: GitAssistKind[] = ['readme', 'documentation', 'manual', 'summary']
 
 function fileIcon(name: string): string {
   const ext = name.slice(name.lastIndexOf('.')).toLowerCase()
@@ -33,6 +30,7 @@ export function GitTree() {
   const repos = useGitRepos()
   const navigate = useNavigate()
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem('beedocs-git-collapsed') === '1'
@@ -121,7 +119,7 @@ export function GitTree() {
         onClick={toggleCollapsed}
       >
         <span className="tree-twist">{collapsed ? '▸' : '▾'}</span>
-        <span className="git-tree-title">⎇ Repositories</span>
+        <span className="git-tree-title">⎇ {t('common.repositories')}</span>
         <span className="muted sm">({repos.length})</span>
       </button>
       {!collapsed && (
@@ -161,7 +159,7 @@ export function GitTree() {
               setMenu(null)
             }}
           >
-            Open repository
+            {t('git.openRepo')}
           </button>
           {canWrite ? (
             <button
@@ -171,7 +169,7 @@ export function GitTree() {
               disabled={syncing || menu.repo.status !== 'ready'}
               onClick={() => syncFromMenu(menu.repo)}
             >
-              {syncing ? 'Pulling…' : 'Pull from remote'}
+              {syncing ? t('git.pulling') : t('git.pullFromRemote')}
             </button>
           ) : null}
           {/* Generating spends the configured AI provider, and saving the draft
@@ -179,18 +177,18 @@ export function GitTree() {
           {canWrite && menu.repo.status === 'ready' ? (
             <>
               <div className="tree-context-sep" />
-              {ASSIST_ITEMS.map((item) => (
+              {ASSIST_KINDS.map((kind) => (
                 <button
-                  key={item.kind}
+                  key={kind}
                   type="button"
                   role="menuitem"
                   className="tree-context-item"
                   onClick={() => {
-                    setAssist({ repo: menu.repo, kind: item.kind })
+                    setAssist({ repo: menu.repo, kind })
                     setMenu(null)
                   }}
                 >
-                  {item.label}
+                  ✨ {t(`git.assist.${kind}` as MessageKey)}
                 </button>
               ))}
             </>
@@ -216,6 +214,7 @@ function RepoNode({
   repo: GitRepo
   onMenu: (e: React.MouseEvent, repo: GitRepo) => void
 }) {
+  const { t } = useI18n()
   const [expanded, setExpanded] = useState(false)
   const ready = repo.status === 'ready'
 
@@ -225,7 +224,11 @@ function RepoNode({
         <button
           type="button"
           className="tree-twist"
-          aria-label={expanded ? `Collapse ${repo.name}` : `Expand ${repo.name}`}
+          aria-label={
+            expanded
+              ? t('git.collapseName', { name: repo.name })
+              : t('git.expandName', { name: repo.name })
+          }
           disabled={!ready}
           onClick={() => setExpanded((v) => !v)}
         >
@@ -235,10 +238,10 @@ function RepoNode({
           <span className="tree-icon">📦</span>
           <span className="tree-text">{repo.name}</span>
           {repo.status === 'cloning' ? (
-            <span className="git-badge is-cloning">cloning…</span>
+            <span className="git-badge is-cloning">{t('git.badgeCloning')}</span>
           ) : repo.status === 'error' ? (
             <span className="git-badge is-error" title={repo.lastError ?? undefined}>
-              failed
+              {t('git.badgeFailed')}
             </span>
           ) : null}
         </NavLink>
@@ -258,6 +261,7 @@ function RepoNode({
  * repo canvas re-mounts the tree via the store refresh when content changes.
  */
 function FolderChildren({ repoId, path }: { repoId: string; path: string }) {
+  const { t } = useI18n()
   const [entries, setEntries] = useState<GitTreeEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -277,8 +281,8 @@ function FolderChildren({ repoId, path }: { repoId: string; path: string }) {
   }, [repoId, path])
 
   if (error !== null) return <div className="git-tree-note is-warn">{error}</div>
-  if (entries === null) return <div className="git-tree-note muted sm">Loading…</div>
-  if (entries.length === 0) return <div className="git-tree-note muted sm">Empty folder</div>
+  if (entries === null) return <div className="git-tree-note muted sm">{t('common.loading')}</div>
+  if (entries.length === 0) return <div className="git-tree-note muted sm">{t('git.emptyFolder')}</div>
 
   return (
     <ul className="tree-children">
@@ -301,6 +305,7 @@ function FolderChildren({ repoId, path }: { repoId: string; path: string }) {
 }
 
 function FolderNode({ repoId, entry }: { repoId: string; entry: GitTreeEntry }) {
+  const { t } = useI18n()
   const [expanded, setExpanded] = useState(false)
   return (
     <li>
@@ -308,7 +313,11 @@ function FolderNode({ repoId, entry }: { repoId: string; entry: GitTreeEntry }) 
         <button
           type="button"
           className="tree-twist"
-          aria-label={expanded ? `Collapse ${entry.name}` : `Expand ${entry.name}`}
+          aria-label={
+            expanded
+              ? t('git.collapseName', { name: entry.name })
+              : t('git.expandName', { name: entry.name })
+          }
           onClick={() => setExpanded((v) => !v)}
         >
           {expanded ? '▾' : '▸'}

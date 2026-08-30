@@ -4,6 +4,7 @@ import { api } from '../api'
 import { withBase } from '../basePath'
 import { bookshelfSitePath } from '../markdownLinks'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n, type TFunction } from '../i18n'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
 import { ExportMenu } from './ExportMenu'
@@ -240,6 +241,7 @@ export function WorkspaceToolbar({
   // own; hiding the buttons here is so the toolbar shows what this account can
   // actually do rather than a row of guaranteed 403s.
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   const [importOpen, setImportOpen] = useState<{ targetBookId?: string } | null>(null)
   const [namePrompt, setNamePrompt] = useState<NamePrompt | null>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
@@ -254,6 +256,7 @@ export function WorkspaceToolbar({
         selection,
         books,
         shelves,
+        t,
         shelfId,
         bookId,
         pageId,
@@ -261,20 +264,20 @@ export function WorkspaceToolbar({
         deckId,
         attachmentId,
       ),
-    [view, selection, books, shelves, shelfId, bookId, pageId, diagramId, deckId, attachmentId],
+    [view, selection, books, shelves, t, shelfId, bookId, pageId, diagramId, deckId, attachmentId],
   )
 
   if (view === 'settings' || view === 'users' || view === 'stats' || view === 'help') {
     const meta =
       view === 'settings'
-        ? { icon: ICONS.settings, label: 'Settings' }
+        ? { icon: ICONS.settings, label: t('common.settings') }
         : view === 'users'
-          ? { icon: ICONS.users, label: 'Users' }
+          ? { icon: ICONS.users, label: t('common.users') }
           : view === 'stats'
-            ? { icon: ICONS.stats, label: 'Statistics' }
-            : { icon: ICONS.help, label: 'About & Help' }
+            ? { icon: ICONS.stats, label: t('shell.statistics') }
+            : { icon: ICONS.help, label: t('shell.aboutHelp') }
     return (
-      <div className="ws-toolbar" role="toolbar" aria-label="Workspace actions">
+      <div className="ws-toolbar" role="toolbar" aria-label={t('shell.workspaceActions')}>
         <div className={`ws-toolbar-context ws-toolbar-context--${view}`}>
           <span className="ws-toolbar-context-icon" aria-hidden>
             {meta.icon}
@@ -284,7 +287,7 @@ export function WorkspaceToolbar({
         <Sep />
         <Group>
           <Link to="/" className="btn ghost sm">
-            ← Back to library
+            ← {t('shell.backToLibrary')}
           </Link>
         </Group>
       </div>
@@ -292,7 +295,7 @@ export function WorkspaceToolbar({
   }
 
   return (
-    <div className="ws-toolbar" role="toolbar" aria-label="Workspace actions">
+    <div className="ws-toolbar" role="toolbar" aria-label={t('shell.workspaceActions')}>
       <div
         className={`ws-toolbar-context ws-toolbar-context--${context.kind}`}
         title={context.title}
@@ -302,7 +305,11 @@ export function WorkspaceToolbar({
         </span>
         <span className="ws-toolbar-context-label">{context.title}</span>
         {context.dirtyHint && (
-          <span className="ws-toolbar-dirty" title="Unsaved changes" aria-label="Unsaved changes" />
+          <span
+            className="ws-toolbar-dirty"
+            title={t('shell.unsavedChanges')}
+            aria-label={t('shell.unsavedChanges')}
+          />
         )}
       </div>
 
@@ -319,10 +326,10 @@ export function WorkspaceToolbar({
                   className="btn primary sm"
                   onClick={() =>
                     setNamePrompt({
-                      title: 'New book',
-                      label: 'Book title',
-                      placeholder: 'e.g. Platform architecture',
-                      confirmLabel: 'Create book',
+                      title: t('shell.newBook'),
+                      label: t('shell.bookTitle'),
+                      placeholder: t('shell.bookPlaceholder'),
+                      confirmLabel: t('shell.createBook'),
                       run: async (title) => {
                         const book = await createBook(title)
                         setSelection({ kind: 'book', bookId: book.id })
@@ -331,18 +338,18 @@ export function WorkspaceToolbar({
                     })
                   }
                 >
-                  New book
+                  {t('shell.newBook')}
                 </button>
                 <button
                   type="button"
                   className="btn ghost sm"
-                  title="A shelf groups related books"
+                  title={t('shell.newShelfTooltip')}
                   onClick={() =>
                     setNamePrompt({
-                      title: 'New shelf',
-                      label: 'Shelf name',
-                      placeholder: 'e.g. Platform',
-                      confirmLabel: 'Create shelf',
+                      title: t('shell.newShelf'),
+                      label: t('shell.shelfName'),
+                      placeholder: t('shell.shelfPlaceholder'),
+                      confirmLabel: t('shell.createShelf'),
                       run: async (title) => {
                         const shelf = await createShelf(title)
                         setSelection({ kind: 'shelf', shelfId: shelf.id })
@@ -351,10 +358,10 @@ export function WorkspaceToolbar({
                     })
                   }
                 >
-                  New shelf
+                  {t('shell.newShelf')}
                 </button>
                 <button type="button" className="btn ghost sm" onClick={() => setImportOpen({})}>
-                  Import
+                  {t('shell.import')}
                 </button>
               </Group>
               <Sep />
@@ -365,9 +372,9 @@ export function WorkspaceToolbar({
               type="button"
               className="btn ghost sm"
               onClick={() => void refreshTree()}
-              title="Refresh library"
+              title={t('shell.refreshLibrary')}
             >
-              Refresh library
+              {t('shell.refreshLibrary')}
             </button>
           </Group>
         </>
@@ -383,10 +390,10 @@ export function WorkspaceToolbar({
                   className="btn primary sm"
                   onClick={() =>
                     setNamePrompt({
-                      title: 'New book',
-                      label: 'Book title',
-                      placeholder: 'e.g. Platform architecture',
-                      confirmLabel: 'Create book',
+                      title: t('shell.newBook'),
+                      label: t('shell.bookTitle'),
+                      placeholder: t('shell.bookPlaceholder'),
+                      confirmLabel: t('shell.createBook'),
                       run: async (title) => {
                         const book = await createBook(title, undefined, context.shelfId)
                         setSelection({ kind: 'book', bookId: book.id })
@@ -395,24 +402,24 @@ export function WorkspaceToolbar({
                     })
                   }
                 >
-                  New book on shelf
+                  {t('shell.newBookOnShelf')}
                 </button>
                 <button
                   type="button"
                   className="btn ghost sm"
                   onClick={() =>
                     setNamePrompt({
-                      title: 'Rename shelf',
-                      label: 'Shelf name',
+                      title: t('shell.renameShelf'),
+                      label: t('shell.shelfName'),
                       defaultValue: context.title,
-                      confirmLabel: 'Rename',
+                      confirmLabel: t('common.rename'),
                       run: async (title) => {
                         await renameShelf(context.shelfId, title)
                       },
                     })
                   }
                 >
-                  Rename
+                  {t('common.rename')}
                 </button>
               </Group>
               <Sep />
@@ -425,7 +432,7 @@ export function WorkspaceToolbar({
                 className="btn ghost sm"
                 onClick={() => void navigate(`/shelves/${context.shelfId}`)}
               >
-                Open shelf
+                {t('shell.openShelf')}
               </button>
             )}
             {(() => {
@@ -437,9 +444,9 @@ export function WorkspaceToolbar({
                   href={withBase(bookshelfSitePath(shelf.slug))}
                   target="_blank"
                   rel="noreferrer"
-                  title="Open this shelf as a website"
+                  title={t('shell.openWebsiteTooltip')}
                 >
-                  Open website
+                  {t('shell.openWebsite')}
                 </a>
               )
             })()}
@@ -451,19 +458,14 @@ export function WorkspaceToolbar({
                 type="button"
                 className="btn danger ghost sm"
                 onClick={() => {
-                  if (
-                    !confirm(
-                      `Delete shelf “${context.title}”? Its books are kept and move to the library root.`,
-                    )
-                  )
-                    return
+                  if (!confirm(t('shell.deleteShelfConfirm', { name: context.title }))) return
                   void deleteShelf(context.shelfId).then(() => {
                     setSelection({ kind: 'none' })
                     void navigate('/')
                   })
                 }}
               >
-                Delete shelf
+                {t('shell.deleteShelf')}
               </button>
             </Group>
           )}
@@ -480,10 +482,10 @@ export function WorkspaceToolbar({
                   className="btn primary sm"
                   onClick={() =>
                     setNamePrompt({
-                      title: 'New page',
-                      label: 'Page title',
-                      placeholder: 'e.g. System Context',
-                      confirmLabel: 'Create page',
+                      title: t('shell.newPage'),
+                      label: t('shell.pageTitle'),
+                      placeholder: t('shell.pagePlaceholder'),
+                      confirmLabel: t('shell.createPage'),
                       run: async (title) => {
                         const p = await createPage(context.bookId, title)
                         void navigate(`/books/${context.bookId}/pages/${p.id}`)
@@ -491,34 +493,34 @@ export function WorkspaceToolbar({
                     })
                   }
                 >
-                  New page
+                  {t('shell.newPage')}
                 </button>
                 <button
                   type="button"
                   className="btn ghost sm"
                   onClick={() =>
                     setNamePrompt({
-                      title: 'New folder',
-                      label: 'Folder name',
-                      placeholder: 'e.g. Design',
-                      confirmLabel: 'Create folder',
+                      title: t('shell.newFolder'),
+                      label: t('shell.folderName'),
+                      placeholder: t('shell.folderPlaceholder'),
+                      confirmLabel: t('shell.createFolder'),
                       run: async (title) => {
                         await createFolder(context.bookId, title)
                       },
                     })
                   }
                 >
-                  New folder
+                  {t('shell.newFolder')}
                 </button>
                 <button
                   type="button"
                   className="btn ghost sm"
                   onClick={() =>
                     setNamePrompt({
-                      title: 'New diagram',
-                      label: 'Diagram title',
-                      placeholder: 'e.g. Network overview',
-                      confirmLabel: 'Create diagram',
+                      title: t('shell.newDiagram'),
+                      label: t('shell.diagramTitle'),
+                      placeholder: t('shell.diagramPlaceholder'),
+                      confirmLabel: t('shell.createDiagram'),
                       run: async (title) => {
                         const d = await createDiagram(context.bookId, title)
                         void navigate(`/books/${context.bookId}/diagrams/${d.id}`)
@@ -526,7 +528,7 @@ export function WorkspaceToolbar({
                     })
                   }
                 >
-                  New diagram
+                  {t('shell.newDiagram')}
                 </button>
                 <button
                   type="button"
@@ -537,18 +539,22 @@ export function WorkspaceToolbar({
                       // fetch degrades to the plain title prompt.
                       const templates = await api.listSlideTemplates().catch(() => [])
                       setNamePrompt({
-                        title: 'New slides',
-                        label: 'Presentation title',
-                        placeholder: 'e.g. Architecture review',
-                        confirmLabel: 'Create slides',
+                        title: t('shell.newSlides'),
+                        label: t('shell.presentationTitle'),
+                        placeholder: t('shell.slidesPlaceholder'),
+                        confirmLabel: t('shell.createSlides'),
                         select: templates.length
                           ? {
-                              label: 'Template',
+                              label: t('shell.template'),
                               options: [
-                                { value: '', label: 'Blank deck' },
-                                ...templates.map((t) => ({
-                                  value: t.id,
-                                  label: `${t.name} (${t.slideCount} slide${t.slideCount === 1 ? '' : 's'})`,
+                                { value: '', label: t('shell.blankDeck') },
+                                ...templates.map((tpl) => ({
+                                  value: tpl.id,
+                                  label: `${tpl.name} (${
+                                    tpl.slideCount === 1
+                                      ? t('shell.slideCount.one', { count: tpl.slideCount })
+                                      : t('shell.slideCount.other', { count: tpl.slideCount })
+                                  })`,
                                 })),
                               ],
                             }
@@ -561,7 +567,7 @@ export function WorkspaceToolbar({
                     })()
                   }
                 >
-                  New slides
+                  {t('shell.newSlides')}
                 </button>
                 <button
                   type="button"
@@ -571,9 +577,9 @@ export function WorkspaceToolbar({
                     uploadBookRef.current = context.bookId
                     uploadInputRef.current?.click()
                   }}
-                  title="Upload a PDF, Word, PowerPoint or other document into this book"
+                  title={t('shell.uploadTooltip')}
                 >
-                  {uploading ? 'Uploading…' : 'Upload file'}
+                  {uploading ? t('shell.uploading') : t('shell.uploadFile')}
                 </button>
               </Group>
               <Sep />
@@ -588,7 +594,7 @@ export function WorkspaceToolbar({
                   className="btn ghost sm"
                   onClick={() => setImportOpen({ targetBookId: context.bookId })}
                 >
-                  Import…
+                  {t('shell.import')}…
                 </button>
             </>
           )}
@@ -598,7 +604,7 @@ export function WorkspaceToolbar({
                 className="btn ghost sm"
                 onClick={() => void navigate(`/books/${context.bookId}`)}
               >
-                Open book
+                {t('shell.openBook')}
               </button>
             )}
           </Group>
@@ -610,14 +616,14 @@ export function WorkspaceToolbar({
                   type="button"
                   className="btn ghost danger sm"
                   onClick={() => {
-                    if (!confirm(`Delete book “${context.title}”?`)) return
+                    if (!confirm(t('shell.deleteBookConfirm', { name: context.title }))) return
                     void deleteBook(context.bookId).then(() => {
                       setSelection({ kind: 'none' })
                       if (bookId === context.bookId) void navigate('/')
                     })
                   }}
                 >
-                  Delete book
+                  {t('shell.deleteBook')}
                 </button>
               </Group>
             </>
@@ -635,10 +641,10 @@ export function WorkspaceToolbar({
                   className="btn primary sm"
                   onClick={() =>
                     setNamePrompt({
-                      title: 'New page',
-                      label: 'Page title',
-                      placeholder: 'e.g. System Context',
-                      confirmLabel: 'Create page',
+                      title: t('shell.newPage'),
+                      label: t('shell.pageTitle'),
+                      placeholder: t('shell.pagePlaceholder'),
+                      confirmLabel: t('shell.createPage'),
                       run: async (title) => {
                         const p = await createPage(context.bookId, title, context.chapterId)
                         void navigate(`/books/${context.bookId}/pages/${p.id}`)
@@ -646,24 +652,24 @@ export function WorkspaceToolbar({
                     })
                   }
                 >
-                  New page in folder
+                  {t('shell.newPageInFolder')}
                 </button>
                 <button
                   type="button"
                   className="btn ghost sm"
                   onClick={() =>
                     setNamePrompt({
-                      title: 'Rename folder',
-                      label: 'Folder name',
+                      title: t('shell.renameFolder'),
+                      label: t('shell.folderName'),
                       defaultValue: context.title,
-                      confirmLabel: 'Rename',
-                      run: async (t) => {
-                        await renameFolder(context.chapterId, context.bookId, t)
+                      confirmLabel: t('common.rename'),
+                      run: async (name) => {
+                        await renameFolder(context.chapterId, context.bookId, name)
                       },
                     })
                   }
                 >
-                  Rename folder
+                  {t('shell.renameFolder')}
                 </button>
               </Group>
             </>
@@ -676,11 +682,7 @@ export function WorkspaceToolbar({
                   type="button"
                   className="btn ghost danger sm"
                   onClick={() => {
-                    if (
-                      !confirm(
-                        `Delete folder “${context.title}”? Pages inside move to the book root.`,
-                      )
-                    ) {
+                    if (!confirm(t('shell.deleteFolderConfirm', { name: context.title }))) {
                       return
                     }
                     void deleteFolder(context.chapterId, context.bookId).then(() => {
@@ -688,7 +690,7 @@ export function WorkspaceToolbar({
                     })
                   }}
                 >
-                  Delete folder
+                  {t('shell.deleteFolder')}
                 </button>
               </Group>
             </>
@@ -707,7 +709,7 @@ export function WorkspaceToolbar({
                   void navigate(`/books/${context.bookId}/pages/${context.pageId}`)
                 }
               >
-                Open
+                {t('common.open')}
               </button>
             )}
             {canWrite && (
@@ -716,7 +718,7 @@ export function WorkspaceToolbar({
                   <button
                     type="button"
                     className="btn ghost sm"
-                    title="Move this page to the book root"
+                    title={t('shell.moveToRootTooltip')}
                     onClick={() => {
                       void movePage({
                         pageId: context.pageId,
@@ -725,7 +727,7 @@ export function WorkspaceToolbar({
                       })
                     }}
                   >
-                    Move to root
+                    {t('shell.moveToRoot')}
                   </button>
                 )}
             </>
@@ -738,7 +740,7 @@ export function WorkspaceToolbar({
           {pageState?.dirty && (
             <>
               <Sep />
-              <span className="ws-toolbar-status muted sm">Unsaved changes</span>
+              <span className="ws-toolbar-status muted sm">{t('shell.unsavedChanges')}</span>
             </>
           )}
           <span className="ws-toolbar-spacer" />
@@ -749,14 +751,14 @@ export function WorkspaceToolbar({
                   type="button"
                   className="btn ghost danger sm"
                   onClick={() => {
-                    if (!confirm(`Delete page “${context.title}”?`)) return
+                    if (!confirm(t('shell.deletePageConfirm', { name: context.title }))) return
                     void deletePage(context.pageId, context.bookId).then(() => {
                       setSelection({ kind: 'book', bookId: context.bookId })
                       if (pageId === context.pageId) void navigate(`/books/${context.bookId}`)
                     })
                   }}
                 >
-                  Delete page
+                  {t('shell.deletePage')}
                 </button>
               </Group>
             </>
@@ -775,17 +777,17 @@ export function WorkspaceToolbar({
                   void navigate(`/books/${context.bookId}/diagrams/${context.diagramId}`)
                 }
               >
-                Open
+                {t('common.open')}
               </button>
             )}
             {view === 'diagram' && diagramId === context.diagramId && (
-              <span className="ws-toolbar-status muted sm">Editing diagram</span>
+              <span className="ws-toolbar-status muted sm">{t('shell.editingDiagram')}</span>
             )}
           </Group>
           {diagramState?.dirty && (
             <>
               <Sep />
-              <span className="ws-toolbar-status muted sm">Unsaved changes</span>
+              <span className="ws-toolbar-status muted sm">{t('shell.unsavedChanges')}</span>
             </>
           )}
           <span className="ws-toolbar-spacer" />
@@ -796,7 +798,7 @@ export function WorkspaceToolbar({
                   type="button"
                   className="btn ghost danger sm"
                   onClick={() => {
-                    if (!confirm(`Delete diagram “${context.title}”?`)) return
+                    if (!confirm(t('shell.deleteDiagramConfirm', { name: context.title }))) return
                     void deleteDiagram(context.diagramId, context.bookId).then(() => {
                       setSelection({ kind: 'book', bookId: context.bookId })
                       if (diagramId === context.diagramId)
@@ -804,7 +806,7 @@ export function WorkspaceToolbar({
                     })
                   }}
                 >
-                  Delete diagram
+                  {t('shell.deleteDiagram')}
                 </button>
               </Group>
             </>
@@ -823,7 +825,7 @@ export function WorkspaceToolbar({
                   void navigate(`/books/${context.bookId}/slides/${context.deckId}`)
                 }
               >
-                Open
+                {t('common.open')}
               </button>
             )}
             {view === 'slides' && deckId === context.deckId && slideState && (
@@ -831,16 +833,16 @@ export function WorkspaceToolbar({
                 type="button"
                 className="btn primary sm"
                 onClick={() => slideState.present()}
-                title="Start the presentation"
+                title={t('shell.presentTooltip')}
               >
-                ▶ Present
+                ▶ {t('shell.present')}
               </button>
             )}
           </Group>
           {slideState?.dirty && (
             <>
               <Sep />
-              <span className="ws-toolbar-status muted sm">Unsaved changes</span>
+              <span className="ws-toolbar-status muted sm">{t('shell.unsavedChanges')}</span>
             </>
           )}
           <span className="ws-toolbar-spacer" />
@@ -850,14 +852,14 @@ export function WorkspaceToolbar({
                 type="button"
                 className="btn ghost danger sm"
                 onClick={() => {
-                  if (!confirm(`Delete slide deck “${context.title}”?`)) return
+                  if (!confirm(t('shell.deleteSlidesConfirm', { name: context.title }))) return
                   void deleteSlideDeck(context.deckId, context.bookId).then(() => {
                     setSelection({ kind: 'book', bookId: context.bookId })
                     if (deckId === context.deckId) void navigate(`/books/${context.bookId}`)
                   })
                 }}
               >
-                Delete slides
+                {t('shell.deleteSlides')}
               </button>
             </Group>
           )}
@@ -875,7 +877,7 @@ export function WorkspaceToolbar({
                   void navigate(`/books/${context.bookId}/files/${context.attachmentId}`)
                 }
               >
-                Open
+                {t('common.open')}
               </button>
             )}
             <button
@@ -888,7 +890,7 @@ export function WorkspaceToolbar({
                 a.click()
               }}
             >
-              Download
+              {t('common.download')}
             </button>
             {canWrite && view === 'attachment' && attachmentId === context.attachmentId && attachmentState && (
               <button
@@ -896,14 +898,14 @@ export function WorkspaceToolbar({
                 className="btn ghost sm"
                 onClick={() => attachmentState.replaceFile()}
               >
-                Replace file
+                {t('shell.replaceFile')}
               </button>
             )}
           </Group>
           {attachmentState?.dirty && (
             <>
               <Sep />
-              <span className="ws-toolbar-status muted sm">Unsaved changes</span>
+              <span className="ws-toolbar-status muted sm">{t('shell.unsavedChanges')}</span>
             </>
           )}
           <span className="ws-toolbar-spacer" />
@@ -913,8 +915,7 @@ export function WorkspaceToolbar({
                 type="button"
                 className="btn ghost danger sm"
                 onClick={() => {
-                  if (!confirm(`Delete “${context.title}”? The file is removed from the server.`))
-                    return
+                  if (!confirm(t('shell.deleteFileConfirm', { name: context.title }))) return
                   void deleteAttachment(context.attachmentId, context.bookId).then(() => {
                     setSelection({ kind: 'book', bookId: context.bookId })
                     if (attachmentId === context.attachmentId)
@@ -922,7 +923,7 @@ export function WorkspaceToolbar({
                   })
                 }}
               >
-                Delete file
+                {t('shell.deleteFile')}
               </button>
             </Group>
           )}
@@ -1050,6 +1051,7 @@ function resolveToolbarContext(
   selection: TreeSelection,
   books: BookLike[],
   shelves: ShelfLike[],
+  t: TFunction,
   shelfId?: string,
   bookId?: string,
   pageId?: string,
@@ -1063,7 +1065,7 @@ function resolveToolbarContext(
     return {
       kind: 'folder',
       icon: ICONS.folder,
-      title: folder?.title ?? 'Folder',
+      title: folder?.title ?? t('shell.folder'),
       bookId: selection.bookId,
       chapterId: selection.chapterId,
     }
@@ -1077,7 +1079,7 @@ function resolveToolbarContext(
     return {
       kind: 'page',
       icon: ICONS.page,
-      title: page?.title ?? 'Page',
+      title: page?.title ?? t('common.page'),
       bookId: bId,
       pageId: pId,
       chapterId: page?.chapterId ?? null,
@@ -1092,7 +1094,7 @@ function resolveToolbarContext(
     return {
       kind: 'diagram',
       icon: ICONS.diagram,
-      title: diagram?.title ?? 'Diagram',
+      title: diagram?.title ?? t('common.diagram'),
       bookId: bId,
       diagramId: dId,
     }
@@ -1106,7 +1108,7 @@ function resolveToolbarContext(
     return {
       kind: 'slides',
       icon: ICONS.slides,
-      title: deck?.title ?? 'Slides',
+      title: deck?.title ?? t('common.slides'),
       bookId: bId,
       deckId: dId,
     }
@@ -1122,7 +1124,7 @@ function resolveToolbarContext(
       // No SVG in ICONS for this one on purpose: a file's identity is its
       // format, and the per-format glyph says more than one generic paperclip.
       icon: <span aria-hidden>{attachmentIcon(file?.fileName ?? '', file?.contentType)}</span>,
-      title: file?.title ?? 'File',
+      title: file?.title ?? t('shell.file'),
       bookId: bId,
       attachmentId: aId,
     }
@@ -1134,7 +1136,7 @@ function resolveToolbarContext(
     return {
       kind: 'book',
       icon: ICONS.book,
-      title: book?.title ?? 'Book',
+      title: book?.title ?? t('common.book'),
       bookId: bId,
     }
   }
@@ -1145,10 +1147,10 @@ function resolveToolbarContext(
     return {
       kind: 'shelf',
       icon: ICONS.library,
-      title: shelf?.title ?? 'Shelf',
+      title: shelf?.title ?? t('common.shelf'),
       shelfId: sId,
     }
   }
 
-  return { kind: 'library', icon: ICONS.library, title: 'Library' }
+  return { kind: 'library', icon: ICONS.library, title: t('shell.library') }
 }

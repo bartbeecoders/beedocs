@@ -10,6 +10,7 @@ import {
   type ReactNode,
   type WheelEvent as ReactWheelEvent,
 } from 'react'
+import { useI18n } from '../i18n'
 import {
   DEFAULT_CONNECTOR_COLOR,
   DEFAULT_ITEM_COLOR,
@@ -185,6 +186,7 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
   { ctrl, onZoomChange, onDropShape },
   ref,
 ) {
+  const { t } = useI18n()
   const { doc, prefs, readOnly } = ctrl
 
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -295,8 +297,8 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
   )
   useEffect(() => centerOnOpen(false), [centerOnOpen, size])
   useEffect(() => {
-    const t = setTimeout(() => centerOnOpen(true), 400)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => centerOnOpen(true), 400)
+    return () => clearTimeout(timer)
   }, [centerOnOpen])
 
   // ── Coordinate helpers ─────────────────────────────────────────────────────
@@ -509,7 +511,8 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
       for (const it of d.items) if (sel.items.includes(it.id)) itemOrigin.set(it.id, { x: it.x, y: it.y })
       for (const z of d.zones)
         if (sel.zones.includes(z.id)) zoneOrigin.set(z.id, { x1: z.x1, y1: z.y1, x2: z.x2, y2: z.y2 })
-      for (const t of d.texts) if (sel.texts.includes(t.id)) textOrigin.set(t.id, { x: t.x, y: t.y })
+      for (const tx of d.texts)
+        if (sel.texts.includes(tx.id)) textOrigin.set(tx.id, { x: tx.x, y: tx.y })
       const w = clientToWorld(e.clientX, e.clientY)
       movedRef.current = false
       setInteraction({
@@ -656,9 +659,9 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
                 ? { ...z, x1: o.x1 + d.x, y1: o.y1 + d.y, x2: o.x2 + d.x, y2: o.y2 + d.y }
                 : z
             }),
-            texts: prev.texts.map((t) => {
-              const o = it.textOrigin.get(t.id)
-              return o ? { ...t, x: o.x + d.x, y: o.y + d.y } : t
+            texts: prev.texts.map((tx) => {
+              const o = it.textOrigin.get(tx.id)
+              return o ? { ...tx, x: o.x + d.x, y: o.y + d.y } : tx
             }),
           }),
           { history: false },
@@ -682,7 +685,7 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
       }
       if (it.kind === 'zone-resize') {
         const w = clientToWorld(e.clientX, e.clientY)
-        const t = roundTile(worldToTile(w.x, w.y))
+        const tile = roundTile(worldToTile(w.x, w.y))
         if (!it.moved) ctrl.beginGesture()
         movedRef.current = true
         setInteraction({ ...it, moved: true })
@@ -698,10 +701,10 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
               3: { x: z.x2, y: z.y1 },
             }[it.corner]
             return {
-              x1: Math.min(t.x, anchor.x),
-              y1: Math.min(t.y, anchor.y),
-              x2: Math.max(t.x, anchor.x),
-              y2: Math.max(t.y, anchor.y),
+              x1: Math.min(tile.x, anchor.x),
+              y1: Math.min(tile.y, anchor.y),
+              x2: Math.max(tile.x, anchor.x),
+              y2: Math.max(tile.y, anchor.y),
             }
           },
           { history: false },
@@ -732,7 +735,7 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
         zones: d.zones
           .filter((z) => inside(tileToWorld((z.x1 + z.x2) / 2, (z.y1 + z.y2) / 2)))
           .map((z) => z.id),
-        texts: d.texts.filter((t) => inside(tileToWorld(t.x, t.y))).map((t) => t.id),
+        texts: d.texts.filter((tx) => inside(tileToWorld(tx.x, tx.y))).map((tx) => tx.id),
       }
       if (it.additive) {
         const cur = ctrl.selectionRef.current
@@ -871,8 +874,8 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
       const p = tileToWorld(z.x1 - 0.5, z.y1 - 0.5)
       return { x: p.x, y: p.y + 12 }
     }
-    const t = d.texts.find((x) => x.id === labelEdit.id)
-    return t ? tileToWorld(t.x, t.y) : null
+    const tx = d.texts.find((x) => x.id === labelEdit.id)
+    return tx ? tileToWorld(tx.x, tx.y) : null
   }, [connectorGeoms, doc, labelEdit])
 
   const cursor =
@@ -1049,19 +1052,19 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
             )
           })}
 
-          {doc.texts.map((t) => {
-            const p = tileToWorld(t.x, t.y)
-            const isSel = selectedTextIds.has(t.id)
-            const w = Math.max(56, t.text.length * 9.5)
+          {doc.texts.map((tx) => {
+            const p = tileToWorld(tx.x, tx.y)
+            const isSel = selectedTextIds.has(tx.id)
+            const w = Math.max(56, tx.text.length * 9.5)
             return (
               <g
-                key={t.id}
-                onPointerDown={(e) => onElementPointerDown(e, 'text', t.id)}
+                key={tx.id}
+                onPointerDown={(e) => onElementPointerDown(e, 'text', tx.id)}
                 onDoubleClick={(e) => {
                   e.stopPropagation()
-                  startLabelEdit('text', t.id)
+                  startLabelEdit('text', tx.id)
                 }}
-                onContextMenu={(e) => openContextMenu(e, { kind: 'text', id: t.id })}
+                onContextMenu={(e) => openContextMenu(e, { kind: 'text', id: tx.id })}
                 style={{ cursor: readOnly ? undefined : 'move' }}
               >
                 <rect
@@ -1072,9 +1075,9 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
                   fill="transparent"
                   className={isSel ? 'iso-text-selected' : undefined}
                 />
-                {!(labelEdit?.kind === 'text' && labelEdit.id === t.id) && (
+                {!(labelEdit?.kind === 'text' && labelEdit.id === tx.id) && (
                   <text className="iso-text" x={p.x} y={p.y}>
-                    {t.text || '…'}
+                    {tx.text || '…'}
                   </text>
                 )}
               </g>
@@ -1148,12 +1151,15 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
                 type="button"
                 className="studio-menu-item"
                 onClick={() => {
-                  const t = contextMenu.target!
+                  const target = contextMenu.target!
                   setContextMenu(null)
-                  startLabelEdit(t.kind, t.id)
+                  startLabelEdit(target.kind, target.id)
                 }}
               >
-                {contextMenu.target.kind === 'text' ? 'Edit text' : 'Edit label'} <kbd>F2</kbd>
+                {contextMenu.target.kind === 'text'
+                  ? t('isometric.menu.editText')
+                  : t('isometric.menu.editLabel')}{' '}
+                <kbd>F2</kbd>
               </button>
               <button
                 type="button"
@@ -1163,7 +1169,7 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
                   ctrl.duplicateSelection()
                 }}
               >
-                Duplicate <kbd>Ctrl+D</kbd>
+                {t('isometric.duplicate')} <kbd>Ctrl+D</kbd>
               </button>
               <div className="studio-menu-sep" />
               <button
@@ -1174,7 +1180,7 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
                   ctrl.deleteSelection()
                 }}
               >
-                Delete <kbd>Del</kbd>
+                {t('common.delete')} <kbd>Del</kbd>
               </button>
             </>
           ) : (
@@ -1187,7 +1193,7 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
                   ctrl.pasteClipboard()
                 }}
               >
-                Paste <kbd>Ctrl+V</kbd>
+                {t('isometric.menu.paste')} <kbd>Ctrl+V</kbd>
               </button>
               <button
                 type="button"
@@ -1197,7 +1203,7 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
                   ctrl.selectAll()
                 }}
               >
-                Select all <kbd>Ctrl+A</kbd>
+                {t('isometric.menu.selectAll')} <kbd>Ctrl+A</kbd>
               </button>
             </>
           )}
@@ -1205,9 +1211,7 @@ export const IsoCanvas = forwardRef<IsoCanvasHandle, Props>(function IsoCanvas(
       )}
 
       {!readOnly && selectionSize(selected) === 0 && doc.items.length === 0 && (
-        <div className="iso-empty-hint">
-          Drag a shape from the palette, or click one to drop it here.
-        </div>
+        <div className="iso-empty-hint">{t('isometric.canvas.emptyHint')}</div>
       )}
     </div>
   )

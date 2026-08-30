@@ -18,6 +18,7 @@ import {
   type FreeDrawStroke,
   type FreeDrawTool,
 } from '../freedraw/model'
+import { useI18n } from '../i18n'
 import { FreeDrawSvg } from './FreeDrawView'
 
 const PEN_COLORS = [
@@ -46,6 +47,7 @@ type Props = {
  * Document is JSON stored in a ```freedraw fence on the page.
  */
 export function FreeDrawCanvas({ source, onChange, readOnly, compact }: Props) {
+  const { t } = useI18n()
   const [doc, setDoc] = useState<FreeDrawDoc>(() => parseFreeDrawDoc(source))
   const docRef = useRef(doc)
   docRef.current = doc
@@ -121,10 +123,10 @@ export function FreeDrawCanvas({ source, onChange, readOnly, compact }: Props) {
 
   const clearAll = useCallback(() => {
     if (docRef.current.strokes.length === 0) return
-    if (!window.confirm('Clear this sketch?')) return
+    if (!window.confirm(t('canvas.clearSketchConfirm'))) return
     pushHistory()
     emit({ ...docRef.current, strokes: [] })
-  }, [emit, pushHistory])
+  }, [t, emit, pushHistory])
 
   const clientToLocal = useCallback((clientX: number, clientY: number): FreeDrawPoint | null => {
     const svg = svgRef.current
@@ -243,35 +245,35 @@ export function FreeDrawCanvas({ source, onChange, readOnly, compact }: Props) {
       tabIndex={0}
       onKeyDown={onKeyDown}
     >
-      <div className="freedraw-toolbar" role="toolbar" aria-label="Sketch tools">
+      <div className="freedraw-toolbar" role="toolbar" aria-label={t('canvas.sketchTools')}>
         <div className="freedraw-toolbar-group">
           <button
             type="button"
             className={`freedraw-tool${tool === 'pen' ? ' is-active' : ''}`}
             aria-pressed={tool === 'pen'}
-            title="Pen"
+            title={t('canvas.pen')}
             onClick={() => setTool('pen')}
           >
-            Pen
+            {t('canvas.pen')}
           </button>
           <button
             type="button"
             className={`freedraw-tool${tool === 'eraser' ? ' is-active' : ''}`}
             aria-pressed={tool === 'eraser'}
-            title="Eraser — removes strokes you paint over"
+            title={t('canvas.eraserHint')}
             onClick={() => setTool('eraser')}
           >
-            Eraser
+            {t('canvas.eraser')}
           </button>
         </div>
 
-        <div className="freedraw-toolbar-group" aria-label="Stroke size">
+        <div className="freedraw-toolbar-group" aria-label={t('canvas.strokeSize')}>
           {SIZES.map((s) => (
             <button
               key={s}
               type="button"
               className={`freedraw-size${size === s ? ' is-active' : ''}`}
-              title={`Size ${s}`}
+              title={t('canvas.sizeValue', { size: s })}
               aria-pressed={size === s}
               onClick={() => setSize(s)}
             >
@@ -280,7 +282,7 @@ export function FreeDrawCanvas({ source, onChange, readOnly, compact }: Props) {
           ))}
         </div>
 
-        <div className="freedraw-toolbar-group freedraw-colors" aria-label="Colour">
+        <div className="freedraw-toolbar-group freedraw-colors" aria-label={t('canvas.colour')}>
           {PEN_COLORS.map((c) => (
             <button
               key={c}
@@ -288,7 +290,7 @@ export function FreeDrawCanvas({ source, onChange, readOnly, compact }: Props) {
               className={`freedraw-swatch${color === c && tool === 'pen' ? ' is-active' : ''}`}
               style={{ background: c }}
               title={c}
-              aria-label={`Colour ${c}`}
+              aria-label={t('canvas.colourValue', { color: c })}
               aria-pressed={color === c}
               disabled={tool === 'eraser'}
               onClick={() => {
@@ -297,7 +299,7 @@ export function FreeDrawCanvas({ source, onChange, readOnly, compact }: Props) {
               }}
             />
           ))}
-          <label className="freedraw-color-custom" title="Custom colour">
+          <label className="freedraw-color-custom" title={t('canvas.customColour')}>
             <input
               type="color"
               value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : '#141a21'}
@@ -311,25 +313,25 @@ export function FreeDrawCanvas({ source, onChange, readOnly, compact }: Props) {
         </div>
 
         <div className="freedraw-toolbar-group">
-          <button type="button" className="freedraw-tool" disabled={!canUndo} title="Undo" onClick={undo}>
-            Undo
+          <button type="button" className="freedraw-tool" disabled={!canUndo} title={t('canvas.undo')} onClick={undo}>
+            {t('canvas.undo')}
           </button>
-          <button type="button" className="freedraw-tool" disabled={!canRedo} title="Redo" onClick={redo}>
-            Redo
+          <button type="button" className="freedraw-tool" disabled={!canRedo} title={t('canvas.redo')} onClick={redo}>
+            {t('canvas.redo')}
           </button>
           <button
             type="button"
             className="freedraw-tool"
             disabled={doc.strokes.length === 0}
-            title="Clear sketch"
+            title={t('canvas.clearSketch')}
             onClick={clearAll}
           >
-            Clear
+            {t('canvas.clear')}
           </button>
         </div>
 
         <div className="freedraw-toolbar-group freedraw-toolbar-group--end">
-          <label className="freedraw-dim" title="Canvas height">
+          <label className="freedraw-dim" title={t('canvas.canvasHeight')}>
             H
             <input
               type="number"
@@ -395,9 +397,7 @@ export function FreeDrawCanvas({ source, onChange, readOnly, compact }: Props) {
         </svg>
       </div>
 
-      <p className="freedraw-hint muted sm">
-        Draw with the pen · eraser removes whole strokes · undo/redo supported · stored on this page
-      </p>
+      <p className="freedraw-hint muted sm">{t('canvas.sketchHint')}</p>
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { api } from '../api'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { useTheme } from '../theme'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n, type MessageKey } from '../i18n'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { Diagram } from '../types'
 import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
@@ -14,19 +15,13 @@ import { MarkdownView } from './MarkdownView'
 const IsometricEditor = lazy(() => import('../isometric/IsometricEditor'))
 const IsometricView = lazy(() => import('../isometric/IsometricView'))
 
-const isometricLoading = <div className="canvas-message muted">Loading isometric editor…</div>
-
 /**
  * Kinds offered by the toolbar switcher. Switching only changes how the
  * source is interpreted — nothing is converted, so flipping back is free
- * until the document is edited under the new kind.
+ * until the document is edited under the new kind. Labels and tooltips come
+ * from the i18n layer (`canvas.kind.*` / `canvas.kindHint.*`).
  */
-const KIND_OPTIONS: { kind: string; label: string; title: string }[] = [
-  { kind: 'beediagram', label: 'BeeDiagram', title: 'Free-form canvas — Studio or Classic editor' },
-  { kind: 'isometric', label: 'Isometric', title: 'Tile-grid isometric editor' },
-  { kind: 'mermaid', label: 'Mermaid', title: 'Mermaid text source with live preview' },
-  { kind: 'c4', label: 'C4', title: 'C4 model in Mermaid syntax' },
-]
+const KIND_OPTIONS = ['beediagram', 'isometric', 'mermaid', 'c4'] as const
 
 export type DiagramEditorState = {
   diagram: Diagram | null
@@ -54,6 +49,7 @@ export function DiagramCanvas({ onStateChange }: Props) {
   const { renameInTree, deleteDiagram: deleteFromTree } = useWorkspace()
   const { autoSaveEnabled } = useTheme()
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   const [diagram, setDiagram] = useState<Diagram | null>(null)
   const [title, setTitle] = useState('')
   const [source, setSource] = useState('')
@@ -183,7 +179,7 @@ export function DiagramCanvas({ onStateChange }: Props) {
   }, [])
 
   const remove = async () => {
-    if (!confirm('Delete this diagram?')) return
+    if (!confirm(t('canvas.deleteDiagramConfirm'))) return
     await deleteFromTree(diagramId, bookId)
     void navigate(`/books/${bookId}`)
   }
@@ -229,18 +225,20 @@ export function DiagramCanvas({ onStateChange }: Props) {
     return <div className="canvas-message error">{error}</div>
   }
   if (!diagram) {
-    return <div className="canvas-message muted">Loading diagram…</div>
+    return <div className="canvas-message muted">{t('canvas.loadingDiagram')}</div>
   }
 
   const statusLabel = saving
-    ? 'Saving…'
+    ? t('common.saving')
     : dirty
       ? autoSaveEnabled
-        ? 'Unsaved · auto-save pending'
-        : 'Unsaved'
+        ? t('canvas.unsavedAutoSave')
+        : t('canvas.unsaved')
       : savedAt
-        ? `Saved · ${savedAt}`
+        ? t('canvas.savedAt', { time: savedAt })
         : null
+
+  const isometricLoading = <div className="canvas-message muted">{t('canvas.loadingIsometric')}</div>
 
   return (
     <div className="diagram-canvas">
@@ -254,7 +252,7 @@ export function DiagramCanvas({ onStateChange }: Props) {
                 setTitle(e.target.value)
                 setDirty(true)
               }}
-              placeholder="Diagram title"
+              placeholder={t('canvas.diagramTitlePlaceholder')}
             />
           ) : (
             <span className="canvas-title">{title}</span>
@@ -265,8 +263,8 @@ export function DiagramCanvas({ onStateChange }: Props) {
               <span className={dirty && !saving ? 'dirty-dot' : undefined}>· {statusLabel}</span>
             )}
             {autoSaveEnabled && canWrite && (
-              <span className="muted save-hint" title="Ctrl/Cmd+S to save immediately">
-                · auto-save on
+              <span className="muted save-hint" title={t('canvas.saveShortcutHint')}>
+                · {t('canvas.autoSaveOn')}
               </span>
             )}
           </div>
@@ -274,22 +272,22 @@ export function DiagramCanvas({ onStateChange }: Props) {
         <div className="toolbar-group">
           {canWrite ? (
             <>
-              <div className="segmented" role="tablist" aria-label="Diagram kind">
+              <div className="segmented" role="tablist" aria-label={t('canvas.diagramKind')}>
                 {KIND_OPTIONS.map((opt) => (
                   <button
-                    key={opt.kind}
+                    key={opt}
                     type="button"
                     role="tab"
-                    aria-selected={kind === opt.kind}
-                    className={kind === opt.kind ? 'active' : ''}
-                    title={opt.title}
+                    aria-selected={kind === opt}
+                    className={kind === opt ? 'active' : ''}
+                    title={t(`canvas.kindHint.${opt}` as MessageKey)}
                     onClick={() => {
-                      if (kind === opt.kind) return
-                      setKind(opt.kind)
+                      if (kind === opt) return
+                      setKind(opt)
                       setDirty(true)
                     }}
                   >
-                    {opt.label}
+                    {t(`canvas.kind.${opt}` as MessageKey)}
                   </button>
                 ))}
               </div>
@@ -299,12 +297,12 @@ export function DiagramCanvas({ onStateChange }: Props) {
                 disabled={saving || !dirty}
                 onClick={() => void save()}
               >
-                {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+                {saving ? t('common.saving') : dirty ? t('common.save') : t('common.saved')}
               </button>
             </>
           ) : (
-            <span className="ws-theme-pill" title="Your account has read-only access">
-              Read-only
+            <span className="ws-theme-pill" title={t('canvas.readOnlyHint')}>
+              {t('canvas.readOnly')}
             </span>
           )}
         </div>

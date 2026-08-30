@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useI18n } from '../i18n'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
 import type { Favorite, FavoriteKind } from '../types'
@@ -53,6 +54,7 @@ function favoriteSelection(f: Favorite): TreeSelection {
  */
 export function FavoritesPanel() {
   const { favorites, toggleFavorite, setSelection } = useWorkspace()
+  const { t } = useI18n()
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem('beedocs-favorites-collapsed') === '1'
@@ -84,7 +86,7 @@ export function FavoritesPanel() {
         onClick={toggleCollapsed}
       >
         <span className="tree-twist">{collapsed ? '▸' : '▾'}</span>
-        <span className="favorites-title">★ Favorites</span>
+        <span className="favorites-title">★ {t('common.favorites')}</span>
         <span className="muted sm">({favorites.length})</span>
       </button>
       {!collapsed && (
@@ -107,8 +109,8 @@ export function FavoritesPanel() {
                     <button
                       type="button"
                       className="fav-remove"
-                      title="Remove from favorites"
-                      aria-label={`Remove “${f.title}” from favorites`}
+                      title={t('nav.removeFavorite')}
+                      aria-label={t('nav.removeFavoriteNamed', { title: f.title })}
                       onClick={() => void toggleFavorite(f.kind, f.entityId)}
                     >
                       ✕

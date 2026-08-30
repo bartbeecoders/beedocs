@@ -60,18 +60,30 @@ public sealed class GitAssistService(
             ?? throw new ArgumentException(
                 $"Unknown assist kind '{request.Kind}'. Use one of: {string.Join(", ", Kinds.All)}.");
 
-        var (bundle, contextFiles) = BuildBundle(repo.Name, Path.Combine(options.Root, repoId));
+        return await GenerateAsync(repo, kind, request.Instructions, request.ProviderId, request.Model, ct);
+    }
+
+    /// <summary>
+    /// The generation itself, on an already-validated repo and normalized kind —
+    /// shared by the synchronous endpoint above and the background job runner,
+    /// so both produce byte-identical drafts from the same parameters.
+    /// </summary>
+    public async Task<GitAssistResultDto> GenerateAsync(
+        GitRepoDto repo, string kind, string? instructions,
+        string? providerId, string? model, CancellationToken ct = default)
+    {
+        var (bundle, contextFiles) = BuildBundle(repo.Name, Path.Combine(options.Root, repo.Id));
 
         LlmCompleteResponse completion;
         try
         {
             completion = await llm.CompleteAsync(new LlmCompleteRequest(
                 Task: LlmPrompts.DocDraft,
-                Prompt: Assignment(kind, repo.Name, request.Instructions),
+                Prompt: Assignment(kind, repo.Name, instructions),
                 Context: bundle,
                 Selection: null,
-                ProviderId: request.ProviderId,
-                Model: request.Model,
+                ProviderId: providerId,
+                Model: model,
                 MaxTokens: null,
                 Temperature: null), ct);
         }
@@ -94,7 +106,7 @@ public sealed class GitAssistService(
             ContextFiles: contextFiles);
     }
 
-    private static string? Normalize(string? raw) =>
+    public static string? Normalize(string? raw) =>
         (raw ?? string.Empty).Trim().ToLowerInvariant() switch
         {
             "readme" => Kinds.Readme,
@@ -111,6 +123,16 @@ public sealed class GitAssistService(
         Kinds.Manual => "docs/MANUAL.md",
         Kinds.Summary => "docs/SUMMARY.md",
         _ => null,
+    };
+
+    /// <summary>The page title a published draft gets in the library.</summary>
+    public static string KindTitle(string kind) => kind switch
+    {
+        Kinds.Readme => "README",
+        Kinds.Documentation => "Developer documentation",
+        Kinds.Manual => "User manual",
+        Kinds.Summary => "Repository summary",
+        _ => kind,
     };
 
     private static string Assignment(string kind, string repoName, string? instructions)

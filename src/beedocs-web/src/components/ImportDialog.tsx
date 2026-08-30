@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import { useI18n } from '../i18n'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { ImportNameMode, ImportPreview, ImportResult } from '../types'
 
@@ -20,6 +21,7 @@ const ACCEPT = '.beedocs,.zip,.md,.markdown'
  */
 export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const { books, refreshTree } = useWorkspace()
 
   const [file, setFile] = useState<File | null>(null)
@@ -99,10 +101,10 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
         if (e.target === e.currentTarget && !importing) onClose()
       }}
     >
-      <div className="modal" ref={dialogRef} role="dialog" aria-modal="true" aria-label="Import">
+      <div className="modal" ref={dialogRef} role="dialog" aria-modal="true" aria-label={t('dialogs.import')}>
         <header className="modal-header">
-          <h2>Import</h2>
-          <button type="button" className="icon-btn" onClick={onClose} disabled={importing}>
+          <h2>{t('dialogs.import')}</h2>
+          <button type="button" className="icon-btn" onClick={onClose} disabled={importing} aria-label={t('common.close')}>
             ✕
           </button>
         </header>
@@ -111,19 +113,22 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
           {!result && (
             <>
               <label className="field">
-                <span className="field-label">File</span>
+                <span className="field-label">{t('dialogs.file')}</span>
                 <input
                   type="file"
                   accept={ACCEPT}
                   onChange={(e) => void pick(e.target.files?.[0] ?? null)}
                 />
                 <span className="field-hint muted sm">
-                  A BeeDocs archive (<code>.beedocs</code>), a zip of Markdown files, or a single{' '}
-                  <code>.md</code> document.
+                  {t('dialogs.fileHint1')}
+                  <code>.beedocs</code>
+                  {t('dialogs.fileHint2')}
+                  <code>.md</code>
+                  {t('dialogs.fileHint3')}
                 </span>
               </label>
 
-              {inspecting && <p className="muted sm">Reading file…</p>}
+              {inspecting && <p className="muted sm">{t('dialogs.readingFile')}</p>}
 
               {preview && (
                 <>
@@ -132,22 +137,23 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
                       {preview.kind === 'page' ? '📄' : '📚'} {preview.bookTitle}
                     </div>
                     <div className="import-summary-counts muted sm">
-                      {preview.pageCount} page(s) · {preview.chapterCount} folder(s) ·{' '}
-                      {preview.diagramCount} diagram(s) ·{' '}
+                      {t('dialogs.countPages', { count: preview.pageCount })} ·{' '}
+                      {t('dialogs.countFolders', { count: preview.chapterCount })} ·{' '}
+                      {t('dialogs.countDiagrams', { count: preview.diagramCount })} ·{' '}
                       {(preview.collectionCount ?? 0) > 0
-                        ? `${preview.collectionCount} collection(s) · `
+                        ? `${t('dialogs.countCollections', { count: preview.collectionCount ?? 0 })} · `
                         : ''}
-                      {preview.assetCount} image(s)
-                      {preview.source !== 'archive' && ' · from Markdown'}
+                      {t('dialogs.countImages', { count: preview.assetCount })}
+                      {preview.source !== 'archive' && ` · ${t('dialogs.fromMarkdown')}`}
                     </div>
                     {preview.pageTitles.length > 0 && (
                       <ul className="import-page-list">
-                        {preview.pageTitles.slice(0, 8).map((t, i) => (
-                          <li key={`${t}-${i}`}>{t}</li>
+                        {preview.pageTitles.slice(0, 8).map((pageTitle, i) => (
+                          <li key={`${pageTitle}-${i}`}>{pageTitle}</li>
                         ))}
                         {preview.pageTitles.length > 8 && (
                           <li className="muted">
-                            …and {preview.pageTitles.length - 8} more
+                            {t('dialogs.andMore', { count: preview.pageTitles.length - 8 })}
                           </li>
                         )}
                       </ul>
@@ -161,15 +167,15 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
                   ))}
 
                   <label className="field">
-                    <span className="field-label">Destination</span>
+                    <span className="field-label">{t('dialogs.destination')}</span>
                     <select
                       value={targetBookId}
                       onChange={(e) => setTargetBookId(e.target.value)}
                     >
-                      <option value="">Create a new book</option>
+                      <option value="">{t('dialogs.createNewBook')}</option>
                       {books.map((b) => (
                         <option key={b.id} value={b.id}>
-                          Add to “{b.title}”
+                          {t('dialogs.addToBook', { title: b.title })}
                         </option>
                       ))}
                     </select>
@@ -179,9 +185,12 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
                     <>
                       <fieldset className="field import-mode">
                         <legend className="field-label">
-                          Name
+                          {t('common.name')}
                           {preview.bookTitleExists && (
-                            <span className="muted sm"> — “{preview.bookTitle}” already exists</span>
+                            <span className="muted sm">
+                              {' '}
+                              {t('dialogs.alreadyExists', { title: preview.bookTitle })}
+                            </span>
                           )}
                         </legend>
                         <label className="radio">
@@ -192,7 +201,7 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
                             onChange={() => setMode('rename')}
                           />
                           <span>
-                            Rename to a free name
+                            {t('dialogs.renameFree')}
                             {preview.suggestedTitle && (
                               <span className="muted sm"> — “{preview.suggestedTitle}”</span>
                             )}
@@ -206,16 +215,19 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
                             onChange={() => setMode('keep')}
                           />
                           <span>
-                            Keep the original name
+                            {t('dialogs.keepOriginal')}
                             {preview.bookTitleExists && (
-                              <span className="muted sm"> — creates a second “{preview.bookTitle}”</span>
+                              <span className="muted sm">
+                                {' '}
+                                {t('dialogs.createsSecond', { title: preview.bookTitle })}
+                              </span>
                             )}
                           </span>
                         </label>
                       </fieldset>
 
                       <label className="field">
-                        <span className="field-label">Title (optional)</span>
+                        <span className="field-label">{t('dialogs.titleOptional')}</span>
                         <input
                           value={title}
                           onChange={(e) => setTitle(e.target.value)}
@@ -227,7 +239,7 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
 
                   {targetBookId && (
                     <fieldset className="field import-mode">
-                      <legend className="field-label">Pages with a name that already exists</legend>
+                      <legend className="field-label">{t('dialogs.clashLegend')}</legend>
                       <label className="radio">
                         <input
                           type="radio"
@@ -236,7 +248,8 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
                           onChange={() => setMode('rename')}
                         />
                         <span>
-                          Rename them <span className="muted sm">— “Deploying (2)”</span>
+                          {t('dialogs.renameThem')}{' '}
+                          <span className="muted sm">{t('dialogs.renameExample')}</span>
                         </span>
                       </label>
                       <label className="radio">
@@ -247,8 +260,8 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
                           onChange={() => setMode('keep')}
                         />
                         <span>
-                          Keep the same name{' '}
-                          <span className="muted sm">— existing pages are left untouched</span>
+                          {t('dialogs.keepSame')}{' '}
+                          <span className="muted sm">{t('dialogs.keepSameHint')}</span>
                         </span>
                       </label>
                     </fieldset>
@@ -261,14 +274,15 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
           {result && (
             <div className="import-result">
               <p>
-                Imported into <strong>{result.bookTitle}</strong>
-                {result.bookCreated ? ' (new book)' : ' (existing book)'}.
+                {result.bookCreated
+                  ? t('dialogs.importedNew', { title: result.bookTitle })
+                  : t('dialogs.importedExisting', { title: result.bookTitle })}
               </p>
               <ul className="import-page-list">
-                <li>{result.pagesCreated} page(s)</li>
-                <li>{result.chaptersCreated} folder(s)</li>
-                <li>{result.diagramsCreated} diagram(s)</li>
-                <li>{result.assetsCreated} image(s)</li>
+                <li>{t('dialogs.countPages', { count: result.pagesCreated })}</li>
+                <li>{t('dialogs.countFolders', { count: result.chaptersCreated })}</li>
+                <li>{t('dialogs.countDiagrams', { count: result.diagramsCreated })}</li>
+                <li>{t('dialogs.countImages', { count: result.assetsCreated })}</li>
               </ul>
               {result.warnings.map((w, i) => (
                 <div key={i} className="banner warn compact">
@@ -285,16 +299,16 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
           {result ? (
             <>
               <button type="button" className="btn" onClick={onClose}>
-                Close
+                {t('common.close')}
               </button>
               <button type="button" className="btn primary" onClick={openImported}>
-                Open it
+                {t('dialogs.openIt')}
               </button>
             </>
           ) : (
             <>
               <button type="button" className="btn" onClick={onClose} disabled={importing}>
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -302,7 +316,7 @@ export function ImportDialog({ onClose, defaultTargetBookId }: Props) {
                 disabled={!preview || importing || inspecting}
                 onClick={() => void doImport()}
               >
-                {importing ? 'Importing…' : 'Import'}
+                {importing ? t('dialogs.importing') : t('dialogs.import')}
               </button>
             </>
           )}

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useI18n, type MessageKey } from '../../i18n'
 import type { BeeArrowHead, BeeEdgeRoute, BeeShape, BeeTextAlign, BeeTextVAlign } from '../../types'
 import {
   AZURE_CATEGORY_ORDER,
@@ -41,42 +42,60 @@ const LINE_SWATCHES = [
   '#ffffff',
 ]
 
-const SHAPE_SWAP: { id: BeeShape; label: string }[] = [
-  { id: 'rectangle', label: 'Rectangle' },
-  { id: 'rounded', label: 'Rounded' },
-  { id: 'stadium', label: 'Terminator' },
-  { id: 'ellipse', label: 'Ellipse' },
-  { id: 'circle', label: 'Circle' },
-  { id: 'rhombus', label: 'Diamond' },
-  { id: 'parallelogram', label: 'Parallelogram' },
-  { id: 'hexagon', label: 'Hexagon' },
-  { id: 'triangle', label: 'Triangle' },
-  { id: 'process', label: 'Process' },
-  { id: 'document', label: 'Document' },
-  { id: 'cylinder', label: 'Cylinder' },
-  { id: 'cloud', label: 'Cloud' },
-  { id: 'note', label: 'Note' },
-  { id: 'card', label: 'Card' },
-  { id: 'callout', label: 'Callout' },
-  { id: 'cube', label: 'Cube' },
-  { id: 'step', label: 'Step' },
-  { id: 'trapezoid', label: 'Trapezoid' },
-  { id: 'tape', label: 'Tape' },
-  { id: 'internalStorage', label: 'Internal storage' },
-  { id: 'dataStorage', label: 'Data storage' },
-  { id: 'actor', label: 'Actor' },
-  { id: 'container', label: 'Container' },
-  { id: 'text', label: 'Text' },
-  { id: 'azure', label: 'Azure service' },
+/** Labels resolve at render via `studio.shape.${id}` (same keys as the palette). */
+const SHAPE_SWAP: BeeShape[] = [
+  'rectangle',
+  'rounded',
+  'stadium',
+  'ellipse',
+  'circle',
+  'rhombus',
+  'parallelogram',
+  'hexagon',
+  'triangle',
+  'process',
+  'document',
+  'cylinder',
+  'cloud',
+  'note',
+  'card',
+  'callout',
+  'cube',
+  'step',
+  'trapezoid',
+  'tape',
+  'internalStorage',
+  'dataStorage',
+  'actor',
+  'container',
+  'text',
+  'azure',
 ]
 
-const ARROW_HEADS: { id: BeeArrowHead; label: string }[] = [
-  { id: 'none', label: 'None' },
-  { id: 'arrow', label: 'Arrow' },
-  { id: 'open', label: 'Open' },
-  { id: 'diamond', label: 'Diamond' },
-  { id: 'circle', label: 'Circle' },
+const ARROW_HEADS: { id: BeeArrowHead; key: MessageKey }[] = [
+  { id: 'none', key: 'common.none' },
+  { id: 'arrow', key: 'studio.arrow.arrow' },
+  { id: 'open', key: 'studio.arrow.open' },
+  { id: 'diamond', key: 'studio.arrow.diamond' },
+  { id: 'circle', key: 'studio.arrow.circle' },
 ]
+
+/**
+ * `shapeFillParts` labels live in diagram/shapes.ts (not edited — the catalog
+ * is serialized for MCP); known labels translate here, unknown ones pass
+ * through in English.
+ */
+const FILL_PART_KEYS: Record<string, MessageKey> = {
+  Header: 'studio.fillPart.header',
+  Body: 'studio.fillPart.body',
+  Front: 'studio.fillPart.front',
+  'Top / side': 'studio.fillPart.topSide',
+  Paper: 'studio.fillPart.paper',
+  Fold: 'studio.fillPart.fold',
+  Top: 'studio.fillPart.top',
+  Backplate: 'studio.fillPart.backplate',
+  Fill: 'studio.fillPart.fill',
+}
 
 type Props = {
   ctrl: StudioController
@@ -87,6 +106,7 @@ type Props = {
 
 /** Right-hand Format panel, modelled on the draw.io Style / Text / Arrange tabs. */
 export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
+  const { t } = useI18n()
   const [tab, setTab] = useState<Tab>('style')
   const { selectedNodes, selectedEdges } = ctrl
   const nodeIds = selectedNodes.map((n) => n.id)
@@ -98,20 +118,24 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
   const hasSelection = nodeIds.length > 0 || edgeIds.length > 0
 
   return (
-    <aside className="studio-format" aria-label="Format">
+    <aside className="studio-format" aria-label={t('studio.format')}>
       {hasSelection ? (
         <>
           <div className="studio-format-tabs" role="tablist">
-            {(['style', 'text', 'arrange'] as Tab[]).map((t) => (
+            {(['style', 'text', 'arrange'] as Tab[]).map((tb) => (
               <button
-                key={t}
+                key={tb}
                 type="button"
                 role="tab"
-                aria-selected={tab === t}
-                className={tab === t ? 'is-active' : ''}
-                onClick={() => setTab(t)}
+                aria-selected={tab === tb}
+                className={tab === tb ? 'is-active' : ''}
+                onClick={() => setTab(tb)}
               >
-                {t === 'style' ? 'Style' : t === 'text' ? 'Text' : 'Arrange'}
+                {tb === 'style'
+                  ? t('studio.tabStyle')
+                  : tb === 'text'
+                    ? t('studio.tabText')
+                    : t('studio.tabArrange')}
               </button>
             ))}
           </div>
@@ -120,13 +144,16 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
               <>
                 {primaryNode && nodeStyle && (
                   <section className="studio-format-section">
-                    <h4>Shape</h4>
+                    <h4>{t('studio.shape')}</h4>
                     {shapeFillParts(resolveShape(primaryNode)).map((part) => {
                       const value = part.key === 'fill' ? nodeStyle.fill : nodeStyle.fill2
+                      const partLabel = FILL_PART_KEYS[part.label]
+                        ? t(FILL_PART_KEYS[part.label])
+                        : part.label
                       return (
                         <div key={part.key}>
                           <label className="studio-field">
-                            <span>{part.label}</span>
+                            <span>{partLabel}</span>
                             <input
                               type="color"
                               value={normalizeColor(value)}
@@ -144,7 +171,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                       )
                     })}
                     <label className="studio-field">
-                      <span>Line</span>
+                      <span>{t('studio.line')}</span>
                       <input
                         type="color"
                         value={normalizeColor(nodeStyle.stroke)}
@@ -158,7 +185,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                     />
                     <div className="studio-field-row">
                       <label className="studio-field">
-                        <span>Width</span>
+                        <span>{t('studio.width')}</span>
                         <input
                           type="number"
                           min={0}
@@ -171,7 +198,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                         />
                       </label>
                       <label className="studio-field">
-                        <span>Opacity</span>
+                        <span>{t('studio.opacity')}</span>
                         <input
                           type="number"
                           min={0}
@@ -191,7 +218,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                           checked={!!primaryNode.style?.dashed}
                           onChange={(e) => ctrl.updateNodeStyle(nodeIds, { dashed: e.target.checked })}
                         />
-                        Dashed
+                        {t('studio.dashed')}
                       </label>
                       <label>
                         <input
@@ -199,11 +226,11 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                           checked={!!primaryNode.style?.shadow}
                           onChange={(e) => ctrl.updateNodeStyle(nodeIds, { shadow: e.target.checked })}
                         />
-                        Shadow
+                        {t('studio.shadow')}
                       </label>
                     </div>
                     <label className="studio-field">
-                      <span>Shape</span>
+                      <span>{t('studio.shape')}</span>
                       <select
                         value={primaryNode.shape ?? ''}
                         onChange={(e) =>
@@ -212,17 +239,17 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                           })
                         }
                       >
-                        <option value="">Classic ({primaryNode.type})</option>
+                        <option value="">{t('studio.classicOption', { type: primaryNode.type })}</option>
                         {SHAPE_SWAP.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.label}
+                          <option key={s} value={s}>
+                            {t(`studio.shape.${s}` as MessageKey)}
                           </option>
                         ))}
                       </select>
                     </label>
                     {primaryNode.shape === 'azure' && (
                       <label className="studio-field">
-                        <span>Service</span>
+                        <span>{t('studio.service')}</span>
                         <select
                           value={primaryNode.icon ?? 'azure'}
                           onChange={(e) => ctrl.updateNodes(nodeIds, { icon: e.target.value })}
@@ -241,7 +268,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                     )}
                     {(primaryNode.shape === 'image' || primaryNode.type === 'image') && (
                       <label className="studio-field studio-field--stack">
-                        <span>Image URL</span>
+                        <span>{t('studio.imageUrl')}</span>
                         <input
                           value={primaryNode.imageUrl ?? ''}
                           placeholder="/uploads/…"
@@ -254,9 +281,9 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
 
                 {primaryEdge && edgeStyle && (
                   <section className="studio-format-section">
-                    <h4>Connection</h4>
+                    <h4>{t('studio.connection')}</h4>
                     <label className="studio-field">
-                      <span>Line</span>
+                      <span>{t('studio.line')}</span>
                       <input
                         type="color"
                         value={normalizeColor(edgeStyle.stroke)}
@@ -266,7 +293,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                     <Swatches colors={LINE_SWATCHES} onPick={(c) => ctrl.updateEdgeStyle(edgeIds, { stroke: c })} />
                     <div className="studio-field-row">
                       <label className="studio-field">
-                        <span>Width</span>
+                        <span>{t('studio.width')}</span>
                         <input
                           type="number"
                           min={0.5}
@@ -279,7 +306,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                         />
                       </label>
                       <label className="studio-field">
-                        <span>Style</span>
+                        <span>{t('studio.tabStyle')}</span>
                         <select
                           value={primaryEdge.route ?? 'straight'}
                           onChange={(e) =>
@@ -289,15 +316,15 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                             })
                           }
                         >
-                          <option value="orthogonal">Orthogonal</option>
-                          <option value="straight">Straight</option>
-                          <option value="curved">Curved</option>
+                          <option value="orthogonal">{t('studio.route.orthogonal')}</option>
+                          <option value="straight">{t('studio.route.straight')}</option>
+                          <option value="curved">{t('studio.route.curved')}</option>
                         </select>
                       </label>
                     </div>
                     <div className="studio-field-row">
                       <label className="studio-field">
-                        <span>Start</span>
+                        <span>{t('studio.start')}</span>
                         <select
                           value={edgeStyle.startArrow}
                           onChange={(e) =>
@@ -306,13 +333,13 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                         >
                           {ARROW_HEADS.map((a) => (
                             <option key={a.id} value={a.id}>
-                              {a.label}
+                              {t(a.key)}
                             </option>
                           ))}
                         </select>
                       </label>
                       <label className="studio-field">
-                        <span>End</span>
+                        <span>{t('studio.end')}</span>
                         <select
                           value={edgeStyle.endArrow}
                           onChange={(e) =>
@@ -321,7 +348,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                         >
                           {ARROW_HEADS.map((a) => (
                             <option key={a.id} value={a.id}>
-                              {a.label}
+                              {t(a.key)}
                             </option>
                           ))}
                         </select>
@@ -334,7 +361,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                           checked={!!primaryEdge.style?.dashed}
                           onChange={(e) => ctrl.updateEdgeStyle(edgeIds, { dashed: e.target.checked })}
                         />
-                        Dashed
+                        {t('studio.dashed')}
                       </label>
                     </div>
                     <button
@@ -342,7 +369,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                       className="btn sm"
                       onClick={() => ctrl.updateEdges(edgeIds, { waypoints: undefined })}
                     >
-                      Clear waypoints
+                      {t('studio.clearWaypoints')}
                     </button>
                   </section>
                 )}
@@ -351,11 +378,11 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
 
             {tab === 'text' && (
               <section className="studio-format-section">
-                <h4>Text</h4>
+                <h4>{t('studio.tabText')}</h4>
                 {primaryNode && nodeStyle && (
                   <>
                     <label className="studio-field studio-field--stack">
-                      <span>Label</span>
+                      <span>{t('studio.label')}</span>
                       <textarea
                         rows={3}
                         value={primaryNode.label}
@@ -364,7 +391,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                     </label>
                     <div className="studio-field-row">
                       <label className="studio-field">
-                        <span>Size</span>
+                        <span>{t('studio.size')}</span>
                         <input
                           type="number"
                           min={6}
@@ -376,7 +403,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                         />
                       </label>
                       <label className="studio-field">
-                        <span>Colour</span>
+                        <span>{t('studio.colour')}</span>
                         <input
                           type="color"
                           value={normalizeColor(nodeStyle.fontColor)}
@@ -389,7 +416,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                         type="button"
                         className={`studio-toggle${nodeStyle.bold ? ' is-active' : ''}`}
                         onClick={() => ctrl.updateNodeStyle(nodeIds, { bold: !nodeStyle.bold })}
-                        title="Bold"
+                        title={t('studio.bold')}
                       >
                         <b>B</b>
                       </button>
@@ -397,7 +424,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                         type="button"
                         className={`studio-toggle${nodeStyle.italic ? ' is-active' : ''}`}
                         onClick={() => ctrl.updateNodeStyle(nodeIds, { italic: !nodeStyle.italic })}
-                        title="Italic"
+                        title={t('studio.italic')}
                       >
                         <i>I</i>
                       </button>
@@ -407,7 +434,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                           type="button"
                           className={`studio-toggle${nodeStyle.align === a ? ' is-active' : ''}`}
                           onClick={() => ctrl.updateNodeStyle(nodeIds, { align: a })}
-                          title={`Align ${a}`}
+                          title={t(`studio.align.${a}` as MessageKey)}
                         >
                           {a === 'left' ? '⯇' : a === 'center' ? '≡' : '⯈'}
                         </button>
@@ -418,7 +445,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                           type="button"
                           className={`studio-toggle${nodeStyle.valign === v ? ' is-active' : ''}`}
                           onClick={() => ctrl.updateNodeStyle(nodeIds, { valign: v })}
-                          title={`Vertical ${v}`}
+                          title={t(`studio.valign.${v}` as MessageKey)}
                         >
                           {v === 'top' ? '⤒' : v === 'middle' ? '↕' : '⤓'}
                         </button>
@@ -429,7 +456,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                 {primaryEdge && edgeStyle && (
                   <>
                     <label className="studio-field studio-field--stack">
-                      <span>Connection label</span>
+                      <span>{t('studio.connectionLabel')}</span>
                       <input
                         value={primaryEdge.label ?? ''}
                         onChange={(e) => ctrl.updateEdges(edgeIds, { label: e.target.value })}
@@ -437,7 +464,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                     </label>
                     <div className="studio-field-row">
                       <label className="studio-field">
-                        <span>Size</span>
+                        <span>{t('studio.size')}</span>
                         <input
                           type="number"
                           min={6}
@@ -449,7 +476,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                         />
                       </label>
                       <label className="studio-field">
-                        <span>Colour</span>
+                        <span>{t('studio.colour')}</span>
                         <input
                           type="color"
                           value={normalizeColor(edgeStyle.fontColor)}
@@ -466,7 +493,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
               <section className="studio-format-section">
                 {primaryNode && (
                   <>
-                    <h4>Size</h4>
+                    <h4>{t('studio.size')}</h4>
                     <div className="studio-field-row">
                       <label className="studio-field">
                         <span>W</span>
@@ -487,7 +514,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                         />
                       </label>
                     </div>
-                    <h4>Position</h4>
+                    <h4>{t('studio.position')}</h4>
                     <div className="studio-field-row">
                       <label className="studio-field">
                         <span>X</span>
@@ -507,7 +534,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                       </label>
                     </div>
                     <label className="studio-field">
-                      <span>Angle</span>
+                      <span>{t('studio.angle')}</span>
                       <input
                         type="number"
                         min={0}
@@ -520,52 +547,52 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                       />
                     </label>
 
-                    <h4>Order</h4>
+                    <h4>{t('studio.order')}</h4>
                     <div className="studio-btn-row">
                       <button type="button" className="btn sm" onClick={() => ctrl.orderSelection('front')}>
-                        To front
+                        {t('studio.toFront')}
                       </button>
                       <button type="button" className="btn sm" onClick={() => ctrl.orderSelection('back')}>
-                        To back
+                        {t('studio.toBack')}
                       </button>
                       <button type="button" className="btn sm" onClick={() => ctrl.orderSelection('forward')}>
-                        Forward
+                        {t('studio.forward')}
                       </button>
                       <button type="button" className="btn sm" onClick={() => ctrl.orderSelection('backward')}>
-                        Backward
+                        {t('studio.backward')}
                       </button>
                     </div>
 
                     {nodeIds.length > 1 && (
                       <>
-                        <h4>Align</h4>
+                        <h4>{t('studio.alignHeading')}</h4>
                         <div className="studio-btn-row">
                           <button type="button" className="btn sm" onClick={() => ctrl.alignSelection('left')}>
-                            Left
+                            {t('studio.left')}
                           </button>
                           <button type="button" className="btn sm" onClick={() => ctrl.alignSelection('centerH')}>
-                            Center
+                            {t('studio.center')}
                           </button>
                           <button type="button" className="btn sm" onClick={() => ctrl.alignSelection('right')}>
-                            Right
+                            {t('studio.right')}
                           </button>
                           <button type="button" className="btn sm" onClick={() => ctrl.alignSelection('top')}>
-                            Top
+                            {t('studio.top')}
                           </button>
                           <button type="button" className="btn sm" onClick={() => ctrl.alignSelection('middleV')}>
-                            Middle
+                            {t('studio.middle')}
                           </button>
                           <button type="button" className="btn sm" onClick={() => ctrl.alignSelection('bottom')}>
-                            Bottom
+                            {t('studio.bottom')}
                           </button>
                         </div>
-                        <h4>Distribute</h4>
+                        <h4>{t('studio.distribute')}</h4>
                         <div className="studio-btn-row">
                           <button type="button" className="btn sm" onClick={() => ctrl.distributeSelection('h')}>
-                            Horizontal
+                            {t('studio.horizontal')}
                           </button>
                           <button type="button" className="btn sm" onClick={() => ctrl.distributeSelection('v')}>
-                            Vertical
+                            {t('studio.vertical')}
                           </button>
                         </div>
                       </>
@@ -574,16 +601,14 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                 )}
                 {!primaryNode && primaryEdge && (
                   <>
-                    <h4>Connection</h4>
-                    <p className="muted sm">
-                      Drag the round handles on the line to bend it, or the endpoints to re-attach.
-                    </p>
+                    <h4>{t('studio.connection')}</h4>
+                    <p className="muted sm">{t('studio.edgeArrangeHint')}</p>
                     <button
                       type="button"
                       className="btn sm"
                       onClick={() => ctrl.updateEdges(edgeIds, { waypoints: undefined })}
                     >
-                      Reset waypoints
+                      {t('studio.resetWaypoints')}
                     </button>
                   </>
                 )}
@@ -594,7 +619,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
       ) : (
         <div className="studio-format-body">
           <section className="studio-format-section">
-            <h4>Diagram</h4>
+            <h4>{t('common.diagram')}</h4>
             <div className="studio-check-row studio-check-row--stack">
               <label>
                 <input
@@ -602,7 +627,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                   checked={ctrl.prefs.grid}
                   onChange={(e) => ctrl.setPrefs({ grid: e.target.checked })}
                 />
-                Grid
+                {t('studio.grid')}
               </label>
               <label>
                 <input
@@ -610,7 +635,7 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                   checked={ctrl.prefs.snap}
                   onChange={(e) => ctrl.setPrefs({ snap: e.target.checked })}
                 />
-                Snap to grid
+                {t('studio.snapToGrid')}
               </label>
               <label>
                 <input
@@ -618,11 +643,11 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
                   checked={ctrl.prefs.guides}
                   onChange={(e) => ctrl.setPrefs({ guides: e.target.checked })}
                 />
-                Alignment guides
+                {t('studio.alignmentGuides')}
               </label>
             </div>
             <label className="studio-field">
-              <span>Zoom</span>
+              <span>{t('studio.zoom')}</span>
               <input
                 type="number"
                 min={20}
@@ -633,20 +658,31 @@ export function FormatPanel({ ctrl, zoom, onZoom, onFit }: Props) {
               />
             </label>
             <button type="button" className="btn sm" onClick={onFit}>
-              Fit page
+              {t('studio.fitPage')}
             </button>
             <p className="muted sm">
-              {ctrl.doc.nodes.length} shapes · {ctrl.doc.edges.length} connections
+              {t('studio.docStats', {
+                shapes: t(
+                  ctrl.doc.nodes.length === 1 ? 'studio.nShapes.one' : 'studio.nShapes.other',
+                  { count: ctrl.doc.nodes.length },
+                ),
+                connections: t(
+                  ctrl.doc.edges.length === 1
+                    ? 'studio.nConnections.one'
+                    : 'studio.nConnections.other',
+                  { count: ctrl.doc.edges.length },
+                ),
+              })}
             </p>
           </section>
           <section className="studio-format-section">
-            <h4>Tips</h4>
+            <h4>{t('studio.tips')}</h4>
             <ul className="studio-tips">
-              <li>Hover a shape and drag a blue arrow to connect.</li>
-              <li>Click an arrow to add a connected copy.</li>
-              <li>Drag from a green ✕ for a fixed connection point.</li>
-              <li>Double-click empty canvas to pick a shape.</li>
-              <li>Right-click for cut / copy / order actions.</li>
+              <li>{t('studio.tip1')}</li>
+              <li>{t('studio.tip2')}</li>
+              <li>{t('studio.tip3')}</li>
+              <li>{t('studio.tip4')}</li>
+              <li>{t('studio.tip5')}</li>
             </ul>
           </section>
         </div>
@@ -664,6 +700,7 @@ function Swatches({
   onPick: (color: string) => void
   onNone?: () => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="studio-swatches">
       {colors.map((c) => (
@@ -674,7 +711,7 @@ function Swatches({
           style={{ background: c }}
           title={c}
           onClick={() => onPick(c)}
-          aria-label={`Use ${c}`}
+          aria-label={t('studio.useColor', { color: c })}
         />
       ))}
       {onNone && (
@@ -682,9 +719,9 @@ function Swatches({
           key="none"
           type="button"
           className="studio-swatch studio-swatch--none"
-          title="None"
+          title={t('common.none')}
           onClick={onNone}
-          aria-label="No colour"
+          aria-label={t('studio.noColour')}
         />
       )}
     </div>

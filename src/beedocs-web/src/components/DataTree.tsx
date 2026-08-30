@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useI18n } from '../i18n'
 import {
-  countLabel,
   parseJsonTree,
   parseXmlTree,
   type JsonNode,
@@ -35,6 +35,7 @@ export function DataTree({ code, lang, fallback }: Props) {
   )
   const [raw, setRaw] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
+  const { t } = useI18n()
 
   const setAllOpen = useCallback((open: boolean) => {
     const root = bodyRef.current
@@ -59,10 +60,10 @@ export function DataTree({ code, lang, fallback }: Props) {
         {!raw && (
           <>
             <button type="button" className="btn ghost sm" onClick={() => setAllOpen(false)}>
-              Collapse all
+              {t('nav.collapseAll')}
             </button>
             <button type="button" className="btn ghost sm" onClick={() => setAllOpen(true)}>
-              Expand all
+              {t('nav.expandAll')}
             </button>
           </>
         )}
@@ -70,9 +71,9 @@ export function DataTree({ code, lang, fallback }: Props) {
           type="button"
           className="btn ghost sm"
           onClick={() => setRaw((v) => !v)}
-          title={raw ? 'Back to the collapsible tree' : 'Show the exact source text for copying'}
+          title={raw ? t('nav.treeViewHint') : t('nav.rawViewHint')}
         >
-          {raw ? 'Tree' : 'Raw'}
+          {raw ? t('nav.treeView') : t('nav.rawView')}
         </button>
       </div>
 
@@ -105,6 +106,7 @@ function JsonValue({
   name?: string
   last: boolean
 }) {
+  const { t } = useI18n()
   const label = name ? (
     <>
       <span className="tok-key">{name}</span>
@@ -146,7 +148,12 @@ function JsonValue({
         {label}
         <span className="tok-punc">{open}</span>
         <span className="dtree-folded">
-          <span className="dtree-count"> {countLabel(size, isObject ? 'key' : 'item')} </span>
+          <span className="dtree-count">
+            {' '}
+            {isObject
+              ? t(size === 1 ? 'nav.countKeys.one' : 'nav.countKeys.other', { count: size })
+              : t(size === 1 ? 'nav.countItems.one' : 'nav.countItems.other', { count: size })}{' '}
+          </span>
           <span className="tok-punc">
             {close}
             {!last ? ',' : ''}
@@ -197,6 +204,7 @@ function XmlAttributes({ node }: { node: XmlNode }) {
 }
 
 function XmlElement({ node }: { node: XmlNode }) {
+  const { t } = useI18n()
   // Empty and text-only elements read better as a single line than as a fold.
   if (node.text !== null) {
     return (
@@ -229,7 +237,12 @@ function XmlElement({ node }: { node: XmlNode }) {
         <XmlAttributes node={node} />
         <span className="tok-punc">&gt;</span>
         <span className="dtree-folded">
-          <span className="dtree-count"> {countLabel(elementCount, 'child')} </span>
+          <span className="dtree-count">
+            {' '}
+            {t(elementCount === 1 ? 'nav.countChildren.one' : 'nav.countChildren.other', {
+              count: elementCount,
+            })}{' '}
+          </span>
           <span className="tok-punc">&lt;/</span>
           <span className="tok-tag">{node.tag}</span>
           <span className="tok-punc">&gt;</span>

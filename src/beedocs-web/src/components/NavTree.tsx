@@ -7,6 +7,7 @@ import { exportBookToPdf, exportPageToPdf } from '../export/pdf'
 import { ImportDialog } from './ImportDialog'
 import type { ExportFormat } from '../types'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n } from '../i18n'
 import { TREE_DRAG_MIME } from '../markdownLinks'
 import { useWorkspace, type TreeBook, type TreeShelf } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
@@ -132,6 +133,7 @@ export function NavTree() {
   const navigate = useNavigate()
   const params = useParams()
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   /**
    * The top-of-tree creation form, shared by books and shelves. `shelfId` is the
    * shelf a new book lands on — null for the library root.
@@ -428,7 +430,7 @@ export function NavTree() {
                 setNewBookOpen((v) => (v ? null : { shelfId: null }))
               }}
             >
-              New book
+              {t('nav.newBook')}
             </button>
             <button
               type="button"
@@ -437,21 +439,21 @@ export function NavTree() {
                 setNewBookOpen(null)
                 setNewShelfOpen((v) => !v)
               }}
-              title="A shelf groups related books"
+              title={t('nav.newShelfHint')}
             >
-              New shelf
+              {t('nav.newShelf')}
             </button>
             <button
               type="button"
               className="btn sm"
               onClick={() => setImportOpen({})}
-              title="Import a BeeDocs archive, a zip of Markdown, or a single .md file"
+              title={t('nav.importHint')}
             >
-              Import
+              {t('nav.import')}
             </button>
           </>
         )}
-        <button type="button" className="icon-btn" onClick={() => void refreshTree()} title="Refresh">
+        <button type="button" className="icon-btn" onClick={() => void refreshTree()} title={t('common.refresh')}>
           ↻
         </button>
       </div>
@@ -460,7 +462,9 @@ export function NavTree() {
         <form className="inline-form" onSubmit={(e) => void onCreateBook(e)}>
           {newBookOpen?.shelfId && (
             <span className="muted sm">
-              On shelf: {shelves.find((s) => s.id === newBookOpen.shelfId)?.title ?? '—'}
+              {t('nav.onShelf', {
+                title: shelves.find((s) => s.id === newBookOpen.shelfId)?.title ?? '—',
+              })}
             </span>
           )}
           <input
@@ -470,19 +474,19 @@ export function NavTree() {
             onKeyDown={(e) => {
               if (e.key === 'Escape') closeCreateForm()
             }}
-            placeholder={newShelfOpen ? 'Shelf name' : 'Book title'}
+            placeholder={newShelfOpen ? t('nav.shelfName') : t('nav.bookTitle')}
           />
           <button type="submit" className="btn primary sm">
-            Create
+            {t('common.create')}
           </button>
           <button type="button" className="btn ghost sm" onClick={closeCreateForm}>
-            Cancel
+            {t('common.cancel')}
           </button>
         </form>
       )}
 
       {error && <div className="banner error compact">{error}</div>}
-      {loading && <p className="muted sm">Loading library…</p>}
+      {loading && <p className="muted sm">{t('nav.loadingLibrary')}</p>}
 
       <ul className="tree-root">
         {shelves.map((shelf) => (
@@ -526,7 +530,7 @@ export function NavTree() {
             onDragLeave={() => setDragOver(null)}
             onDrop={(e) => void dropOnShelf(null, e)}
           >
-            Not on a shelf
+            {t('nav.notOnShelf')}
           </li>
         )}
 
@@ -558,11 +562,9 @@ export function NavTree() {
 
       {!loading && books.length === 0 && shelves.length === 0 && (
         <div className="empty-tree">
-          <p>No books yet.</p>
+          <p>{t('nav.emptyTitle')}</p>
           <p className="muted sm">
-            {canWrite
-              ? 'Create a book to start documenting architecture, or a shelf to group several.'
-              : 'Nothing has been published to this instance yet.'}
+            {canWrite ? t('nav.emptyHintWrite') : t('nav.emptyHintRead')}
           </p>
         </div>
       )}
@@ -573,7 +575,7 @@ export function NavTree() {
             <>
               <div className="tree-context-heading">📚 {menu.title}</div>
               <MenuItem
-                label="New book on this shelf"
+                label={t('nav.newBookOnShelf')}
                 write
                 onClick={() => {
                   setNewShelfOpen(false)
@@ -582,24 +584,24 @@ export function NavTree() {
                 }}
               />
               <MenuItem
-                label="Rename shelf"
+                label={t('nav.renameShelf')}
                 write
                 onClick={() => {
-                  const t = window.prompt('Shelf name', menu.title)?.trim()
-                  if (t) void renameShelf(menu.shelfId, t)
+                  const next = window.prompt(t('nav.shelfName'), menu.title)?.trim()
+                  if (next) void renameShelf(menu.shelfId, next)
                   setMenu(null)
                 }}
               />
               <div className="tree-context-sep" />
               <MenuItem
-                label="Open shelf"
+                label={t('nav.openShelf')}
                 onClick={() => {
                   void navigate(`/shelves/${menu.shelfId}`)
                   setMenu(null)
                 }}
               />
               <MenuItem
-                label="Open as website"
+                label={t('nav.openAsWebsite')}
                 onClick={() => {
                   window.open(withBase(bookshelfSitePath(menu.slug)), '_blank', 'noopener')
                   setMenu(null)
@@ -607,15 +609,11 @@ export function NavTree() {
               />
               <div className="tree-context-sep" />
               <MenuItem
-                label="Delete shelf"
+                label={t('nav.deleteShelf')}
                 write
                 danger
                 onClick={() => {
-                  if (
-                    confirm(
-                      `Delete shelf “${menu.title}”? Its books are kept and move to the library root.`,
-                    )
-                  ) {
+                  if (confirm(t('nav.deleteShelfConfirm', { title: menu.title }))) {
                     void deleteShelf(menu.shelfId).then(() => {
                       if (params.shelfId === menu.shelfId) void navigate('/')
                     })
@@ -629,7 +627,7 @@ export function NavTree() {
             <>
               <div className="tree-context-heading">{menu.title}</div>
               <MenuItem
-                label="New page"
+                label={t('nav.newPage')}
                 write
                 onClick={() => {
                   setCreatingIn({ bookId: menu.bookId, kind: 'page' })
@@ -637,7 +635,7 @@ export function NavTree() {
                 }}
               />
               <MenuItem
-                label="New folder"
+                label={t('nav.newFolder')}
                 write
                 onClick={() => {
                   setCreatingIn({ bookId: menu.bookId, kind: 'folder' })
@@ -645,7 +643,7 @@ export function NavTree() {
                 }}
               />
               <MenuItem
-                label="New diagram"
+                label={t('nav.newDiagram')}
                 write
                 onClick={() => {
                   setCreatingIn({ bookId: menu.bookId, kind: 'diagram' })
@@ -653,7 +651,7 @@ export function NavTree() {
                 }}
               />
               <MenuItem
-                label="New isometric diagram"
+                label={t('nav.newIsometricDiagram')}
                 write
                 onClick={() => {
                   setCreatingIn({ bookId: menu.bookId, kind: 'diagram', diagramKind: 'isometric' })
@@ -661,7 +659,7 @@ export function NavTree() {
                 }}
               />
               <MenuItem
-                label="New slides"
+                label={t('nav.newSlides')}
                 write
                 onClick={() => {
                   setCreatingIn({ bookId: menu.bookId, kind: 'slides' })
@@ -669,7 +667,7 @@ export function NavTree() {
                 }}
               />
               <MenuItem
-                label="Upload file…"
+                label={t('nav.uploadFile')}
                 write
                 onClick={() => {
                   openUploadPicker(menu.bookId)
@@ -682,7 +680,7 @@ export function NavTree() {
                 onPick={(format) => runExport('book', menu.bookId, format)}
               />
               <MenuItem
-                label="Import into this book…"
+                label={t('nav.importIntoBook')}
                 write
                 onClick={() => {
                   setImportOpen({ targetBookId: menu.bookId })
@@ -691,7 +689,7 @@ export function NavTree() {
               />
               <div className="tree-context-sep" />
               <MenuItem
-                label="Open book"
+                label={t('nav.openBook')}
                 onClick={() => {
                   void navigate(`/books/${menu.bookId}`)
                   setMenu(null)
@@ -701,7 +699,7 @@ export function NavTree() {
               {/* Shelving a book is a drag onto a shelf, or the picker in the
                   properties pane; only the way back out needs a menu item. */}
               <MenuItem
-                label="Move to library root"
+                label={t('nav.moveToLibraryRoot')}
                 write
                 disabled={menu.shelfId == null}
                 onClick={() => {
@@ -711,11 +709,11 @@ export function NavTree() {
               />
               <div className="tree-context-sep" />
               <MenuItem
-                label="Delete book"
+                label={t('nav.deleteBook')}
                 write
                 danger
                 onClick={() => {
-                  if (confirm(`Delete book “${menu.title}”?`)) {
+                  if (confirm(t('nav.deleteBookConfirm', { title: menu.title }))) {
                     void deleteBook(menu.bookId).then(() => {
                       if (params.bookId === menu.bookId) void navigate('/')
                     })
@@ -729,7 +727,7 @@ export function NavTree() {
             <>
               <div className="tree-context-heading">📁 {menu.title}</div>
               <MenuItem
-                label="New page in folder"
+                label={t('nav.newPageInFolder')}
                 write
                 onClick={() => {
                   setCreatingIn({ bookId: menu.bookId, kind: 'page', chapterId: menu.chapterId })
@@ -737,25 +735,21 @@ export function NavTree() {
                 }}
               />
               <MenuItem
-                label="Rename folder"
+                label={t('nav.renameFolder')}
                 write
                 onClick={() => {
-                  const t = window.prompt('Folder name', menu.title)?.trim()
-                  if (t) void renameFolder(menu.chapterId, menu.bookId, t)
+                  const next = window.prompt(t('nav.folderName'), menu.title)?.trim()
+                  if (next) void renameFolder(menu.chapterId, menu.bookId, next)
                   setMenu(null)
                 }}
               />
               <div className="tree-context-sep" />
               <MenuItem
-                label="Delete folder"
+                label={t('nav.deleteFolder')}
                 write
                 danger
                 onClick={() => {
-                  if (
-                    confirm(
-                      `Delete folder “${menu.title}”? Pages inside move to the book root.`,
-                    )
-                  ) {
+                  if (confirm(t('nav.deleteFolderConfirm', { title: menu.title }))) {
                     void deleteFolder(menu.chapterId, menu.bookId)
                   }
                   setMenu(null)
@@ -767,7 +761,7 @@ export function NavTree() {
             <>
               <div className="tree-context-heading">📄 {menu.title}</div>
               <MenuItem
-                label="Open"
+                label={t('common.open')}
                 onClick={() => {
                   void navigate(`/books/${menu.bookId}/pages/${menu.pageId}`)
                   setMenu(null)
@@ -775,7 +769,7 @@ export function NavTree() {
               />
               <FavoriteMenuItem kind="page" entityId={menu.pageId} onDone={() => setMenu(null)} />
               <MenuItem
-                label="Move to book root"
+                label={t('nav.moveToBookRoot')}
                 write
                 disabled={menu.chapterId == null}
                 onClick={() => {
@@ -794,11 +788,11 @@ export function NavTree() {
               />
               <div className="tree-context-sep" />
               <MenuItem
-                label="Delete page"
+                label={t('nav.deletePage')}
                 write
                 danger
                 onClick={() => {
-                  if (confirm(`Delete page “${menu.title}”?`)) {
+                  if (confirm(t('nav.deletePageConfirm', { title: menu.title }))) {
                     void deletePage(menu.pageId, menu.bookId).then(() => {
                       if (params.pageId === menu.pageId) void navigate(`/books/${menu.bookId}`)
                     })
@@ -812,7 +806,7 @@ export function NavTree() {
             <>
               <div className="tree-context-heading">⬡ {menu.title}</div>
               <MenuItem
-                label="Open"
+                label={t('common.open')}
                 onClick={() => {
                   void navigate(`/books/${menu.bookId}/diagrams/${menu.diagramId}`)
                   setMenu(null)
@@ -825,11 +819,11 @@ export function NavTree() {
               />
               <div className="tree-context-sep" />
               <MenuItem
-                label="Delete diagram"
+                label={t('nav.deleteDiagram')}
                 write
                 danger
                 onClick={() => {
-                  if (confirm(`Delete diagram “${menu.title}”?`)) {
+                  if (confirm(t('nav.deleteDiagramConfirm', { title: menu.title }))) {
                     void deleteDiagram(menu.diagramId, menu.bookId).then(() => {
                       if (params.diagramId === menu.diagramId)
                         void navigate(`/books/${menu.bookId}`)
@@ -844,7 +838,7 @@ export function NavTree() {
             <>
               <div className="tree-context-heading">🎞️ {menu.title}</div>
               <MenuItem
-                label="Open"
+                label={t('common.open')}
                 onClick={() => {
                   void navigate(`/books/${menu.bookId}/slides/${menu.deckId}`)
                   setMenu(null)
@@ -853,11 +847,11 @@ export function NavTree() {
               <FavoriteMenuItem kind="slides" entityId={menu.deckId} onDone={() => setMenu(null)} />
               <div className="tree-context-sep" />
               <MenuItem
-                label="Delete slides"
+                label={t('nav.deleteSlides')}
                 write
                 danger
                 onClick={() => {
-                  if (confirm(`Delete slide deck “${menu.title}”?`)) {
+                  if (confirm(t('nav.deleteSlidesConfirm', { title: menu.title }))) {
                     void deleteSlideDeck(menu.deckId, menu.bookId).then(() => {
                       if (params.deckId === menu.deckId)
                         void navigate(`/books/${menu.bookId}`)
@@ -874,7 +868,7 @@ export function NavTree() {
                 {attachmentIcon(menu.fileName)} {menu.title}
               </div>
               <MenuItem
-                label="Open"
+                label={t('common.open')}
                 onClick={() => {
                   void navigate(`/books/${menu.bookId}/files/${menu.attachmentId}`)
                   setMenu(null)
@@ -886,7 +880,7 @@ export function NavTree() {
                 onDone={() => setMenu(null)}
               />
               <MenuItem
-                label="Download"
+                label={t('common.download')}
                 onClick={() => {
                   const a = document.createElement('a')
                   a.href = api.attachmentUrl(menu.attachmentId)
@@ -897,11 +891,11 @@ export function NavTree() {
               />
               <div className="tree-context-sep" />
               <MenuItem
-                label="Delete file"
+                label={t('nav.deleteFile')}
                 write
                 danger
                 onClick={() => {
-                  if (confirm(`Delete “${menu.title}”? The file is removed from the server.`)) {
+                  if (confirm(t('nav.deleteFileConfirm', { title: menu.title }))) {
                     void deleteAttachment(menu.attachmentId, menu.bookId).then(() => {
                       if (params.attachmentId === menu.attachmentId)
                         void navigate(`/books/${menu.bookId}`)
@@ -952,15 +946,17 @@ function ExportItems({
   busy: boolean
   onPick: (format: ExportFormat | 'pdf') => void
 }) {
+  const { t } = useI18n()
+  // PDF and Markdown are proper nouns and stay untranslated.
   const formats: { format: ExportFormat | 'pdf'; label: string }[] = [
     { format: 'pdf', label: 'PDF' },
     { format: 'markdown', label: 'Markdown' },
-    { format: 'docx', label: 'Word (.docx)' },
-    { format: 'archive', label: 'BeeDocs archive' },
+    { format: 'docx', label: t('nav.exportWord') },
+    { format: 'archive', label: t('nav.exportArchive') },
   ]
   return (
     <>
-      <div className="tree-context-heading sub">{busy ? 'Exporting…' : 'Export as'}</div>
+      <div className="tree-context-heading sub">{busy ? t('nav.exporting') : t('nav.exportAs')}</div>
       {formats.map((f) => (
         <MenuItem
           key={f.format}
@@ -1022,10 +1018,11 @@ function FavoriteMenuItem({
   onDone: () => void
 }) {
   const { isFavorite, toggleFavorite } = useWorkspace()
+  const { t } = useI18n()
   const starred = isFavorite(kind, entityId)
   return (
     <MenuItem
-      label={starred ? 'Remove from favorites' : 'Add to favorites'}
+      label={starred ? t('nav.removeFavorite') : t('nav.addFavorite')}
       onClick={() => {
         void toggleFavorite(kind, entityId)
         onDone()
@@ -1092,6 +1089,7 @@ function ShelfNode({
   uploadingIn: string | null
   uploadToBook: (bookId: string, files: File[]) => void
 }) {
+  const { t } = useI18n()
   const dropId = `shelf:${shelf.id}`
   const active =
     params.shelfId === shelf.id ||
@@ -1134,8 +1132,8 @@ function ShelfNode({
           <span className="tree-icon">📚</span>
           <span className="tree-text">{shelf.title}</span>
           {shelf.published && (
-            <span className="tree-site-badge" title="Served as a website">
-              web
+            <span className="tree-site-badge" title={t('nav.servedAsWebsite')}>
+              {t('nav.webBadge')}
             </span>
           )}
           <span className="muted sm">({books.length})</span>
@@ -1169,7 +1167,7 @@ function ShelfNode({
             />
           ))}
           {books.length === 0 && (
-            <li className="muted sm tree-empty">Empty shelf — drop books here</li>
+            <li className="muted sm tree-empty">{t('nav.emptyShelf')}</li>
           )}
         </ul>
       )}
@@ -1225,6 +1223,7 @@ function BookNode({
   uploadToBook: (bookId: string, files: File[]) => void
 }) {
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   // One zone for the whole book node — row and children alike — so a document
   // dropped anywhere under a book lands in it. The rows inside decline file
   // drags so the event reaches here.
@@ -1302,7 +1301,7 @@ function BookNode({
 
       {book.expanded && (
         <ul className="tree-children">
-          {book.loading && <li className="muted sm">Loading…</li>}
+          {book.loading && <li className="muted sm">{t('common.loading')}</li>}
           {creatingIn?.bookId === book.id && (
             <li>
               <form className="inline-form nested" onSubmit={(e) => void onCreateChild(e)}>
@@ -1315,19 +1314,19 @@ function BookNode({
                   }}
                   placeholder={
                     creatingIn.kind === 'page'
-                      ? 'Page title'
+                      ? t('nav.pageTitle')
                       : creatingIn.kind === 'folder'
-                        ? 'Folder name'
+                        ? t('nav.folderName')
                         : creatingIn.kind === 'slides'
-                          ? 'Presentation title'
-                          : 'Diagram title'
+                          ? t('nav.presentationTitle')
+                          : t('nav.diagramTitle')
                   }
                 />
                 <button type="submit" className="btn primary sm">
-                  Add
+                  {t('common.add')}
                 </button>
                 <button type="button" className="btn ghost sm" onClick={() => setCreatingIn(null)}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </form>
             </li>
@@ -1356,7 +1355,7 @@ function BookNode({
             />
           ))}
 
-          {rootPages.length > 0 && <li className="tree-group-label">Pages</li>}
+          {rootPages.length > 0 && <li className="tree-group-label">{t('common.pages')}</li>}
           {rootPages.map((p) => (
             <PageRow
               key={p.id}
@@ -1372,7 +1371,7 @@ function BookNode({
             />
           ))}
 
-          {book.diagrams.length > 0 && <li className="tree-group-label">Diagrams</li>}
+          {book.diagrams.length > 0 && <li className="tree-group-label">{t('common.diagrams')}</li>}
           {book.diagrams.map((d) => (
             <DiagramRow
               key={d.id}
@@ -1389,7 +1388,7 @@ function BookNode({
             />
           ))}
 
-          {book.slideDecks.length > 0 && <li className="tree-group-label">Slides</li>}
+          {book.slideDecks.length > 0 && <li className="tree-group-label">{t('common.slideDecks')}</li>}
           {book.slideDecks.map((d) => (
             <SlideDeckRow
               key={d.id}
@@ -1406,7 +1405,7 @@ function BookNode({
             />
           ))}
 
-          {book.attachments.length > 0 && <li className="tree-group-label">Files</li>}
+          {book.attachments.length > 0 && <li className="tree-group-label">{t('nav.groupFiles')}</li>}
           {book.attachments.map((a) => (
             <AttachmentRow
               key={a.id}
@@ -1422,7 +1421,7 @@ function BookNode({
               }
             />
           ))}
-          {uploadingIn === book.id && <li className="muted sm">Uploading…</li>}
+          {uploadingIn === book.id && <li className="muted sm">{t('nav.uploading')}</li>}
 
           {!book.loading &&
             book.pages.length === 0 &&
@@ -1431,9 +1430,7 @@ function BookNode({
             book.attachments.length === 0 &&
             book.chapters.length === 0 &&
             creatingIn?.bookId !== book.id && (
-              <li className="muted sm tree-empty">
-                Empty book — right-click for New page / folder
-              </li>
+              <li className="muted sm tree-empty">{t('nav.emptyBook')}</li>
             )}
         </ul>
       )}
@@ -1480,6 +1477,7 @@ function FolderNode({
   ) => Promise<void>
 }) {
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   const dropId = `folder:${folder.id}`
   const folderSelected =
     selection.kind === 'folder' && selection.chapterId === folder.id
@@ -1550,7 +1548,7 @@ function FolderNode({
           {creatingIn?.bookId === book.id &&
             creatingIn.kind === 'page' &&
             creatingIn.chapterId === folder.id && (
-              <li className="muted sm">Adding page… use form above</li>
+              <li className="muted sm">{t('nav.addingPage')}</li>
             )}
           {pages.map((p) => (
             <PageRow
@@ -1570,7 +1568,7 @@ function FolderNode({
             />
           ))}
           {pages.length === 0 && (
-            <li className="muted sm tree-empty">Empty folder — drop pages here</li>
+            <li className="muted sm tree-empty">{t('nav.emptyFolder')}</li>
           )}
         </ul>
       )}

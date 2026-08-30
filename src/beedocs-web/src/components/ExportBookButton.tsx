@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { exportBookToPdf } from '../export/pdf'
+import { useI18n } from '../i18n'
 
 type Props = {
   bookId: string
@@ -10,6 +11,7 @@ type Props = {
 }
 
 export function ExportBookButton({ bookId, bookTitle, className = '', variant = 'button' }: Props) {
+  const { t } = useI18n()
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -17,10 +19,10 @@ export function ExportBookButton({ bookId, bookTitle, className = '', variant = 
   const run = async () => {
     setBusy(true)
     setError(null)
-    setStatus('Preparing…')
+    setStatus(t('dialogs.preparing'))
     try {
       await exportBookToPdf(bookId, (msg) => setStatus(msg))
-      setStatus('Print dialog opened — choose “Save as PDF”.')
+      setStatus(t('dialogs.printOpened'))
       setTimeout(() => setStatus(null), 5000)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -36,7 +38,11 @@ export function ExportBookButton({ bookId, bookTitle, className = '', variant = 
         <button
           type="button"
           className="icon-btn sm"
-          title={busy ? status || 'Exporting…' : `Export “${bookTitle ?? 'book'}” as PDF`}
+          title={
+            busy
+              ? status || t('dialogs.exporting')
+              : t('dialogs.exportAsPdf', { title: bookTitle ?? t('dialogs.bookFallback') })
+          }
           disabled={busy}
           onClick={() => void run()}
         >
@@ -50,7 +56,7 @@ export function ExportBookButton({ bookId, bookTitle, className = '', variant = 
   return (
     <div className={`export-book ${className}`}>
       <button type="button" className="btn primary" disabled={busy} onClick={() => void run()}>
-        {busy ? 'Exporting…' : 'Export PDF'}
+        {busy ? t('dialogs.exporting') : t('dialogs.exportPdf')}
       </button>
       {status && <p className="muted sm export-book-status">{status}</p>}
       {error && <div className="banner error compact">{error}</div>}

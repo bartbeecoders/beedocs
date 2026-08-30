@@ -113,3 +113,16 @@ Do this in a seperate branch
 Add the ability to upload/add documents to books. Files like PDF, word, powerpoint etc can then bee added to books.
 Users can set the properties (title, owner etc)
 
+
+
+## ideas
+
+- multi language
+    - make the application work in:
+        English, French, German, Spanish, Dutch, Japanese, Chinees
+
+- Re-branding:
+    - user can change logo -> generate with AI 
+    - user can change the Title (BeeDocs)
+    - Add a broader set of themes
+    - Take the colors/theme from the active theme of omarchy, when running as an app inn omarchy

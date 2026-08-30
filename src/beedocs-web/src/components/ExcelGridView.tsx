@@ -7,6 +7,7 @@ import {
   DEFAULT_HEADER_HEIGHT,
   DEFAULT_HEADER_WIDTH,
 } from '../excelgrid/types'
+import { useI18n } from '../i18n'
 
 type Props = {
   source: string
@@ -16,6 +17,7 @@ type Props = {
 
 /** Read-only rendering of an excelgrid document. */
 export function ExcelGridView({ source, className = '', title }: Props) {
+  const { t } = useI18n()
   const clipPrefix = useId().replace(/:/g, '')
   const rootRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -92,7 +94,7 @@ export function ExcelGridView({ source, className = '', title }: Props) {
     <div className={`excelgrid-view ${className}`.trim()} ref={rootRef}>
       {title && <div className="excelgrid-view-title muted sm">{title}</div>}
       <div className="excelgrid-surface is-readonly" style={{ maxHeight: 420, overflow: 'auto' }}>
-        <svg ref={svgRef} role="img" aria-label={title || 'Spreadsheet'} />
+        <svg ref={svgRef} role="img" aria-label={title || t('canvas.grid.spreadsheet')} />
       </div>
     </div>
   )

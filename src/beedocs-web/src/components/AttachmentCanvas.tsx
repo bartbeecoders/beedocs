@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n } from '../i18n'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { Attachment } from '../types'
 import {
@@ -53,6 +54,7 @@ export function AttachmentCanvas({ onStateChange }: Props) {
   const { bookId = '', attachmentId = '' } = useParams()
   const navigate = useNavigate()
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   const { patchAttachment, deleteAttachment: deleteFromTree } = useWorkspace()
 
   const [attachment, setAttachment] = useState<Attachment | null>(null)
@@ -170,10 +172,10 @@ export function AttachmentCanvas({ onStateChange }: Props) {
   }, [])
 
   const remove = useCallback(async () => {
-    if (!confirm(`Delete “${title}”? The file is removed from the server.`)) return
+    if (!confirm(t('canvas.deleteAttachmentConfirm', { name: title }))) return
     await deleteFromTree(idRef.current, bookId)
     void navigate(`/books/${bookId}`)
-  }, [title, deleteFromTree, bookId, navigate])
+  }, [t, title, deleteFromTree, bookId, navigate])
 
   const replaceFile = useCallback(() => fileInputRef.current?.click(), [])
 
@@ -230,18 +232,18 @@ export function AttachmentCanvas({ onStateChange }: Props) {
     return <div className="canvas-message error">{error}</div>
   }
   if (!attachment) {
-    return <div className="canvas-message muted">Loading file…</div>
+    return <div className="canvas-message muted">{t('canvas.loadingFile')}</div>
   }
 
   const previewUrl = `${api.attachmentUrl(attachment.id, true)}&v=${fileVersion}`
   const statusLabel = saving
-    ? 'Saving…'
+    ? t('common.saving')
     : replacing
-      ? 'Uploading…'
+      ? t('canvas.uploading')
       : dirty
-        ? 'Unsaved'
+        ? t('canvas.unsaved')
         : savedAt
-          ? `Saved · ${savedAt}`
+          ? t('canvas.savedAt', { time: savedAt })
           : null
 
   return (
@@ -252,10 +254,8 @@ export function AttachmentCanvas({ onStateChange }: Props) {
       {fileDrop.dragging && (
         <div className="file-drop-overlay">
           <span aria-hidden>♻️</span>
-          <strong>Drop to replace “{attachment.title}”</strong>
-          <span className="muted sm">
-            Keeps the title, description and every link to this file
-          </span>
+          <strong>{t('canvas.dropReplace', { name: attachment.title })}</strong>
+          <span className="muted sm">{t('canvas.dropReplaceHint')}</span>
         </div>
       )}
       <div className="canvas-toolbar">
@@ -268,7 +268,7 @@ export function AttachmentCanvas({ onStateChange }: Props) {
                 setTitle(e.target.value)
                 setDirty(true)
               }}
-              placeholder="File title"
+              placeholder={t('canvas.fileTitlePlaceholder')}
             />
           ) : (
             <span className="canvas-title">{title}</span>
@@ -281,7 +281,7 @@ export function AttachmentCanvas({ onStateChange }: Props) {
         </div>
         <div className="toolbar-group">
           <button type="button" className="btn sm" onClick={download}>
-            Download
+            {t('common.download')}
           </button>
           {canWrite && (
             <>
@@ -290,9 +290,9 @@ export function AttachmentCanvas({ onStateChange }: Props) {
                 className="btn ghost sm"
                 disabled={replacing}
                 onClick={replaceFile}
-                title="Upload a new version of this file, keeping its title and links"
+                title={t('canvas.replaceFileHint')}
               >
-                {replacing ? 'Uploading…' : 'Replace file'}
+                {replacing ? t('canvas.uploading') : t('canvas.replaceFile')}
               </button>
               <button
                 type="button"
@@ -300,7 +300,7 @@ export function AttachmentCanvas({ onStateChange }: Props) {
                 disabled={saving || !dirty}
                 onClick={() => void save()}
               >
-                {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+                {saving ? t('common.saving') : dirty ? t('common.save') : t('common.saved')}
               </button>
             </>
           )}
@@ -341,12 +341,9 @@ export function AttachmentCanvas({ onStateChange }: Props) {
               {attachmentTypeLabel(attachment.fileName, attachment.contentType)} ·{' '}
               {formatFileSize(attachment.sizeBytes)}
             </p>
-            <p className="muted sm">
-              This format opens in its own application. Download it to read or edit it — the copy
-              here stays as it is until someone uploads a replacement.
-            </p>
+            <p className="muted sm">{t('canvas.noPreview')}</p>
             <button type="button" className="btn primary sm" onClick={download}>
-              Download {attachment.fileName}
+              {t('canvas.downloadNamed', { name: attachment.fileName })}
             </button>
           </div>
         )}

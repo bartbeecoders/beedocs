@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
+import { useI18n, type MessageKey, type TFunction } from '../i18n'
 
 /**
  * About / Help — what BeeDocs is, how to use the workspace, and how to point an
  * AI agent at the MCP server. The MCP snippets are generated from the endpoint
  * and token you type in, so they can be copied straight into a client config.
+ *
+ * Almost all copy here is documentation prose; it is translated in sentence
+ * fragments (prefix/suffix keys around <code>/<kbd>/<strong> elements) so each
+ * language can phrase around the fixed technical tokens naturally.
  */
 
 type McpClient = 'claude-code' | 'cursor' | 'vscode' | 'desktop' | 'stdio'
 
+// Labels are product names shown untranslated; stdio's parenthetical is the
+// one translatable label and is resolved at render time.
 const MCP_CLIENTS: { id: McpClient; label: string }[] = [
   { id: 'claude-code', label: 'Claude Code' },
   { id: 'cursor', label: 'Cursor' },
@@ -17,17 +24,17 @@ const MCP_CLIENTS: { id: McpClient; label: string }[] = [
   { id: 'stdio', label: 'stdio (local clone)' },
 ]
 
-const SECTIONS = [
-  { id: 'about', label: 'About BeeDocs' },
-  { id: 'workspace', label: 'Workspace basics' },
-  { id: 'pages', label: 'Writing pages' },
-  { id: 'diagrams', label: 'Diagrams' },
-  { id: 'export', label: 'Export & import' },
-  { id: 'ai', label: 'Writing help (AI)' },
-  { id: 'mcp', label: 'Connect an AI agent (MCP)' },
-  { id: 'shortcuts', label: 'Keyboard shortcuts' },
-  { id: 'troubleshooting', label: 'Troubleshooting' },
-]
+const SECTION_IDS = [
+  'about',
+  'workspace',
+  'pages',
+  'diagrams',
+  'export',
+  'ai',
+  'mcp',
+  'shortcuts',
+  'troubleshooting',
+] as const
 
 /** Best guess at where the MCP server lives, based on where the UI is served. */
 function guessMcpUrl(): string {
@@ -41,6 +48,7 @@ function guessMcpUrl(): string {
 }
 
 export function HelpPanel() {
+  const { t } = useI18n()
   const [version, setVersion] = useState<string | null>(null)
   const [apiOk, setApiOk] = useState<boolean | null>(null)
   const [mcpUrl, setMcpUrl] = useState(guessMcpUrl)
@@ -70,143 +78,208 @@ export function HelpPanel() {
   const apiUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5080'
 
   const snippet = useMemo(
-    () => mcpSnippet(client, { mcpUrl, token: mcpToken, repoPath }),
-    [client, mcpUrl, mcpToken, repoPath],
+    () => mcpSnippet(client, { mcpUrl, token: mcpToken, repoPath }, t),
+    [client, mcpUrl, mcpToken, repoPath, t],
   )
 
   return (
     <div className="help-panel">
       <header className="settings-header">
-        <h1>About &amp; Help</h1>
+        <h1>{t('helpdoc.title')}</h1>
         <p className="muted">
-          BeeDocs — self-hosted documentation for software &amp; hardware architecture.
-          {version && <> Build <code>v{version}</code>.</>}{' '}
-          {apiOk === true && <span className="help-badge ok">API reachable</span>}
-          {apiOk === false && <span className="help-badge bad">API unreachable</span>}
+          {t('helpdoc.tagline')}
+          {version && (
+            <>
+              {' '}
+              {t('helpdoc.build')} <code>v{version}</code>
+              {t('helpdoc.period')}
+            </>
+          )}{' '}
+          {apiOk === true && <span className="help-badge ok">{t('helpdoc.apiOk')}</span>}
+          {apiOk === false && <span className="help-badge bad">{t('helpdoc.apiBad')}</span>}
         </p>
       </header>
 
-      <nav className="help-toc" aria-label="Sections">
-        {SECTIONS.map((s) => (
-          <a key={s.id} href={`#help-${s.id}`}>
-            {s.label}
+      <nav className="help-toc" aria-label={t('helpdoc.tocLabel')}>
+        {SECTION_IDS.map((id) => (
+          <a key={id} href={`#help-${id}`}>
+            {t(`helpdoc.section.${id}` as MessageKey)}
           </a>
         ))}
       </nav>
 
       <section className="settings-section" id="help-about">
-        <h2>About BeeDocs</h2>
+        <h2>{t('helpdoc.section.about')}</h2>
         <p className="muted">
-          A single-page workspace for architecture documentation: a library of{' '}
-          <strong>books → folders → pages</strong>, Markdown with live Mermaid and C4 diagrams, a
-          built-in <strong>BeeDiagram</strong> canvas, image uploads, and PDF/HTML export. Everything
-          is stored in an embedded SQLite database next to the .NET API — no external services.
+          {t('helpdoc.about.body1')}
+          <strong>{t('helpdoc.about.hierarchy')}</strong>
+          {t('helpdoc.about.body2')}
+          <strong>BeeDiagram</strong>
+          {t('helpdoc.about.body3')}
         </p>
         <dl className="help-facts">
           <div>
-            <dt>Stack</dt>
+            <dt>{t('helpdoc.about.factStack')}</dt>
             <dd>.NET 10 minimal API · SQLite · React + Vite</dd>
           </div>
           <div>
-            <dt>This instance</dt>
+            <dt>{t('helpdoc.about.factInstance')}</dt>
             <dd>
               <code>{apiUrl}</code>
             </dd>
           </div>
           <div>
-            <dt>Build</dt>
+            <dt>{t('helpdoc.build')}</dt>
             <dd>{version ? `v${version}` : '—'}</dd>
           </div>
         </dl>
       </section>
 
       <section className="settings-section" id="help-workspace">
-        <h2>Workspace basics</h2>
+        <h2>{t('helpdoc.section.workspace')}</h2>
         <ul className="help-list">
           <li>
-            <strong>Left pane</strong> — the library tree: shelves, books, folders, pages and
-            diagrams. Right-click (or use the ⋯ menu) to create, rename, move and delete. Drag pages
-            between folders. A shelf can be served as its own website at{' '}
-            <code>/bookshelf-serve/&lt;slug&gt;</code> — toggle <strong>Serve as a public
-            website</strong> in the shelf properties, then open it from the toolbar or the tree
-            menu.
+            <strong>{t('helpdoc.ws.leftTitle')}</strong>
+            {t('helpdoc.ws.left1')}
+            <code>/bookshelf-serve/&lt;slug&gt;</code>
+            {t('helpdoc.ws.left2')}
+            <strong>{t('helpdoc.ws.leftToggle')}</strong>
+            {t('helpdoc.ws.left3')}
           </li>
           <li>
-            <strong>Search</strong> — <kbd>Ctrl</kbd>+<kbd>K</kbd> (or the header button) searches
-            every book by content, not just by title. Results are grouped by kind with a matching
-            excerpt; arrow keys move, <kbd>Enter</kbd> opens. Wrap words in{' '}
-            <code>"double quotes"</code> to match a phrase, and note that accents fold — searching{' '}
-            <code>cafe</code> finds <code>café</code>. Diagrams match on their shape labels.
+            <strong>{t('common.search')}</strong>
+            {t('helpdoc.dash')}
+            <kbd>Ctrl</kbd>+<kbd>K</kbd>
+            {t('helpdoc.ws.search2')}
+            <kbd>Enter</kbd>
+            {t('helpdoc.ws.search3')}
+            <code>"double quotes"</code>
+            {t('helpdoc.ws.search4')}
+            <code>cafe</code>
+            {t('helpdoc.ws.search5')}
+            <code>café</code>
+            {t('helpdoc.ws.search6')}
           </li>
           <li>
-            <strong>Center</strong> — the editor for the selected page or diagram.
+            <strong>{t('helpdoc.ws.centerTitle')}</strong>
+            {t('helpdoc.ws.center')}
           </li>
           <li>
-            <strong>Right pane</strong> — properties and actions for whatever is open.
+            <strong>{t('helpdoc.ws.rightTitle')}</strong>
+            {t('helpdoc.ws.right')}
           </li>
           <li>
-            Both side panes resize by dragging their edge and collapse from their header. Widths are
-            remembered per browser; reset them in <strong>Settings → Layout</strong>.
+            {t('helpdoc.ws.panes1')}
+            <strong>{t('helpdoc.ws.panesPath')}</strong>
+            {t('helpdoc.period')}
           </li>
           <li>
-            <strong>Auto-save</strong> runs about 1.5s after you stop typing (toggle in Settings).{' '}
-            <kbd>Ctrl</kbd>+<kbd>S</kbd> saves immediately.
+            <strong>{t('helpdoc.ws.autosaveTitle')}</strong>
+            {t('helpdoc.ws.autosave1')}
+            <kbd>Ctrl</kbd>+<kbd>S</kbd>
+            {t('helpdoc.ws.autosave2')}
           </li>
         </ul>
       </section>
 
       <section className="settings-section" id="help-pages">
-        <h2>Writing pages</h2>
+        <h2>{t('helpdoc.section.pages')}</h2>
         <p className="muted">
-          Pages are Markdown (GFM: tables, task lists, footnotes) with fenced blocks that render
-          live. Drop or paste an image anywhere in the editor to upload it and insert the link. PDFs
-          and 3D models (GLB/GLTF/OBJ) can be embedded the same way — use the <strong>Add</strong>{' '}
-          toolbar (Image / PDF / 3D) or drop a file onto the page.
+          {t('helpdoc.pg.intro1')}
+          <strong>{t('helpdoc.pg.addBtn')}</strong>
+          {t('helpdoc.pg.intro2')}
         </p>
         <p className="muted">
-          The small <strong>On this page</strong> pane (right of the editor) lists headings and major
-          embeds so you can jump around long pages. Collapse it to a thin rail with the › control; the
-          choice is remembered in this browser.
+          {t('helpdoc.pg.toc1')}
+          <strong>{t('helpdoc.pg.tocName')}</strong>
+          {t('helpdoc.pg.toc2')}
         </p>
         <p className="muted">
-          Fenced code blocks are syntax highlighted in the preview and in exports when the fence
-          names a language BeeDocs has a grammar for — <code>bash</code>, <code>csharp</code>,{' '}
-          <code>css</code>, <code>diff</code>, <code>dockerfile</code>, <code>go</code>,{' '}
-          <code>ini</code>/<code>toml</code>, <code>java</code>, <code>javascript</code>,{' '}
-          <code>json</code>, <code>markdown</code>, <code>python</code>, <code>rust</code>,{' '}
-          <code>shell</code>, <code>sql</code>, <code>typescript</code>, <code>xml</code>/
-          <code>html</code> and <code>yaml</code>, plus the usual short forms (<code>ts</code>,{' '}
-          <code>py</code>, <code>yml</code>, <code>sh</code>…). Colours follow the active theme. An
-          unlabelled fence is left as plain text rather than guessed at.
+          {t('helpdoc.pg.hl1')}
+          <code>bash</code>
+          {', '}
+          <code>csharp</code>
+          {', '}
+          <code>css</code>
+          {', '}
+          <code>diff</code>
+          {', '}
+          <code>dockerfile</code>
+          {', '}
+          <code>go</code>
+          {', '}
+          <code>ini</code>/<code>toml</code>
+          {', '}
+          <code>java</code>
+          {', '}
+          <code>javascript</code>
+          {', '}
+          <code>json</code>
+          {', '}
+          <code>markdown</code>
+          {', '}
+          <code>python</code>
+          {', '}
+          <code>rust</code>
+          {', '}
+          <code>shell</code>
+          {', '}
+          <code>sql</code>
+          {', '}
+          <code>typescript</code>
+          {', '}
+          <code>xml</code>/<code>html</code>
+          {t('helpdoc.and')}
+          <code>yaml</code>
+          {t('helpdoc.pg.hl2')}
+          <code>ts</code>
+          {', '}
+          <code>py</code>
+          {', '}
+          <code>yml</code>
+          {', '}
+          <code>sh</code>
+          {t('helpdoc.pg.hl3')}
         </p>
         <p className="muted">
-          <code>json</code> and <code>xml</code> blocks render as a collapsible tree in the preview:
-          click any node to fold it, or use <strong>Collapse all</strong> / <strong>Expand all</strong>.
-          Folds are keyboard operable and survive editing. <strong>Raw</strong> switches to the
-          highlighted source for copying, and a document that does not parse — or is very large —
-          stays a plain code block.
+          <code>json</code>
+          {t('helpdoc.and')}
+          <code>xml</code>
+          {t('helpdoc.pg.tree1')}
+          <strong>{t('helpdoc.pg.collapseAll')}</strong> / <strong>{t('helpdoc.pg.expandAll')}</strong>
+          {t('helpdoc.pg.tree2')}
+          <strong>{t('helpdoc.pg.raw')}</strong>
+          {t('helpdoc.pg.tree3')}
         </p>
         <p className="muted">
-          Dropping a <code>.json</code> or <code>.xml</code> file inlines its text as a fenced code
-          block instead of uploading it, so config and schemas are versioned with the page and turn
-          up in search. A <code>.csv</code> or <code>.tsv</code> file becomes a spreadsheet
-          section instead. The text is kept exactly as the file had it; the block's{' '}
-          <strong>Format</strong> button re-indents it on request, and declines when reformatting
-          would alter the data — oversized numbers, numeric object keys, or XML whose whitespace is
-          part of the content. Files above 0.5 MB are refused rather than wedged into the page.
+          {t('helpdoc.pg.drop1')}
+          <code>.json</code>
+          {t('helpdoc.or')}
+          <code>.xml</code>
+          {t('helpdoc.pg.drop2')}
+          <code>.csv</code>
+          {t('helpdoc.or')}
+          <code>.tsv</code>
+          {t('helpdoc.pg.drop3')}
+          <strong>{t('helpdoc.pg.formatBtn')}</strong>
+          {t('helpdoc.pg.drop4')}
         </p>
         <p className="muted">
-          In <strong>edit</strong> mode the page is split into blocks: one per heading, plus one for
-          each diagram or embed. Hover a block to reveal its <code>⠿</code> handle on the left and
-          drag it to a new position — a line shows where it will land. The handle also takes{' '}
-          <kbd>↑</kbd> and <kbd>↓</kbd> once focused, so blocks can be moved without a mouse. A
-          heading you type inside an existing block becomes its own block when you click away.
+          {t('helpdoc.pg.blocks1')}
+          <strong>{t('helpdoc.pg.blocksEdit')}</strong>
+          {t('helpdoc.pg.blocks2')}
+          <code>⠿</code>
+          {t('helpdoc.pg.blocks3')}
+          <kbd>↑</kbd>
+          {t('helpdoc.and')}
+          <kbd>↓</kbd>
+          {t('helpdoc.pg.blocks4')}
         </p>
         <table className="help-table">
           <thead>
             <tr>
-              <th>Fence</th>
-              <th>Renders as</th>
+              <th>{t('helpdoc.pg.fenceCol')}</th>
+              <th>{t('helpdoc.pg.rendersCol')}</th>
             </tr>
           </thead>
           <tbody>
@@ -214,26 +287,27 @@ export function HelpPanel() {
               <td>
                 <code>```mermaid</code>
               </td>
-              <td>Mermaid diagram (flowchart, sequence, ER, gantt, C4…)</td>
+              <td>{t('helpdoc.pg.fenceMermaid')}</td>
             </tr>
             <tr>
               <td>
                 <code>```beediagram</code>
               </td>
-              <td>Inline BeeDiagram canvas, editable in place</td>
+              <td>{t('helpdoc.pg.fenceBee')}</td>
             </tr>
             <tr>
               <td>
                 <code>```beediagram-ref</code>
               </td>
-              <td>Embed of a stored diagram — the body is the diagram id</td>
+              <td>{t('helpdoc.pg.fenceRef')}</td>
             </tr>
             <tr>
               <td>
                 <code>```freedraw</code>
               </td>
               <td>
-                Free-draw sketch pad (pen, eraser, undo) — insert via <strong>Add → Free draw</strong>
+                {t('helpdoc.pg.fenceFree1')}
+                <strong>{t('helpdoc.pg.fenceFreeMenu')}</strong>
               </td>
             </tr>
             <tr>
@@ -241,187 +315,202 @@ export function HelpPanel() {
                 <code>```excelgrid</code>
               </td>
               <td>
-                Excel-style spreadsheet (cells, formatting, CSV import) — insert via{' '}
-                <strong>Add → Spreadsheet</strong>, or drop a <code>.csv</code> file on the page
+                {t('helpdoc.pg.fenceExcel1')}
+                <strong>{t('helpdoc.pg.fenceExcelMenu')}</strong>
+                {t('helpdoc.pg.fenceExcel2')}
+                <code>.csv</code>
+                {t('helpdoc.pg.fenceExcel3')}
               </td>
             </tr>
           </tbody>
         </table>
         <p className="muted sm">
-          A diagram's own editor shows the exact <code>beediagram-ref</code> snippet to paste, with a
-          copy button. Export a whole book to PDF from the book view.
+          {t('helpdoc.pg.fenceNote1')}
+          <code>beediagram-ref</code>
+          {t('helpdoc.pg.fenceNote2')}
         </p>
       </section>
 
       <section className="settings-section" id="help-diagrams">
-        <h2>Diagrams</h2>
-        <p className="muted">
-          BeeDiagram documents open in one of two modes — the switch sits above the canvas and is
-          remembered per browser.
-        </p>
+        <h2>{t('helpdoc.section.diagrams')}</h2>
+        <p className="muted">{t('helpdoc.dg.intro')}</p>
         <ul className="help-list">
           <li>
-            <strong>Studio</strong> — a diagrams.net-style workspace: searchable shape palette (drag
-            or click to place), infinite pan/zoom canvas with grid and snapping, alignment guides,
-            resize/rotate handles (including multi-select group resize), undo/redo, clipboard and a
-            Style / Text / Arrange format panel. With a shape selected, start typing to edit its
-            label.
+            <strong>{t('helpdoc.dg.studioTitle')}</strong>
+            {t('helpdoc.dg.studio')}
           </li>
           <li>
-            <strong>Connecting</strong> — hover a shape: drag a <em>blue arrow</em> to another shape
-            to connect it, or click the arrow to drop a connected copy in that direction. Drag from a{' '}
-            <em>green ✕</em> for a fixed connection point (up to 16 per shape); drag from the shape's
-            edge for a floating one that re-routes as things move. Dropping a connection on empty
-            canvas offers a shape to create.
+            <strong>{t('helpdoc.dg.connectTitle')}</strong>
+            {t('helpdoc.dg.connect1')}
+            <em>{t('helpdoc.dg.blueArrow')}</em>
+            {t('helpdoc.dg.connect2')}
+            <em>{t('helpdoc.dg.greenX')}</em>
+            {t('helpdoc.dg.connect3')}
           </li>
           <li>
-            <strong>Containers</strong> — drag a shape onto a <em>Container</em> (or drop one there
-            from the palette) to put it inside; the container highlights as you hover. Moving,
-            copying or deleting the container takes its contents with it. Drag a shape off the
-            container to take it back out. Containers can nest.
+            <strong>{t('helpdoc.dg.containersTitle')}</strong>
+            {t('helpdoc.dg.containers1')}
+            <em>{t('helpdoc.dg.containerShape')}</em>
+            {t('helpdoc.dg.containers2')}
           </li>
           <li>
-            <strong>Collections</strong> — select shapes and use <em>Save collection</em> (or
-            right-click) to store a named multi-shape snippet. Choose <em>This book</em> (only this
-            book) or <em>App library</em> (every book). They appear under{' '}
-            <em>Book collections</em> / <em>App collections</em> in the palette.
+            <strong>{t('helpdoc.dg.collectionsTitle')}</strong>
+            {t('helpdoc.dg.collections1')}
+            <em>{t('helpdoc.dg.saveCollection')}</em>
+            {t('helpdoc.dg.collections2')}
+            <em>{t('helpdoc.dg.thisBook')}</em>
+            {t('helpdoc.dg.collections3')}
+            <em>{t('helpdoc.dg.appLibrary')}</em>
+            {t('helpdoc.dg.collections4')}
+            <em>{t('helpdoc.dg.bookCollections')}</em> / <em>{t('helpdoc.dg.appCollections')}</em>
+            {t('helpdoc.dg.collections5')}
           </li>
           <li>
-            <strong>On a page</strong> — the insert toolbar <em>BeeDiagram</em> /{' '}
-            <em>Linked diagram</em> embeds open in Studio by default (switch to Classic any time).
-            Same JSON document either way.
+            <strong>{t('helpdoc.dg.onPageTitle')}</strong>
+            {t('helpdoc.dg.onPage1')}
+            <em>BeeDiagram</em> / <em>{t('helpdoc.dg.linkedDiagram')}</em>
+            {t('helpdoc.dg.onPage2')}
           </li>
           <li>
-            <strong>Classic</strong> — the original compact editor. It ignores container grouping.
+            <strong>{t('helpdoc.dg.classicTitle')}</strong>
+            {t('helpdoc.dg.classic')}
           </li>
-          <li>Mermaid and C4 diagrams are edited as source with a live preview beside them.</li>
+          <li>{t('helpdoc.dg.mermaid')}</li>
         </ul>
       </section>
 
       <section className="settings-section" id="help-export">
-        <h2>Export &amp; import</h2>
+        <h2>{t('helpdoc.section.export')}</h2>
         <p className="muted">
-          Whole books or single documents, from the <strong>Export ▾</strong> button on a book, the{' '}
-          <strong>⭳</strong> button in the page toolbar, or by right-clicking anything in the
-          library tree.
+          {t('helpdoc.ex.intro1')}
+          <strong>{t('helpdoc.ex.exportBtn')}</strong>
+          {t('helpdoc.ex.intro2')}
+          <strong>⭳</strong>
+          {t('helpdoc.ex.intro3')}
         </p>
         <ul className="help-list">
           <li>
-            <strong>PDF</strong> — opens a print-ready view; choose “Save as PDF”. The only format
-            that renders diagrams as pictures, so allow pop-ups for this site.
+            <strong>PDF</strong>
+            {t('helpdoc.ex.pdf')}
           </li>
           <li>
-            <strong>Markdown</strong> — a book becomes a zip mirroring its folders, a page becomes
-            one <code>.md</code> file. Front matter keeps titles and ordering, so it imports back.
+            <strong>Markdown</strong>
+            {t('helpdoc.ex.md1')}
+            <code>.md</code>
+            {t('helpdoc.ex.md2')}
           </li>
           <li>
-            <strong>Word (.docx)</strong> — headings, lists, tables and images. Diagrams appear as
-            their source, not as pictures.
+            <strong>{t('helpdoc.ex.wordTitle')}</strong>
+            {t('helpdoc.ex.word')}
           </li>
           <li>
-            <strong>BeeDocs archive</strong> — lossless and re-importable: folders, diagrams and
-            images all survive the round trip. Use this to move content between instances.
+            <strong>{t('helpdoc.ex.archiveTitle')}</strong>
+            {t('helpdoc.ex.archive')}
           </li>
           <li>
-            <strong>Import</strong> sits in the library toolbar. It previews the file first, and
-            lets you keep a clashing name or rename to a free one. Import never overwrites existing
-            pages.
+            <strong>{t('helpdoc.ex.importTitle')}</strong>
+            {t('helpdoc.ex.import')}
           </li>
         </ul>
       </section>
 
       <section className="settings-section" id="help-ai">
-        <h2>Writing help (AI)</h2>
-        <p className="muted">
-          The page editor can ask a language model for a continuation as you type, and can act on
-          text you select. It stays out of sight until a provider is configured — no provider, no AI
-          controls anywhere.
-        </p>
+        <h2>{t('helpdoc.section.ai')}</h2>
+        <p className="muted">{t('helpdoc.ai.intro')}</p>
 
-        <h3 className="help-sub">Configure a provider</h3>
+        <h3 className="help-sub">{t('helpdoc.ai.configTitle')}</h3>
         <p className="muted">
-          <strong>Settings → AI providers</strong>. Pick where the model runs —{' '}
-          <strong>OpenRouter</strong>, <strong>xAI</strong>, <strong>OpenAI</strong> or{' '}
-          <strong>LM Studio</strong> on this machine — and the name and base URL are filled in for
-          you. Paste the key (LM Studio needs none), then <strong>Test connection</strong>, which
-          lists the provider's models and proves the key without spending anything. Pick a model
-          from that list, or leave it blank for whichever the provider lists first.
+          <strong>{t('helpdoc.ai.settingsPath')}</strong>
+          {t('helpdoc.ai.config1')}
+          <strong>OpenRouter</strong>
+          {', '}
+          <strong>xAI</strong>
+          {', '}
+          <strong>OpenAI</strong>
+          {t('helpdoc.or')}
+          <strong>LM Studio</strong>
+          {t('helpdoc.ai.config2')}
+          <strong>{t('helpdoc.ai.testConn')}</strong>
+          {t('helpdoc.ai.config3')}
         </p>
         <p className="muted sm">
-          Keys are stored on the server and never sent back to the browser — a saved provider shows
-          only the last four characters, and every call to the provider goes through the API.
-          “Default” just means first in the list: <strong>Make default</strong> moves a provider to
-          the top, and that is the one the editor uses.
+          {t('helpdoc.ai.keys1')}
+          <strong>{t('helpdoc.ai.makeDefault')}</strong>
+          {t('helpdoc.ai.keys2')}
         </p>
 
-        <h3 className="help-sub">Inline autocomplete</h3>
+        <h3 className="help-sub">{t('helpdoc.ai.autoTitle')}</h3>
         <p className="muted">
-          Stop typing for a moment and a greyed-out continuation appears after the caret.{' '}
-          <kbd>Tab</kbd> accepts it, <kbd>Esc</kbd> dismisses it, and typing anything else throws it
-          away. It only offers a continuation when the caret sits at the <em>end</em> of the block
-          you are editing — mid-paragraph suggestions read as corrupted text. Turn it off with{' '}
-          <strong>Inline suggestions</strong> in the AI bar above the editor; the switch is
-          remembered per browser.
+          {t('helpdoc.ai.auto1')}
+          <kbd>Tab</kbd>
+          {t('helpdoc.ai.auto2')}
+          <kbd>Esc</kbd>
+          {t('helpdoc.ai.auto3')}
+          <em>{t('helpdoc.ai.autoEnd')}</em>
+          {t('helpdoc.ai.auto4')}
+          <strong>{t('helpdoc.ai.inlineSuggestions')}</strong>
+          {t('helpdoc.ai.auto5')}
         </p>
 
-        <h3 className="help-sub">Selection actions</h3>
-        <p className="muted">
-          Select text inside a block and a small toolbar appears under it.
-        </p>
+        <h3 className="help-sub">{t('helpdoc.ai.selTitle')}</h3>
+        <p className="muted">{t('helpdoc.ai.selIntro')}</p>
         <table className="help-table">
           <thead>
             <tr>
-              <th>Action</th>
-              <th>Does</th>
+              <th>{t('helpdoc.ai.actionCol')}</th>
+              <th>{t('helpdoc.ai.doesCol')}</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td>Rewrite</td>
-              <td>Clearer and tighter, same facts, same Markdown structure</td>
+              <td>{t('helpdoc.ai.rewrite')}</td>
+              <td>{t('helpdoc.ai.rewriteDesc')}</td>
             </tr>
             <tr>
-              <td>Fix grammar</td>
-              <td>Spelling, grammar and punctuation only — no rewording</td>
+              <td>{t('helpdoc.ai.grammar')}</td>
+              <td>{t('helpdoc.ai.grammarDesc')}</td>
             </tr>
             <tr>
-              <td>Format as Markdown</td>
-              <td>Turns loose prose into headings, lists and tables</td>
+              <td>{t('helpdoc.ai.format')}</td>
+              <td>{t('helpdoc.ai.formatDesc')}</td>
             </tr>
             <tr>
-              <td>Summarize</td>
-              <td>A short summary of the selection</td>
+              <td>{t('helpdoc.ai.summarize')}</td>
+              <td>{t('helpdoc.ai.summarizeDesc')}</td>
             </tr>
           </tbody>
         </table>
         <p className="muted sm">
-          The answer arrives beside the original rather than replacing it —{' '}
-          <strong>Replace selection</strong> applies it, <strong>Discard</strong> drops it. Edit the
-          block while one is generating and the proposal is held back, because the range it was
-          written for has moved.
+          {t('helpdoc.ai.result1')}
+          <strong>{t('helpdoc.ai.replaceSel')}</strong>
+          {t('helpdoc.ai.result2')}
+          <strong>{t('helpdoc.ai.discard')}</strong>
+          {t('helpdoc.ai.result3')}
         </p>
         <p className="muted sm">
-          The rest of the page is sent along as context so the model matches the surrounding voice.
-          Nothing is stored by BeeDocs; where the text goes is whatever your provider does with it.
-          A deployment that requires an API key on <code>/api/*</code> cannot use this from the
-          browser — the settings section says so. Details:{' '}
-          <code>Docs/LLM-PROVIDERS.md</code> in the repository.
+          {t('helpdoc.ai.privacy1')}
+          <code>/api/*</code>
+          {t('helpdoc.ai.privacy2')}
+          <code>Docs/LLM-PROVIDERS.md</code>
+          {t('helpdoc.inRepo')}
         </p>
       </section>
 
       <section className="settings-section" id="help-mcp">
-        <h2>Connect an AI agent (MCP)</h2>
+        <h2>{t('helpdoc.section.mcp')}</h2>
         <p className="muted">
-          BeeDocs ships an <strong>MCP server</strong> that exposes the whole API to AI agents —
-          books, folders, pages, images and diagrams — so an agent can write documentation directly
-          into this instance. It speaks two transports:{' '}
-          <strong>Streamable HTTP</strong> (point a client at a URL — recommended) and{' '}
-          <strong>stdio</strong> (the client spawns a local process from a clone of the repo).
+          {t('helpdoc.mcp.intro1')}
+          <strong>{t('helpdoc.mcp.serverName')}</strong>
+          {t('helpdoc.mcp.intro2')}
+          <strong>Streamable HTTP</strong>
+          {t('helpdoc.mcp.intro3')}
+          <strong>stdio</strong>
+          {t('helpdoc.mcp.intro4')}
         </p>
 
         <div className="help-fields">
           <label className="studio-field">
-            <span>MCP endpoint</span>
+            <span>{t('helpdoc.mcp.endpointLabel')}</span>
             <input
               value={mcpUrl}
               onChange={(e) => setMcpUrl(e.target.value)}
@@ -430,17 +519,17 @@ export function HelpPanel() {
             />
           </label>
           <label className="studio-field">
-            <span>Bearer token</span>
+            <span>{t('helpdoc.mcp.tokenLabel')}</span>
             <input
               value={mcpToken}
               onChange={(e) => setMcpToken(e.target.value)}
               spellCheck={false}
-              placeholder="leave empty for no auth"
+              placeholder={t('helpdoc.mcp.tokenPlaceholder')}
             />
           </label>
           {client === 'stdio' && (
             <label className="studio-field">
-              <span>Repo path</span>
+              <span>{t('helpdoc.mcp.repoLabel')}</span>
               <input
                 value={repoPath}
                 onChange={(e) => setRepoPath(e.target.value)}
@@ -451,15 +540,22 @@ export function HelpPanel() {
           )}
         </div>
         <p className="muted sm">
-          Local runs (<code>./scripts/start.sh</code>) serve MCP on{' '}
-          <code>http://localhost:5090/mcp</code> with no auth unless{' '}
-          <code>MCP_AUTH_TOKEN</code> is set. A hosted
-          instance uses <code>https://mcp.&lt;your-domain&gt;/mcp</code> — get its token with{' '}
-          <code>./scripts/deploy-k3s.sh mcp-token</code>, and add the two{' '}
-          <code>CF-Access-*</code> headers if Cloudflare Access is in front of it.
+          {t('helpdoc.mcp.local1')}
+          <code>./scripts/start.sh</code>
+          {t('helpdoc.mcp.local2')}
+          <code>http://localhost:5090/mcp</code>
+          {t('helpdoc.mcp.local3')}
+          <code>MCP_AUTH_TOKEN</code>
+          {t('helpdoc.mcp.local4')}
+          <code>https://mcp.&lt;your-domain&gt;/mcp</code>
+          {t('helpdoc.mcp.local5')}
+          <code>./scripts/deploy-k3s.sh mcp-token</code>
+          {t('helpdoc.mcp.local6')}
+          <code>CF-Access-*</code>
+          {t('helpdoc.mcp.local7')}
         </p>
 
-        <div className="segmented help-clients" role="tablist" aria-label="MCP client">
+        <div className="segmented help-clients" role="tablist" aria-label={t('helpdoc.mcp.clientLabel')}>
           {MCP_CLIENTS.map((c) => (
             <button
               key={c.id}
@@ -469,197 +565,207 @@ export function HelpPanel() {
               className={client === c.id ? 'active' : ''}
               onClick={() => setClient(c.id)}
             >
-              {c.label}
+              {c.id === 'stdio' ? t('helpdoc.client.stdio') : c.label}
             </button>
           ))}
         </div>
 
         <CodeBlock title={snippet.title} code={snippet.code} note={snippet.note} />
 
-        <h3 className="help-sub">Check it works</h3>
+        <h3 className="help-sub">{t('helpdoc.mcp.checkTitle')}</h3>
         <p className="muted sm">
-          Ask the agent to run the <code>beedocs_health</code> tool — it reports the API URL the
-          server is actually using. From a terminal:
+          {t('helpdoc.mcp.check1')}
+          <code>beedocs_health</code>
+          {t('helpdoc.mcp.check2')}
         </p>
         <CodeBlock
-          title="Smoke test"
+          title={t('helpdoc.mcp.smokeTitle')}
           code={`curl -s -X POST ${mcpUrl} \\
 ${mcpToken.trim() ? `  -H "Authorization: Bearer ${mcpToken.trim()}" \\\n` : ''}  -H "Content-Type: application/json" \\
   -H "Accept: application/json, text/event-stream" \\
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'`}
         />
 
-        <h3 className="help-sub">What agents can do</h3>
+        <h3 className="help-sub">{t('helpdoc.mcp.toolsTitle')}</h3>
         <table className="help-table">
           <thead>
             <tr>
-              <th>Area</th>
-              <th>Tools</th>
+              <th>{t('helpdoc.mcp.areaCol')}</th>
+              <th>{t('helpdoc.mcp.toolsCol')}</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td>System</td>
+              <td>{t('helpdoc.mcp.areaSystem')}</td>
               <td>
                 <code>beedocs_health</code>, <code>beedocs_get_api_info</code>
               </td>
             </tr>
             <tr>
-              <td>Books &amp; folders</td>
-              <td>list / get / create / update / delete, book tree, export book</td>
+              <td>{t('helpdoc.mcp.areaBooks')}</td>
+              <td>{t('helpdoc.mcp.booksTools')}</td>
             </tr>
             <tr>
-              <td>Pages</td>
-              <td>list / get / create / update / delete, append Markdown, move between folders</td>
+              <td>{t('common.pages')}</td>
+              <td>{t('helpdoc.mcp.pagesTools')}</td>
             </tr>
             <tr>
-              <td>Diagrams</td>
-              <td>list / get / create / update / delete, embed into a page</td>
+              <td>{t('common.diagrams')}</td>
+              <td>{t('helpdoc.mcp.diagramsTools')}</td>
             </tr>
             <tr>
-              <td>Images</td>
-              <td>upload, embed into a page</td>
+              <td>{t('helpdoc.mcp.areaImages')}</td>
+              <td>{t('helpdoc.mcp.imagesTools')}</td>
             </tr>
           </tbody>
         </table>
         <p className="muted sm">
-          Full reference: <code>Docs/MCP-TOOLS.md</code> · setup details:{' '}
-          <code>Docs/MCP-SERVER.md</code> · hosting behind Cloudflare Access:{' '}
-          <code>Docs/MCP-HOSTING.md</code> in the repository.
+          {t('helpdoc.mcp.docs1')}
+          <code>Docs/MCP-TOOLS.md</code>
+          {t('helpdoc.mcp.docs2')}
+          <code>Docs/MCP-SERVER.md</code>
+          {t('helpdoc.mcp.docs3')}
+          <code>Docs/MCP-HOSTING.md</code>
+          {t('helpdoc.inRepo')}
         </p>
       </section>
 
       <section className="settings-section" id="help-shortcuts">
-        <h2>Keyboard shortcuts</h2>
+        <h2>{t('helpdoc.section.shortcuts')}</h2>
         <div className="help-shortcut-cols">
           <div>
-            <h3 className="help-sub">Everywhere</h3>
+            <h3 className="help-sub">{t('helpdoc.sc.everywhere')}</h3>
             <table className="help-table">
               <tbody>
                 <tr>
                   <td>
                     <kbd>Ctrl</kbd>+<kbd>K</kbd>
                   </td>
-                  <td>Search the whole library</td>
+                  <td>{t('helpdoc.sc.searchLibrary')}</td>
                 </tr>
                 <tr>
                   <td>
                     <kbd>Ctrl</kbd>+<kbd>S</kbd>
                   </td>
-                  <td>Save the open page or diagram</td>
+                  <td>{t('helpdoc.sc.savePage')}</td>
                 </tr>
               </tbody>
             </table>
-            <h3 className="help-sub">Spreadsheet</h3>
+            <h3 className="help-sub">{t('helpdoc.sc.spreadsheet')}</h3>
             <table className="help-table">
               <tbody>
                 <tr>
                   <td>
-                    Arrows / <kbd>Tab</kbd> / <kbd>Enter</kbd>
+                    {t('helpdoc.sc.arrows')} / <kbd>Tab</kbd> / <kbd>Enter</kbd>
                   </td>
-                  <td>Move the active cell (Shift extends the selection)</td>
+                  <td>{t('helpdoc.sc.moveCell')}</td>
                 </tr>
                 <tr>
                   <td>
-                    Type or <kbd>F2</kbd>
+                    {t('helpdoc.sc.typeOr')}
+                    <kbd>F2</kbd>
                   </td>
-                  <td>Edit the active cell</td>
+                  <td>{t('helpdoc.sc.editCell')}</td>
                 </tr>
                 <tr>
                   <td>
                     <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd>
                   </td>
-                  <td>Copy / cut / paste (TSV, including from Excel)</td>
+                  <td>{t('helpdoc.sc.copyPaste')}</td>
                 </tr>
                 <tr>
                   <td>
                     <kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd>
                   </td>
-                  <td>Bold / italic / underline</td>
+                  <td>{t('helpdoc.sc.boldItalic')}</td>
                 </tr>
               </tbody>
             </table>
-            <h3 className="help-sub">Diagram Studio — editing</h3>
+            <h3 className="help-sub">{t('helpdoc.sc.studioEdit')}</h3>
             <table className="help-table">
               <tbody>
                 <tr>
                   <td>
                     <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>
                   </td>
-                  <td>Undo / redo</td>
+                  <td>{t('helpdoc.sc.undoRedo')}</td>
                 </tr>
                 <tr>
                   <td>
                     <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd> / <kbd>D</kbd>
                   </td>
-                  <td>Copy / cut / paste / duplicate</td>
+                  <td>{t('helpdoc.sc.copyDup')}</td>
                 </tr>
                 <tr>
                   <td>
                     <kbd>Ctrl</kbd>+<kbd>A</kbd>, <kbd>Del</kbd>, <kbd>Esc</kbd>
                   </td>
-                  <td>Select all, delete, deselect</td>
+                  <td>{t('helpdoc.sc.selectAll')}</td>
                 </tr>
                 <tr>
                   <td>
-                    <kbd>F2</kbd> / <kbd>Enter</kbd> / type
+                    <kbd>F2</kbd> / <kbd>Enter</kbd>
+                    {t('helpdoc.sc.orType')}
                   </td>
-                  <td>Edit label · double-click, or just start typing when a shape is selected</td>
+                  <td>{t('helpdoc.sc.editLabel')}</td>
                 </tr>
                 <tr>
                   <td>
-                    Arrows / <kbd>Shift</kbd>+Arrows
+                    {t('helpdoc.sc.arrows')} / <kbd>Shift</kbd>+{t('helpdoc.sc.arrows')}
                   </td>
-                  <td>Nudge 1px / one grid step</td>
+                  <td>{t('helpdoc.sc.nudge')}</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <div>
-            <h3 className="help-sub">Diagram Studio — view &amp; order</h3>
+            <h3 className="help-sub">{t('helpdoc.sc.studioView')}</h3>
             <table className="help-table">
               <tbody>
                 <tr>
                   <td>
                     <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> / <kbd>B</kbd>
                   </td>
-                  <td>Bring to front / send to back</td>
+                  <td>{t('helpdoc.sc.frontBack')}</td>
                 </tr>
                 <tr>
                   <td>
                     <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd>
                   </td>
-                  <td>Fit page</td>
+                  <td>{t('helpdoc.sc.fitPage')}</td>
                 </tr>
                 <tr>
                   <td>
                     <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd>
                   </td>
-                  <td>Zoom in / out / 100%</td>
+                  <td>{t('helpdoc.sc.zoom')}</td>
                 </tr>
                 <tr>
                   <td>
-                    <kbd>Space</kbd>-drag, middle-drag
+                    <kbd>Space</kbd>
+                    {t('helpdoc.sc.spaceDrag')}
                   </td>
-                  <td>Pan the canvas</td>
+                  <td>{t('helpdoc.sc.pan')}</td>
                 </tr>
                 <tr>
                   <td>
-                    <kbd>Ctrl</kbd>+wheel
+                    <kbd>Ctrl</kbd>+{t('helpdoc.sc.wheel')}
                   </td>
-                  <td>Zoom at the pointer</td>
+                  <td>{t('helpdoc.sc.zoomPointer')}</td>
                 </tr>
                 <tr>
                   <td>
-                    <kbd>Alt</kbd>-drag
+                    <kbd>Alt</kbd>
+                    {t('helpdoc.sc.altDrag')}
                   </td>
-                  <td>Ignore grid snapping and guides</td>
+                  <td>{t('helpdoc.sc.ignoreSnap')}</td>
                 </tr>
                 <tr>
                   <td>
-                    <kbd>Shift</kbd>-drag handle
+                    <kbd>Shift</kbd>
+                    {t('helpdoc.sc.shiftDrag')}
                   </td>
-                  <td>Keep ratio · snap rotation to 15°</td>
+                  <td>{t('helpdoc.sc.keepRatio')}</td>
                 </tr>
               </tbody>
             </table>
@@ -668,36 +774,51 @@ ${mcpToken.trim() ? `  -H "Authorization: Bearer ${mcpToken.trim()}" \\\n` : ''}
       </section>
 
       <section className="settings-section" id="help-troubleshooting">
-        <h2>Troubleshooting</h2>
+        <h2>{t('helpdoc.section.troubleshooting')}</h2>
         <ul className="help-list">
           <li>
-            <strong>Nothing loads / “API unreachable”</strong> — check{' '}
-            <code>{apiUrl}/api/health</code>. It should return{' '}
-            <code>{'{"status":"ok"}'}</code>.
+            <strong>{t('helpdoc.tr.noloadTitle')}</strong>
+            {t('helpdoc.tr.noload1')}
+            <code>{apiUrl}/api/health</code>
+            {t('helpdoc.tr.noload2')}
+            <code>{'{"status":"ok"}'}</code>
+            {t('helpdoc.period')}
           </li>
           <li>
-            <strong>Agent can't connect</strong> — check the MCP server's own health endpoint (
-            <code>/healthz</code> on its port, e.g. <code>http://localhost:5090/healthz</code>). It
-            reports which API URL it talks to; if that's wrong, set{' '}
-            <code>BEEDOCS_API_URL</code> on the server process.
+            <strong>{t('helpdoc.tr.agentTitle')}</strong>
+            {t('helpdoc.tr.agent1')}
+            <code>/healthz</code>
+            {t('helpdoc.tr.agent2')}
+            <code>http://localhost:5090/healthz</code>
+            {t('helpdoc.tr.agent3')}
+            <code>BEEDOCS_API_URL</code>
+            {t('helpdoc.tr.agent4')}
           </li>
           <li>
-            <strong>401 from MCP</strong> — the bearer token doesn't match{' '}
-            <code>MCP_AUTH_TOKEN</code>. Hosted instances behind Cloudflare Access also need the{' '}
-            <code>CF-Access-Client-Id</code> / <code>CF-Access-Client-Secret</code> headers.
+            <strong>{t('helpdoc.tr.401Title')}</strong>
+            {t('helpdoc.tr.4011')}
+            <code>MCP_AUTH_TOKEN</code>
+            {t('helpdoc.tr.4012')}
+            <code>CF-Access-Client-Id</code> / <code>CF-Access-Client-Secret</code>
+            {t('helpdoc.tr.4013')}
           </li>
           <li>
-            <strong>No AI controls in the editor</strong> — no provider is enabled, or the one that
-            is cannot be reached. Check it in <strong>Settings → AI providers</strong> with{' '}
-            <strong>Test connection</strong>.
+            <strong>{t('helpdoc.tr.noAiTitle')}</strong>
+            {t('helpdoc.tr.noAi1')}
+            <strong>{t('helpdoc.ai.settingsPath')}</strong>
+            {t('helpdoc.tr.noAi2')}
+            <strong>{t('helpdoc.ai.testConn')}</strong>
+            {t('helpdoc.period')}
           </li>
           <li>
-            <strong>Images don't appear</strong> — uploads are served from <code>/uploads</code> by
-            the API; in dev the Vite proxy forwards it.
+            <strong>{t('helpdoc.tr.imagesTitle')}</strong>
+            {t('helpdoc.tr.images1')}
+            <code>/uploads</code>
+            {t('helpdoc.tr.images2')}
           </li>
           <li>
-            <strong>Lost pane layout or theme</strong> — both live in this browser's local storage;
-            reset the layout in Settings.
+            <strong>{t('helpdoc.tr.layoutTitle')}</strong>
+            {t('helpdoc.tr.layout')}
           </li>
         </ul>
       </section>
@@ -706,6 +827,7 @@ ${mcpToken.trim() ? `  -H "Authorization: Bearer ${mcpToken.trim()}" \\\n` : ''}
 }
 
 function CodeBlock({ title, code, note }: { title: string; code: string; note?: string }) {
+  const { t } = useI18n()
   const [copied, setCopied] = useState(false)
   return (
     <div className="help-code">
@@ -721,7 +843,7 @@ function CodeBlock({ title, code, note }: { title: string; code: string; note?: 
             })
           }}
         >
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? t('helpdoc.copied') : t('common.copy')}
         </button>
       </div>
       <pre>{code}</pre>
@@ -733,6 +855,7 @@ function CodeBlock({ title, code, note }: { title: string; code: string; note?: 
 function mcpSnippet(
   client: McpClient,
   opts: { mcpUrl: string; token: string; repoPath: string },
+  t: TFunction,
 ): { title: string; code: string; note?: string } {
   const { mcpUrl, repoPath } = opts
   const token = opts.token.trim()
@@ -740,16 +863,16 @@ function mcpSnippet(
   switch (client) {
     case 'claude-code':
       return {
-        title: 'Terminal — registers the server for this project',
+        title: t('helpdoc.mcp.snipClaudeTitle'),
         code: token
           ? `claude mcp add --transport http beedocs ${mcpUrl} \\
   -H "Authorization: Bearer ${token}"`
           : `claude mcp add --transport http beedocs ${mcpUrl}`,
-        note: 'Add -s user to register it globally instead of per project.',
+        note: t('helpdoc.mcp.snipClaudeNote'),
       }
     case 'cursor':
       return {
-        title: '.cursor/mcp.json (project) or Cursor MCP settings',
+        title: t('helpdoc.mcp.snipCursorTitle'),
         code: JSON.stringify(
           {
             mcpServers: {
@@ -759,11 +882,11 @@ function mcpSnippet(
           null,
           2,
         ),
-        note: 'A "url" key instead of "command" is what selects the HTTP transport.',
+        note: t('helpdoc.mcp.snipCursorNote'),
       }
     case 'vscode':
       return {
-        title: '.vscode/mcp.json (or user MCP settings)',
+        title: t('helpdoc.mcp.snipVscodeTitle'),
         code: JSON.stringify(
           {
             servers: {
@@ -780,7 +903,7 @@ function mcpSnippet(
       }
     case 'desktop':
       return {
-        title: 'claude_desktop_config.json — bridges stdio to the HTTP server',
+        title: t('helpdoc.mcp.snipDesktopTitle'),
         code: JSON.stringify(
           {
             mcpServers: {
@@ -798,11 +921,11 @@ function mcpSnippet(
           null,
           2,
         ),
-        note: 'Use this pattern for any client that can only spawn a subprocess.',
+        note: t('helpdoc.mcp.snipDesktopNote'),
       }
     case 'stdio':
       return {
-        title: 'Client config — the client spawns the server itself',
+        title: t('helpdoc.mcp.snipStdioTitle'),
         code: JSON.stringify(
           {
             mcpServers: {
@@ -821,7 +944,7 @@ function mcpSnippet(
           null,
           2,
         ),
-        note: 'Requires a clone and the .NET 10 SDK. No token — it inherits your local API.',
+        note: t('helpdoc.mcp.snipStdioNote'),
       }
   }
 }

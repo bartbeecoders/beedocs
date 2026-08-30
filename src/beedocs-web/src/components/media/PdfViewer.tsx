@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { withApiBase } from '../../basePath'
+import { useI18n } from '../../i18n'
 import { filenameFromPath } from '../../media/mediaKinds'
 
 export type PdfViewerProps = {
@@ -39,6 +40,7 @@ function embedPdfUrl(url: string): string {
  * Uses the browser's native PDF viewer via iframe for reliability and zero extra deps.
  */
 export function PdfViewer({ url, title, className }: PdfViewerProps) {
+  const { t } = useI18n()
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const resolved = useMemo(() => resolvePdfUrl(url), [url])
   const embedSrc = useMemo(() => embedPdfUrl(resolved), [resolved])
@@ -50,10 +52,10 @@ export function PdfViewer({ url, title, className }: PdfViewerProps) {
   // Reset + soft timeout: some browsers never fire iframe load for PDFs
   useEffect(() => {
     setStatus('loading')
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       setStatus((s) => (s === 'loading' ? 'ready' : s))
     }, 1600)
-    return () => window.clearTimeout(t)
+    return () => window.clearTimeout(timer)
   }, [embedSrc])
 
   return (
@@ -63,34 +65,34 @@ export function PdfViewer({ url, title, className }: PdfViewerProps) {
     >
       <header className="media-embed-chrome">
         <div className="media-embed-chrome-left">
-          <span className="media-embed-badge" title="PDF document">
+          <span className="media-embed-badge" title={t('canvas.media.pdfDocument')}>
             PDF
           </span>
           <span className="media-embed-title" title={displayName}>
             {displayName}
           </span>
         </div>
-        <div className="media-embed-chrome-actions" role="toolbar" aria-label="PDF actions">
+        <div className="media-embed-chrome-actions" role="toolbar" aria-label={t('canvas.media.pdfActions')}>
           <a
             className="btn sm ghost media-embed-action"
             href={resolved}
             target="_blank"
             rel="noopener noreferrer"
-            title="Open in new tab"
-            aria-label="Open PDF in new tab"
+            title={t('canvas.media.openInNewTab')}
+            aria-label={t('canvas.media.openInNewTab')}
           >
             <OpenIcon />
-            <span className="media-embed-action-label">Open</span>
+            <span className="media-embed-action-label">{t('common.open')}</span>
           </a>
           <a
             className="btn sm ghost media-embed-action"
             href={resolved}
             download={displayName}
-            title="Download PDF"
-            aria-label="Download PDF"
+            title={t('canvas.media.downloadPdf')}
+            aria-label={t('canvas.media.downloadPdf')}
           >
             <DownloadIcon />
-            <span className="media-embed-action-label">Download</span>
+            <span className="media-embed-action-label">{t('common.download')}</span>
           </a>
         </div>
       </header>
@@ -99,14 +101,14 @@ export function PdfViewer({ url, title, className }: PdfViewerProps) {
         {status === 'loading' && (
           <div className="media-embed-status" role="status" aria-live="polite">
             <span className="media-embed-spinner" aria-hidden />
-            <span>Loading PDF…</span>
+            <span>{t('canvas.media.loadingPdf')}</span>
           </div>
         )}
         {status === 'error' && (
           <div className="media-embed-status media-embed-status--error" role="alert">
-            <span>Could not load this PDF.</span>
+            <span>{t('canvas.media.pdfLoadError')}</span>
             <a className="btn sm" href={resolved} target="_blank" rel="noopener noreferrer">
-              Open in new tab
+              {t('canvas.media.openInNewTab')}
             </a>
           </div>
         )}

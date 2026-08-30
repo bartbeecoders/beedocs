@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n'
 import { selectionSize, type IsoController } from './useIsoController'
 
 type Props = {
@@ -11,15 +12,16 @@ type Props = {
 
 /** Top action bar — the studio toolbar, trimmed to what the iso editor supports. */
 export function IsoToolbar({ ctrl, zoom, onZoomIn, onZoomOut, onFit, onActualSize }: Props) {
+  const { t } = useI18n()
   const hasSelection = selectionSize(ctrl.selection) > 0
 
   return (
-    <div className="studio-toolbar" role="toolbar" aria-label="Diagram tools">
+    <div className="studio-toolbar" role="toolbar" aria-label={t('isometric.toolbar.tools')}>
       <div className="studio-toolbar-group">
         <button
           type="button"
           className="studio-tool"
-          title="Undo (Ctrl+Z)"
+          title={t('isometric.toolbar.undo')}
           disabled={!ctrl.canUndo}
           onClick={ctrl.undo}
         >
@@ -28,7 +30,7 @@ export function IsoToolbar({ ctrl, zoom, onZoomIn, onZoomOut, onFit, onActualSiz
         <button
           type="button"
           className="studio-tool"
-          title="Redo (Ctrl+Shift+Z)"
+          title={t('isometric.toolbar.redo')}
           disabled={!ctrl.canRedo}
           onClick={ctrl.redo}
         >
@@ -37,21 +39,36 @@ export function IsoToolbar({ ctrl, zoom, onZoomIn, onZoomOut, onFit, onActualSiz
       </div>
 
       <div className="studio-toolbar-group">
-        <button type="button" className="studio-tool" title="Zoom out (Ctrl+-)" onClick={onZoomOut}>
+        <button
+          type="button"
+          className="studio-tool"
+          title={t('isometric.toolbar.zoomOut')}
+          onClick={onZoomOut}
+        >
           −
         </button>
         <button
           type="button"
           className="studio-tool studio-tool--wide"
-          title="Actual size (Ctrl+0)"
+          title={t('isometric.toolbar.actualSize')}
           onClick={onActualSize}
         >
           {Math.round(zoom * 100)}%
         </button>
-        <button type="button" className="studio-tool" title="Zoom in (Ctrl++)" onClick={onZoomIn}>
+        <button
+          type="button"
+          className="studio-tool"
+          title={t('isometric.toolbar.zoomIn')}
+          onClick={onZoomIn}
+        >
           +
         </button>
-        <button type="button" className="studio-tool" title="Fit content (Ctrl+Shift+H)" onClick={onFit}>
+        <button
+          type="button"
+          className="studio-tool"
+          title={t('isometric.toolbar.fit')}
+          onClick={onFit}
+        >
           ⤢
         </button>
       </div>
@@ -60,7 +77,7 @@ export function IsoToolbar({ ctrl, zoom, onZoomIn, onZoomOut, onFit, onActualSiz
         <button
           type="button"
           className="studio-tool"
-          title="Delete (Del)"
+          title={t('isometric.toolbar.delete')}
           disabled={!hasSelection}
           onClick={ctrl.deleteSelection}
         >
@@ -69,7 +86,7 @@ export function IsoToolbar({ ctrl, zoom, onZoomIn, onZoomOut, onFit, onActualSiz
         <button
           type="button"
           className="studio-tool"
-          title="Duplicate (Ctrl+D)"
+          title={t('isometric.toolbar.duplicate')}
           disabled={!hasSelection}
           onClick={ctrl.duplicateSelection}
         >
@@ -81,7 +98,7 @@ export function IsoToolbar({ ctrl, zoom, onZoomIn, onZoomOut, onFit, onActualSiz
         <button
           type="button"
           className={`studio-tool${ctrl.prefs.grid ? ' is-active' : ''}`}
-          title="Toggle grid"
+          title={t('isometric.toolbar.toggleGrid')}
           onClick={() => ctrl.setPrefs({ grid: !ctrl.prefs.grid })}
         >
           ◈
@@ -92,18 +109,18 @@ export function IsoToolbar({ ctrl, zoom, onZoomIn, onZoomOut, onFit, onActualSiz
         <button
           type="button"
           className={`studio-tool${ctrl.prefs.paletteOpen ? ' is-active' : ''}`}
-          title="Toggle shape panel"
+          title={t('isometric.toolbar.togglePalette')}
           onClick={() => ctrl.setPrefs({ paletteOpen: !ctrl.prefs.paletteOpen })}
         >
-          ▤ Shapes
+          ▤ {t('isometric.toolbar.shapes')}
         </button>
         <button
           type="button"
           className={`studio-tool${ctrl.prefs.formatOpen ? ' is-active' : ''}`}
-          title="Toggle format panel"
+          title={t('isometric.toolbar.toggleFormat')}
           onClick={() => ctrl.setPrefs({ formatOpen: !ctrl.prefs.formatOpen })}
         >
-          Format ▤
+          {t('isometric.toolbar.format')} ▤
         </button>
       </div>
     </div>

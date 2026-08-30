@@ -419,3 +419,42 @@ public sealed class GitRepo
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
+
+/// <summary>
+/// One background AI-drafting run against a repo (README / documentation /
+/// manual / summary). The row is the job's whole story: parameters in, status
+/// while running, the generated Markdown and its provenance when done, and —
+/// when the result was published into the library — which book/page it became,
+/// so a re-run updates the same page instead of creating a sibling.
+/// </summary>
+public sealed class GitAssistJob
+{
+    public string Id { get; set; } = string.Empty;
+    public string RepoId { get; set; } = string.Empty;
+    public string Kind { get; set; } = string.Empty;
+    public string? Instructions { get; set; }
+    public string? ProviderId { get; set; }
+    public string? Model { get; set; }
+    /// <summary>queued | running | completed | failed.</summary>
+    public string Status { get; set; } = "queued";
+    public string? Error { get; set; }
+    public string? Markdown { get; set; }
+    public string? ProviderName { get; set; }
+    public string? ModelUsed { get; set; }
+    public int? PromptTokens { get; set; }
+    public int? CompletionTokens { get; set; }
+    public int? ElapsedMs { get; set; }
+    /// <summary>JSON array of the file paths whose excerpts grounded the draft.</summary>
+    public string? ContextFiles { get; set; }
+    /// <summary>Publish the result into the library as soon as generation ends.</summary>
+    public bool PublishBook { get; set; }
+    public string? ShelfId { get; set; }
+    public string? BookId { get; set; }
+    public string? PageId { get; set; }
+    public string? CreatedById { get; set; }
+    public string? CreatedByName { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? StartedAt { get; set; }
+    public DateTimeOffset? FinishedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}

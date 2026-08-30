@@ -2,16 +2,15 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n, type MessageKey } from '../i18n'
 import type { UserRole } from '../types'
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  admin: 'Admin',
-  editor: 'Editor',
-  viewer: 'Viewer',
-}
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
+}
+
+function roleKey(role: UserRole | undefined): MessageKey {
+  return `common.${role ?? 'viewer'}` as MessageKey
 }
 
 /**
@@ -25,13 +24,13 @@ function errText(e: unknown): string {
  */
 export function UsersPanel() {
   const { authEnabled, canManageUsers, user: me } = useAuth()
+  const { t } = useI18n()
 
   if (!authEnabled) {
     return (
       <p className="muted sm">
-        Sign-in is off, so every visitor has full access and accounts are not used. Set{' '}
-        <code>BeeDocs__Auth__Enabled=true</code> on the API to turn it on — you will then be asked
-        to create the administrator account the first time the app loads.
+        {t('users.authOffBefore')} <code>BeeDocs__Auth__Enabled=true</code>{' '}
+        {t('users.authOffAfter')}
       </p>
     )
   }
@@ -42,12 +41,13 @@ export function UsersPanel() {
       <GitEmailCard />
       {canManageUsers ? (
         <p className="muted sm">
-          Other accounts are managed on the <Link to="/users">Users page</Link>.
+          {t('users.otherAccountsPrefix')} <Link to="/users">{t('users.usersPage')}</Link>
+          {t('users.otherAccountsSuffix')}
         </p>
       ) : (
         <p className="muted sm">
-          You are signed in as <strong>{me?.displayName || me?.username}</strong> (
-          {ROLE_LABELS[me?.role ?? 'viewer']}). Only an admin can manage accounts.
+          {t('users.signedInAs')} <strong>{me?.displayName || me?.username}</strong> (
+          {t(roleKey(me?.role))}). {t('users.onlyAdminManages')}
         </p>
       )}
     </div>
@@ -61,6 +61,7 @@ export function UsersPanel() {
  */
 function GitEmailCard() {
   const { user, apply } = useAuth()
+  const { t } = useI18n()
   const [value, setValue] = useState(user?.gitEmail ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -90,18 +91,17 @@ function GitEmailCard() {
     <section className="users-card">
       <header className="users-card-head">
         <div>
-          <h3>Git identity</h3>
+          <h3>{t('users.gitIdentity')}</h3>
           <p className="muted sm">
-            Commits made from the Repositories section are authored as{' '}
-            <strong>{user.displayName || user.username}</strong> with this email. It ends up in git
-            history, so it is yours to choose — commits are refused until one is set.
+            {t('users.gitLeadBefore')} <strong>{user.displayName || user.username}</strong>{' '}
+            {t('users.gitLeadAfter')}
           </p>
         </div>
       </header>
 
       <form className="users-form" onSubmit={submit}>
         <label className="users-field">
-          <span>Git email</span>
+          <span>{t('users.gitEmail')}</span>
           <input
             type="email"
             autoComplete="off"
@@ -114,9 +114,9 @@ function GitEmailCard() {
         </label>
         <div className="users-form-actions">
           <button type="submit" className="btn primary sm" disabled={busy || !dirty}>
-            {busy ? 'Saving…' : 'Save git email'}
+            {busy ? t('common.saving') : t('users.saveGitEmail')}
           </button>
-          {done && <span className="users-ok">Saved.</span>}
+          {done && <span className="users-ok">{t('common.saved')}</span>}
           {error && (
             <span className="users-error" role="alert">
               {error}
@@ -131,6 +131,7 @@ function GitEmailCard() {
 /** Change your own password. Available to every role, including viewers. */
 function AccountCard() {
   const { user, apply, rbaEnabled } = useAuth()
+  const { t } = useI18n()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -147,7 +148,7 @@ function AccountCard() {
     // Checked here as well as on the server because the server cannot see it:
     // it only ever receives the one value, so a typo would be saved silently.
     if (next !== confirm) {
-      setError('The two new passwords do not match.')
+      setError(t('users.passwordMismatch'))
       return
     }
 
@@ -171,9 +172,10 @@ function AccountCard() {
     <section className="users-card">
       <header className="users-card-head">
         <div>
-          <h3>Your account</h3>
+          <h3>{t('users.yourAccount')}</h3>
           <p className="muted sm">
-            {user.displayName || user.username} · <span className={`role-pill ${user.role}`}>{ROLE_LABELS[user.role]}</span>
+            {user.displayName || user.username} ·{' '}
+            <span className={`role-pill ${user.role}`}>{t(roleKey(user.role))}</span>
           </p>
         </div>
       </header>
@@ -181,23 +183,15 @@ function AccountCard() {
       {/* In RBA mode the form stays: local (integrated) accounts remain a
           supported sign-in path. An RBA-provisioned account cannot use it —
           its stored password is a random token nobody knows. */}
-      {rbaEnabled && (
-        <p className="muted sm">
-          If you sign in with your corporate (RBA) account there is no BeeDocs password to change,
-          and roles come from the DOC groups in RBA. The form below applies only to local
-          (integrated) accounts.
-        </p>
-      )}
+      {rbaEnabled && <p className="muted sm">{t('users.rbaPasswordNote')}</p>}
       <>
       {user.mustChangePassword && (
-        <p className="users-notice">
-          This account still uses the password it was given. Set your own below.
-        </p>
+        <p className="users-notice">{t('users.mustChangeNotice')}</p>
       )}
 
       <form className="users-form" onSubmit={submit}>
         <label className="users-field">
-          <span>Current password</span>
+          <span>{t('users.currentPassword')}</span>
           <input
             type="password"
             autoComplete="current-password"
@@ -208,7 +202,7 @@ function AccountCard() {
           />
         </label>
         <label className="users-field">
-          <span>New password</span>
+          <span>{t('users.newPassword')}</span>
           <input
             type="password"
             autoComplete="new-password"
@@ -220,7 +214,7 @@ function AccountCard() {
           />
         </label>
         <label className="users-field">
-          <span>Repeat new password</span>
+          <span>{t('users.repeatNewPassword')}</span>
           <input
             type="password"
             autoComplete="new-password"
@@ -234,9 +228,9 @@ function AccountCard() {
 
         <div className="users-form-actions">
           <button type="submit" className="btn primary sm" disabled={busy}>
-            {busy ? 'Saving…' : 'Change password'}
+            {busy ? t('common.saving') : t('users.changePassword')}
           </button>
-          {done && <span className="users-ok">Password changed. Other sessions were signed out.</span>}
+          {done && <span className="users-ok">{t('users.passwordChanged')}</span>}
           {error && (
             <span className="users-error" role="alert">
               {error}

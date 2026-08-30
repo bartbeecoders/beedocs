@@ -1,13 +1,33 @@
 import { useMemo, useState } from 'react'
+import { useI18n, type MessageKey, type TFunction } from '../i18n'
 import { ISO_SHAPE_MIME } from './IsoCanvas'
 import { DEFAULT_ITEM_COLOR } from './isoModel'
-import { isoShape, searchIsoLibrary, type IsoPrimitive } from './isoShapes'
+import { isoShape, searchIsoLibrary, type IsoLibraryGroup, type IsoPrimitive } from './isoShapes'
 
 /** Palette entries that are not item shapes. */
 export const ISO_SPECIALS = [
   { id: 'zone', label: 'Zone' },
   { id: 'text', label: 'Text' },
 ] as const
+
+/**
+ * Translated display name for a shape id. The ids (and their English labels)
+ * live in isoShapes.ts, which is mirrored by the MCP catalog and must not
+ * change — so translation is a keyed lookup here, falling back to the library's
+ * English label for any id without a message (t() echoes an unknown key).
+ */
+export function isoShapeName(t: TFunction, id: string): string {
+  const key = `isometric.shape.${id}` as MessageKey
+  const name = t(key)
+  return name === key ? isoShape(id).label : name
+}
+
+/** Same keyed-lookup-with-fallback for a palette group's title. */
+function isoGroupTitle(t: TFunction, group: IsoLibraryGroup): string {
+  const key = `isometric.group.${group.id}` as MessageKey
+  const title = t(key)
+  return title === key ? group.title : title
+}
 
 type Props = {
   onPlace: (shapeId: string) => void
@@ -87,20 +107,27 @@ function SpecialThumb({ id, size = 30 }: { id: string; size?: number }) {
 
 /** Left sidebar shape library — drag onto the canvas or click to drop in view. */
 export function IsoPalette({ onPlace, disabled }: Props) {
+  const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
 
   const groups = useMemo(() => searchIsoLibrary(query), [query])
   const q = query.trim().toLowerCase()
   const showSpecials =
-    !q || ISO_SPECIALS.some((s) => s.label.toLowerCase().includes(q) || s.id.includes(q))
+    !q ||
+    ISO_SPECIALS.some(
+      (s) =>
+        s.label.toLowerCase().includes(q) ||
+        s.id.includes(q) ||
+        isoShapeName(t, s.id).toLowerCase().includes(q),
+    )
 
   const entryButton = (id: string, label: string, thumb: React.ReactNode) => (
     <button
       key={id}
       type="button"
       className="studio-palette-item"
-      title={`${label} — drag onto the canvas`}
+      title={t('isometric.palette.dragHint', { label })}
       draggable={!disabled}
       onDragStart={(e) => {
         e.dataTransfer.setData(ISO_SHAPE_MIME, id)
@@ -115,19 +142,19 @@ export function IsoPalette({ onPlace, disabled }: Props) {
   )
 
   return (
-    <aside className="studio-palette" aria-label="Shapes">
+    <aside className="studio-palette" aria-label={t('isometric.toolbar.shapes')}>
       <div className="studio-palette-search">
         <input
           type="search"
           value={query}
-          placeholder="Search shapes"
+          placeholder={t('isometric.palette.searchPlaceholder')}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search shapes"
+          aria-label={t('isometric.palette.searchPlaceholder')}
         />
       </div>
       <div className="studio-palette-scroll">
         {groups.length === 0 && !showSpecials && (
-          <p className="muted sm studio-palette-empty">No shapes match “{query}”.</p>
+          <p className="muted sm studio-palette-empty">{t('isometric.palette.noMatch', { query })}</p>
         )}
         {groups.map((group) => {
           const isCollapsed = !query && collapsed[group.id]
@@ -142,12 +169,12 @@ export function IsoPalette({ onPlace, disabled }: Props) {
                 <span className={`studio-caret${isCollapsed ? ' is-collapsed' : ''}`} aria-hidden>
                   ▾
                 </span>
-                {group.title}
+                {isoGroupTitle(t, group)}
               </button>
               {!isCollapsed && (
                 <div className="studio-palette-grid">
                   {group.shapes.map((id) =>
-                    entryButton(id, isoShape(id).label, <IsoShapeThumb shapeId={id} />),
+                    entryButton(id, isoShapeName(t, id), <IsoShapeThumb shapeId={id} />),
                   )}
                 </div>
               )}
@@ -168,11 +195,13 @@ export function IsoPalette({ onPlace, disabled }: Props) {
               >
                 ▾
               </span>
-              Annotations
+              {t('isometric.group.annotations')}
             </button>
             {!collapsed.annotations && (
               <div className="studio-palette-grid">
-                {ISO_SPECIALS.map((s) => entryButton(s.id, s.label, <SpecialThumb id={s.id} />))}
+                {ISO_SPECIALS.map((s) =>
+                  entryButton(s.id, isoShapeName(t, s.id), <SpecialThumb id={s.id} />),
+                )}
               </div>
             )}
           </section>

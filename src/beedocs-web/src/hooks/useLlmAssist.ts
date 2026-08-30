@@ -2,12 +2,14 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   type RefObject,
 } from 'react'
 import { api } from '../api'
+import { useI18n, type MessageKey } from '../i18n'
 import type { LlmProvider, LlmTask } from '../types'
 
 /**
@@ -148,6 +150,14 @@ export type LlmAvailability = {
   reason: string | null
 }
 
+/**
+ * The two "nothing to talk to" reasons are stored as message *keys*, not
+ * sentences: this module-scope store has no language of its own, so the hook
+ * translates them at read time. Every other reason is server/error text and is
+ * passed through verbatim.
+ */
+const REASON_KEYS: readonly string[] = ['editor.llm.noneEnabled', 'editor.llm.noneConfigured']
+
 let availability: LlmAvailability = { loaded: false, active: null, reason: null }
 let providersInFlight: Promise<void> | null = null
 const availabilityListeners = new Set<() => void>()
@@ -177,8 +187,8 @@ function loadProviders(): Promise<void> {
         reason: active
           ? null
           : list.length
-            ? 'No AI provider is enabled.'
-            : 'No AI provider is configured.',
+            ? 'editor.llm.noneEnabled'
+            : 'editor.llm.noneConfigured',
       })
     })
     .catch((e: unknown) => {
@@ -207,11 +217,19 @@ function subscribeAvailability(listener: () => void): () => void {
 }
 
 export function useLlmAvailability(): LlmAvailability {
+  const { t } = useI18n()
   const state = useSyncExternalStore(subscribeAvailability, () => availability)
   useEffect(() => {
     if (!availability.loaded) void loadProviders()
   }, [])
-  return state
+  // Stored key → the reader's language; verbatim server text stays verbatim.
+  return useMemo(
+    () =>
+      state.reason && REASON_KEYS.includes(state.reason)
+        ? { ...state, reason: t(state.reason as MessageKey) }
+        : state,
+    [state, t],
+  )
 }
 
 /* ===== Health of the speculative half ===== */

@@ -3,29 +3,25 @@ import type { KeyboardEvent } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { useInlineSuggestions, useInlineSuggestionsChosen } from '../hooks/useLlmAssist'
 import { api } from '../api'
+import { useI18n, type MessageKey } from '../i18n'
 import type { LlmKind, LlmModel, LlmProvider, LlmTestResult, UpdateLlmProviderRequest } from '../types'
 import { refreshLlmProviders } from '../hooks/useLlmAssist'
 
 type KindOption = {
   kind: LlmKind
+  /** Product name — a proper noun, never translated. The hint is `providers.kindHint.{kind}`. */
   label: string
-  hint: string
   /** Shown before the row exists — the server fills the same value in on create. */
   baseUrl: string
 }
 
 const KINDS: KindOption[] = [
-  {
-    kind: 'openrouter',
-    label: 'OpenRouter',
-    hint: 'One key, hundreds of models',
-    baseUrl: 'https://openrouter.ai/api/v1',
-  },
-  { kind: 'xai', label: 'xAI', hint: 'Grok, straight from x.ai', baseUrl: 'https://api.x.ai/v1' },
-  { kind: 'openai', label: 'OpenAI', hint: 'GPT models, no middleman', baseUrl: 'https://api.openai.com/v1' },
-  { kind: 'lmstudio', label: 'LM Studio', hint: 'Runs on this machine, no key', baseUrl: 'http://localhost:1234/v1' },
-  { kind: 'claude-cli', label: 'Claude Code', hint: 'Your installed claude CLI, its sign-in', baseUrl: '' },
-  { kind: 'grok-cli', label: 'Grok CLI', hint: 'Your installed grok CLI, its sign-in', baseUrl: '' },
+  { kind: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
+  { kind: 'xai', label: 'xAI', baseUrl: 'https://api.x.ai/v1' },
+  { kind: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
+  { kind: 'lmstudio', label: 'LM Studio', baseUrl: 'http://localhost:1234/v1' },
+  { kind: 'claude-cli', label: 'Claude Code', baseUrl: '' },
+  { kind: 'grok-cli', label: 'Grok CLI', baseUrl: '' },
 ]
 
 const KIND_LABELS: Record<LlmKind, string> = {
@@ -50,12 +46,11 @@ const CLI_COMMANDS: Partial<Record<LlmKind, string>> = {
 const isCliKind = (kind: LlmKind): boolean => kind in CLI_COMMANDS
 
 /**
- * A blank model means "whatever the provider lists first". It is a *setting*, not
- * a model id, so it never appears as a value in the model box — only as its
- * placeholder and as the first row of the browse list.
+ * A blank model means "whatever the provider lists first" ('providers.autoModel'
+ * / 'providers.autoSubListed'). It is a *setting*, not a model id, so it never
+ * appears as a value in the model box — only as its placeholder and as the first
+ * row of the browse list.
  */
-const AUTO_MODEL = 'Automatic'
-const AUTO_MODEL_SUB = 'first listed model'
 
 type Draft = { name: string; baseUrl: string; model: string; apiKey: string }
 
@@ -147,7 +142,8 @@ type ModelFieldProps = {
  *    re-measure-on-pane-resize problem to get wrong.
  */
 function ModelField({ id, value, models, onChange, onRetry, readOnly, busy, autoSub }: ModelFieldProps) {
-  const auto = autoSub ?? AUTO_MODEL_SUB
+  const { t } = useI18n()
+  const auto = autoSub ?? t('providers.autoSubListed')
   const [browsing, setBrowsing] = useState(false)
   const [filter, setFilter] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -197,7 +193,7 @@ function ModelField({ id, value, models, onChange, onRetry, readOnly, busy, auto
 
   return (
     <div className="llm-field">
-      <label htmlFor={id}>Model</label>
+      <label htmlFor={id}>{t('providers.model')}</label>
       <div className="llm-inline">
         <input
           id={id}
@@ -210,7 +206,7 @@ function ModelField({ id, value, models, onChange, onRetry, readOnly, busy, auto
           spellCheck={false}
           readOnly={readOnly}
           aria-describedby={hintId}
-          placeholder={`${AUTO_MODEL} — ${auto}`}
+          placeholder={`${t('providers.autoModel')} — ${auto}`}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -222,7 +218,7 @@ function ModelField({ id, value, models, onChange, onRetry, readOnly, busy, auto
           aria-controls={panelId}
           onClick={() => (browsing ? closeBrowse() : setBrowsing(true))}
         >
-          {browsing ? 'Hide models' : 'Browse models'}
+          {browsing ? t('providers.hideModels') : t('providers.browseModels')}
         </button>
       </div>
 
@@ -243,8 +239,10 @@ function ModelField({ id, value, models, onChange, onRetry, readOnly, busy, auto
           <input
             type="search"
             className="llm-browse-filter"
-            aria-label="Filter the model list"
-            placeholder={`Filter ${listed} model${listed === 1 ? '' : 's'}`}
+            aria-label={t('providers.filterModelsAria')}
+            placeholder={t(listed === 1 ? 'providers.filterModels.one' : 'providers.filterModels.other', {
+              count: listed,
+            })}
             readOnly={readOnly}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -258,8 +256,8 @@ function ModelField({ id, value, models, onChange, onRetry, readOnly, busy, auto
                 disabled={busy}
                 onClick={() => pick('')}
               >
-                <span className="llm-browse-id">{AUTO_MODEL}</span>
-                <span className="llm-browse-note">the {auto}</span>
+                <span className="llm-browse-id">{t('providers.autoModel')}</span>
+                <span className="llm-browse-note">{auto}</span>
               </button>
             </li>
             {matches.map((m) => (
@@ -279,24 +277,22 @@ function ModelField({ id, value, models, onChange, onRetry, readOnly, busy, auto
             ))}
           </ul>
           {matches.length === 0 ? (
-            <p className="llm-hint">
-              Nothing in the list matches “{filter.trim()}”. Type the id into the Model box above —
-              it is saved exactly as written.
-            </p>
+            <p className="llm-hint">{t('providers.browseNoMatch', { filter: filter.trim() })}</p>
           ) : null}
         </div>
       ) : null}
 
       <p className="llm-hint" id={hintId}>
-        {models.status === 'loading' ? 'Loading the model list…' : null}
+        {models.status === 'loading' ? t('providers.modelsLoading') : null}
         {models.status === 'ready'
-          ? `${listed} model${listed === 1 ? '' : 's'} suggested — any id you type is saved as written. Leave blank for the ${auto}.`
+          ? t(listed === 1 ? 'providers.modelHintReady.one' : 'providers.modelHintReady.other', {
+              count: listed,
+              sub: auto,
+            })
           : null}
-        {models.status === 'needs-key'
-          ? `Add a key and save to list the models. You can type an id now — it is saved as written, or leave it blank for the ${auto}.`
-          : null}
+        {models.status === 'needs-key' ? t('providers.modelHintNeedsKey', { sub: auto }) : null}
         {models.status === 'idle' || models.status === 'error'
-          ? `Type the model id, or leave it blank for the ${auto}.`
+          ? t('providers.modelHintIdle', { sub: auto })
           : null}
       </p>
 
@@ -304,9 +300,9 @@ function ModelField({ id, value, models, onChange, onRetry, readOnly, busy, auto
         <p className="llm-inline llm-hint is-warn">
           {/* Server messages are already sentences — drop the full stop rather
               than end up with "…v1.. Enter the model id". */}
-          <span>Could not list models — {(models.error ?? '').replace(/\.\s*$/, '')}.</span>
+          <span>{t('providers.modelsError', { error: (models.error ?? '').replace(/\.\s*$/, '') })}</span>
           <button type="button" className="btn sm" disabled={busy} onClick={onRetry}>
-            Retry list
+            {t('providers.retryList')}
           </button>
         </p>
       ) : null}
@@ -331,6 +327,7 @@ function ModelField({ id, value, models, onChange, onRetry, readOnly, busy, auto
  * response lands in provider B's form.
  */
 export function LlmProviders() {
+  const { t } = useI18n()
   const [providers, setProviders] = useState<LlmProvider[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -414,7 +411,7 @@ export function LlmProviders() {
     [providers, openId],
   )
   const openDirty = openProvider !== null && isDirty(draft, openProvider)
-  const openName = openProvider?.name ?? 'this provider'
+  const openName = openProvider?.name ?? t('providers.thisProvider')
 
   // Several kinds of the same provider are otherwise indistinguishable rows.
   const kindCounts = useMemo(() => {
@@ -429,20 +426,22 @@ export function LlmProviders() {
     // gives "LM Studio · LM Studio".
     if (p.name !== KIND_LABELS[p.kind]) parts.push(KIND_LABELS[p.kind])
     const cli = CLI_COMMANDS[p.kind]
-    parts.push(p.model || (cli ? 'CLI default model' : AUTO_MODEL_SUB))
+    parts.push(
+      p.model || (cli ? t('providers.subCliDefaultModel') : t('providers.subFirstListedModel')),
+    )
     // Unconditionally, even with a single provider: whether a key is stored is
     // the one thing you come to this screen to check, and it was previously only
     // visible by expanding the card. A CLI kind has neither endpoint nor key —
     // the command and its own sign-in are the whole story.
-    parts.push(cli ? `${cli} command` : endpointOf(p.baseUrl))
+    parts.push(cli ? t('providers.subCliCommand', { cmd: cli }) : endpointOf(p.baseUrl))
     parts.push(
       cli
-        ? 'uses the CLI sign-in'
+        ? t('providers.subCliSignIn')
         : p.hasKey
-          ? `key ····${p.keyHint ?? ''}`
+          ? t('providers.subKeyStored', { hint: p.keyHint ?? '' })
           : p.requiresKey
-            ? 'no key'
-            : 'no key needed',
+            ? t('providers.subNoKey')
+            : t('providers.subNoKeyNeeded'),
     )
     return parts.join(' · ')
   }
@@ -542,7 +541,7 @@ export function LlmProviders() {
   // The draft is one shared object, so leaving an edited card throws the edit
   // away. Losing a pasted key without a word is not acceptable — ask first.
   const mayLeaveDraft = () =>
-    !openDirty || window.confirm(`Discard unsaved changes to ${openName}?`)
+    !openDirty || window.confirm(t('providers.discardConfirm', { name: openName }))
 
   const openCard = (p: LlmProvider) => {
     if (!mayLeaveDraft()) return
@@ -566,9 +565,9 @@ export function LlmProviders() {
   const blocker = useBlocker(openDirty)
   useEffect(() => {
     if (blocker.state !== 'blocked') return
-    if (window.confirm(`Discard unsaved changes to ${openName}?`)) blocker.proceed()
+    if (window.confirm(t('providers.discardConfirm', { name: openName }))) blocker.proceed()
     else blocker.reset()
-  }, [blocker, openName])
+  }, [blocker, openName, t])
 
   useEffect(() => {
     if (!openDirty) return
@@ -745,7 +744,7 @@ export function LlmProviders() {
 
   const addBlock = (
     <div className="llm-add">
-      <h3 className="llm-add-title">Add a provider</h3>
+      <h3 className="llm-add-title">{t('providers.addTitle')}</h3>
       <div className="llm-add-grid">
         {KINDS.map((k) => {
           const already = kindCounts.get(k.kind) ?? 0
@@ -755,18 +754,30 @@ export function LlmProviders() {
               type="button"
               className="llm-kind-btn"
               disabled={creating !== null || listBusy}
-              aria-label={already > 0 ? `Add another ${k.label} provider` : `Add ${k.label}`}
+              aria-label={
+                already > 0
+                  ? t('providers.addAnotherAria', { label: k.label })
+                  : t('providers.addAria', { label: k.label })
+              }
               onClick={() => void create(k.kind)}
             >
               <span className="llm-kind-name">
                 {k.label}
                 {/* The count is the whole message. "Add another" underneath it
                     said the same thing a second time in a 200px tile. */}
-                {already > 0 ? <span className="llm-kind-count">{already} added</span> : null}
+                {already > 0 ? (
+                  <span className="llm-kind-count">{t('providers.kindCount', { count: already })}</span>
+                ) : null}
               </span>
-              <span className="llm-kind-hint">{creating === k.kind ? 'Adding…' : k.hint}</span>
+              <span className="llm-kind-hint">
+                {creating === k.kind
+                  ? t('providers.adding')
+                  : t(`providers.kindHint.${k.kind}` as MessageKey)}
+              </span>
               <span className="llm-kind-url">
-                {CLI_COMMANDS[k.kind] ? `${CLI_COMMANDS[k.kind]} command` : endpointOf(k.baseUrl)}
+                {CLI_COMMANDS[k.kind]
+                  ? t('providers.subCliCommand', { cmd: CLI_COMMANDS[k.kind]! })
+                  : endpointOf(k.baseUrl)}
               </span>
             </button>
           )
@@ -779,17 +790,10 @@ export function LlmProviders() {
   if (unavailable) {
     return (
       <div className="llm-providers">
-        <p className="llm-intro">
-          Writing help — autocomplete, rewrite, grammar and summarise — runs against a model you
-          configure here.
-        </p>
+        <p className="llm-intro">{t('providers.introShort')}</p>
         <div className="llm-empty">
-          <h3>Not available on this deployment</h3>
-          <p>
-            This server requires an API key on <code>/api/llm</code>, which the web app cannot send.
-            Configure providers from a deployment without <code>BeeDocs:ApiKey</code> set, or over
-            the MCP server.
-          </p>
+          <h3>{t('providers.unavailableTitle')}</h3>
+          <p>{t('providers.unavailableBody')}</p>
         </div>
       </div>
     )
@@ -797,10 +801,7 @@ export function LlmProviders() {
 
   return (
     <div className="llm-providers">
-      <p className="llm-intro">
-        Writing help — autocomplete, rewrite, grammar and summarise — runs against a model you
-        configure here. Keys are stored on the server and never sent back to the browser.
-      </p>
+      <p className="llm-intro">{t('providers.intro')}</p>
 
       {loadError ? (
         <p className="banner error llm-load-error">
@@ -808,7 +809,7 @@ export function LlmProviders() {
           {/* Without a retry the only way back is a page reload, and the Add
               grid below is hidden precisely because the list is unknown. */}
           <button type="button" className="btn sm" disabled={loading} onClick={() => void refresh()}>
-            {loading ? 'Retrying…' : 'Retry'}
+            {loading ? t('providers.retrying') : t('common.retry')}
           </button>
         </p>
       ) : null}
@@ -822,12 +823,8 @@ export function LlmProviders() {
 
       {providers !== null && providers.length === 0 ? (
         <div className="llm-empty">
-          <h3>No provider configured</h3>
-          <p>
-            Writing help stays switched off until one provider is added, enabled and reachable. Pick
-            where the model should run below — the name and base URL are filled in for you, then you
-            add a key, test the connection and switch it on.
-          </p>
+          <h3>{t('providers.emptyTitle')}</h3>
+          <p>{t('providers.emptyBody')}</p>
         </div>
       ) : null}
 
@@ -836,8 +833,7 @@ export function LlmProviders() {
           because the default also migrates between cards without a click here. */}
       {providers !== null && providers.length > 0 && defaultId === null ? (
         <p className="llm-notice" role="status">
-          <strong>Writing help is off.</strong> Every provider below is switched off. Turn one on to
-          use autocomplete, rewrite, grammar and summarise.
+          <strong>{t('providers.offStrong')}</strong> {t('providers.offRest')}
         </p>
       ) : null}
 
@@ -849,17 +845,14 @@ export function LlmProviders() {
       {providers !== null && defaultId !== null && !inlineChosen ? (
         <div className="llm-notice llm-offer" role="status">
           <p>
-            <strong>Turn on inline suggestions?</strong> As you pause typing, the block you are in
-            and the text around it on that page are sent to your provider to draft a continuation.
-            Selection actions — rewrite, grammar, Markdown, summarise — work either way and only run
-            when you ask.
+            <strong>{t('providers.inlineTitle')}</strong> {t('providers.inlineBody')}
           </p>
           <div className="llm-offer-actions">
             <button type="button" className="btn primary sm" onClick={() => setInline(true)}>
-              Turn on
+              {t('providers.turnOn')}
             </button>
             <button type="button" className="btn sm" onClick={() => setInline(false)}>
-              Not now
+              {t('providers.notNow')}
             </button>
           </div>
         </div>
@@ -912,11 +905,15 @@ export function LlmProviders() {
                     <span className="llm-card-title">
                       <span className="llm-name-row">
                         <span className="llm-name">{p.name}</span>
-                        {isDefault ? <span className="llm-badge is-default">Default</span> : null}
-                        {p.requiresKey && !p.hasKey ? (
-                          <span className="llm-badge is-warn">Key needed</span>
+                        {isDefault ? (
+                          <span className="llm-badge is-default">{t('providers.badgeDefault')}</span>
                         ) : null}
-                        {dirty ? <span className="llm-badge is-dirty">Unsaved</span> : null}
+                        {p.requiresKey && !p.hasKey ? (
+                          <span className="llm-badge is-warn">{t('providers.badgeKeyNeeded')}</span>
+                        ) : null}
+                        {dirty ? (
+                          <span className="llm-badge is-dirty">{t('providers.badgeUnsaved')}</span>
+                        ) : null}
                       </span>
                       <span className="llm-card-sub">{subLine(p)}</span>
                     </span>
@@ -929,7 +926,7 @@ export function LlmProviders() {
                         role="switch"
                         // Without this the accessible name is the visible "On"
                         // text, so every row announces as a switch called "On".
-                        aria-label={`Enable ${p.name}`}
+                        aria-label={t('providers.enableAria', { name: p.name })}
                         checked={p.enabled}
                         // Turning *off* is always allowed. Turning on a
                         // key-requiring row that has no key is not: it would
@@ -938,13 +935,13 @@ export function LlmProviders() {
                         disabled={formBusy || (!p.enabled && !mayEnable)}
                         title={
                           !p.enabled && !mayEnable
-                            ? `${p.name} needs a key before it can be turned on.`
+                            ? t('providers.needsKeyTitle', { name: p.name })
                             : undefined
                         }
                         onChange={() => void toggleEnabled(p)}
                       />
                       <span className="llm-switch-text" aria-hidden>
-                        {p.enabled ? 'On' : 'Off'}
+                        {p.enabled ? t('providers.on') : t('providers.off')}
                       </span>
                     </label>
                   </div>
@@ -958,7 +955,7 @@ export function LlmProviders() {
                     <button
                       type="button"
                       className="llm-row-error-x"
-                      aria-label="Dismiss this error"
+                      aria-label={t('providers.dismissError')}
                       onClick={() => clearRowError(p.id)}
                     >
                       ✕
@@ -979,7 +976,7 @@ export function LlmProviders() {
                   >
                     <div className="llm-grid">
                       <div className="llm-field">
-                        <label htmlFor={`llm-name-${p.id}`}>Name</label>
+                        <label htmlFor={`llm-name-${p.id}`}>{t('common.name')}</label>
                         <input
                           id={`llm-name-${p.id}`}
                           value={draft.name}
@@ -994,13 +991,13 @@ export function LlmProviders() {
                         />
                         {nameMissing ? (
                           <p className="llm-hint is-warn" id={nameErrId}>
-                            Name is required.
+                            {t('providers.nameRequired')}
                           </p>
                         ) : null}
                       </div>
                       {isCli ? (
                         <div className="llm-field">
-                          <label htmlFor={`llm-cmd-${p.id}`}>Command</label>
+                          <label htmlFor={`llm-cmd-${p.id}`}>{t('providers.command')}</label>
                           <input
                             id={`llm-cmd-${p.id}`}
                             className="llm-mono"
@@ -1011,7 +1008,7 @@ export function LlmProviders() {
                         </div>
                       ) : (
                         <div className="llm-field">
-                          <label htmlFor={`llm-url-${p.id}`}>Base URL</label>
+                          <label htmlFor={`llm-url-${p.id}`}>{t('providers.baseUrl')}</label>
                           <input
                             id={`llm-url-${p.id}`}
                             className="llm-mono"
@@ -1025,7 +1022,7 @@ export function LlmProviders() {
                           />
                           {urlMissing ? (
                             <p className="llm-hint is-warn" id={urlErrId}>
-                              Base URL is required.
+                              {t('providers.baseUrlRequired')}
                             </p>
                           ) : null}
                         </div>
@@ -1034,15 +1031,13 @@ export function LlmProviders() {
 
                     {isCli ? (
                       <p className="llm-hint" id={`llm-cli-hint-${p.id}`}>
-                        Completions run the <code>{CLI_COMMANDS[p.kind]}</code> command on the
-                        machine the BeeDocs API runs on, with the account it is signed in with — no
-                        key to store. Leave the model blank to use the CLI’s own default model.
+                        {t('providers.cliHint', { cmd: CLI_COMMANDS[p.kind]! })}
                       </p>
                     ) : null}
 
                     {isCli ? null : (
                     <div className="llm-field">
-                      <label htmlFor={`llm-key-${p.id}`}>API key</label>
+                      <label htmlFor={`llm-key-${p.id}`}>{t('providers.apiKeyLabel')}</label>
                       <div className="llm-inline">
                         <input
                           id={`llm-key-${p.id}`}
@@ -1061,7 +1056,7 @@ export function LlmProviders() {
                             p.hasKey
                               ? `•••••••• ${p.keyHint ?? ''}`.trim()
                               : p.requiresKey
-                                ? 'Paste the key from the provider'
+                                ? t('providers.keyPlaceholder')
                                 : ''
                           }
                           value={draft.apiKey}
@@ -1074,16 +1069,13 @@ export function LlmProviders() {
                             disabled={formBusy || confirmKeyId === p.id}
                             onClick={() => setConfirmKeyId(p.id)}
                           >
-                            Remove key
+                            {t('providers.removeKey')}
                           </button>
                         ) : null}
                       </div>
                       {confirmKeyId === p.id ? (
                         <div className="llm-confirm">
-                          <span>
-                            Remove the stored key for <strong>{p.name}</strong>? It cannot be shown
-                            again — you would have to paste a new one.
-                          </span>
+                          <span>{t('providers.removeKeyConfirm', { name: p.name })}</span>
                           <span className="llm-confirm-actions">
                             <button
                               type="button"
@@ -1091,7 +1083,7 @@ export function LlmProviders() {
                               disabled={rowBusy}
                               onClick={() => setConfirmKeyId(null)}
                             >
-                              Keep it
+                              {t('providers.keepIt')}
                             </button>
                             <button
                               type="button"
@@ -1099,19 +1091,16 @@ export function LlmProviders() {
                               disabled={formBusy}
                               onClick={() => void clearKey(p)}
                             >
-                              {isSaving ? 'Removing…' : 'Remove key'}
+                              {isSaving ? t('providers.removing') : t('providers.removeKey')}
                             </button>
                           </span>
                         </div>
                       ) : null}
                       {p.hasKey ? (
-                        <p className="llm-hint">
-                          A key is stored. Leave this blank to keep it, or enter a new one to
-                          replace it.
-                        </p>
+                        <p className="llm-hint">{t('providers.keyStoredHint')}</p>
                       ) : !p.requiresKey ? (
                         <p className="llm-hint">
-                          {KIND_LABELS[p.kind]} needs no key unless you put it behind a proxy.
+                          {t('providers.noKeyHint', { label: KIND_LABELS[p.kind] })}
                         </p>
                       ) : null}
                     </div>
@@ -1123,7 +1112,7 @@ export function LlmProviders() {
                       models={models}
                       readOnly={formBusy}
                       busy={formBusy}
-                      autoSub={isCli ? 'CLI’s own default model' : undefined}
+                      autoSub={isCli ? t('providers.autoSubCli') : undefined}
                       onChange={(model) => editDraft({ model })}
                       onRetry={() => void loadModels(p.id)}
                     />
@@ -1136,7 +1125,14 @@ export function LlmProviders() {
                         <span>
                           {result.message}
                           <span className="llm-result-meta">
-                            {result.modelCount !== null ? ` · ${result.modelCount} models` : ''}
+                            {result.modelCount !== null
+                              ? ` · ${t(
+                                  result.modelCount === 1
+                                    ? 'providers.modelCount.one'
+                                    : 'providers.modelCount.other',
+                                  { count: result.modelCount },
+                                )}`
+                              : ''}
                             {result.elapsedMs > 0 ? ` · ${result.elapsedMs} ms` : ''}
                           </span>
                         </span>
@@ -1149,9 +1145,7 @@ export function LlmProviders() {
                         confirming a delete used to hide Save with edits pending. */}
                     {confirmId === p.id ? (
                       <div className="llm-confirm">
-                        <span>
-                          Delete <strong>{p.name}</strong>? Its stored key goes with it.
-                        </span>
+                        <span>{t('providers.deleteConfirm', { name: p.name })}</span>
                         <span className="llm-confirm-actions">
                           <button
                             type="button"
@@ -1159,7 +1153,7 @@ export function LlmProviders() {
                             disabled={rowBusy}
                             onClick={() => setConfirmId(null)}
                           >
-                            Cancel
+                            {t('common.cancel')}
                           </button>
                           <button
                             type="button"
@@ -1167,7 +1161,7 @@ export function LlmProviders() {
                             disabled={formBusy}
                             onClick={() => void remove(p)}
                           >
-                            {rowBusy ? 'Deleting…' : 'Delete provider'}
+                            {rowBusy ? t('providers.deleting') : t('providers.deleteProvider')}
                           </button>
                         </span>
                       </div>
@@ -1175,21 +1169,15 @@ export function LlmProviders() {
 
                     {!mayEnable ? (
                       <p className="llm-hint" id={keyGateId}>
-                        {KIND_LABELS[p.kind]} rejects every call without a key, so this provider
-                        cannot be turned on or made the default until one is stored. Paste it above
-                        and save — that turns it on in the same step.
+                        {t('providers.keyGateHint', { label: KIND_LABELS[p.kind] })}
                       </p>
                     ) : !p.enabled ? (
-                      <p className="llm-hint">
-                        Switched off — writing help will not use it. Turn it on with the switch
-                        above, or use “Enable and make default”.
-                      </p>
+                      <p className="llm-hint">{t('providers.offHint')}</p>
                     ) : null}
 
                     {dirty ? (
                       <p className="llm-hint" id={testHintId}>
-                        Save first — the test runs against the saved settings, not what is in these
-                        boxes.
+                        {t('providers.saveFirstHint')}
                       </p>
                     ) : null}
 
@@ -1198,7 +1186,11 @@ export function LlmProviders() {
                         {/* No onClick: the form's onSubmit is the single entry
                             point, so a click and an Enter cannot both fire. */}
                         <button type="submit" className="btn primary" disabled={!canSave}>
-                          {isSaving ? 'Saving…' : turnOn ? 'Save and turn on' : 'Save changes'}
+                          {isSaving
+                            ? t('common.saving')
+                            : turnOn
+                              ? t('providers.saveAndTurnOn')
+                              : t('providers.saveChanges')}
                         </button>
                         <button
                           type="button"
@@ -1207,7 +1199,7 @@ export function LlmProviders() {
                           aria-describedby={dirty ? testHintId : undefined}
                           onClick={() => void runTest(p)}
                         >
-                          {isTesting ? 'Testing…' : 'Test connection'}
+                          {isTesting ? t('providers.testing') : t('providers.testConnection')}
                         </button>
                         {isTesting ? (
                           <button
@@ -1215,11 +1207,11 @@ export function LlmProviders() {
                             className="btn ghost"
                             onClick={() => testAbort.current?.abort()}
                           >
-                            Cancel
+                            {t('common.cancel')}
                           </button>
                         ) : null}
                         <span className={`llm-flash${savedFlash ? ' is-on' : ''}`} aria-live="polite">
-                          {savedFlash ? 'Saved' : ''}
+                          {savedFlash ? t('common.saved') : ''}
                         </span>
                       </div>
                       <div className="llm-actions-side">
@@ -1234,10 +1226,10 @@ export function LlmProviders() {
                             onClick={() => void makeDefault(p)}
                           >
                             {listBusy
-                              ? 'Working…'
+                              ? t('providers.working')
                               : p.enabled
-                                ? 'Make default'
-                                : 'Enable and make default'}
+                                ? t('providers.makeDefault')
+                                : t('providers.enableMakeDefault')}
                           </button>
                         )}
                         <button
@@ -1246,7 +1238,7 @@ export function LlmProviders() {
                           disabled={formBusy || confirmId === p.id}
                           onClick={() => setConfirmId(p.id)}
                         >
-                          Delete
+                          {t('common.delete')}
                         </button>
                       </div>
                     </div>

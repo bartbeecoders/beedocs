@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useI18n } from '../i18n'
 import {
   buildPageOutline,
   scrollToOutlineTarget,
@@ -27,6 +28,7 @@ type Props = {
  * Collapses to a thin rail (like Library / Properties) so the editor can use the space.
  */
 export function PageOutlineNav({ content, rootRef, className = '' }: Props) {
+  const { t } = useI18n()
   const items = useMemo(() => buildPageOutline(content), [content])
   const [collapsed, setCollapsed] = useState(loadCollapsed)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -89,37 +91,40 @@ export function PageOutlineNav({ content, rootRef, className = '' }: Props) {
 
   if (collapsed) {
     return (
-      <aside className={`page-outline is-collapsed ${className}`.trim()} aria-label="On this page">
+      <aside
+        className={`page-outline is-collapsed ${className}`.trim()}
+        aria-label={t('props.onThisPage')}
+      >
         <button
           type="button"
           className="page-outline-rail-btn"
           onClick={toggle}
           aria-expanded={false}
-          title="Show On this page"
+          title={t('props.showOnThisPage')}
         >
-          <span className="page-outline-rail-label">On this page</span>
+          <span className="page-outline-rail-label">{t('props.onThisPage')}</span>
         </button>
       </aside>
     )
   }
 
   return (
-    <aside className={`page-outline ${className}`.trim()} aria-label="On this page">
+    <aside className={`page-outline ${className}`.trim()} aria-label={t('props.onThisPage')}>
       <div className="page-outline-head">
-        <span className="page-outline-title">On this page</span>
+        <span className="page-outline-title">{t('props.onThisPage')}</span>
         <button
           type="button"
           className="page-outline-toggle"
           onClick={toggle}
           aria-expanded
-          aria-label="Collapse On this page"
-          title="Collapse On this page"
+          aria-label={t('props.collapseOnThisPage')}
+          title={t('props.collapseOnThisPage')}
         >
           ›
         </button>
       </div>
       {items.length === 0 ? (
-        <p className="page-outline-empty muted sm">Add headings to build a quick map of this page.</p>
+        <p className="page-outline-empty muted sm">{t('props.outlineEmpty')}</p>
       ) : (
         <nav className="page-outline-nav">
           <ul className="page-outline-list">

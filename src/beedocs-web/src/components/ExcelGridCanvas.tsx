@@ -51,6 +51,7 @@ import {
   type SelectionRange,
   type SelectionType,
 } from '../excelgrid/types'
+import { useI18n } from '../i18n'
 
 type Props = {
   source: string
@@ -66,6 +67,7 @@ const FONT_SIZES = [10, 11, 12, 14, 16, 18, 20, 24]
  * Excel-style D3 grid stored as a ```excelgrid JSON fence on the page.
  */
 export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) {
+  const { t } = useI18n()
   const clipPrefix = useId().replace(/:/g, '')
   const rootRef = useRef<HTMLDivElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
@@ -988,7 +990,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
       <div className="excelgrid is-readonly" ref={rootRef}>
         <div className="excelgrid-surface" style={{ height: Math.min(SURFACE_H, totalHeight + 2) }}>
           <div className="excelgrid-sheet" style={{ width: totalWidth, height: totalHeight }}>
-            <svg ref={svgRef} role="img" aria-label="Spreadsheet" />
+            <svg ref={svgRef} role="img" aria-label={t('canvas.grid.spreadsheet')} />
           </div>
         </div>
       </div>
@@ -1001,29 +1003,29 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
       ref={rootRef}
       onContextMenu={onContextMenu}
     >
-      <div className="excelgrid-toolbar" role="toolbar" aria-label="Spreadsheet tools">
+      <div className="excelgrid-toolbar" role="toolbar" aria-label={t('canvas.grid.tools')}>
         <div className="excelgrid-toolbar-group">
-          <button type="button" className="excelgrid-tool" disabled={!undoStack.current.length} onClick={undo} title="Undo">
-            Undo
+          <button type="button" className="excelgrid-tool" disabled={!undoStack.current.length} onClick={undo} title={t('canvas.undo')}>
+            {t('canvas.undo')}
           </button>
-          <button type="button" className="excelgrid-tool" disabled={!redoStack.current.length} onClick={redo} title="Redo">
-            Redo
+          <button type="button" className="excelgrid-tool" disabled={!redoStack.current.length} onClick={redo} title={t('canvas.redo')}>
+            {t('canvas.redo')}
           </button>
         </div>
         <div className="excelgrid-toolbar-group">
-          <button type="button" className="excelgrid-tool" onClick={() => void copy(true)} title="Cut">
-            Cut
+          <button type="button" className="excelgrid-tool" onClick={() => void copy(true)} title={t('canvas.grid.cut')}>
+            {t('canvas.grid.cut')}
           </button>
-          <button type="button" className="excelgrid-tool" onClick={() => void copy(false)} title="Copy">
-            Copy
+          <button type="button" className="excelgrid-tool" onClick={() => void copy(false)} title={t('common.copy')}>
+            {t('common.copy')}
           </button>
-          <button type="button" className="excelgrid-tool" onClick={() => void paste()} title="Paste">
-            Paste
+          <button type="button" className="excelgrid-tool" onClick={() => void paste()} title={t('canvas.grid.paste')}>
+            {t('canvas.grid.paste')}
           </button>
-          <button type="button" className="excelgrid-tool" onClick={() => fillDirection('down')} title="Fill down">
+          <button type="button" className="excelgrid-tool" onClick={() => fillDirection('down')} title={t('canvas.grid.fillDown')}>
             ↓
           </button>
-          <button type="button" className="excelgrid-tool" onClick={() => fillDirection('right')} title="Fill right">
+          <button type="button" className="excelgrid-tool" onClick={() => fillDirection('right')} title={t('canvas.grid.fillRight')}>
             →
           </button>
         </div>
@@ -1032,7 +1034,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
             type="button"
             className={`excelgrid-tool${selectedFormatting?.bold ? ' is-active' : ''}`}
             onClick={() => formatSelection({ bold: !selectedFormatting?.bold })}
-            title="Bold"
+            title={t('canvas.grid.bold')}
           >
             <strong>B</strong>
           </button>
@@ -1040,7 +1042,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
             type="button"
             className={`excelgrid-tool${selectedFormatting?.italic ? ' is-active' : ''}`}
             onClick={() => formatSelection({ italic: !selectedFormatting?.italic })}
-            title="Italic"
+            title={t('canvas.grid.italic')}
           >
             <em>I</em>
           </button>
@@ -1048,7 +1050,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
             type="button"
             className={`excelgrid-tool${selectedFormatting?.underline ? ' is-active' : ''}`}
             onClick={() => formatSelection({ underline: !selectedFormatting?.underline })}
-            title="Underline"
+            title={t('canvas.grid.underline')}
           >
             <span style={{ textDecoration: 'underline' }}>U</span>
           </button>
@@ -1056,7 +1058,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
             type="button"
             className={`excelgrid-tool${selectedFormatting?.textAlign === 'left' ? ' is-active' : ''}`}
             onClick={() => formatSelection({ textAlign: 'left' })}
-            title="Align left"
+            title={t('canvas.grid.alignLeft')}
           >
             ⇤
           </button>
@@ -1064,7 +1066,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
             type="button"
             className={`excelgrid-tool${selectedFormatting?.textAlign === 'center' ? ' is-active' : ''}`}
             onClick={() => formatSelection({ textAlign: 'center' })}
-            title="Align center"
+            title={t('canvas.grid.alignCenter')}
           >
             ≡
           </button>
@@ -1072,11 +1074,11 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
             type="button"
             className={`excelgrid-tool${selectedFormatting?.textAlign === 'right' ? ' is-active' : ''}`}
             onClick={() => formatSelection({ textAlign: 'right' })}
-            title="Align right"
+            title={t('canvas.grid.alignRight')}
           >
             ⇥
           </button>
-          <label className="excelgrid-color" title="Text colour">
+          <label className="excelgrid-color" title={t('canvas.grid.textColour')}>
             A
             <input
               type="color"
@@ -1084,7 +1086,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
               onChange={(e) => formatSelection({ textColor: e.target.value })}
             />
           </label>
-          <label className="excelgrid-color" title="Fill colour">
+          <label className="excelgrid-color" title={t('canvas.grid.fillColour')}>
             ▣
             <input
               type="color"
@@ -1094,7 +1096,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
           </label>
           <select
             className="excelgrid-select"
-            aria-label="Font size"
+            aria-label={t('canvas.grid.fontSize')}
             value={selectedFormatting?.fontSize ?? 12}
             onChange={(e) => formatSelection({ fontSize: Number(e.target.value) })}
           >
@@ -1106,13 +1108,13 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
           </select>
         </div>
         <div className="excelgrid-toolbar-group excelgrid-toolbar-group--end">
-          <button type="button" className="excelgrid-tool" onClick={() => addRows(5)} title="Add 5 rows">
-            + Rows
+          <button type="button" className="excelgrid-tool" onClick={() => addRows(5)} title={t('canvas.grid.addRowsTitle', { count: 5 })}>
+            {t('canvas.grid.addRows')}
           </button>
-          <button type="button" className="excelgrid-tool" onClick={() => addColumns(2)} title="Add 2 columns">
-            + Cols
+          <button type="button" className="excelgrid-tool" onClick={() => addColumns(2)} title={t('canvas.grid.addColsTitle', { count: 2 })}>
+            {t('canvas.grid.addCols')}
           </button>
-          <button type="button" className="excelgrid-tool" onClick={() => fileRef.current?.click()} title="Import CSV">
+          <button type="button" className="excelgrid-tool" onClick={() => fileRef.current?.click()} title={t('canvas.grid.importCsv')}>
             CSV
           </button>
           <input
@@ -1131,7 +1133,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
       </div>
 
       <div className="excelgrid-formula">
-        <span className="excelgrid-addr" title="Active cell">
+        <span className="excelgrid-addr" title={t('canvas.grid.activeCell')}>
           {addr}
         </span>
         <input
@@ -1139,7 +1141,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
           className="excelgrid-formula-input"
           value={editing ? editValue : formula}
           readOnly={!selected}
-          aria-label="Cell value"
+          aria-label={t('canvas.grid.cellValue')}
           onFocus={() => {
             armedRef.current = true
             if (selected && !editingRef.current) {
@@ -1173,7 +1175,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
         ref={surfaceRef}
         tabIndex={0}
         role="grid"
-        aria-label="Spreadsheet"
+        aria-label={t('canvas.grid.spreadsheet')}
         onFocus={() => {
           armedRef.current = true
         }}
@@ -1231,7 +1233,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
       </div>
 
       <p className="excelgrid-hint muted sm">
-        Double-click or type to edit · drag to select · drop a CSV to import · {working.rowCount}×{working.colCount}
+        {t('canvas.grid.hint', { rows: working.rowCount, cols: working.colCount })}
       </p>
 
       {menu && (
@@ -1241,10 +1243,10 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
           role="menu"
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <button type="button" onClick={() => { void copy(true); setMenu(null) }}>Cut</button>
-          <button type="button" onClick={() => { void copy(false); setMenu(null) }}>Copy</button>
-          <button type="button" onClick={() => { void paste(); setMenu(null) }}>Paste</button>
-          <button type="button" onClick={() => { clearSelection(); setMenu(null) }}>Clear</button>
+          <button type="button" onClick={() => { void copy(true); setMenu(null) }}>{t('canvas.grid.cut')}</button>
+          <button type="button" onClick={() => { void copy(false); setMenu(null) }}>{t('common.copy')}</button>
+          <button type="button" onClick={() => { void paste(); setMenu(null) }}>{t('canvas.grid.paste')}</button>
+          <button type="button" onClick={() => { clearSelection(); setMenu(null) }}>{t('canvas.clear')}</button>
           <hr />
           <button
             type="button"
@@ -1253,7 +1255,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
               setMenu(null)
             }}
           >
-            Insert row
+            {t('canvas.grid.insertRow')}
           </button>
           <button
             type="button"
@@ -1262,7 +1264,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
               setMenu(null)
             }}
           >
-            Insert column
+            {t('canvas.grid.insertColumn')}
           </button>
           <button
             type="button"
@@ -1271,7 +1273,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
               setMenu(null)
             }}
           >
-            Delete row(s)
+            {t('canvas.grid.deleteRows')}
           </button>
           <button
             type="button"
@@ -1280,7 +1282,7 @@ export function ExcelGridCanvas({ source, onChange, readOnly, compact }: Props) 
               setMenu(null)
             }}
           >
-            Delete column(s)
+            {t('canvas.grid.deleteColumns')}
           </button>
         </div>
       )}

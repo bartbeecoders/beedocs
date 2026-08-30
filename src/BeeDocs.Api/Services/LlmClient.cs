@@ -131,7 +131,7 @@ public sealed class LlmClient(
         var model = await ResolveModelAsync(provider, request.Model, ct);
         var started = Stopwatch.GetTimestamp();
         var budget = request.MaxTokens ?? LlmPrompts.MaxTokens(task, request);
-        var timeout = task == LlmPrompts.DocDraft ? DocDraftTimeout : CompleteTimeout;
+        var timeout = task is LlmPrompts.DocDraft or LlmPrompts.Logo ? DocDraftTimeout : CompleteTimeout;
 
         var (text, promptTokens, completionTokens) =
             await AttemptAsync(provider, model, task, request, budget, timeout, ct);
@@ -523,8 +523,16 @@ public static class LlmPrompts
     /// </summary>
     public const string DocDraft = "docdraft";
 
+    /// <summary>
+    /// A standalone SVG logo mark (the branding settings' "generate with AI").
+    /// The context is the instance title, the prompt is the description, and the
+    /// answer is a lone &lt;svg&gt; element — which BrandingService then
+    /// sanitizes before anything is stored or served.
+    /// </summary>
+    public const string Logo = "logo";
+
     public static readonly IReadOnlyList<string> Tasks =
-        [Continue, Rewrite, Grammar, Format, Summarize, DocDraft];
+        [Continue, Rewrite, Grammar, Format, Summarize, DocDraft, Logo];
 
     /// <summary>Enough context to be grounded, not enough to blow up the bill.</summary>
     private const int MaxContextChars = 6000;
@@ -546,6 +554,7 @@ public static class LlmPrompts
             "format" or "markdown" or "formatasmarkdown" or "formatmarkdown" => Format,
             "summarize" or "summarise" or "summary" => Summarize,
             "docdraft" or "document" or "docgen" => DocDraft,
+            "logo" or "icon" => Logo,
             _ => null,
         };
 
@@ -628,6 +637,24 @@ public static class LlmPrompts
               the whole answer in a code fence — fences inside the document are fine.
             """,
 
+        Logo => """
+            You design small vector logo marks as standalone SVG.
+
+            Rules:
+            - Reply with ONLY a single <svg> element. No preamble, no explanation, no
+              code fence, no XML declaration.
+            - The root element must carry viewBox="0 0 64 64" and no width or height
+              attributes.
+            - Use only vector shapes (path, circle, rect, ellipse, polygon, line, g)
+              with fill/stroke colors; gradients declared in <defs> are fine.
+            - Never use <script>, <foreignObject>, <image>, event handler attributes,
+              CSS imports, or references to anything outside the document.
+            - Design a simple, bold, geometric mark that stays readable at 20 pixels:
+              a handful of shapes, a small palette (2–4 colors), no fine detail.
+            - The mark must work on both light and dark backgrounds — no full-canvas
+              background rectangle unless it is part of the mark (a rounded tile is fine).
+            """,
+
         _ => "You are a concise writing assistant. Reply with only the requested text.",
     };
 
@@ -649,6 +676,16 @@ public static class LlmPrompts
 
             builder0.Append("Assignment:\n").Append(Head(request.Prompt, MaxPromptChars));
             return builder0.ToString();
+        }
+
+        if (task == Logo)
+        {
+            var logoBuilder = new StringBuilder("Design a logo icon.\n");
+            var product = Head(request.Context, 200);
+            if (product.Length > 0)
+                logoBuilder.Append("Product name: ").Append(product).Append('\n');
+            logoBuilder.Append("Description of the desired logo:\n").Append(Head(request.Prompt, MaxPromptChars));
+            return logoBuilder.ToString();
         }
 
         var context = Tail(request.Context, MaxContextChars);
@@ -691,6 +728,8 @@ public static class LlmPrompts
     {
         Grammar or Format => 0.1,
         Rewrite or DocDraft => 0.4,
+        // Creative work — identical retries of a rejected logo would be useless.
+        Logo => 0.8,
         _ => 0.3,
     };
 
@@ -701,7 +740,7 @@ public static class LlmPrompts
     /// </summary>
     public static string ReasoningEffort(string task) => task switch
     {
-        Rewrite or Summarize or DocDraft => "low",
+        Rewrite or Summarize or DocDraft or Logo => "low",
         _ => "none",
     };
 
@@ -717,6 +756,8 @@ public static class LlmPrompts
         // A whole README or manual, not an edit — room to finish a long
         // document without inviting padding.
         DocDraft => 4096,
+        // SVG path data is token-hungry; a modest mark still runs long.
+        Logo => 4096,
         // Roughly two tokens of headroom per token of input, since these tasks
         // return the whole passage back.
         _ => Math.Clamp(((request.Selection?.Length ?? 0) / 2) + 256, 256, 4096),

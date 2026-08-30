@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useI18n } from '../i18n'
 import type { SlideDeckDoc } from './slideModel'
 import { SlideSurface } from './SlideView'
 
@@ -15,6 +16,7 @@ type Props = {
  * still gets a working presentation, just with chrome around it).
  */
 export function SlidePresenter({ deck, initialIndex = 0, onClose }: Props) {
+  const { t } = useI18n()
   const [index, setIndex] = useState(() =>
     Math.min(Math.max(initialIndex, 0), deck.slides.length - 1),
   )
@@ -96,7 +98,7 @@ export function SlidePresenter({ deck, initialIndex = 0, onClose }: Props) {
       ref={rootRef}
       className="slide-presenter"
       role="dialog"
-      aria-label="Presentation"
+      aria-label={t('slidesEditor.presentation')}
       // Click to advance, PowerPoint style; the controls stop propagation.
       onClick={() => step(1)}
       onContextMenu={(e) => {
@@ -131,7 +133,7 @@ export function SlidePresenter({ deck, initialIndex = 0, onClose }: Props) {
         >
           ›
         </button>
-        <button type="button" className="slide-hud-btn slide-hud-exit" onClick={onClose} title="End presentation (Esc)">
+        <button type="button" className="slide-hud-btn slide-hud-exit" onClick={onClose} title={t('slidesEditor.endPresentation')}>
           ✕
         </button>
       </div>

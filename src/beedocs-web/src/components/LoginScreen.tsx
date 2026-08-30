@@ -1,5 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n } from '../i18n'
+import { useBranding } from '../branding'
+import { withApiBase } from '../basePath'
 
 /**
  * The whole app when sign-in is enabled and nobody is signed in. It renders
@@ -13,6 +16,8 @@ import { useAuth } from '../auth/AuthContext'
  */
 export function LoginScreen({ version }: { version?: string | null }) {
   const { login, rbaEnabled } = useAuth()
+  const { t } = useI18n()
+  const { branding } = useBranding()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -50,22 +55,26 @@ export function LoginScreen({ version }: { version?: string | null }) {
       <form className="login-card" onSubmit={submit}>
         <div className="login-brand">
           <span className="login-mark" aria-hidden>
-            🐝
+            {branding.logoUrl ? (
+              <img className="login-logo" src={withApiBase(branding.logoUrl)} alt="" />
+            ) : (
+              '🐝'
+            )}
           </span>
-          <span className="login-title">BeeDocs</span>
+          <span className="login-title">{branding.title}</span>
           {version && <span className="ws-version-pill">v{version}</span>}
         </div>
 
         <p className="muted sm login-lead">
           {rbaMode
-            ? 'Sign in with your corporate (RBA) account to open the documentation workspace.'
+            ? t('auth.leadRba')
             : rbaEnabled
-              ? 'Sign in with a local BeeDocs account.'
-              : 'Sign in to open the documentation workspace.'}
+              ? t('auth.leadLocal')
+              : t('auth.leadDefault')}
         </p>
 
         <label className="login-field">
-          <span>Username</span>
+          <span>{t('auth.username')}</span>
           <input
             name="username"
             autoComplete="username"
@@ -78,7 +87,7 @@ export function LoginScreen({ version }: { version?: string | null }) {
         </label>
 
         <label className="login-field">
-          <span>Password</span>
+          <span>{t('auth.password')}</span>
           <input
             type="password"
             name="password"
@@ -99,21 +108,19 @@ export function LoginScreen({ version }: { version?: string | null }) {
         )}
 
         <button type="submit" className="btn primary login-submit" disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? t('auth.signingIn') : t('auth.signIn')}
         </button>
 
         {rbaEnabled && (
           <button type="button" className="login-method-switch" onClick={switchMethod} disabled={busy}>
             {useLocalAccount
-              ? 'Use your corporate (RBA) account instead'
-              : 'Use a local BeeDocs account instead'}
+              ? t('auth.useRbaInstead')
+              : t('auth.useLocalInstead')}
           </button>
         )}
 
         <p className="muted sm login-hint">
-          {rbaMode
-            ? 'Access is granted through RBA — ask to be added to a DOC group if sign-in is refused.'
-            : 'Forgotten your password? An admin can reset it from Settings → Users & roles.'}
+          {rbaMode ? t('auth.hintRba') : t('auth.hintLocal')}
         </p>
       </form>
     </div>

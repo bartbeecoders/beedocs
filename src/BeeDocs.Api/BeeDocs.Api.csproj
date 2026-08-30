@@ -3,11 +3,21 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <!-- Single source of truth for the container image tag (scripts/deploy-k3s.sh). -->
-    <Version>0.7.3</Version>
+    <Version>0.7.5</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- data/ is the runtime state directory (SQLite, uploads, git clones).
+         A cloned repo can contain .cs files, which the SDK's default globs
+         would otherwise compile into the API itself. -->
+    <Compile Remove="data/**" />
+    <Content Remove="data/**" />
+    <None Remove="data/**" />
+    <EmbeddedResource Remove="data/**" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Blobs" Version="12.29.1" />

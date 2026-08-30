@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useI18n } from '../i18n'
 import { IsoCanvas, type IsoCanvasHandle } from './IsoCanvas'
 import { IsoFormatPanel } from './IsoFormatPanel'
 import { IsoPalette } from './IsoPalette'
@@ -21,6 +22,7 @@ type Props = {
  * 2:1 dimetric projection.
  */
 export default function IsometricEditor({ source, onChange, readOnly }: Props) {
+  const { t } = useI18n()
   const ctrl = useIsoController({ source, onChange, readOnly })
   const canvasRef = useRef<IsoCanvasHandle>(null)
   const [zoom, setZoom] = useState(1)
@@ -70,8 +72,8 @@ export default function IsometricEditor({ source, onChange, readOnly }: Props) {
             ? { ...z, x1: z.x1 + dx, y1: z.y1 + dy, x2: z.x2 + dx, y2: z.y2 + dy }
             : z,
         ),
-        texts: prev.texts.map((t) =>
-          sel.texts.includes(t.id) ? { ...t, x: t.x + dx, y: t.y + dy } : t,
+        texts: prev.texts.map((tx) =>
+          sel.texts.includes(tx.id) ? { ...tx, x: tx.x + dx, y: tx.y + dy } : tx,
         ),
       }))
     },
@@ -231,20 +233,43 @@ export default function IsometricEditor({ source, onChange, readOnly }: Props) {
       <div className="studio-status">
         <span>
           {selectionSize(sel) > 0
-            ? [
-                sel.items.length > 0 && `${sel.items.length} shape${sel.items.length === 1 ? '' : 's'}`,
-                sel.connectors.length > 0 &&
-                  `${sel.connectors.length} connection${sel.connectors.length === 1 ? '' : 's'}`,
-                sel.zones.length > 0 && `${sel.zones.length} zone${sel.zones.length === 1 ? '' : 's'}`,
-                sel.texts.length > 0 && `${sel.texts.length} text${sel.texts.length === 1 ? '' : 's'}`,
-              ]
-                .filter(Boolean)
-                .join(', ') + ' selected'
-            : 'Nothing selected'}
+            ? t('isometric.status.selected', {
+                list: [
+                  sel.items.length > 0 &&
+                    t(
+                      sel.items.length === 1
+                        ? 'isometric.count.shapes.one'
+                        : 'isometric.count.shapes.other',
+                      { count: sel.items.length },
+                    ),
+                  sel.connectors.length > 0 &&
+                    t(
+                      sel.connectors.length === 1
+                        ? 'isometric.count.connections.one'
+                        : 'isometric.count.connections.other',
+                      { count: sel.connectors.length },
+                    ),
+                  sel.zones.length > 0 &&
+                    t(
+                      sel.zones.length === 1
+                        ? 'isometric.count.zones.one'
+                        : 'isometric.count.zones.other',
+                      { count: sel.zones.length },
+                    ),
+                  sel.texts.length > 0 &&
+                    t(
+                      sel.texts.length === 1
+                        ? 'isometric.count.texts.one'
+                        : 'isometric.count.texts.other',
+                      { count: sel.texts.length },
+                    ),
+                ]
+                  .filter(Boolean)
+                  .join(', '),
+              })
+            : t('isometric.status.nothing')}
         </span>
-        <span className="muted">
-          Hover a shape to connect it · drag from the palette · double-click to rename
-        </span>
+        <span className="muted">{t('isometric.status.hint')}</span>
       </div>
     </div>
   )

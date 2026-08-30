@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { api } from '../api'
+import { useI18n, type MessageKey } from '../i18n'
 import type {
   StorageProvider,
   StorageProviderKind,
@@ -10,13 +11,13 @@ import type {
 
 type KindOption = {
   kind: StorageProviderKind
+  /** Product name — a proper noun, never translated. The hint is `providers.kindHint.{kind}`. */
   label: string
-  hint: string
 }
 
 const KINDS: KindOption[] = [
-  { kind: 'azure-blob', label: 'Azure Blob Storage', hint: 'A container + connection string' },
-  { kind: 'google-drive', label: 'Google Drive', hint: 'Your OAuth app, connect an account' },
+  { kind: 'azure-blob', label: 'Azure Blob Storage' },
+  { kind: 'google-drive', label: 'Google Drive' },
 ]
 
 const KIND_LABELS: Record<StorageProviderKind, string> = {
@@ -73,6 +74,7 @@ function isReady(p: StorageProvider): boolean {
  * an untouched box must omit the field — sending "" is how a secret is cleared.
  */
 export function StorageProviders() {
+  const { t } = useI18n()
   const [providers, setProviders] = useState<StorageProvider[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -136,7 +138,7 @@ export function StorageProviders() {
     [providers, openId],
   )
   const openDirty = openProvider !== null && isDirty(draft, openProvider)
-  const openName = openProvider?.name ?? 'this provider'
+  const openName = openProvider?.name ?? t('providers.thisProvider')
 
   const kindCounts = useMemo(() => {
     const counts = new Map<StorageProviderKind, number>()
@@ -150,12 +152,20 @@ export function StorageProviders() {
     // would read "Google Drive · Google Drive".
     if (p.name !== KIND_LABELS[p.kind]) parts.push(KIND_LABELS[p.kind])
     if (p.kind === 'azure-blob') {
-      parts.push(`container ${p.container ?? 'beedocs'}`)
-      parts.push(p.hasConnectionString ? `secret ····${p.connectionStringHint ?? ''}` : 'no connection string')
+      parts.push(t('providers.subContainer', { name: p.container ?? 'beedocs' }))
+      parts.push(
+        p.hasConnectionString
+          ? t('providers.subSecretStored', { hint: p.connectionStringHint ?? '' })
+          : t('providers.subNoConnString'),
+      )
     } else {
-      parts.push(p.googleConnected ? 'connected' : 'not connected')
+      parts.push(p.googleConnected ? t('providers.subConnected') : t('providers.subNotConnected'))
     }
-    parts.push(p.shelfCount === 1 ? '1 shelf' : `${p.shelfCount} shelves`)
+    parts.push(
+      t(p.shelfCount === 1 ? 'providers.shelfCount.one' : 'providers.shelfCount.other', {
+        count: p.shelfCount,
+      }),
+    )
     return parts.join(' · ')
   }
 
@@ -219,7 +229,8 @@ export function StorageProviders() {
 
   // The draft is one shared object, so leaving an edited card throws the edit
   // away. Losing a pasted connection string without a word is not acceptable.
-  const mayLeaveDraft = () => !openDirty || window.confirm(`Discard unsaved changes to ${openName}?`)
+  const mayLeaveDraft = () =>
+    !openDirty || window.confirm(t('providers.discardConfirm', { name: openName }))
 
   const openCard = (p: StorageProvider) => {
     if (!mayLeaveDraft()) return
@@ -235,9 +246,9 @@ export function StorageProviders() {
   const blocker = useBlocker(openDirty)
   useEffect(() => {
     if (blocker.state !== 'blocked') return
-    if (window.confirm(`Discard unsaved changes to ${openName}?`)) blocker.proceed()
+    if (window.confirm(t('providers.discardConfirm', { name: openName }))) blocker.proceed()
     else blocker.reset()
-  }, [blocker, openName])
+  }, [blocker, openName, t])
 
   useEffect(() => {
     if (!openDirty) return
@@ -413,7 +424,7 @@ export function StorageProviders() {
 
   const addBlock = (
     <div className="llm-add">
-      <h3 className="llm-add-title">Add a storage provider</h3>
+      <h3 className="llm-add-title">{t('providers.addStorageTitle')}</h3>
       <div className="llm-add-grid">
         {KINDS.map((k) => {
           const already = kindCounts.get(k.kind) ?? 0
@@ -423,14 +434,24 @@ export function StorageProviders() {
               type="button"
               className="llm-kind-btn"
               disabled={creating !== null}
-              aria-label={already > 0 ? `Add another ${k.label} provider` : `Add ${k.label}`}
+              aria-label={
+                already > 0
+                  ? t('providers.addAnotherAria', { label: k.label })
+                  : t('providers.addAria', { label: k.label })
+              }
               onClick={() => void create(k.kind)}
             >
               <span className="llm-kind-name">
                 {k.label}
-                {already > 0 ? <span className="llm-kind-count">{already} added</span> : null}
+                {already > 0 ? (
+                  <span className="llm-kind-count">{t('providers.kindCount', { count: already })}</span>
+                ) : null}
               </span>
-              <span className="llm-kind-hint">{creating === k.kind ? 'Adding…' : k.hint}</span>
+              <span className="llm-kind-hint">
+                {creating === k.kind
+                  ? t('providers.adding')
+                  : t(`providers.kindHint.${k.kind}` as MessageKey)}
+              </span>
             </button>
           )
         })}
@@ -441,18 +462,13 @@ export function StorageProviders() {
 
   return (
     <div className="llm-providers storage-providers">
-      <p className="llm-intro">
-        Bookshelves are stored in the embedded database by default. A provider added here becomes an
-        option in a shelf's <strong>Storage</strong> field (properties pane) — assigning it moves
-        that shelf's pages, revisions, diagrams and slide decks to the provider. Credentials are
-        stored on the server and never sent back to the browser.
-      </p>
+      <p className="llm-intro">{t('providers.storageIntro')}</p>
 
       {loadError ? (
         <p className="banner error llm-load-error">
           <span>{loadError}</span>
           <button type="button" className="btn sm" disabled={loading} onClick={() => void refresh()}>
-            {loading ? 'Retrying…' : 'Retry'}
+            {loading ? t('providers.retrying') : t('common.retry')}
           </button>
         </p>
       ) : null}
@@ -496,11 +512,13 @@ export function StorageProviders() {
                       <span className="llm-name-row">
                         <span className="llm-name">{p.name}</span>
                         {ready ? (
-                          <span className="llm-badge is-ok">Ready</span>
+                          <span className="llm-badge is-ok">{t('providers.badgeReady')}</span>
                         ) : (
-                          <span className="llm-badge is-warn">Setup needed</span>
+                          <span className="llm-badge is-warn">{t('providers.badgeSetupNeeded')}</span>
                         )}
-                        {dirty ? <span className="llm-badge is-dirty">Unsaved</span> : null}
+                        {dirty ? (
+                          <span className="llm-badge is-dirty">{t('providers.badgeUnsaved')}</span>
+                        ) : null}
                       </span>
                       <span className="llm-card-sub">{subLine(p)}</span>
                     </span>
@@ -513,7 +531,7 @@ export function StorageProviders() {
                     <button
                       type="button"
                       className="llm-row-error-x"
-                      aria-label="Dismiss this error"
+                      aria-label={t('providers.dismissError')}
                       onClick={() => clearRowError(p.id)}
                     >
                       ✕
@@ -531,7 +549,7 @@ export function StorageProviders() {
                     }}
                   >
                     <div className="llm-field">
-                      <label htmlFor={`sp-name-${p.id}`}>Name</label>
+                      <label htmlFor={`sp-name-${p.id}`}>{t('common.name')}</label>
                       <input
                         id={`sp-name-${p.id}`}
                         value={draft.name}
@@ -544,7 +562,7 @@ export function StorageProviders() {
                       />
                       {nameMissing ? (
                         <p className="llm-hint is-warn" id={nameErrId}>
-                          Name is required.
+                          {t('providers.nameRequired')}
                         </p>
                       ) : null}
                     </div>
@@ -552,7 +570,7 @@ export function StorageProviders() {
                     {p.kind === 'azure-blob' ? (
                       <>
                         <div className="llm-field">
-                          <label htmlFor={`sp-container-${p.id}`}>Container</label>
+                          <label htmlFor={`sp-container-${p.id}`}>{t('providers.container')}</label>
                           <input
                             id={`sp-container-${p.id}`}
                             className="llm-mono"
@@ -563,12 +581,10 @@ export function StorageProviders() {
                             readOnly={formBusy}
                             onChange={(e) => editDraft({ container: e.target.value })}
                           />
-                          <p className="llm-hint">
-                            Created in the storage account if it does not exist yet.
-                          </p>
+                          <p className="llm-hint">{t('providers.containerHint')}</p>
                         </div>
                         <div className="llm-field">
-                          <label htmlFor={`sp-conn-${p.id}`}>Connection string</label>
+                          <label htmlFor={`sp-conn-${p.id}`}>{t('providers.connectionString')}</label>
                           <div className="llm-inline">
                             <input
                               id={`sp-conn-${p.id}`}
@@ -582,7 +598,7 @@ export function StorageProviders() {
                               placeholder={
                                 p.hasConnectionString
                                   ? `•••••••• ${p.connectionStringHint ?? ''}`.trim()
-                                  : "Paste it from the storage account's Access keys"
+                                  : t('providers.connStringPlaceholder')
                               }
                               value={draft.connectionString}
                               onChange={(e) => editDraft({ connectionString: e.target.value })}
@@ -594,22 +610,19 @@ export function StorageProviders() {
                                 disabled={formBusy || confirmSecretId === p.id}
                                 onClick={() => setConfirmSecretId(p.id)}
                               >
-                                Remove
+                                {t('common.remove')}
                               </button>
                             ) : null}
                           </div>
                           {p.hasConnectionString ? (
-                            <p className="llm-hint">
-                              A connection string is stored. Leave this blank to keep it, or enter a
-                              new one to replace it.
-                            </p>
+                            <p className="llm-hint">{t('providers.connStringStoredHint')}</p>
                           ) : null}
                         </div>
                       </>
                     ) : (
                       <>
                         <div className="llm-field">
-                          <label htmlFor={`sp-client-id-${p.id}`}>OAuth client id</label>
+                          <label htmlFor={`sp-client-id-${p.id}`}>{t('providers.oauthClientId')}</label>
                           <input
                             id={`sp-client-id-${p.id}`}
                             className="llm-mono"
@@ -622,7 +635,7 @@ export function StorageProviders() {
                           />
                         </div>
                         <div className="llm-field">
-                          <label htmlFor={`sp-client-secret-${p.id}`}>Client secret</label>
+                          <label htmlFor={`sp-client-secret-${p.id}`}>{t('providers.clientSecret')}</label>
                           <div className="llm-inline">
                             <input
                               id={`sp-client-secret-${p.id}`}
@@ -635,8 +648,8 @@ export function StorageProviders() {
                               readOnly={formBusy}
                               placeholder={
                                 p.hasGoogleClientSecret
-                                  ? '•••••••• stored'
-                                  : 'From your Google Cloud OAuth client'
+                                  ? t('providers.secretStoredPlaceholder')
+                                  : t('providers.clientSecretPlaceholder')
                               }
                               value={draft.clientSecret}
                               onChange={(e) => editDraft({ clientSecret: e.target.value })}
@@ -648,16 +661,11 @@ export function StorageProviders() {
                                 disabled={formBusy || confirmSecretId === p.id}
                                 onClick={() => setConfirmSecretId(p.id)}
                               >
-                                Remove
+                                {t('common.remove')}
                               </button>
                             ) : null}
                           </div>
-                          <p className="llm-hint">
-                            Create an OAuth client (type “Web application”) in Google Cloud Console
-                            and add this server's{' '}
-                            <code>/api/storage-providers/google/callback</code> URL as an authorized
-                            redirect URI. Changing the client drops the stored connection.
-                          </p>
+                          <p className="llm-hint">{t('providers.googleClientHint')}</p>
                         </div>
                         <div className="llm-field">
                           <span className="sp-connect">
@@ -667,31 +675,30 @@ export function StorageProviders() {
                               disabled={formBusy || connecting || dirty || !p.hasGoogleClientSecret || !p.googleClientId}
                               title={
                                 dirty
-                                  ? 'Save first — the consent flow uses the saved client.'
+                                  ? t('providers.connectSaveFirst')
                                   : !p.hasGoogleClientSecret || !p.googleClientId
-                                    ? 'Store the OAuth client id and secret first.'
+                                    ? t('providers.connectNeedsClient')
                                     : undefined
                               }
                               onClick={() => void connectGoogle(p)}
                             >
-                              {p.googleConnected ? 'Reconnect Google Drive' : 'Connect Google Drive'}
+                              {p.googleConnected
+                                ? t('providers.reconnectGoogle')
+                                : t('providers.connectGoogle')}
                             </button>
                             {connecting ? (
                               <>
                                 <span className="llm-hint sp-waiting">
-                                  Waiting for you to finish in the Google window…
+                                  {t('providers.googleWaiting')}
                                 </span>
                                 <button type="button" className="btn ghost sm" onClick={stopWaiting}>
-                                  Stop waiting
+                                  {t('providers.stopWaiting')}
                                 </button>
                               </>
                             ) : null}
                           </span>
                           {p.googleConnected && !connecting ? (
-                            <p className="llm-hint">
-                              Connected. Content is stored in a “BeeDocs” folder in that account's
-                              Drive.
-                            </p>
+                            <p className="llm-hint">{t('providers.googleConnectedHint')}</p>
                           ) : null}
                         </div>
                       </>
@@ -700,9 +707,12 @@ export function StorageProviders() {
                     {confirmSecretId === p.id ? (
                       <div className="llm-confirm">
                         <span>
-                          Remove the stored {p.kind === 'azure-blob' ? 'connection string' : 'client secret'}{' '}
-                          for <strong>{p.name}</strong>? It cannot be shown again — you would have to
-                          paste a new one{p.kind === 'google-drive' ? ', and the Drive connection is dropped with it' : ''}.
+                          {t(
+                            p.kind === 'azure-blob'
+                              ? 'providers.removeSecretConfirmAzure'
+                              : 'providers.removeSecretConfirmGoogle',
+                            { name: p.name },
+                          )}
                         </span>
                         <span className="llm-confirm-actions">
                           <button
@@ -711,7 +721,7 @@ export function StorageProviders() {
                             disabled={formBusy}
                             onClick={() => setConfirmSecretId(null)}
                           >
-                            Keep it
+                            {t('providers.keepIt')}
                           </button>
                           <button
                             type="button"
@@ -719,7 +729,7 @@ export function StorageProviders() {
                             disabled={formBusy}
                             onClick={() => void clearSecret(p)}
                           >
-                            {isSaving ? 'Removing…' : 'Remove'}
+                            {isSaving ? t('providers.removing') : t('common.remove')}
                           </button>
                         </span>
                       </div>
@@ -738,11 +748,7 @@ export function StorageProviders() {
 
                     {confirmId === p.id ? (
                       <div className="llm-confirm">
-                        <span>
-                          Delete <strong>{p.name}</strong>? Its stored credentials go with it. The
-                          server refuses while any shelf still keeps content there — move those
-                          shelves back to Local first.
-                        </span>
+                        <span>{t('providers.deleteStorageConfirm', { name: p.name })}</span>
                         <span className="llm-confirm-actions">
                           <button
                             type="button"
@@ -750,7 +756,7 @@ export function StorageProviders() {
                             disabled={formBusy}
                             onClick={() => setConfirmId(null)}
                           >
-                            Cancel
+                            {t('common.cancel')}
                           </button>
                           <button
                             type="button"
@@ -758,7 +764,7 @@ export function StorageProviders() {
                             disabled={formBusy}
                             onClick={() => void remove(p)}
                           >
-                            {busyId === p.id ? 'Deleting…' : 'Delete provider'}
+                            {busyId === p.id ? t('providers.deleting') : t('providers.deleteProvider')}
                           </button>
                         </span>
                       </div>
@@ -766,15 +772,14 @@ export function StorageProviders() {
 
                     {dirty ? (
                       <p className="llm-hint" id={testHintId}>
-                        Save first — the test runs against the saved settings, not what is in these
-                        boxes.
+                        {t('providers.saveFirstHint')}
                       </p>
                     ) : null}
 
                     <div className="llm-actions">
                       <div className="llm-actions-main">
                         <button type="submit" className="btn primary" disabled={!canSave}>
-                          {isSaving ? 'Saving…' : 'Save changes'}
+                          {isSaving ? t('common.saving') : t('providers.saveChanges')}
                         </button>
                         <button
                           type="button"
@@ -783,7 +788,7 @@ export function StorageProviders() {
                           aria-describedby={dirty ? testHintId : undefined}
                           onClick={() => void runTest(p)}
                         >
-                          {isTesting ? 'Testing…' : 'Test connection'}
+                          {isTesting ? t('providers.testing') : t('providers.testConnection')}
                         </button>
                         {isTesting ? (
                           <button
@@ -791,11 +796,11 @@ export function StorageProviders() {
                             className="btn ghost"
                             onClick={() => testAbort.current?.abort()}
                           >
-                            Cancel
+                            {t('common.cancel')}
                           </button>
                         ) : null}
                         <span className={`llm-flash${savedFlash ? ' is-on' : ''}`} aria-live="polite">
-                          {savedFlash ? 'Saved' : ''}
+                          {savedFlash ? t('common.saved') : ''}
                         </span>
                       </div>
                       <div className="llm-actions-side">
@@ -805,7 +810,7 @@ export function StorageProviders() {
                           disabled={formBusy || confirmId === p.id}
                           onClick={() => setConfirmId(p.id)}
                         >
-                          Delete
+                          {t('common.delete')}
                         </button>
                       </div>
                     </div>

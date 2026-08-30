@@ -35,9 +35,37 @@ public interface ICurrentUserAccessor
 }
 
 /// <summary>
+/// Lets a background task act *as* the person who queued it. An assist job
+/// publishes pages minutes after the request that started it has ended, but the
+/// page history should still name the requester — so the job runner wraps its
+/// document writes in <see cref="Use"/> and <see cref="HttpCurrentUserAccessor"/>
+/// answers with that actor instead of "no request, nobody". AsyncLocal, so
+/// parallel jobs cannot see each other's actor.
+/// </summary>
+public static class AmbientActor
+{
+    private static readonly AsyncLocal<CurrentActor?> Slot = new();
+
+    public static CurrentActor? Current => Slot.Value;
+
+    public static IDisposable Use(CurrentActor actor)
+    {
+        var previous = Slot.Value;
+        Slot.Value = actor;
+        return new Scope(previous);
+    }
+
+    private sealed class Scope(CurrentActor? previous) : IDisposable
+    {
+        public void Dispose() => Slot.Value = previous;
+    }
+}
+
+/// <summary>
 /// Reads the <see cref="CurrentUser"/> that <see cref="AuthEndpointFilter"/> put
 /// on the request. Outside a request (startup seeding, a background job) there is
-/// no HttpContext and the answer is <see cref="CurrentActor.Unknown"/>.
+/// no HttpContext and the answer is <see cref="CurrentActor.Unknown"/> — unless
+/// the task declared who it acts for via <see cref="AmbientActor"/>.
 /// </summary>
 public sealed class HttpCurrentUserAccessor(IHttpContextAccessor accessor) : ICurrentUserAccessor
 {
@@ -45,6 +73,8 @@ public sealed class HttpCurrentUserAccessor(IHttpContextAccessor accessor) : ICu
     {
         get
         {
+            if (AmbientActor.Current is { } ambient) return ambient;
+
             var http = accessor.HttpContext;
             if (http is null) return CurrentActor.Unknown;
 

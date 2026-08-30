@@ -10,6 +10,10 @@ function resolveBase(): string {
   return withSlash.endsWith('/') ? withSlash : `${withSlash}/`
 }
 
+// Same override the start scripts use, so `API_PORT=5081 pnpm dev` proxies to
+// the API it actually started.
+const apiTarget = process.env.BEEDOCS_API_URL || `http://localhost:${process.env.API_PORT || '5080'}`
+
 export default defineConfig({
   base: resolveBase(),
   plugins: [react()],
@@ -17,11 +21,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5080',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:5080',
+        target: apiTarget,
         changeOrigin: true,
       },
     },

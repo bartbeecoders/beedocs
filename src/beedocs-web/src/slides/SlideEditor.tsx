@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { api } from '../api'
+import { useI18n, type MessageKey } from '../i18n'
 import {
   cloneSlide,
   newImageElement,
@@ -32,16 +33,33 @@ type Props = {
   onPresent: (index: number) => void
 }
 
-const SHAPES: { kind: SlideShapeKind; label: string }[] = [
-  { kind: 'rect', label: '▭ Rectangle' },
-  { kind: 'rounded', label: '▢ Rounded' },
-  { kind: 'ellipse', label: '◯ Ellipse' },
-  { kind: 'triangle', label: '△ Triangle' },
-  { kind: 'diamond', label: '◇ Diamond' },
-  { kind: 'star', label: '☆ Star' },
-  { kind: 'arrow', label: '→ Arrow' },
-  { kind: 'line', label: '— Line' },
+const SHAPES: { kind: SlideShapeKind; glyph: string }[] = [
+  { kind: 'rect', glyph: '▭' },
+  { kind: 'rounded', glyph: '▢' },
+  { kind: 'ellipse', glyph: '◯' },
+  { kind: 'triangle', glyph: '△' },
+  { kind: 'diamond', glyph: '◇' },
+  { kind: 'star', glyph: '☆' },
+  { kind: 'arrow', glyph: '→' },
+  { kind: 'line', glyph: '—' },
 ]
+
+/**
+ * Message keys for the placeholder texts newSlide() stamps into each layout,
+ * in element order — translated at insertion time so the stored document gets
+ * the deck author's language (slideModel.ts stays language-neutral).
+ */
+const LAYOUT_STARTER_KEYS: Record<SlideLayoutId, MessageKey[]> = {
+  title: ['slidesEditor.starter.title', 'slidesEditor.starter.subtitle'],
+  'title-content': ['slidesEditor.starter.slideTitle', 'slidesEditor.starter.bullets'],
+  'two-content': [
+    'slidesEditor.starter.slideTitle',
+    'slidesEditor.starter.left',
+    'slidesEditor.starter.right',
+  ],
+  section: ['slidesEditor.starter.section'],
+  blank: [],
+}
 
 /** Snap drags to a coarse grid so hand-placed boxes still line up. */
 const GRID = 5
@@ -67,6 +85,7 @@ type DragState =
  * (SlideCanvas wires it into the shared auto-save).
  */
 export function SlideEditor({ initialSource, onChange, onPresent }: Props) {
+  const { t } = useI18n()
   const [deck, setDeck] = useState<SlideDeckDoc>(() => parseDeck(initialSource))
   const [current, setCurrent] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -177,6 +196,10 @@ export function SlideEditor({ initialSource, onChange, onPresent }: Props) {
   const addSlide = useCallback(
     (layout: SlideLayoutId) => {
       const s = newSlide(layout)
+      const starterKeys = LAYOUT_STARTER_KEYS[layout]
+      s.elements = s.elements.map((el, i) =>
+        starterKeys[i] ? { ...el, text: t(starterKeys[i]) } : el,
+      )
       apply((d) => {
         const slides = [...d.slides]
         slides.splice(current + 1, 0, s)
@@ -186,7 +209,7 @@ export function SlideEditor({ initialSource, onChange, onPresent }: Props) {
       setSelectedId(null)
       setEditingId(null)
     },
-    [apply, current],
+    [apply, current, t],
   )
 
   const duplicateSlide = useCallback(() => {
@@ -444,10 +467,10 @@ export function SlideEditor({ initialSource, onChange, onPresent }: Props) {
           <button
             type="button"
             className="btn sm"
-            onClick={() => addElement(newTextElement())}
-            title="Insert a text box"
+            onClick={() => addElement(newTextElement({ text: t('slidesEditor.starter.text') }))}
+            title={t('slidesEditor.insertText')}
           >
-            + Text
+            + {t('slidesEditor.text')}
           </button>
           <div className="slide-shape-menu">
             <button
@@ -456,7 +479,7 @@ export function SlideEditor({ initialSource, onChange, onPresent }: Props) {
               onClick={() => setShapeMenuOpen((v) => !v)}
               aria-expanded={shapeMenuOpen}
             >
-              + Shape ▾
+              + {t('slidesEditor.shapeBtn')} ▾
             </button>
             {shapeMenuOpen && (
               <div className="slide-shape-popover" onMouseLeave={() => setShapeMenuOpen(false)}>
@@ -470,7 +493,7 @@ export function SlideEditor({ initialSource, onChange, onPresent }: Props) {
                       setShapeMenuOpen(false)
                     }}
                   >
-                    {s.label}
+                    {s.glyph} {t(`slidesEditor.shape.${s.kind}`)}
                   </button>
                 ))}
               </div>
@@ -480,9 +503,9 @@ export function SlideEditor({ initialSource, onChange, onPresent }: Props) {
             type="button"
             className="btn sm"
             onClick={() => fileRef.current?.click()}
-            title="Insert an image"
+            title={t('slidesEditor.insertImage')}
           >
-            + Image
+            + {t('slidesEditor.image')}
           </button>
           <input
             ref={fileRef}
@@ -505,20 +528,20 @@ export function SlideEditor({ initialSource, onChange, onPresent }: Props) {
             onChange={(e) => {
               if (e.target.value) addSlide(e.target.value as SlideLayoutId)
             }}
-            title="Add a slide after the current one"
+            title={t('slidesEditor.addSlideTitle')}
           >
-            <option value="">+ Slide…</option>
+            <option value="">{t('slidesEditor.addSlideOption')}</option>
             {SLIDE_LAYOUTS.map((l) => (
               <option key={l.id} value={l.id}>
-                {l.label}
+                {t(`slidesEditor.layout.${l.id}`)}
               </option>
             ))}
           </select>
           <button type="button" className="btn ghost sm" onClick={duplicateSlide}>
-            Duplicate
+            {t('slidesEditor.duplicate')}
           </button>
           <button type="button" className="btn ghost danger sm" onClick={deleteSlide}>
-            Delete slide
+            {t('slidesEditor.deleteSlide')}
           </button>
         </div>
 
@@ -526,18 +549,18 @@ export function SlideEditor({ initialSource, onChange, onPresent }: Props) {
 
         <div className="slide-toolbar-group">
           <label className="slide-inline-label">
-            Theme
+            {t('slidesEditor.themeLabel')}
             <select
-              value={SLIDE_THEMES.find((t) => t.theme.background === deck.theme.background && t.theme.color === deck.theme.color)?.id ?? ''}
+              value={SLIDE_THEMES.find((th) => th.theme.background === deck.theme.background && th.theme.color === deck.theme.color)?.id ?? ''}
               onChange={(e) => {
-                const preset = SLIDE_THEMES.find((t) => t.id === e.target.value)
+                const preset = SLIDE_THEMES.find((th) => th.id === e.target.value)
                 if (preset) apply((d) => ({ ...d, theme: { ...preset.theme } }))
               }}
             >
-              <option value="">Custom</option>
-              {SLIDE_THEMES.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
+              <option value="">{t('slidesEditor.themeCustom')}</option>
+              {SLIDE_THEMES.map((th) => (
+                <option key={th.id} value={th.id}>
+                  {t(`slidesEditor.theme.${th.id}` as MessageKey)}
                 </option>
               ))}
             </select>
@@ -550,9 +573,9 @@ export function SlideEditor({ initialSource, onChange, onPresent }: Props) {
           type="button"
           className="btn primary sm"
           onClick={() => onPresent(current)}
-          title="Start the presentation from this slide (F5-style)"
+          title={t('slidesEditor.presentTitle')}
         >
-          ▶ Present
+          ▶ {t('slidesEditor.present')}
         </button>
       </div>
 
@@ -589,9 +612,9 @@ export function SlideEditor({ initialSource, onChange, onPresent }: Props) {
             type="button"
             className="slide-thumb-add"
             onClick={() => addSlide('title-content')}
-            title="Add a slide"
+            title={t('slidesEditor.addSlideThumbTitle')}
           >
-            + New slide
+            + {t('slidesEditor.newSlide')}
           </button>
         </div>
 
@@ -651,12 +674,11 @@ function ElementFormat({
   onReorder: (dir: 'front' | 'back' | 'forward' | 'backward') => void
   onDelete: () => void
 }) {
-  const kindLabel =
-    element.kind === 'text' ? 'Text box' : element.kind === 'image' ? 'Image' : 'Shape'
+  const { t } = useI18n()
 
   return (
     <div className="slide-format">
-      <h4>{kindLabel}</h4>
+      <h4>{t(`slidesEditor.elKind.${element.kind}`)}</h4>
 
       {element.kind !== 'image' && (
         <>
@@ -689,7 +711,7 @@ function ElementFormat({
               max={200}
               value={element.fontSize ?? 28}
               onChange={(e) => onPatch({ fontSize: Number(e.target.value) || 28 })}
-              title="Font size"
+              title={t('slidesEditor.fontSize')}
             />
           </div>
 
@@ -700,7 +722,7 @@ function ElementFormat({
                 type="button"
                 className={`btn sm slide-style-toggle${(element.align ?? 'left') === a ? ' on' : ''}`}
                 onClick={() => onPatch({ align: a })}
-                title={`Align ${a}`}
+                title={t(`slidesEditor.align.${a}`)}
               >
                 {a === 'left' ? '⇤' : a === 'center' ? '↔' : '⇥'}
               </button>
@@ -711,7 +733,7 @@ function ElementFormat({
                 type="button"
                 className={`btn sm slide-style-toggle${(element.valign ?? 'top') === v ? ' on' : ''}`}
                 onClick={() => onPatch({ valign: v })}
-                title={`Vertical ${v}`}
+                title={t(`slidesEditor.valign.${v}`)}
               >
                 {v === 'top' ? '⤒' : v === 'middle' ? '⇕' : '⤓'}
               </button>
@@ -719,7 +741,7 @@ function ElementFormat({
           </div>
 
           <label className="slide-format-field">
-            <span>Text colour</span>
+            <span>{t('slidesEditor.textColor')}</span>
             <input
               type="color"
               value={toColorInput(element.color, '#1f2430')}
@@ -732,7 +754,7 @@ function ElementFormat({
       {element.kind === 'shape' && (
         <>
           <label className="slide-format-field">
-            <span>Fill</span>
+            <span>{t('slidesEditor.fill')}</span>
             <span className="slide-format-inline">
               <input
                 type="color"
@@ -746,12 +768,12 @@ function ElementFormat({
                   checked={element.fill === 'none'}
                   onChange={(e) => onPatch({ fill: e.target.checked ? 'none' : '#f59e0b' })}
                 />
-                none
+                {t('common.none')}
               </label>
             </span>
           </label>
           <label className="slide-format-field">
-            <span>Outline</span>
+            <span>{t('slidesEditor.outline')}</span>
             <span className="slide-format-inline">
               <input
                 type="color"
@@ -773,7 +795,7 @@ function ElementFormat({
                       : { stroke: element.stroke && element.stroke !== 'none' ? element.stroke : '#1f2430', strokeWidth: width },
                   )
                 }}
-                title="Outline width"
+                title={t('slidesEditor.outlineWidth')}
               />
             </span>
           </label>
@@ -781,7 +803,7 @@ function ElementFormat({
       )}
 
       <label className="slide-format-field">
-        <span>Opacity</span>
+        <span>{t('slidesEditor.opacity')}</span>
         <input
           type="range"
           min={10}
@@ -792,7 +814,7 @@ function ElementFormat({
       </label>
 
       <label className="slide-format-field">
-        <span>Rotation</span>
+        <span>{t('slidesEditor.rotation')}</span>
         <input
           type="number"
           className="slide-num"
@@ -818,28 +840,25 @@ function ElementFormat({
       </div>
 
       <div className="slide-format-row">
-        <button type="button" className="btn ghost sm" onClick={() => onReorder('front')} title="Bring to front">
+        <button type="button" className="btn ghost sm" onClick={() => onReorder('front')} title={t('slidesEditor.bringToFront')}>
           ⬆⬆
         </button>
-        <button type="button" className="btn ghost sm" onClick={() => onReorder('forward')} title="Bring forward">
+        <button type="button" className="btn ghost sm" onClick={() => onReorder('forward')} title={t('slidesEditor.bringForward')}>
           ⬆
         </button>
-        <button type="button" className="btn ghost sm" onClick={() => onReorder('backward')} title="Send backward">
+        <button type="button" className="btn ghost sm" onClick={() => onReorder('backward')} title={t('slidesEditor.sendBackward')}>
           ⬇
         </button>
-        <button type="button" className="btn ghost sm" onClick={() => onReorder('back')} title="Send to back">
+        <button type="button" className="btn ghost sm" onClick={() => onReorder('back')} title={t('slidesEditor.sendToBack')}>
           ⬇⬇
         </button>
       </div>
 
       <button type="button" className="btn ghost danger sm" onClick={onDelete}>
-        Delete element
+        {t('slidesEditor.deleteElement')}
       </button>
 
-      <p className="muted sm">
-        Drag to move, handles to resize. Double-click to edit text. Arrow keys nudge, Ctrl+D
-        duplicates.
-      </p>
+      <p className="muted sm">{t('slidesEditor.elementHint')}</p>
     </div>
   )
 }
@@ -855,11 +874,12 @@ function SlideFormat({
   onPatchSlide: (patch: Partial<Slide>) => void
   onPatchTheme: (patch: Partial<{ background: string; color: string }>) => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="slide-format">
-      <h4>Slide</h4>
+      <h4>{t('slidesEditor.slide')}</h4>
       <label className="slide-format-field">
-        <span>Background</span>
+        <span>{t('slidesEditor.background')}</span>
         <span className="slide-format-inline">
           <input
             type="color"
@@ -871,16 +891,16 @@ function SlideFormat({
               type="button"
               className="btn ghost sm"
               onClick={() => onPatchSlide({ background: undefined })}
-              title="Use the theme background again"
+              title={t('slidesEditor.resetBackgroundTitle')}
             >
-              Reset
+              {t('common.reset')}
             </button>
           )}
         </span>
       </label>
 
       <label className="slide-format-field">
-        <span>Theme background</span>
+        <span>{t('slidesEditor.themeBackground')}</span>
         <input
           type="color"
           value={toColorInput(theme.background, '#ffffff')}
@@ -888,7 +908,7 @@ function SlideFormat({
         />
       </label>
       <label className="slide-format-field">
-        <span>Theme text</span>
+        <span>{t('slidesEditor.themeText')}</span>
         <input
           type="color"
           value={toColorInput(theme.color, '#1f2430')}
@@ -897,20 +917,17 @@ function SlideFormat({
       </label>
 
       <label className="slide-format-field column">
-        <span>Speaker notes</span>
+        <span>{t('slidesEditor.speakerNotes')}</span>
         <textarea
           className="slide-notes"
           rows={6}
-          placeholder="Notes for the presenter — never shown on the slide."
+          placeholder={t('slidesEditor.notesPlaceholder')}
           value={slide.notes ?? ''}
           onChange={(e) => onPatchSlide({ notes: e.target.value || undefined })}
         />
       </label>
 
-      <p className="muted sm">
-        Click an element to format it. Double-click text to edit. Use the filmstrip to reorder
-        slides by dragging.
-      </p>
+      <p className="muted sm">{t('slidesEditor.slideHint')}</p>
     </div>
   )
 }

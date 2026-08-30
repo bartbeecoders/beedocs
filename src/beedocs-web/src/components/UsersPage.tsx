@@ -2,30 +2,22 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
+import { useI18n, type MessageKey } from '../i18n'
 import { refreshUserDirectory } from '../hooks/useUserDirectory'
 import type { User, UserRole } from '../types'
 import '../styles/users.css'
 
-const ROLES: { id: UserRole; label: string; hint: string }[] = [
-  { id: 'admin', label: 'Admin', hint: 'Everything, plus accounts and AI provider settings' },
-  { id: 'editor', label: 'Editor', hint: 'Create, edit and delete books, pages and diagrams' },
-  { id: 'viewer', label: 'Viewer', hint: 'Read, search and export — no changes' },
-]
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  admin: 'Admin',
-  editor: 'Editor',
-  viewer: 'Viewer',
-}
+const ROLE_IDS: UserRole[] = ['admin', 'editor', 'viewer']
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return 'never'
+/** Null when there is no valid date — the caller renders its own "never". */
+function formatDate(value: string | null): string | null {
+  if (!value) return null
   const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? 'never' : d.toLocaleDateString()
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString()
 }
 
 /**
@@ -36,39 +28,34 @@ function formatDate(value: string | null): string {
  */
 export function UsersPage() {
   const { authEnabled, canManageUsers, user: me, rbaEnabled } = useAuth()
+  const { t } = useI18n()
 
   return (
     <div className="settings-panel users-page">
       <header className="settings-header">
-        <h1>Users</h1>
-        <p className="muted">Add accounts, assign roles, reset passwords.</p>
+        <h1>{t('common.users')}</h1>
+        <p className="muted">{t('users.pageLead')}</p>
       </header>
 
       {!authEnabled ? (
         <section className="settings-section">
           <p className="muted sm">
-            Sign-in is off, so every visitor has full access and accounts are not used. Set{' '}
-            <code>BeeDocs__Auth__Enabled=true</code> on the API to turn it on — you will then be
-            asked to create the administrator account the first time the app loads.
+            {t('users.authOffBefore')} <code>BeeDocs__Auth__Enabled=true</code>{' '}
+            {t('users.authOffAfter')}
           </p>
         </section>
       ) : !canManageUsers ? (
         <section className="settings-section">
           <p className="muted sm">
-            You are signed in as <strong>{me?.displayName || me?.username}</strong> (
-            {ROLE_LABELS[me?.role ?? 'viewer']}). Only an admin can manage accounts. Your own
-            password can be changed in <Link to="/settings">Settings</Link>.
+            {t('users.signedInAs')} <strong>{me?.displayName || me?.username}</strong> (
+            {t(`common.${me?.role ?? 'viewer'}` as MessageKey)}). {t('users.onlyAdminManages')}{' '}
+            {t('users.ownPasswordPrefix')} <Link to="/settings/account">{t('common.settings')}</Link>
+            {t('users.ownPasswordSuffix')}
           </p>
         </section>
       ) : (
         <section className="settings-section">
-          {rbaEnabled && (
-            <p className="users-notice">
-              Sign-in is delegated to RBA: accounts appear here after a person's first login, and
-              roles follow their DOC groups in RBA — a role edited here is overwritten at their next
-              sign-in. Passwords are not managed in BeeDocs. Disabling an account here does block it.
-            </p>
-          )}
+          {rbaEnabled && <p className="users-notice">{t('users.rbaNotice')}</p>}
           <UserList meId={me?.id ?? null} />
         </section>
       )}
@@ -77,6 +64,7 @@ export function UsersPage() {
 }
 
 function UserList({ meId }: { meId: string | null }) {
+  const { t } = useI18n()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -107,11 +95,11 @@ function UserList({ meId }: { meId: string | null }) {
     <section className="users-card">
       <header className="users-card-head">
         <div>
-          <h3>Accounts</h3>
-          <p className="muted sm">Who can reach this instance, and with what authority.</p>
+          <h3>{t('users.accounts')}</h3>
+          <p className="muted sm">{t('users.accountsLead')}</p>
         </div>
         <button type="button" className="btn sm" onClick={() => setAdding((v) => !v)}>
-          {adding ? 'Cancel' : 'Add user'}
+          {adding ? t('common.cancel') : t('users.addUser')}
         </button>
       </header>
 
@@ -129,13 +117,13 @@ function UserList({ meId }: { meId: string | null }) {
         <p className="users-error" role="alert">
           {error}{' '}
           <button type="button" className="btn ghost sm" onClick={() => void load()}>
-            Retry
+            {t('common.retry')}
           </button>
         </p>
       )}
 
       {loading && users.length === 0 ? (
-        <p className="muted sm">Loading accounts…</p>
+        <p className="muted sm">{t('users.loadingAccounts')}</p>
       ) : (
         <ul className="users-list">
           {users.map((u) => (
@@ -167,6 +155,7 @@ function UserRow({
   onToggle: () => void
   onChanged: () => Promise<void>
 }) {
+  const { t } = useI18n()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /** Non-null after a generated reset: the one and only time this string exists. */
@@ -196,14 +185,15 @@ function UserRow({
           <strong>{user.displayName || user.username}</strong>
           <span className="muted sm">
             {user.username}
-            {user.email ? ` · ${user.email}` : ''} · last sign-in {formatDate(user.lastLoginAt)}
+            {user.email ? ` · ${user.email}` : ''} ·{' '}
+            {t('users.lastSignIn', { when: formatDate(user.lastLoginAt) ?? t('users.never') })}
           </span>
         </span>
-        <span className={`role-pill ${user.role}`}>{ROLE_LABELS[user.role]}</span>
-        {!user.enabled && <span className="users-flag">Disabled</span>}
+        <span className={`role-pill ${user.role}`}>{t(`common.${user.role}` as MessageKey)}</span>
+        {!user.enabled && <span className="users-flag">{t('users.disabled')}</span>}
         {user.mustChangePassword && user.enabled && (
-          <span className="users-flag warn" title="Still using an assigned password">
-            Temp password
+          <span className="users-flag warn" title={t('users.tempPasswordTitle')}>
+            {t('users.tempPassword')}
           </span>
         )}
       </button>
@@ -212,7 +202,7 @@ function UserRow({
         <div className="users-row-body">
           <div className="users-controls">
             <label className="users-field inline">
-              <span>Role</span>
+              <span>{t('users.role')}</span>
               <select
                 value={user.role}
                 disabled={busy}
@@ -223,9 +213,9 @@ function UserRow({
                   })
                 }
               >
-                {ROLES.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.label}
+                {ROLE_IDS.map((r) => (
+                  <option key={r} value={r}>
+                    {t(`common.${r}` as MessageKey)}
                   </option>
                 ))}
               </select>
@@ -243,11 +233,11 @@ function UserRow({
                   })
                 }
               />
-              <span>Enabled</span>
+              <span>{t('users.enabled')}</span>
             </label>
           </div>
 
-          <p className="muted sm">{ROLES.find((r) => r.id === user.role)?.hint}</p>
+          <p className="muted sm">{t(`users.roleHint.${user.role}` as MessageKey)}</p>
 
           <div className="users-actions">
             <button
@@ -262,15 +252,15 @@ function UserRow({
                 })
               }
             >
-              Generate new password
+              {t('users.generatePassword')}
             </button>
 
-            <span className="users-or">or</span>
+            <span className="users-or">{t('users.or')}</span>
 
             <input
               type="password"
               className="users-inline-input"
-              placeholder="Set a password…"
+              placeholder={t('users.setPasswordPlaceholder')}
               autoComplete="new-password"
               minLength={8}
               value={manualPassword}
@@ -290,7 +280,7 @@ function UserRow({
                 })
               }
             >
-              Set
+              {t('users.set')}
             </button>
 
             {/* Two clicks, not a confirm() — a browser dialog inside the
@@ -309,10 +299,10 @@ function UserRow({
                       })
                     }
                   >
-                    Delete permanently
+                    {t('users.deletePermanently')}
                   </button>
                   <button type="button" className="btn ghost sm" onClick={() => setConfirmDelete(false)}>
-                    Keep
+                    {t('users.keep')}
                   </button>
                 </>
               ) : (
@@ -322,15 +312,15 @@ function UserRow({
                   disabled={busy}
                   onClick={() => setConfirmDelete(true)}
                 >
-                  Delete
+                  {t('common.delete')}
                 </button>
               ))}
           </div>
 
           {generated && (
             <p className="users-generated">
-              New password for <strong>{user.username}</strong>: <code>{generated}</code>
-              <span className="muted sm"> — shown once. Copy it now; only the hash is stored.</span>
+              {t('users.newPasswordFor', { name: user.username })} <code>{generated}</code>
+              <span className="muted sm"> {t('users.shownOnce')}</span>
             </p>
           )}
 
@@ -346,6 +336,7 @@ function UserRow({
 }
 
 function NewUserForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: () => Promise<void> }) {
+  const { t } = useI18n()
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
@@ -381,7 +372,7 @@ function NewUserForm({ onCancel, onCreated }: { onCancel: () => void; onCreated:
     <form className="users-form new-user" onSubmit={submit}>
       <div className="users-form-grid">
         <label className="users-field">
-          <span>Username</span>
+          <span>{t('auth.username')}</span>
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
@@ -392,7 +383,7 @@ function NewUserForm({ onCancel, onCreated }: { onCancel: () => void; onCreated:
           />
         </label>
         <label className="users-field">
-          <span>Display name</span>
+          <span>{t('users.displayName')}</span>
           <input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
@@ -402,7 +393,7 @@ function NewUserForm({ onCancel, onCreated }: { onCancel: () => void; onCreated:
           />
         </label>
         <label className="users-field">
-          <span>Email (optional)</span>
+          <span>{t('users.emailOptional')}</span>
           <input
             type="email"
             value={email}
@@ -412,17 +403,17 @@ function NewUserForm({ onCancel, onCreated }: { onCancel: () => void; onCreated:
           />
         </label>
         <label className="users-field">
-          <span>Role</span>
+          <span>{t('users.role')}</span>
           <select value={role} onChange={(e) => setRole(e.target.value as UserRole)} disabled={busy}>
-            {ROLES.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.label}
+            {ROLE_IDS.map((r) => (
+              <option key={r} value={r}>
+                {t(`common.${r}` as MessageKey)}
               </option>
             ))}
           </select>
         </label>
         <label className="users-field">
-          <span>Password</span>
+          <span>{t('auth.password')}</span>
           <input
             type="password"
             value={password}
@@ -435,14 +426,14 @@ function NewUserForm({ onCancel, onCreated }: { onCancel: () => void; onCreated:
         </label>
       </div>
 
-      <p className="muted sm">{ROLES.find((r) => r.id === role)?.hint}</p>
+      <p className="muted sm">{t(`users.roleHint.${role}` as MessageKey)}</p>
 
       <div className="users-form-actions">
         <button type="submit" className="btn primary sm" disabled={busy}>
-          {busy ? 'Creating…' : 'Create user'}
+          {busy ? t('setup.creating') : t('users.createUser')}
         </button>
         <button type="button" className="btn ghost sm" onClick={onCancel} disabled={busy}>
-          Cancel
+          {t('common.cancel')}
         </button>
         {error && (
           <span className="users-error" role="alert">

@@ -155,6 +155,42 @@ How it stays honest:
 - Generating is editor-and-up (`POST /api/git/repos/{id}/assist`): it spends
   the provider's money/plan, which a viewer should not be able to do.
 
+## Background drafting jobs
+
+The dialog's **Run in the background** option (or a direct
+`POST /api/git/repos/{id}/assist/jobs`) turns the same generation into a job:
+the request answers immediately with a row in `git_assist_job`
+(`Services/GitAssistJobService.cs`) whose status tells the story — **queued →
+running → completed | failed** — the git-clone pattern, polled by the UI. The
+repo's front page grows an **AI documentation jobs** panel
+(`GitAssistJobs.tsx`) listing every job with status, requester, provider,
+timing and errors; it polls every few seconds while anything is active and
+renders nothing until the first job exists.
+
+- **The draft survives everything**: the generated Markdown is stored on the
+  job row *before* publishing is attempted, so a publish failure (or a
+  deleted shelf) never costs the paid-for generation — the panel offers
+  *Publish to library* again. Jobs left queued/running by a server restart are
+  swept to `failed` at startup.
+- **Publish to the library** (`POST /api/git/assist/jobs/{jobId}/publish`, or
+  the *add it to the library as a book* option when starting): the result
+  becomes a book page — a book named after the repo is created on the chosen
+  shelf (or the library root) unless an existing book is targeted, and the
+  page is titled by kind (README / Developer documentation / User manual /
+  Repository summary). Publishing the same kind into the same book **updates
+  the page in place** rather than duplicating it, and the job remembers its
+  `bookId`/`pageId`. Page history names whoever queued the job
+  (`AmbientActor` carries the actor into the background task).
+- **Re-generate** (`POST /api/git/assist/jobs/{jobId}/rerun`): a fresh job
+  with the prior one's parameters *and its page linkage*, so regenerated
+  documentation lands on the same page as a new revision — links and history
+  survive. The panel's *Re-generate & update* button is this.
+- **Delete** (`DELETE /api/git/assist/jobs/{jobId}`) removes the record — a
+  still-running job is cancelled first; anything already published stays, it
+  is ordinary library content by then.
+- A completed job's viewer also offers *Save draft to repo* — the same
+  blob-guarded working-tree write as the inline dialog.
+
 ## Pull requests, auto-fetch, and commit identity details
 
 - **PR deep link**: on GitHub and Azure DevOps connections the toolbar shows

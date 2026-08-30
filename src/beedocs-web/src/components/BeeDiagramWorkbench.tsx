@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useI18n } from '../i18n'
 import { BeeDiagramEditor } from './BeeDiagramEditor'
 import { BeeStudioEditor } from './studio/BeeStudioEditor'
 
@@ -29,6 +30,7 @@ type Props = {
  * same BeeDiagram JSON.
  */
 export function BeeDiagramWorkbench({ source, onChange, readOnly, bookId }: Props) {
+  const { t } = useI18n()
   const [mode, setMode] = useState<BeeEditorMode>(loadMode)
 
   useEffect(() => {
@@ -42,16 +44,16 @@ export function BeeDiagramWorkbench({ source, onChange, readOnly, bookId }: Prop
   return (
     <div className={`bee-workbench bee-workbench--${mode}`}>
       <div className="bee-workbench-modes">
-        <div className="segmented" role="tablist" aria-label="Diagram editor mode">
+        <div className="segmented" role="tablist" aria-label={t('studio.editorMode')}>
           <button
             type="button"
             role="tab"
             aria-selected={mode === 'studio'}
             className={mode === 'studio' ? 'active' : ''}
             onClick={() => setMode('studio')}
-            title="Shape palette, connection arrows and format panel"
+            title={t('studio.studioTip')}
           >
-            Studio
+            {t('studio.modeStudio')}
           </button>
           <button
             type="button"
@@ -59,9 +61,9 @@ export function BeeDiagramWorkbench({ source, onChange, readOnly, bookId }: Prop
             aria-selected={mode === 'classic'}
             className={mode === 'classic' ? 'active' : ''}
             onClick={() => setMode('classic')}
-            title="The compact BeeDocs editor"
+            title={t('studio.classicTip')}
           >
-            Classic
+            {t('studio.modeClassic')}
           </button>
         </div>
       </div>

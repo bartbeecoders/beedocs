@@ -535,3 +535,11 @@ and a curl/UI exercise against a scratch instance (no test project exists yet;
     about the test repo generated in ~7 s, grounded in README.md +
     docs/todo.md (the result names its context files) and correctly derived
     from their contents.
+
+
+
+Improve the generation the AI assisted manuals and documentation for the repos:
+- make it possible to run this as a background job
+- add the possibility to see the status of these background jobs (started, running, completed etc)
+- add the possibility to add the documentation/manual etc as a book on a bookshelf
+- add the possibility to re-generate, update this documentation

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { exportBookToPdf, exportPageToPdf } from '../export/pdf'
+import { useI18n, type MessageKey } from '../i18n'
 import type { ExportFormat } from '../types'
 
 type Scope = 'book' | 'page'
@@ -16,25 +17,13 @@ type Props = {
   variant?: 'button' | 'icon'
 }
 
-type Choice = {
-  /** 'pdf' is rendered in the browser; the rest are fetched from the API. */
-  format: ExportFormat | 'pdf'
-  label: string
-  hint: string
-}
+/** 'pdf' is rendered in the browser; the rest are fetched from the API. */
+type Choice = ExportFormat | 'pdf'
 
 type MenuPos = { top: number; left: number }
 
-const CHOICES: Choice[] = [
-  { format: 'pdf', label: 'PDF', hint: 'Opens a print view — choose “Save as PDF”' },
-  { format: 'markdown', label: 'Markdown', hint: 'Portable text, diagrams as fenced blocks' },
-  { format: 'docx', label: 'Word (.docx)', hint: 'Formatted document with images and tables' },
-  {
-    format: 'archive',
-    label: 'BeeDocs archive',
-    hint: 'Lossless — re-importable, keeps diagrams and images',
-  },
-]
+/** Labels and hints come from `dialogs.exportFormat.*` / `dialogs.exportHint.*`. */
+const CHOICES: Choice[] = ['pdf', 'markdown', 'docx', 'archive']
 
 /**
  * Export a book or a single document. PDF goes through the browser print
@@ -45,6 +34,7 @@ const CHOICES: Choice[] = [
  * clipped by the workspace toolbar (`overflow-y: hidden` + fixed height).
  */
 export function ExportMenu({ scope, id, title, className = '', variant = 'button' }: Props) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
@@ -79,8 +69,8 @@ export function ExportMenu({ scope, id, title, className = '', variant = 'button
   useEffect(() => {
     if (!open) return
     const onPointerDown = (e: MouseEvent) => {
-      const t = e.target as Node
-      if (wrapRef.current?.contains(t) || popRef.current?.contains(t)) return
+      const target = e.target as Node
+      if (wrapRef.current?.contains(target) || popRef.current?.contains(target)) return
       setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
@@ -102,21 +92,21 @@ export function ExportMenu({ scope, id, title, className = '', variant = 'button
 
   const run = async (choice: Choice) => {
     setOpen(false)
-    setBusy(choice.format)
+    setBusy(choice)
     setError(null)
-    setStatus('Preparing…')
+    setStatus(t('dialogs.preparing'))
     try {
-      if (choice.format === 'pdf') {
+      if (choice === 'pdf') {
         if (scope === 'book') await exportBookToPdf(id, setStatus)
         else await exportPageToPdf(id, setStatus)
-        setStatus('Print dialog opened — choose “Save as PDF”.')
+        setStatus(t('dialogs.printOpened'))
       } else {
         const fileName = await api.downloadExport(
           scope === 'book' ? 'books' : 'pages',
           id,
-          choice.format,
+          choice,
         )
-        setStatus(`Downloaded ${fileName}`)
+        setStatus(t('dialogs.downloaded', { name: fileName }))
       }
       setTimeout(() => setStatus(null), 5000)
     } catch (e) {
@@ -127,7 +117,9 @@ export function ExportMenu({ scope, id, title, className = '', variant = 'button
     }
   }
 
-  const label = scope === 'book' ? `Export “${title ?? 'book'}”` : `Export “${title ?? 'document'}”`
+  const label = t('dialogs.exportTitle', {
+    title: title ?? (scope === 'book' ? t('dialogs.bookFallback') : t('dialogs.documentFallback')),
+  })
 
   const menu =
     open && menuPos
@@ -139,18 +131,22 @@ export function ExportMenu({ scope, id, title, className = '', variant = 'button
             style={{ top: menuPos.top, left: menuPos.left }}
           >
             <div className="export-menu-heading">
-              {scope === 'book' ? 'Export book' : 'Export document'}
+              {scope === 'book' ? t('dialogs.exportBook') : t('dialogs.exportDocument')}
             </div>
             {CHOICES.map((choice) => (
               <button
-                key={choice.format}
+                key={choice}
                 type="button"
                 role="menuitem"
                 className="export-menu-item"
                 onClick={() => void run(choice)}
               >
-                <span className="export-menu-label">{choice.label}</span>
-                <span className="export-menu-hint">{choice.hint}</span>
+                <span className="export-menu-label">
+                  {t(`dialogs.exportFormat.${choice}` as MessageKey)}
+                </span>
+                <span className="export-menu-hint">
+                  {t(`dialogs.exportHint.${choice}` as MessageKey)}
+                </span>
               </button>
             ))}
           </div>,
@@ -165,7 +161,7 @@ export function ExportMenu({ scope, id, title, className = '', variant = 'button
           ref={triggerRef}
           type="button"
           className="icon-btn sm"
-          title={busy ? (status ?? 'Exporting…') : label}
+          title={busy ? (status ?? t('dialogs.exporting')) : label}
           disabled={busy !== null}
           aria-haspopup="menu"
           aria-expanded={open}
@@ -183,7 +179,7 @@ export function ExportMenu({ scope, id, title, className = '', variant = 'button
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
         >
-          {busy ? 'Exporting…' : 'Export ▾'}
+          {busy ? t('dialogs.exporting') : `${t('dialogs.export')} ▾`}
         </button>
       )}
 

@@ -48,6 +48,18 @@ var gitRoot = string.IsNullOrWhiteSpace(configuredGit)
     : Path.GetFullPath(configuredGit, builder.Environment.ContentRootPath);
 Directory.CreateDirectory(gitRoot);
 builder.Services.AddSingleton(new GitOptions(gitRoot));
+
+// Instance branding: the custom logo is a single file here (the title lives in
+// app_setting). Not under uploads — the logo must be served to anonymous
+// visitors on the login screen, which /uploads only is while a shelf is
+// published, so it gets its own always-anonymous endpoint instead.
+var configuredBranding = builder.Configuration["BeeDocs:BrandingPath"];
+var brandingRoot = string.IsNullOrWhiteSpace(configuredBranding)
+    ? Path.Combine(builder.Environment.ContentRootPath, "data", "branding")
+    : Path.GetFullPath(configuredBranding, builder.Environment.ContentRootPath);
+Directory.CreateDirectory(brandingRoot);
+builder.Services.AddSingleton(new BrandingOptions(brandingRoot));
+builder.Services.AddSingleton<BrandingService>();
 builder.Services.Configure<ApiKeyOptions>(builder.Configuration.GetSection(ApiKeyOptions.SectionName));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.Configure<RbaOptions>(builder.Configuration.GetSection(RbaOptions.SectionName));
@@ -122,6 +134,10 @@ builder.Services.AddSingleton<IGitRepoService, GitRepoService>();
 builder.Services.AddSingleton<GitSearchIndexer>();
 builder.Services.AddSingleton<GitProviderCatalog>();
 builder.Services.AddSingleton<GitAssistService>();
+// Drafting as background jobs: rows the UI polls, results published into the
+// library on completion. Singleton so the in-flight cancellation handles live
+// as long as the runs they belong to.
+builder.Services.AddSingleton<GitAssistJobService>();
 // Opt-in background fetch (BeeDocs:GitFetchMinutes, default 0 = off): keeps
 // the behind-the-remote badges honest; pulling stays a person's explicit verb.
 builder.Services.AddSingleton(new GitFetchOptions(
@@ -409,6 +425,18 @@ api.MapGet("/health", () => Results.Ok(new { status = "ok", service = "BeeDocs.A
 
 api.MapGet("/version", () => Results.Ok(new { version = appVersion }))
     .WithMetadata(new AllowAnonymousEndpoint());
+
+// Branding answers before any credential check too: the login screen shows the
+// instance's name and logo before there is a session to load them with.
+api.MapGet("/branding", async (BrandingService branding, CancellationToken ct) =>
+        Results.Ok(await branding.GetBrandingAsync(ct)))
+    .WithMetadata(new AllowAnonymousEndpoint());
+
+api.MapGet("/branding/logo", async (BrandingService branding, CancellationToken ct) =>
+{
+    var logo = await branding.GetLogoAsync(ct);
+    return logo is null ? Results.NotFound() : Results.File(logo.Value.Path, logo.Value.ContentType);
+}).WithMetadata(new AllowAnonymousEndpoint());
 
 // --- Sign-in & accounts ---
 // /api/auth/* is anonymous by necessity: it is how a browser with no cookie
@@ -1676,6 +1704,74 @@ settingsAdmin.MapDelete("/rba", async (RbaSettingsService rba, CancellationToken
 settingsAdmin.MapPost("/rba/test", async (RbaTestRequest body, IRbaAuthService rba, CancellationToken ct) =>
     Results.Ok(await rba.TestConnectionAsync(body.Username, body.Password, ct)));
 
+// Instance branding: the name in the header and the logo next to it. Reads are
+// anonymous (see /api/branding above); everything that changes them is admin.
+settingsAdmin.MapGet("/branding", async (BrandingService branding, CancellationToken ct) =>
+    Results.Ok(await branding.GetBrandingAsync(ct)));
+
+settingsAdmin.MapPut("/branding", async (UpdateBrandingRequest body, BrandingService branding, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await branding.SetTitleAsync(body.Title, ct));
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = [e.Message] });
+    }
+});
+
+settingsAdmin.MapPost("/branding/logo", async (HttpRequest request, BrandingService branding, CancellationToken ct) =>
+{
+    if (!request.HasFormContentType)
+        return Results.BadRequest(new { error = "Expected multipart form data with a file field." });
+
+    var form = await request.ReadFormAsync(ct);
+    var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
+    if (file is null || file.Length == 0)
+        return Results.BadRequest(new { error = "No file uploaded." });
+
+    try
+    {
+        await using var stream = file.OpenReadStream();
+        return Results.Ok(await branding.SetLogoAsync(stream, file.Length, file.FileName, ct));
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["file"] = [e.Message] });
+    }
+});
+
+// The AI path: PUT stores an SVG the admin approved in the preview.
+settingsAdmin.MapPut("/branding/logo", async (SetLogoSvgRequest body, BrandingService branding, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await branding.SetLogoSvgAsync(body.Svg, ct));
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["svg"] = [e.Message] });
+    }
+});
+
+settingsAdmin.MapDelete("/branding/logo", async (BrandingService branding, CancellationToken ct) =>
+    Results.Ok(await branding.ClearLogoAsync(ct)));
+
+// Draft only — nothing is stored until the admin applies the preview via the
+// PUT above, the same review gate the git AI actions go through.
+settingsAdmin.MapPost("/branding/logo/generate", async (GenerateLogoRequest body, BrandingService branding, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await branding.GenerateLogoAsync(body, ct));
+    }
+    catch (LlmException e)
+    {
+        return LlmFailure(e);
+    }
+});
+
 // --- LLM providers & completion ---
 // Behind the same key as /api/v1, and not optional: a completion spends the user's
 // money, so an unauthenticated /api/llm on a reachable port is a bill waiting to
@@ -2319,6 +2415,95 @@ gitApi.MapPost("/repos/{id}/assist", async (
         return GitFailure(ex);
     }
 });
+
+// The background variant: the POST answers immediately with a job row that the
+// UI polls (queued → running → completed | failed); generation runs server-side
+// and the finished Markdown stays on the job. Same editor gate as /assist — a
+// job spends the provider either way. A job may also publish its result into
+// the library as a book page (and a re-run updates that same page in place).
+gitApi.MapPost("/repos/{id}/assist/jobs", async (
+    string id, StartGitAssistJobRequest body, GitAssistJobService jobs, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await jobs.StartAsync(id, body, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["assist"] = [ex.Message] });
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+// Job status — read-only, the default viewer rule. Lists omit the Markdown
+// body; the single-job GET carries it for the review dialog.
+gitApi.MapGet("/repos/{id}/assist/jobs", async (
+    string id, GitAssistJobService jobs, CancellationToken ct) =>
+    Results.Ok(await jobs.ListAsync(id, 100, ct)));
+
+gitApi.MapGet("/assist/jobs", async (GitAssistJobService jobs, CancellationToken ct) =>
+    Results.Ok(await jobs.ListAsync(null, 100, ct)));
+
+gitApi.MapGet("/assist/jobs/{jobId}", async (
+    string jobId, GitAssistJobService jobs, CancellationToken ct) =>
+    await jobs.GetAsync(jobId, includeMarkdown: true, ct) is { } job
+        ? Results.Ok(job)
+        : Results.NotFound());
+
+// Re-generate: a fresh job with the prior one's parameters and — crucially —
+// its book/page linkage, so regenerated documentation updates the same page.
+gitApi.MapPost("/assist/jobs/{jobId}/rerun", async (
+    string jobId, RerunGitAssistJobRequest body, GitAssistJobService jobs, CancellationToken ct) =>
+{
+    try
+    {
+        return await jobs.RerunAsync(jobId, body, ct) is { } job
+            ? Results.Ok(job)
+            : Results.NotFound();
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+// Publish a completed job's draft into the library on demand — for jobs run
+// without auto-publish, or to send the result somewhere else.
+gitApi.MapPost("/assist/jobs/{jobId}/publish", async (
+    string jobId, PublishGitAssistJobRequest body, GitAssistJobService jobs, CancellationToken ct) =>
+{
+    try
+    {
+        return await jobs.PublishAsync(jobId, body, ct) is { } job
+            ? Results.Ok(job)
+            : Results.NotFound();
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+// Delete the record; a still-running job is cancelled first. What the job
+// published stays — it is ordinary library content by then.
+gitApi.MapDelete("/assist/jobs/{jobId}", async (
+    string jobId, GitAssistJobService jobs, CancellationToken ct) =>
+    await jobs.DeleteAsync(jobId, ct) ? Results.NoContent() : Results.NotFound());
 
 // History and diffs — read-only, so the default viewer rule applies.
 gitApi.MapGet("/repos/{id}/log", async (

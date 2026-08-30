@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { api } from '../../api'
+import { useI18n } from '../../i18n'
 import type { BeePoint, ShapeCollection, ShapeCollectionScope } from '../../types'
 import { useImageIntake } from '../../hooks/useImageIntake'
 import { loadImageSize, type UploadedImage } from '../../media/imageIntake'
@@ -27,6 +28,7 @@ type Props = {
  * the classic editor.
  */
 export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
+  const { t } = useI18n()
   const ctrl = useStudioController({ source, onChange, readOnly })
   const canvasRef = useRef<StudioCanvasHandle>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -145,7 +147,7 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
     if (readOnly) return
     if (ctrl.selection.nodes.length === 0) return
     const first = ctrl.selectedNodes[0]
-    const fallback = first?.label?.trim() || 'Collection'
+    const fallback = first?.label?.trim() || t('studio.collectionFallbackName')
     setSaveError(null)
     setSaveDialog({
       name: fallback,
@@ -153,7 +155,7 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
       // Prefer book scope when a book is available; otherwise app-wide only.
       scope: bookId ? 'book' : 'app',
     })
-  }, [bookId, ctrl.selection.nodes.length, ctrl.selectedNodes, readOnly])
+  }, [bookId, ctrl.selection.nodes.length, ctrl.selectedNodes, readOnly, t])
 
   const submitSaveCollection = useCallback(
     async (e: FormEvent) => {
@@ -161,16 +163,16 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
       if (!saveDialog) return
       const name = saveDialog.name.trim()
       if (!name) {
-        setSaveError('Name is required.')
+        setSaveError(t('studio.nameRequired'))
         return
       }
       if (saveDialog.scope === 'book' && !bookId) {
-        setSaveError('This diagram is not linked to a book.')
+        setSaveError(t('studio.notLinkedToBook'))
         return
       }
       const source = ctrl.selectionAsCollectionSource()
       if (!source) {
-        setSaveError('Select at least one shape to save.')
+        setSaveError(t('studio.selectShapeToSave'))
         return
       }
       setSaveBusy(true)
@@ -191,7 +193,7 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
         setSaveBusy(false)
       }
     },
-    [bookId, ctrl, saveDialog],
+    [bookId, ctrl, saveDialog, t],
   )
 
   const nudge = useCallback(
@@ -349,14 +351,14 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
     >
       {(dragging || uploading) && !readOnly && (
         <div className="image-drop-overlay" aria-live="polite">
-          {uploading ? 'Uploading image…' : 'Drop image onto the canvas'}
+          {uploading ? t('studio.uploadingImage') : t('studio.dropImage')}
         </div>
       )}
       {mediaError && (
         <div className="banner error compact">
           {mediaError}{' '}
           <button type="button" className="btn ghost sm" onClick={() => setMediaError(null)}>
-            Dismiss
+            {t('studio.dismiss')}
           </button>
         </div>
       )}
@@ -411,12 +413,21 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
       <div className="studio-status">
         <span>
           {ctrl.selection.nodes.length + ctrl.selection.edges.length > 0
-            ? `${ctrl.selection.nodes.length} shape${ctrl.selection.nodes.length === 1 ? '' : 's'}, ${ctrl.selection.edges.length} connection${ctrl.selection.edges.length === 1 ? '' : 's'} selected`
-            : 'Nothing selected'}
+            ? t('studio.selectedStatus', {
+                shapes: t(
+                  ctrl.selection.nodes.length === 1 ? 'studio.nShapes.one' : 'studio.nShapes.other',
+                  { count: ctrl.selection.nodes.length },
+                ),
+                connections: t(
+                  ctrl.selection.edges.length === 1
+                    ? 'studio.nConnections.one'
+                    : 'studio.nConnections.other',
+                  { count: ctrl.selection.edges.length },
+                ),
+              })
+            : t('studio.nothingSelected')}
         </span>
-        <span className="muted">
-          Drag a shape or collection from the left · save a selection as a book or app collection
-        </span>
+        <span className="muted">{t('studio.statusHint')}</span>
       </div>
 
       {saveDialog && (
@@ -428,12 +439,10 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
             onClick={(e) => e.stopPropagation()}
             onSubmit={(e) => void submitSaveCollection(e)}
           >
-            <h3 id="save-collection-title">Save as collection</h3>
-            <p className="muted sm">
-              Stores the selected shapes so you can place them again from the shape palette.
-            </p>
+            <h3 id="save-collection-title">{t('studio.saveAsCollection')}</h3>
+            <p className="muted sm">{t('studio.saveCollectionLead')}</p>
             <fieldset className="studio-scope-fieldset">
-              <legend>Save to</legend>
+              <legend>{t('studio.saveTo')}</legend>
               {bookId && (
                 <label className="studio-scope-option">
                   <input
@@ -443,8 +452,8 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
                     onChange={() => setSaveDialog({ ...saveDialog, scope: 'book' })}
                   />
                   <span className="studio-scope-option-text">
-                    <strong>This book</strong>
-                    <span className="muted sm">Only diagrams in the current book</span>
+                    <strong>{t('studio.scopeBook')}</strong>
+                    <span className="muted sm">{t('studio.scopeBookHint')}</span>
                   </span>
                 </label>
               )}
@@ -456,13 +465,13 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
                   onChange={() => setSaveDialog({ ...saveDialog, scope: 'app' })}
                 />
                 <span className="studio-scope-option-text">
-                  <strong>App library</strong>
-                  <span className="muted sm">Available in every book</span>
+                  <strong>{t('studio.scopeApp')}</strong>
+                  <span className="muted sm">{t('studio.scopeAppHint')}</span>
                 </span>
               </label>
             </fieldset>
             <label className="studio-field studio-field--stack">
-              <span>Name</span>
+              <span>{t('common.name')}</span>
               <input
                 autoFocus
                 value={saveDialog.name}
@@ -472,22 +481,22 @@ export function BeeStudioEditor({ source, onChange, readOnly, bookId }: Props) {
               />
             </label>
             <label className="studio-field studio-field--stack">
-              <span>Description</span>
+              <span>{t('common.description')}</span>
               <textarea
                 value={saveDialog.description}
                 onChange={(e) => setSaveDialog({ ...saveDialog, description: e.target.value })}
                 rows={3}
                 maxLength={500}
-                placeholder="Optional — shown under the name in the palette"
+                placeholder={t('studio.descriptionPlaceholder')}
               />
             </label>
             {saveError && <div className="banner error compact">{saveError}</div>}
             <div className="studio-modal-actions">
               <button type="button" className="btn ghost" disabled={saveBusy} onClick={() => setSaveDialog(null)}>
-                Cancel
+                {t('common.cancel')}
               </button>
               <button type="submit" className="btn primary" disabled={saveBusy}>
-                {saveBusy ? 'Saving…' : 'Save collection'}
+                {saveBusy ? t('common.saving') : t('studio.saveCollection')}
               </button>
             </div>
           </form>

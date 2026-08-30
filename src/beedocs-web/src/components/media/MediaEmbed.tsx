@@ -4,6 +4,7 @@ import {
   type MediaKind,
   type Model3dFormat,
 } from '../../media/mediaKinds'
+import { useI18n } from '../../i18n'
 import { ModelViewer } from './ModelViewer'
 import { PdfViewer } from './PdfViewer'
 
@@ -103,6 +104,7 @@ export function MediaEmbed({
   body,
   className,
 }: MediaEmbedProps) {
+  const { t } = useI18n()
   const parsed = body != null ? parseMediaFenceBody(body) : { url: '' }
   const url = (urlProp || parsed.url || '').trim()
   const title = titleProp || parsed.title
@@ -112,7 +114,7 @@ export function MediaEmbed({
     return (
       <div className={['media-embed', 'media-embed--empty', className].filter(Boolean).join(' ')}>
         <div className="media-embed-status media-embed-status--error" role="alert">
-          No media URL provided.
+          {t('canvas.media.noUrl')}
         </div>
       </div>
     )
@@ -155,10 +157,10 @@ export function MediaEmbed({
   return (
     <div className={['media-embed', 'media-embed--unknown', className].filter(Boolean).join(' ')}>
       <div className="media-embed-status media-embed-status--error" role="alert">
-        <span>Unsupported media type for</span>
+        <span>{t('canvas.media.unsupported')}</span>
         <code className="media-embed-code">{url}</code>
         <a className="btn sm" href={url} target="_blank" rel="noopener noreferrer">
-          Open file
+          {t('canvas.media.openFile')}
         </a>
       </div>
     </div>

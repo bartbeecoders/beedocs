@@ -283,6 +283,60 @@ public sealed record RbaTestResultDto(
     string Message
 );
 
+/// <summary>
+/// Instance branding as every visitor sees it — served anonymously because the
+/// login screen renders the name and logo before there is a session.
+/// </summary>
+/// <param name="CustomTitle">True when an admin stored a title (the UI shows a "reset" affordance).</param>
+/// <param name="LogoUrl">Cache-busted URL of the custom logo, or null for the default 🐝 mark.</param>
+/// <param name="Omarchy">The active Omarchy desktop theme when the API runs on an Omarchy machine, else null.</param>
+public sealed record BrandingDto(
+    string Title,
+    bool CustomTitle,
+    string? LogoUrl,
+    OmarchyThemeDto? Omarchy
+);
+
+/// <summary>
+/// Raw palette of the active Omarchy desktop theme. Only colors that were
+/// actually declared cross the wire — deriving the full UI token set from them
+/// is the web app's job, next to its other themes.
+/// </summary>
+public sealed record OmarchyThemeDto(
+    string Name,
+    string Scheme,
+    string Background,
+    string Foreground,
+    string? Accent,
+    string? Muted,
+    string? BgLighter,
+    string? BgDarker,
+    string? Selection,
+    string? Red,
+    string? Green,
+    string? Yellow,
+    string? Blue,
+    string? Magenta,
+    string? Cyan
+);
+
+/// <summary>Null or blank resets the title to "BeeDocs".</summary>
+public sealed record UpdateBrandingRequest(string? Title);
+
+/// <summary>A generated (or pasted) SVG logo to store — validated server-side.</summary>
+public sealed record SetLogoSvgRequest([property: Required, MinLength(1)] string Svg);
+
+/// <summary>All optional: an empty prompt gets a generic mark from the default provider.</summary>
+public sealed record GenerateLogoRequest(string? Prompt, string? ProviderId, string? Model);
+
+/// <param name="Svg">Sanitized and ready to preview — stored only when the admin applies it.</param>
+public sealed record GenerateLogoResultDto(
+    string Svg,
+    string ProviderName,
+    string Model,
+    int ElapsedMs
+);
+
 // --- External publish API (slug-based, /api/v1) ---
 
 /// <summary>Create or update a book addressed by slug.</summary>
@@ -1213,6 +1267,55 @@ public sealed record GitAssistRequest(
     string? Instructions,
     string? ProviderId,
     string? Model
+);
+
+/// <param name="Kind">readme | documentation | manual | summary.</param>
+/// <param name="PublishBook">Publish the result into the library when generation ends.</param>
+/// <param name="ShelfId">Shelf for a book created by publishing; omit for the library root.</param>
+/// <param name="BookId">Existing book to publish into; omit to create one named after the repo.</param>
+public sealed record StartGitAssistJobRequest(
+    [property: Required, MinLength(1)] string Kind,
+    string? Instructions,
+    string? ProviderId,
+    string? Model,
+    bool? PublishBook = null,
+    string? ShelfId = null,
+    string? BookId = null
+);
+
+/// <param name="Instructions">Override the original job's instructions; null re-uses them.</param>
+public sealed record RerunGitAssistJobRequest(string? Instructions);
+
+/// <param name="ShelfId">Shelf for a book created by publishing; null falls back to the job's, "" the library root.</param>
+/// <param name="BookId">Existing book to publish into; null falls back to the job's own.</param>
+public sealed record PublishGitAssistJobRequest(string? ShelfId, string? BookId);
+
+/// <param name="Status">queued | running | completed | failed.</param>
+/// <param name="Markdown">The generated draft — only on the single-job GET; lists omit it.</param>
+/// <param name="BookId">The library book the result was published into, once it has been.</param>
+/// <param name="PageId">The library page holding the result, once published — re-runs update it.</param>
+public sealed record GitAssistJobDto(
+    string Id,
+    string RepoId,
+    string RepoName,
+    string Kind,
+    string Status,
+    string? Error,
+    string? Instructions,
+    string? ProviderName,
+    string? Model,
+    int? CompletionTokens,
+    int? ElapsedMs,
+    IReadOnlyList<string> ContextFiles,
+    bool PublishBook,
+    string? ShelfId,
+    string? BookId,
+    string? PageId,
+    string? CreatedByName,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? FinishedAt,
+    string? Markdown
 );
 
 /// <param name="SuggestedPath">Where a draft of this kind conventionally lives in the repo.</param>
