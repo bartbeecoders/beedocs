@@ -130,6 +130,31 @@ GET             /api/git/repos/{id}/diff?path=      viewer  uncommitted changes 
 dirty checkout — maps to 409, because the fix is a user action, not a retry; a
 path the jail refuses is a 400.
 
+## AI actions (repo context menu)
+
+Right-click a repo in the left tree: **Draft README… / Draft documentation… /
+Draft user manual… / Summarize repository…** — each opens a dialog, takes
+optional extra instructions, and generates a Markdown draft grounded in the
+repository, through the **configured AI provider** (Settings → AI providers —
+any kind works, the local Claude Code / Grok CLI providers included).
+
+How it stays honest:
+
+- The **server** gathers the context (`Services/GitAssistService.cs`): the file
+  tree plus excerpts ordered most-informative-first — README, manifests,
+  existing docs, then shallow source files — under a hard budget
+  (≤ 40 KB bundle, ≤ 6 KB/file), so a metered or local model is never fed a
+  monorepo. The result reports exactly which files grounded the draft.
+- One `docdraft` completion (`LlmPrompts.DocDraft`, its own 240 s budget) with
+  a system prompt that forbids inventing commands or behaviour the source does
+  not show.
+- **Nothing is written until reviewed**: the dialog renders the draft
+  (preview/source toggle), and *Save draft to repo* is the ordinary
+  blob-guarded working-tree write — the AI's words enter history through the
+  same diff → commit → push gate as any human edit.
+- Generating is editor-and-up (`POST /api/git/repos/{id}/assist`): it spends
+  the provider's money/plan, which a viewer should not be able to do.
+
 ## Pull requests, auto-fetch, and commit identity details
 
 - **PR deep link**: on GitHub and Azure DevOps connections the toolbar shows

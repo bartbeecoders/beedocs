@@ -1204,3 +1204,27 @@ public sealed record GitRenameRequest(
     [property: Required, MinLength(1)] string From,
     [property: Required, MinLength(1)] string To
 );
+
+/// <param name="Kind">readme | documentation | manual | summary.</param>
+/// <param name="Instructions">Extra guidance folded into the assignment (audience, focus, tone…).</param>
+/// <param name="ProviderId">Omit to use the default (first enabled) AI provider.</param>
+public sealed record GitAssistRequest(
+    [property: Required, MinLength(1)] string Kind,
+    string? Instructions,
+    string? ProviderId,
+    string? Model
+);
+
+/// <param name="SuggestedPath">Where a draft of this kind conventionally lives in the repo.</param>
+/// <param name="ContextFiles">The files whose excerpts grounded the draft — what the model actually saw.</param>
+public sealed record GitAssistResultDto(
+    string Kind,
+    string? SuggestedPath,
+    string Markdown,
+    string ProviderName,
+    string Model,
+    int? PromptTokens,
+    int? CompletionTokens,
+    int ElapsedMs,
+    IReadOnlyList<string> ContextFiles
+);

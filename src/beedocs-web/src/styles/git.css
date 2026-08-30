@@ -495,3 +495,41 @@ a.git-root-entry:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- AI assist dialog --- */
+
+.git-assist-dialog {
+  width: min(46rem, calc(100vw - 2rem));
+  max-height: 86vh;
+  overflow-y: auto;
+}
+
+.git-assist-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.git-assist-field textarea,
+.git-assist-field input {
+  font: inherit;
+  padding: 0.4rem 0.5rem;
+  resize: vertical;
+}
+
+.git-assist-preview {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.git-assist-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 0;
+}

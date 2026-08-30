@@ -109,9 +109,10 @@ builder.Services.AddSingleton<IStatsService, StatsService>();
 builder.Services.AddSingleton<ILlmProviderService, LlmProviderService>();
 builder.Services.AddSingleton<ILlmClient, LlmClient>();
 
-// Backstop only — LlmClient gives each call its own budget with a linked token.
+// Backstop only — LlmClient gives each call its own budget with a linked token
+// (up to 240s for whole-document generation, so the backstop sits above that).
 builder.Services.AddHttpClient(LlmClient.HttpClientName,
-    client => client.Timeout = TimeSpan.FromMinutes(2));
+    client => client.Timeout = TimeSpan.FromMinutes(5));
 
 // Git integration: the CLI runner, connection rows (token write-only), the
 // repos with their clones, provider repo discovery, and the opt-in search feed.
@@ -120,6 +121,7 @@ builder.Services.AddSingleton<IGitConnectionService, GitConnectionService>();
 builder.Services.AddSingleton<IGitRepoService, GitRepoService>();
 builder.Services.AddSingleton<GitSearchIndexer>();
 builder.Services.AddSingleton<GitProviderCatalog>();
+builder.Services.AddSingleton<GitAssistService>();
 // Opt-in background fetch (BeeDocs:GitFetchMinutes, default 0 = off): keeps
 // the behind-the-remote badges honest; pulling stays a person's explicit verb.
 builder.Services.AddSingleton(new GitFetchOptions(
@@ -2271,6 +2273,35 @@ gitApi.MapGet("/repos/{id}/branches", async (string id, IGitRepoService repos, C
     catch (KeyNotFoundException)
     {
         return Results.NotFound();
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+// AI-assisted drafting (README / documentation / manual / summary) grounded in
+// the clone. POST = the default editor rule — generating spends the configured
+// LLM provider's money/plan, which a viewer should not be able to do. Nothing
+// here writes the repo: saving the draft is the ordinary PUT …/file.
+gitApi.MapPost("/repos/{id}/assist", async (
+    string id, GitAssistRequest body, GitAssistService assist, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await assist.AssistAsync(id, body, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["assist"] = [ex.Message] });
+    }
+    catch (LlmException ex)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: ex.Message);
     }
     catch (GitException ex)
     {

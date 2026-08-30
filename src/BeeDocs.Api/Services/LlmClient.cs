@@ -46,6 +46,9 @@ public sealed class LlmClient(
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan CompleteTimeout = TimeSpan.FromSeconds(90);
 
+    /// <summary>DocDraft writes a whole document — an editing budget would cut it off.</summary>
+    private static readonly TimeSpan DocDraftTimeout = TimeSpan.FromSeconds(240);
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         // OpenAI's request fields are snake_case (max_tokens, …).
@@ -128,8 +131,10 @@ public sealed class LlmClient(
         var model = await ResolveModelAsync(provider, request.Model, ct);
         var started = Stopwatch.GetTimestamp();
         var budget = request.MaxTokens ?? LlmPrompts.MaxTokens(task, request);
+        var timeout = task == LlmPrompts.DocDraft ? DocDraftTimeout : CompleteTimeout;
 
-        var (text, promptTokens, completionTokens) = await AttemptAsync(provider, model, task, request, budget, ct);
+        var (text, promptTokens, completionTokens) =
+            await AttemptAsync(provider, model, task, request, budget, timeout, ct);
 
         // A reasoning model spends max_tokens on hidden reasoning before it writes
         // anything, and it does so unpredictably: the same list prompt answered in
@@ -144,7 +149,7 @@ public sealed class LlmClient(
             && !LlmProviderKinds.IsCli(provider.Kind))
         {
             (text, promptTokens, completionTokens) =
-                await AttemptAsync(provider, model, task, request, RetryBudget, ct);
+                await AttemptAsync(provider, model, task, request, RetryBudget, timeout, ct);
         }
 
         return new LlmCompleteResponse(
@@ -167,6 +172,7 @@ public sealed class LlmClient(
         string task,
         LlmCompleteRequest request,
         int maxTokens,
+        TimeSpan timeout,
         CancellationToken ct)
     {
         // The CLI kinds are a different transport entirely: the same prompts, but
@@ -179,7 +185,7 @@ public sealed class LlmClient(
                 model,
                 LlmPrompts.SystemMessage(task),
                 LlmPrompts.UserMessage(task, request),
-                CompleteTimeout,
+                timeout,
                 ct);
         }
 
@@ -213,7 +219,7 @@ public sealed class LlmClient(
             JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
 
         using var document = await SendAsync(
-            provider, HttpMethod.Post, "chat/completions", content, CompleteTimeout, ct);
+            provider, HttpMethod.Post, "chat/completions", content, timeout, ct);
         var root = document.RootElement;
 
         // Empty is a normal outcome, not a fault — surfacing it as a provider error
@@ -510,12 +516,26 @@ public static class LlmPrompts
     public const string Format = "format";
     public const string Summarize = "summarize";
 
-    public static readonly IReadOnlyList<string> Tasks = [Continue, Rewrite, Grammar, Format, Summarize];
+    /// <summary>
+    /// Whole-document generation (the git integration's AI actions): the
+    /// context is a repository bundle, the prompt is the assignment, and the
+    /// answer is a complete Markdown document rather than an edit.
+    /// </summary>
+    public const string DocDraft = "docdraft";
+
+    public static readonly IReadOnlyList<string> Tasks =
+        [Continue, Rewrite, Grammar, Format, Summarize, DocDraft];
 
     /// <summary>Enough context to be grounded, not enough to blow up the bill.</summary>
     private const int MaxContextChars = 6000;
     private const int MaxPromptChars = 4000;
     private const int MaxSelectionChars = 16000;
+
+    /// <summary>
+    /// DocDraft alone reads a whole repository bundle — a backstop over the
+    /// budget GitAssistService already enforces while building it.
+    /// </summary>
+    private const int MaxDocContextChars = 120_000;
 
     public static string? NormalizeTask(string? raw) =>
         (raw ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", "").Replace("-", "").Replace("_", "") switch
@@ -525,6 +545,7 @@ public static class LlmPrompts
             "grammar" or "fix" or "fixgrammar" or "spelling" or "proofread" => Grammar,
             "format" or "markdown" or "formatasmarkdown" or "formatmarkdown" => Format,
             "summarize" or "summarise" or "summary" => Summarize,
+            "docdraft" or "document" or "docgen" => DocDraft,
             _ => null,
         };
 
@@ -592,11 +613,44 @@ public static class LlmPrompts
             - Reply with ONLY the summary. No preamble, no heading, no wrapping code fence.
             """,
 
+        DocDraft => """
+            You are a senior technical writer producing a complete, standalone
+            Markdown document about a software project, from its repository.
+
+            Rules:
+            - Ground every statement in the source material you are given. Where the
+              material does not answer something, say so briefly rather than inventing
+              commands, options, URLs or behaviour that may not exist.
+            - Structure the document with clear headings, lists and code blocks where
+              they help. Start with a single H1 title.
+            - Write for the audience the assignment names; keep the tone plain and direct.
+            - Reply with ONLY the document. No preamble, no commentary, and never wrap
+              the whole answer in a code fence — fences inside the document are fine.
+            """,
+
         _ => "You are a concise writing assistant. Reply with only the requested text.",
     };
 
     public static string UserMessage(string task, LlmCompleteRequest request)
     {
+        if (task == DocDraft)
+        {
+            // Head, not Tail: the bundle is ordered most-important-first
+            // (README, manifests, docs, then source), so the start must survive
+            // any truncation.
+            var builder0 = new StringBuilder();
+            var material = Head(request.Context, MaxDocContextChars);
+            if (material.Length > 0)
+            {
+                builder0.Append("Source material — the repository's file tree and file excerpts:\n\n")
+                    .Append(material)
+                    .Append("\n\n");
+            }
+
+            builder0.Append("Assignment:\n").Append(Head(request.Prompt, MaxPromptChars));
+            return builder0.ToString();
+        }
+
         var context = Tail(request.Context, MaxContextChars);
         var builder = new StringBuilder();
 
@@ -636,7 +690,7 @@ public static class LlmPrompts
     public static double Temperature(string task) => task switch
     {
         Grammar or Format => 0.1,
-        Rewrite => 0.4,
+        Rewrite or DocDraft => 0.4,
         _ => 0.3,
     };
 
@@ -647,7 +701,7 @@ public static class LlmPrompts
     /// </summary>
     public static string ReasoningEffort(string task) => task switch
     {
-        Rewrite or Summarize => "low",
+        Rewrite or Summarize or DocDraft => "low",
         _ => "none",
     };
 
@@ -660,6 +714,9 @@ public static class LlmPrompts
         // model ignores effort:none and burns the budget on hidden reasoning.
         Continue => 128,
         Summarize => 512,
+        // A whole README or manual, not an edit — room to finish a long
+        // document without inviting padding.
+        DocDraft => 4096,
         // Roughly two tokens of headroom per token of input, since these tasks
         // return the whole passage back.
         _ => Math.Clamp(((request.Selection?.Length ?? 0) / 2) + 256, 256, 4096),

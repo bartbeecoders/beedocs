@@ -433,7 +433,12 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   (default 0) arms a background fetch that keeps behind-badges honest without
   touching the working tree; the toolbar deep-links PR creation on
   GitHub/DevOps. Per-user worktrees and the HybridPageEditor-over-git source
-  are deliberately deferred (see the plan's log for why). See
+  are deliberately deferred (see the plan's log for why). AI actions on the
+  repo context menu (`GitAssistService` + `GitAssistDialog.tsx`, POST
+  `…/assist`, editor-gated) draft README/docs/manual/summary grounded in a
+  server-built repo bundle (≤40 KB, most-informative-first) through the
+  configured LLM provider via the `docdraft` task in `LlmPrompts` (own 240s
+  budget); drafts land only through the ordinary review→save→commit gate. See
   `Docs/GIT-INTEGRATION.md`.
 - **BeeDocs.Mcp** wraps the whole REST API for AI agents (official C# MCP SDK
   2.1.0, protocol revision `2026-07-28` with fallback to older ones).

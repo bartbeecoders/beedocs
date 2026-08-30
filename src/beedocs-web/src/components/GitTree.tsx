@@ -1,10 +1,19 @@
-import { useEffect, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import { useAuth } from '../auth/AuthContext'
 import { gitFilePath } from '../gitPaths'
-import { useGitRepos } from '../hooks/useGitRepos'
-import type { GitRepo, GitTreeEntry } from '../types'
+import { GitAssistDialog } from './GitAssistDialog'
+import { bumpGitStatus, refreshGitRepos, useGitRepos } from '../hooks/useGitRepos'
+import type { GitAssistKind, GitRepo, GitTreeEntry } from '../types'
 import '../styles/git.css'
+
+const ASSIST_ITEMS: { kind: GitAssistKind; label: string }[] = [
+  { kind: 'readme', label: '✨ Draft README…' },
+  { kind: 'documentation', label: '✨ Draft documentation…' },
+  { kind: 'manual', label: '✨ Draft user manual…' },
+  { kind: 'summary', label: '✨ Summarize repository…' },
+]
 
 function fileIcon(name: string): string {
   const ext = name.slice(name.lastIndexOf('.')).toLowerCase()
@@ -22,6 +31,8 @@ function fileIcon(name: string): string {
  */
 export function GitTree() {
   const repos = useGitRepos()
+  const navigate = useNavigate()
+  const { canWrite } = useAuth()
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem('beedocs-git-collapsed') === '1'
@@ -29,8 +40,57 @@ export function GitTree() {
       return false
     }
   })
+  // Right-click on a repo row. Reuses the library tree's menu chrome so a repo
+  // reads as the same kind of thing as a book.
+  const [menu, setMenu] = useState<{ repo: GitRepo; x: number; y: number } | null>(null)
+  const [assist, setAssist] = useState<{ repo: GitRepo; kind: GitAssistKind } | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!menu) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenu(null)
+    }
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return
+      setMenu(null)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onDown, true)
+    }
+  }, [menu])
 
   if (!repos || repos.length === 0) return null
+
+  const openMenu = (e: React.MouseEvent, repo: GitRepo) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const pad = 8
+    setMenu({
+      repo,
+      x: Math.min(e.clientX, window.innerWidth - 220 - pad),
+      y: Math.min(e.clientY, window.innerHeight - 260 - pad),
+    })
+  }
+
+  const syncFromMenu = (repo: GitRepo) => {
+    setSyncing(true)
+    api
+      .pullGitRepo(repo.id)
+      .then(() => {
+        refreshGitRepos()
+        bumpGitStatus()
+      })
+      .catch((err: unknown) => alert(err instanceof Error ? err.message : String(err)))
+      .finally(() => {
+        setSyncing(false)
+        setMenu(null)
+      })
+  }
 
   const toggleCollapsed = () => {
     setCollapsed((c) => {
@@ -76,24 +136,92 @@ export function GitTree() {
               </div>
               <ul className="tree-children">
                 {group.repos.map((repo) => (
-                  <RepoNode key={repo.id} repo={repo} />
+                  <RepoNode key={repo.id} repo={repo} onMenu={openMenu} />
                 ))}
               </ul>
             </li>
           ))}
         </ul>
       )}
+
+      {menu && (
+        <div
+          ref={menuRef}
+          className="tree-context-menu"
+          role="menu"
+          style={{ position: 'fixed', left: Math.max(8, menu.x), top: Math.max(8, menu.y), zIndex: 1200 }}
+        >
+          <div className="tree-context-heading">📦 {menu.repo.name}</div>
+          <button
+            type="button"
+            role="menuitem"
+            className="tree-context-item"
+            onClick={() => {
+              void navigate(`/git/${menu.repo.id}`)
+              setMenu(null)
+            }}
+          >
+            Open repository
+          </button>
+          {canWrite ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="tree-context-item"
+              disabled={syncing || menu.repo.status !== 'ready'}
+              onClick={() => syncFromMenu(menu.repo)}
+            >
+              {syncing ? 'Pulling…' : 'Pull from remote'}
+            </button>
+          ) : null}
+          {/* Generating spends the configured AI provider, and saving the draft
+              is a write — both editor-and-up, so a viewer sees no dead items. */}
+          {canWrite && menu.repo.status === 'ready' ? (
+            <>
+              <div className="tree-context-sep" />
+              {ASSIST_ITEMS.map((item) => (
+                <button
+                  key={item.kind}
+                  type="button"
+                  role="menuitem"
+                  className="tree-context-item"
+                  onClick={() => {
+                    setAssist({ repo: menu.repo, kind: item.kind })
+                    setMenu(null)
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {assist && (
+        <GitAssistDialog
+          repo={assist.repo}
+          kind={assist.kind}
+          onClose={() => setAssist(null)}
+        />
+      )}
     </div>
   )
 }
 
-function RepoNode({ repo }: { repo: GitRepo }) {
+function RepoNode({
+  repo,
+  onMenu,
+}: {
+  repo: GitRepo
+  onMenu: (e: React.MouseEvent, repo: GitRepo) => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const ready = repo.status === 'ready'
 
   return (
     <li>
-      <div className="tree-row">
+      <div className="tree-row" onContextMenu={(e) => onMenu(e, repo)}>
         <button
           type="button"
           className="tree-twist"

@@ -1038,6 +1038,23 @@ export type GitDiff = {
   truncated: boolean
 }
 
+/** The AI actions on a repo's context menu. */
+export type GitAssistKind = 'readme' | 'documentation' | 'manual' | 'summary'
+
+export type GitAssistResult = {
+  kind: GitAssistKind
+  /** Where a draft of this kind conventionally lives in the repo. */
+  suggestedPath: string | null
+  markdown: string
+  providerName: string
+  model: string
+  promptTokens: number | null
+  completionTokens: number | null
+  elapsedMs: number
+  /** The files whose excerpts grounded the draft — what the model actually saw. */
+  contextFiles: string[]
+}
+
 export type GitCommitResult = {
   commitSha: string
   /** "Name <email>" as recorded in the commit. */

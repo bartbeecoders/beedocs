@@ -52,6 +52,8 @@ import type {
   GitAvailableRepo,
   GitBranch,
   GitConnection,
+  GitAssistKind,
+  GitAssistResult,
   GitCommitDetail,
   GitCommitResult,
   GitConnectionTestResult,
@@ -880,6 +882,18 @@ export const api = {
       `/api/git/repos/${id}/diff${path ? `?path=${encodeURIComponent(path)}` : ''}`,
       { signal },
     ),
+  /** AI-drafted document about the repo, via the configured LLM provider. Slow — a whole document. */
+  gitAssist: (
+    id: string,
+    body: { kind: GitAssistKind; instructions?: string; providerId?: string; model?: string },
+    signal?: AbortSignal,
+  ) =>
+    request<GitAssistResult>(`/api/git/repos/${id}/assist`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      timeoutMs: 300_000,
+      signal,
+    }),
   /** Working-tree delete — shows as dirty until committed. */
   deleteGitFile: (id: string, path: string) =>
     request<void>(`/api/git/repos/${id}/file?path=${encodeURIComponent(path)}`, {
