@@ -159,7 +159,27 @@
     }
   }
 
+  // ------------------------------------------------------- theme toggle
+
+  // The <head> script already stamped data-theme before first paint; this
+  // only flips it and remembers the choice.
+  function setupThemeToggle() {
+    var btn = document.getElementById("theme-toggle");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var root = document.documentElement;
+      var current = root.getAttribute("data-theme");
+      if (current !== "light" && current !== "dark") {
+        current = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      var next = current === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("beedocs-theme", next); } catch (e) { /* private mode: theme lasts the page view */ }
+    });
+  }
+
   buildHero();
   setupReveal();
   setupTourVideo();
+  setupThemeToggle();
 })();

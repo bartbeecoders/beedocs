@@ -4,12 +4,24 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BeeDocs — self-hosted systems documentation with a diagram studio inside</title>
-  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks — and an MCP server so AI agents write docs alongside you." />
+  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks, searchable file attachments — and an MCP server so AI agents write docs alongside you." />
   <meta property="og:title" content="BeeDocs — documentation that draws its own architecture" />
-  <meta property="og:description" content="Self-hosted docs for systems teams: Markdown books, BeeDiagram Studio, isometric views, slides, full-text search, and an MCP server for AI agents. One container, SQLite inside. MIT-licensed and free forever." />
+  <meta property="og:description" content="Self-hosted docs for systems teams: Markdown books, BeeDiagram Studio, isometric views, slides, searchable file attachments, full-text search, and an MCP server for AI agents. One container, SQLite inside. MIT-licensed and free forever." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://beedocshome.hideterms.com/" />
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <script>
+    // Stamp the theme before first paint so there is no light flash.
+    (function () {
+      try {
+        var t = localStorage.getItem("beedocs-theme");
+        if (t !== "light" && t !== "dark") {
+          t = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { /* stateless visit: the CSS media query decides */ }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -30,12 +42,12 @@
     </a>
     <nav class="head-nav" aria-label="Sections">
       <a href="#tour">Tour</a>
-      <a href="#gridpages">Grid pages</a>
       <a href="#features">Features</a>
       <a href="#diagrams">Diagrams</a>
-      <a href="#agents">AI agents</a>
+      <a href="#agents">Agents</a>
+      <a href="#desktop">Desktop</a>
       <a href="#selfhost">Self-host</a>
-      <a href="releases.html">Releases</a>
+      <a href="releases.html">Releases<span class="nav-badge">v0.6</span></a>
     </nav>
     <div class="head-actions">
       <a class="btn btn-ghost" href="https://github.com/bartbeecoders/beedocs" rel="noopener">
@@ -43,6 +55,10 @@
         GitHub
       </a>
       <a class="btn btn-honey" href="https://beedocs.hideterms.com" rel="noopener">Open demo</a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle light or dark theme">
+        <svg class="icon-moon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M13.9 10.4A6.5 6.5 0 0 1 5.6 2.1a0.4 0.4 0 0 0-0.5-0.5 6.5 6.5 0 1 0 9.3 9.3 0.4 0.4 0 0 0-0.5-0.5Z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.4" fill="currentColor"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="8" y1="0.8" x2="8" y2="2.6"/><line x1="8" y1="13.4" x2="8" y2="15.2"/><line x1="0.8" y1="8" x2="2.6" y2="8"/><line x1="13.4" y1="8" x2="15.2" y2="8"/><line x1="2.9" y1="2.9" x2="4.2" y2="4.2"/><line x1="11.8" y1="11.8" x2="13.1" y2="13.1"/><line x1="2.9" y1="13.1" x2="4.2" y2="11.8"/><line x1="11.8" y1="4.2" x2="13.1" y2="2.9"/></g></svg>
+      </button>
     </div>
   </div>
 </header>
@@ -54,6 +70,11 @@
     <div class="container hero-inner">
       <div class="hero-copy">
         <p class="eyebrow"><span class="dot" aria-hidden="true"></span>self-hosted · single container · SQLite inside</p>
+        <a class="release-flag" href="releases.html">
+          <span class="flag-badge">v0.6</span>
+          <span>New: attachments, favorites &amp; desktop plugin</span>
+          <span class="flag-arrow" aria-hidden="true">→</span>
+        </a>
         <h1>Documentation that draws its own architecture.</h1>
         <p class="lede">
           BeeDocs is a self-hosted platform for documenting software and hardware
@@ -126,7 +147,7 @@
   <!-- ====================================================== grid pages -->
   <section id="gridpages" class="section reveal">
     <div class="container">
-      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>new in v0.5 · grid pages</p>
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>grid pages</p>
       <h2>Lay pages out like a dashboard.</h2>
       <p class="section-lede">A page doesn't have to be one long column. Pick a
          grid — 2×1, 3×1, 2×2, 3×2 — and every section, diagram, table and image
@@ -192,16 +213,30 @@
              Slides opens natively.</p>
         </article>
         <article class="card">
+          <h3>Attachments a book keeps</h3>
+          <p>Drop PDFs, Office and OpenDocument files onto a book and they file
+             themselves there — versioned, behind the API gate, links surviving
+             every replacement.</p>
+        </article>
+        <article class="card">
           <h3>Search that is never stale</h3>
-          <p>SQLite FTS5 over every page, book and diagram label. Whoever wrote
-             the row — UI, agent or import — it gets indexed.
+          <p>SQLite FTS5 over every page, book, diagram label — and the text
+             <em>inside</em> attached PDFs and documents. Whoever wrote the row
+             — UI, agent or import — it gets indexed.
              <span class="mono">Ctrl+K</span> opens it anywhere.</p>
+        </article>
+        <article class="card">
+          <h3>Favorites at hand</h3>
+          <p>Star any book, page, diagram, deck or attachment and it waits in a
+             panel above the tree. Personal, per-account, and open to read-only
+             viewers too.</p>
         </article>
         <article class="card">
           <h3>Accounts when you want them</h3>
           <p>Three roles — admin, editor, viewer — with sessions and hardened
-             password hashing. Auth is off by default and flips on without a
-             migration.</p>
+             password hashing. Auth is off by default, flips on without a
+             migration, and can delegate sign-in to your central auth service
+             while local accounts stay as break-glass.</p>
         </article>
         <article class="card">
           <h3>Owners and page history</h3>
@@ -316,6 +351,45 @@ claude mcp add beedocs -- dotnet run \
     </div>
   </section>
 
+  <!-- ========================================================= desktop -->
+  <section id="desktop" class="section reveal">
+    <div class="container split">
+      <div class="split-copy">
+        <p class="eyebrow"><span class="dot" aria-hidden="true"></span>new in v0.6 · on the desktop</p>
+        <h2>One keystroke from anywhere.</h2>
+        <p>On <a href="https://omarchy.org/" rel="noopener">Omarchy</a> — the
+           Hyprland-based Arch Linux — BeeDocs ships a shell plugin: a bar pill
+           that watches your server, a popup panel that searches the whole
+           library as you type, and the workspace itself in its own window on
+           <span class="mono">Super+Shift+D</span>.</p>
+        <p>An installer script builds the production bundle, runs it as a
+           systemd user service with your data outside the app directory, and
+           binds the plugin to it — redeploying is re-running one script.</p>
+        <ul class="chip-row" aria-label="Omarchy plugin abilities">
+          <li class="mono">bar status pill</li>
+          <li class="mono">search panel</li>
+          <li class="mono">workspace window</li>
+          <li class="mono">systemd service</li>
+        </ul>
+      </div>
+      <div class="split-panel">
+        <figure class="shot" style="max-width:420px;margin-inline:auto">
+          <img src="assets/tour/omarchy-panel.jpg" loading="lazy" width="368" height="574"
+               alt="The BeeDocs Omarchy bar panel: server status and library counts, a search for 'diagram', and matching pages with highlighted snippets." />
+          <figcaption class="mono">fig. 13 — the bar panel searching a live
+            library from the Omarchy shell.</figcaption>
+        </figure>
+        <div class="code-panel" role="img" aria-label="Terminal command installing BeeDocs as a systemd user service on Omarchy">
+          <p class="code-title mono">install on omarchy</p>
+<pre class="mono"><code>./scripts/install-omarchy.sh
+
+<span class="c"># builds UI + API, installs a systemd</span>
+<span class="c"># user service, binds the bar plugin</span></code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ======================================================== self-host -->
   <section id="selfhost" class="section section-alt reveal">
     <div class="container split">
@@ -326,9 +400,9 @@ claude mcp add beedocs -- dotnet run \
            database from a single process. SQLite is embedded — there is no
            database server to run, and a backup is one file.</p>
         <ul class="check-list">
-          <li>Deploy with Docker Compose, Podman or K3S</li>
+          <li>Deploy with Docker Compose, Podman or K3S — or as a systemd user service on Arch/Omarchy</li>
           <li>Optional cloud storage for page bodies — Azure Blob or Google Drive</li>
-          <li>Opt-in sign-in wall; API key for machine callers</li>
+          <li>Opt-in sign-in wall; API key for machine callers; pluggable external sign-in</li>
           <li>This page and the demo run on the same VPS</li>
         </ul>
       </div>

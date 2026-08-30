@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "bart.beedocs",
+  "name": "BeeDocs",
+  "version": "1.0.0",
+  "author": "Bart Roelant",
+  "license": "MIT",
+  "description": "BeeDocs documentation library in the Omarchy bar: server status, full-text search, and a one-click workspace window.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "BeeDocs",
+    "description": "Watch the BeeDocs server, search the library from the bar, and open the workspace in its own window.",
+    "category": "Tools",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "baseUrl": "http://localhost:5080",
+      "webUrl": "",
+      "apiKey": "",
+      "refreshIntervalSec": 30,
+      "projectDir": "",
+      "startCommand": "",
+      "windowPattern": "chrome-localhost__-Default"
+    },
+    "schema": [
+      {
+        "key": "baseUrl",
+        "type": "string",
+        "label": "BeeDocs URL",
+        "defaultValue": "http://localhost:5080",
+        "description": "Where the BeeDocs API + UI are served."
+      },
+      {
+        "key": "webUrl",
+        "type": "string",
+        "label": "Workspace URL",
+        "defaultValue": "",
+        "description": "Optional. Where windows open when the UI is served elsewhere than the API — e.g. http://localhost:5200 for the Vite dev stack. Empty = same as BeeDocs URL."
+      },
+      {
+        "key": "apiKey",
+        "type": "string",
+        "label": "API key",
+        "defaultValue": "",
+        "description": "Optional. Sent as X-Api-Key for instances with sign-in enabled (BeeDocs:ApiKey)."
+      },
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Health check (seconds)",
+        "min": 5,
+        "max": 3600,
+        "step": 5,
+        "defaultValue": 30
+      },
+      {
+        "key": "projectDir",
+        "type": "path",
+        "label": "BeeDocs checkout",
+        "defaultValue": "",
+        "description": "Optional. Enables the Start BeeDocs button (runs scripts/start.sh in a terminal) when the server is down."
+      },
+      {
+        "key": "startCommand",
+        "type": "string",
+        "label": "Start command",
+        "defaultValue": "",
+        "description": "Optional. Command that starts the server when it is down — e.g. 'systemctl --user start beedocs' for an installed instance. Takes precedence over the checkout's start.sh."
+      },
+      {
+        "key": "windowPattern",
+        "type": "string",
+        "label": "Window pattern",
+        "defaultValue": "chrome-localhost__-Default",
+        "description": "Hyprland class/title pattern used to focus an already-open BeeDocs window instead of launching a second one."
+      }
+    ]
+  }
+}

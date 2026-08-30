@@ -69,14 +69,34 @@ check_remote_deps() {
 # -----------------------------------------------------------------------------
 # Build / push
 # -----------------------------------------------------------------------------
+# Stage a build context where every assets/… reference in the HTML gets a
+# ?v=<content-hash> suffix. nginx serves assets immutable for a year, so a
+# changed file MUST change its URL or browsers and Cloudflare keep the old one
+# — the deployed "Releasesv0.6" header with day-old CSS was exactly that.
+stage_site() {
+  STAGE_DIR="$(mktemp -d)"
+  trap 'rm -rf "$STAGE_DIR"' EXIT
+
+  cp "$SITE_DIR"/*.html "$SITE_DIR/Dockerfile" "$SITE_DIR/nginx.conf" "$STAGE_DIR/"
+  cp -r "$SITE_DIR/assets" "$STAGE_DIR/assets"
+
+  local f rel hash
+  while IFS= read -r -d '' f; do
+    rel="assets/${f#"$STAGE_DIR/assets/"}"
+    hash="$(sha1sum "$f" | cut -c1-10)"
+    sed -i "s|\"${rel}\"|\"${rel}?v=${hash}\"|g" "$STAGE_DIR"/*.html
+  done < <(find "$STAGE_DIR/assets" -type f -print0)
+}
+
 build_image() {
   echo "==> Building $IMAGE ($GIT_SHA)"
+  stage_site
   podman build \
     --pull=newer \
     -t "$IMAGE:latest" \
     -t "$IMAGE:$GIT_SHA" \
-    -f "$SITE_DIR/Dockerfile" \
-    "$SITE_DIR"
+    -f "$STAGE_DIR/Dockerfile" \
+    "$STAGE_DIR"
 }
 
 push_image() {

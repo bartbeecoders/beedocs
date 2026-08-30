@@ -17,10 +17,44 @@
   --connector: #4e6e9b;
   --panel-ink: #26241d;
   --panel-text: #efece2;
+  /* Text on a honey fill — dark in both themes, since honey never changes. */
+  --on-honey: #23211a;
 
   --font-display: "Bricolage Grotesque", system-ui, sans-serif;
   --font-body: "Instrument Sans", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  color-scheme: light;
+}
+
+/* Dark theme: the Studio canvas at night. The head script stamps data-theme
+   from localStorage (falling back to the system preference), so the attribute
+   selector is the one that normally applies; the media query below covers
+   no-JS visitors. KEEP THE TWO TOKEN BLOCKS IDENTICAL. */
+[data-theme="dark"] {
+  --paper: #191712;
+  --canvas: #201d17;
+  --grid: #383428;
+  --ink: #efece2;
+  --muted: #a69f8c;
+  --honey-deep: #f2b53d;
+  --connector: #90a9cd;
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #191712;
+    --canvas: #201d17;
+    --grid: #383428;
+    --ink: #efece2;
+    --muted: #a69f8c;
+    --honey-deep: #f2b53d;
+    --connector: #90a9cd;
+
+    color-scheme: dark;
+  }
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -111,7 +145,7 @@ h3 { font-size: 1.14rem; font-weight: 700; line-height: 1.3; }
 
 .btn-honey {
   background: var(--honey);
-  color: var(--ink);
+  color: var(--on-honey);
   border-color: var(--ink);
   box-shadow: 2px 2px 0 var(--ink);
 }
@@ -162,7 +196,7 @@ h3 { font-size: 1.14rem; font-weight: 700; line-height: 1.3; }
 
 .head-nav {
   display: flex;
-  gap: 22px;
+  gap: 18px;
   margin-inline: auto;
 }
 
@@ -170,11 +204,52 @@ h3 { font-size: 1.14rem; font-weight: 700; line-height: 1.3; }
   color: var(--ink);
   text-decoration: none;
   font-weight: 500;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
+  white-space: nowrap;
 }
 .head-nav a:hover { color: var(--honey-deep); }
 
-.head-actions { display: flex; gap: 10px; }
+.nav-badge {
+  font-size: 0.66rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  background: var(--honey);
+  color: var(--on-honey);
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-left: 5px;
+  vertical-align: 2px;
+}
+
+.head-actions { display: flex; gap: 10px; align-items: center; }
+
+/* ---------------------------------------------------------- theme toggle */
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 9px;
+  background: var(--canvas);
+  border: 1.5px solid var(--grid);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+.theme-toggle:hover { border-color: var(--ink); }
+.theme-toggle svg { width: 17px; height: 17px; display: block; }
+
+/* Show the theme you would switch to: moon while light, sun while dark. */
+.theme-toggle .icon-sun { display: none; }
+[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .icon-sun { display: block; }
+  :root:not([data-theme="light"]) .theme-toggle .icon-moon { display: none; }
+}
 
 /* ----------------------------------------------------------------- hero */
 
@@ -193,6 +268,34 @@ h3 { font-size: 1.14rem; font-weight: 700; line-height: 1.3; }
   gap: 48px;
   padding-block: 76px 64px;
 }
+
+/* "What just shipped" pill above the hero title. */
+.release-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1.3em;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--canvas);
+  border: 1px solid var(--grid);
+  border-radius: 999px;
+  padding: 5px 15px 5px 5px;
+  transition: border-color 0.12s ease;
+}
+.release-flag:hover { border-color: var(--honey); }
+.release-flag .flag-badge {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 600;
+  background: var(--honey);
+  color: var(--on-honey);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.release-flag .flag-arrow { color: var(--muted); }
 
 .lede {
   font-size: 1.14rem;
@@ -519,15 +622,20 @@ h3 { font-size: 1.14rem; font-weight: 700; line-height: 1.3; }
 
 /* ----------------------------------------------------------- responsive */
 
+/* The nav needs its full width to stay on one line; below this it goes
+   rather than wrapping. */
+@media (max-width: 1080px) {
+  .head-nav { display: none; }
+}
+
 @media (max-width: 960px) {
   .hero-inner { grid-template-columns: 1fr; padding-block: 48px; gap: 36px; }
   .split { grid-template-columns: 1fr; gap: 36px; }
-  .head-nav { display: none; }
   .section { padding-block: 60px; }
 }
 
 @media (max-width: 560px) {
-  .head-actions .btn-ghost { display: none; }
+  .head-actions a.btn-ghost { display: none; }
   .cta-row .btn { width: 100%; justify-content: center; }
   .foot-links { margin-inline: 0; }
 }
@@ -603,8 +711,24 @@ h3 { font-size: 1.14rem; font-weight: 700; line-height: 1.3; }
 .release-badge--latest {
   background: var(--honey);
   border-color: var(--honey-deep);
-  color: var(--panel-ink);
+  color: var(--on-honey);
 }
+
+/* The newest entry gets its own honey-outlined card so "latest" is read at a
+   glance, not deduced from the badge text. The timeline dot moves down with
+   the card padding and fills honey to match. */
+.release--latest {
+  background: color-mix(in srgb, var(--honey) 6%, var(--canvas));
+  border: 1.5px solid var(--honey);
+  border-radius: 14px;
+  padding: 24px 26px 28px;
+  margin-bottom: 52px;
+}
+.release--latest::before {
+  top: 34px;
+  background: var(--honey);
+}
+.release--latest .release-shot img { border-color: color-mix(in srgb, var(--honey) 35%, var(--grid)); }
 
 .release-date {
   font-size: 0.74rem;
