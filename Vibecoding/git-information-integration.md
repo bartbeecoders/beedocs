@@ -444,3 +444,32 @@ and a curl/UI exercise against a scratch instance (no test project exists yet;
     bad branch names 400.
   - Still open for later phases: history/diff views, in-place conflict
     resolution, file delete/rename, MCP tools, per-user worktrees.
+- 2026-08-30 — **Phase 3 implemented** (comfort: history, diffs, conflict
+  strategies, delete/rename, read-only MCP):
+  - Backend: `GET …/log` (machine-parsed via unit separators; `path` follows
+    renames with `--follow`; cap 200), `GET …/commits/{sha}` (meta + patch,
+    256 KB cap), `GET …/diff` (vs HEAD; an untracked per-path target answers a
+    synthetic all-added patch via `diff --no-index /dev/null`), `file?ref=`
+    (plumbing reads via `show`; `ValidateRef` — charset-limited, no leading
+    `-`/`.`, no `..` so a range can never reach `show`), `DELETE …/file` and
+    `POST …/rename` (working-tree only, dirty until committed, rename onto an
+    existing path 409s), and `pull?strategy=ours|theirs` (`-X` merge
+    strategies — the answer a conflict 409 now points at).
+  - Web: `DiffView` (plain-text unified-diff renderer), repo-canvas History
+    (expandable commits with patches), file-canvas Changes/History panels,
+    "view the file at this commit" read-only ref view with banner, Rename
+    dialog and Delete, and Keep ours / Take theirs buttons appearing on a
+    conflict 409.
+  - MCP: `GitTools.cs` — eight read-only tools (`beedocs_git_list_repos`,
+    `_tree`, `_read_file` (+ref), `_status`, `_branches`, `_log`,
+    `_show_commit`, `_diff`), registered by assembly scan; `Docs/MCP-TOOLS.md`
+    section added. Write verbs deliberately deferred per §12.
+  - Verified live (local smart-HTTP remote + running MCP server): log whole /
+    per-file with rename-follow, commit patch, file@ref (initial README), bad
+    refs (`-x`, `a..b`, `main;rm`) → 400, tracked + untracked diffs, rename →
+    conflict on existing target, delete → D in status → committed, conflict →
+    plain pull 409 → `strategy=theirs` 200 with remote content winning → push;
+    MCP `tools/list` shows all eight, `_log` and `_read_file@ref` answer
+    correctly over stateless HTTP.
+  - Phase 4 remains: MCP write verbs, per-user worktrees, PR deep links,
+    auto-fetch, `HybridPageEditor` over a git document source.

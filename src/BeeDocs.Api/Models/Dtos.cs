@@ -1160,3 +1160,40 @@ public sealed record GitCreateBranchRequest(
     [property: Required, MinLength(1)] string Name,
     bool? Checkout
 );
+
+/// <summary>One commit in a log listing (newest first).</summary>
+public sealed record GitLogEntryDto(
+    string Sha,
+    string ShortSha,
+    string Author,
+    string AuthorEmail,
+    DateTimeOffset Date,
+    string Subject
+);
+
+/// <param name="Patch">Unified diff of the commit (optionally narrowed to one path).</param>
+/// <param name="PatchTruncated">The patch hit the size cap and was cut.</param>
+public sealed record GitCommitDetailDto(
+    string Sha,
+    string ShortSha,
+    string Author,
+    string AuthorEmail,
+    DateTimeOffset Date,
+    string Subject,
+    string Body,
+    string Patch,
+    bool PatchTruncated
+);
+
+/// <param name="Path">Null when the diff covers the whole working tree.</param>
+/// <param name="Patch">Unified diff of uncommitted changes against HEAD. Empty = nothing changed.</param>
+public sealed record GitDiffDto(
+    string? Path,
+    string Patch,
+    bool Truncated
+);
+
+public sealed record GitRenameRequest(
+    [property: Required, MinLength(1)] string From,
+    [property: Required, MinLength(1)] string To
+);

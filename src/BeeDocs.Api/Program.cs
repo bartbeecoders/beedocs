@@ -1,6 +1,7 @@
 using System.Reflection;
 using BeeDocs.Api.Models;
 using BeeDocs.Api.Services;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 
@@ -2026,18 +2027,23 @@ gitApi.MapDelete("/repos/{id}", async (string id, IGitRepoService repos, Cancell
     .WithMetadata(gitAdmin);
 
 // /sync and /pull are the same verb — /sync predates the git verbs and stays
-// for anything that learned it in phase 1.
+// for anything that learned it in phase 1. ?strategy=ours|theirs resolves a
+// conflicted merge toward one side — the retry a conflict 409 points at.
 foreach (var pullPath in new[] { "/repos/{id}/sync", "/repos/{id}/pull" })
 {
-    gitApi.MapPost(pullPath, async (string id, IGitRepoService repos, CancellationToken ct) =>
+    gitApi.MapPost(pullPath, async (string id, string? strategy, IGitRepoService repos, CancellationToken ct) =>
     {
         try
         {
-            return Results.Ok(await repos.SyncAsync(id, ct));
+            return Results.Ok(await repos.SyncAsync(id, strategy, ct));
         }
         catch (KeyNotFoundException)
         {
             return Results.NotFound();
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]> { ["strategy"] = [ex.Message] });
         }
         catch (GitConflictException ex)
         {
@@ -2189,11 +2195,13 @@ gitApi.MapGet("/repos/{id}/tree", async (string id, string? path, IGitRepoServic
     }
 });
 
-gitApi.MapGet("/repos/{id}/file", async (string id, string? path, IGitRepoService repos, CancellationToken ct) =>
+gitApi.MapGet("/repos/{id}/file", async (
+    string id, string? path, [FromQuery(Name = "ref")] string? gitRef,
+    IGitRepoService repos, CancellationToken ct) =>
 {
     try
     {
-        return Results.Ok(await repos.FileAsync(id, path, ct));
+        return Results.Ok(await repos.FileAsync(id, path, gitRef, ct));
     }
     catch (KeyNotFoundException)
     {
@@ -2258,6 +2266,120 @@ gitApi.MapGet("/repos/{id}/branches", async (string id, IGitRepoService repos, C
     catch (KeyNotFoundException)
     {
         return Results.NotFound();
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+// History and diffs — read-only, so the default viewer rule applies.
+gitApi.MapGet("/repos/{id}/log", async (
+    string id, string? path, int? limit, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await repos.LogAsync(id, path, limit ?? 30, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["path"] = [ex.Message] });
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+gitApi.MapGet("/repos/{id}/commits/{sha}", async (
+    string id, string sha, string? path, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await repos.CommitDetailAsync(id, sha, path, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["sha"] = [ex.Message] });
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+gitApi.MapGet("/repos/{id}/diff", async (
+    string id, string? path, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await repos.DiffAsync(id, path, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["path"] = [ex.Message] });
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+// Working-tree delete and rename. Both leave the change uncommitted — the
+// commit dialog is where it becomes history, same as an edit.
+gitApi.MapDelete("/repos/{id}/file", async (
+    string id, string? path, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        await repos.DeleteFileAsync(id, path, ct);
+        return Results.NoContent();
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["path"] = [ex.Message] });
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+gitApi.MapPost("/repos/{id}/rename", async (
+    string id, GitRenameRequest body, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        await repos.RenameAsync(id, body, ct);
+        return Results.NoContent();
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["path"] = [ex.Message] });
+    }
+    catch (GitConflictException ex)
+    {
+        return GitConflict(ex);
     }
     catch (GitException ex)
     {

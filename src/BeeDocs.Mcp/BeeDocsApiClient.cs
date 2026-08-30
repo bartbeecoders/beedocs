@@ -302,6 +302,49 @@ public sealed class BeeDocsApiClient(HttpClient http)
     public Task<JsonElement> SearchStatusAsync(CancellationToken ct = default)
         => GetAsync("/api/search/status", ct);
 
+    // --- Git integration (read-only for now — write verbs land once the
+    //     shared-working-copy guards have soaked with human use) ---
+
+    public Task<JsonElement> ListGitReposAsync(CancellationToken ct = default)
+        => GetAsync("/api/git/repos", ct);
+
+    public Task<JsonElement> GetGitTreeAsync(string repoId, string? path, CancellationToken ct = default)
+        => GetAsync($"/api/git/repos/{Uri.EscapeDataString(repoId)}/tree{PathQuery(path)}", ct);
+
+    public Task<JsonElement> GetGitFileAsync(
+        string repoId, string path, string? gitRef, CancellationToken ct = default)
+    {
+        var query = $"?path={Uri.EscapeDataString(path)}";
+        if (!string.IsNullOrWhiteSpace(gitRef)) query += $"&ref={Uri.EscapeDataString(gitRef)}";
+        return GetAsync($"/api/git/repos/{Uri.EscapeDataString(repoId)}/file{query}", ct);
+    }
+
+    public Task<JsonElement> GetGitStatusAsync(string repoId, CancellationToken ct = default)
+        => GetAsync($"/api/git/repos/{Uri.EscapeDataString(repoId)}/status", ct);
+
+    public Task<JsonElement> GetGitBranchesAsync(string repoId, CancellationToken ct = default)
+        => GetAsync($"/api/git/repos/{Uri.EscapeDataString(repoId)}/branches", ct);
+
+    public Task<JsonElement> GetGitLogAsync(
+        string repoId, string? path, int? limit, CancellationToken ct = default)
+    {
+        var query = PathQuery(path);
+        if (limit is not null) query += (query.Length == 0 ? "?" : "&") + $"limit={limit}";
+        return GetAsync($"/api/git/repos/{Uri.EscapeDataString(repoId)}/log{query}", ct);
+    }
+
+    public Task<JsonElement> GetGitCommitAsync(
+        string repoId, string sha, string? path, CancellationToken ct = default)
+        => GetAsync(
+            $"/api/git/repos/{Uri.EscapeDataString(repoId)}/commits/{Uri.EscapeDataString(sha)}{PathQuery(path)}",
+            ct);
+
+    public Task<JsonElement> GetGitDiffAsync(string repoId, string? path, CancellationToken ct = default)
+        => GetAsync($"/api/git/repos/{Uri.EscapeDataString(repoId)}/diff{PathQuery(path)}", ct);
+
+    private static string PathQuery(string? path)
+        => string.IsNullOrWhiteSpace(path) ? "" : $"?path={Uri.EscapeDataString(path)}";
+
     public Task<JsonElement> ReindexAsync(CancellationToken ct = default)
         => SendJsonAsync(HttpMethod.Post, "/api/search/reindex", new { }, ct);
 

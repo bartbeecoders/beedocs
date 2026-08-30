@@ -18,12 +18,16 @@ public interface IGitRepoService
     Task<GitRepoDto?> UpdateAsync(string id, UpdateGitRepoRequest request, CancellationToken ct = default);
     Task<bool> DeleteAsync(string id, CancellationToken ct = default);
 
-    /// <summary>Pull from the remote (merge; a conflict is backed out and reported as 409).
+    /// <summary>Pull from the remote (merge; a conflict is backed out and reported as 409,
+    /// unless <paramref name="strategy"/> — ours|theirs — says which side wins).
     /// Synchronous — the UI gives it a long timeout.</summary>
-    Task<GitRepoDto> SyncAsync(string id, CancellationToken ct = default);
+    Task<GitRepoDto> SyncAsync(string id, string? strategy = null, CancellationToken ct = default);
 
     Task<IReadOnlyList<GitTreeEntryDto>> TreeAsync(string id, string? path, CancellationToken ct = default);
-    Task<GitFileDto> FileAsync(string id, string? path, CancellationToken ct = default);
+
+    /// <summary>The working-tree file, or — when <paramref name="gitRef"/> names a commit/branch —
+    /// that ref's version of it (text only; read-only history view).</summary>
+    Task<GitFileDto> FileAsync(string id, string? path, string? gitRef = null, CancellationToken ct = default);
 
     /// <summary>Save to the working tree, guarded by the blob sha the editor loaded.</summary>
     Task<GitFileDto> WriteFileAsync(string id, string? path, GitWriteFileRequest request, CancellationToken ct = default);
@@ -38,6 +42,21 @@ public interface IGitRepoService
     Task<GitRepoDto> CheckoutAsync(string id, string branch, CancellationToken ct = default);
 
     Task<GitRepoDto> CreateBranchAsync(string id, GitCreateBranchRequest request, CancellationToken ct = default);
+
+    /// <summary>Commit history, newest first — the whole branch or one path's.</summary>
+    Task<IReadOnlyList<GitLogEntryDto>> LogAsync(string id, string? path, int limit, CancellationToken ct = default);
+
+    /// <summary>One commit with its patch (optionally narrowed to a path).</summary>
+    Task<GitCommitDetailDto> CommitDetailAsync(string id, string sha, string? path, CancellationToken ct = default);
+
+    /// <summary>Uncommitted changes against HEAD — the whole tree or one path (untracked included per-path).</summary>
+    Task<GitDiffDto> DiffAsync(string id, string? path, CancellationToken ct = default);
+
+    /// <summary>Delete a working-tree file. The deletion shows as dirty until committed.</summary>
+    Task DeleteFileAsync(string id, string? path, CancellationToken ct = default);
+
+    /// <summary>Move/rename a working-tree file or folder inside the repo.</summary>
+    Task RenameAsync(string id, GitRenameRequest request, CancellationToken ct = default);
 
     /// <summary>Absolute path + content type + download name for streaming one file.</summary>
     Task<(string AbsolutePath, string ContentType, string FileName)> RawAsync(
@@ -263,11 +282,16 @@ public sealed class GitRepoService(
         return true;
     }
 
-    public async Task<GitRepoDto> SyncAsync(string id, CancellationToken ct = default)
+    public async Task<GitRepoDto> SyncAsync(
+        string id, string? strategy = null, CancellationToken ct = default)
     {
         var repo = await RequireAsync(id, ct);
         if (repo.Status == "cloning")
             throw new GitException($"{repo.Name} is still cloning — try again in a moment.");
+
+        var chosen = (strategy ?? string.Empty).Trim().ToLowerInvariant();
+        if (chosen is not ("" or "ours" or "theirs"))
+            throw new ArgumentException($"Unknown pull strategy '{strategy}'. Use ours or theirs.");
 
         var connection = await connections.ResolveAsync(repo.ConnectionId, ct)
             ?? throw new GitException($"The connection behind {repo.Name} no longer exists.");
@@ -276,7 +300,12 @@ public sealed class GitRepoService(
         {
             using (await git.LockAsync(id, ct))
             {
-                var args = new[] { "pull", "--no-rebase", "--no-recurse-submodules" };
+                // -X ours/-X theirs resolves *conflicting hunks* toward one side
+                // and merges the rest normally — the "keep mine / take theirs"
+                // answer to a pull that 409ed on a conflict.
+                var args = chosen.Length == 0
+                    ? new[] { "pull", "--no-rebase", "--no-recurse-submodules" }
+                    : new[] { "pull", "--no-rebase", "--no-recurse-submodules", "-X", chosen };
                 var pull = await git.RunAsync(
                     RepoDir(id), args, connection.BasicAuth, GitCli.SyncTimeout, ct);
                 if (pull.ExitCode != 0)
@@ -297,9 +326,8 @@ public sealed class GitRepoService(
                         throw new GitConflictException(
                             $"Pull would conflict in {string.Join(", ", files.Take(5))}" +
                             $"{(files.Length > 5 ? $" and {files.Length - 5} more" : "")}. " +
-                            "The merge was backed out: both sides changed the same lines. Undo one " +
-                            "side (edit and commit again here, or on the remote), then pull — " +
-                            "in-place conflict resolution is a later phase.");
+                            "The merge was backed out: both sides changed the same lines. Pull " +
+                            "again keeping ours or taking theirs, or undo one side and retry.");
                     }
 
                     var detail = pull.StdErr + "\n" + pull.StdOut;
@@ -359,10 +387,15 @@ public sealed class GitRepoService(
         return entries;
     }
 
-    public async Task<GitFileDto> FileAsync(string id, string? path, CancellationToken ct = default)
+    public async Task<GitFileDto> FileAsync(
+        string id, string? path, string? gitRef = null, CancellationToken ct = default)
     {
         var repo = await RequireReadyAsync(id, ct);
         var relative = GitPaths.Normalize(path);
+
+        if (!string.IsNullOrWhiteSpace(gitRef))
+            return await FileAtRefAsync(repo, relative, gitRef, ct);
+
         var absolute = GitPaths.Resolve(RepoDir(repo.Id), relative);
         var info = new FileInfo(absolute);
         if (!info.Exists)
@@ -382,6 +415,59 @@ public sealed class GitRepoService(
             Content: binary || tooLarge ? null : Encoding.UTF8.GetString(bytes),
             ContentBase64: null,
             TooLarge: tooLarge);
+    }
+
+    /// <summary>
+    /// The ref's version of a file, read through plumbing so nothing touches the
+    /// working tree. Text only: history views render prose and code; a binary at
+    /// an old ref answers with no content rather than garbled bytes.
+    /// </summary>
+    private async Task<GitFileDto> FileAtRefAsync(
+        GitRepoDto repo, string relative, string gitRef, CancellationToken ct)
+    {
+        var reference = ValidateRef(gitRef);
+        var dir = RepoDir(repo.Id);
+
+        var blob = await git.RunAsync(
+            dir, ["rev-parse", "--verify", "--quiet", $"{reference}:{relative}"],
+            basicAuth: null, GitCli.ReadTimeout, ct);
+        if (blob.ExitCode != 0)
+            throw new KeyNotFoundException($"'{relative}' does not exist at {gitRef} in {repo.Name}.");
+
+        var show = await git.RunOkAsync(
+            dir, ["show", $"{reference}:{relative}"], basicAuth: null, GitCli.ReadTimeout, ct);
+        var binary = show.Contains('\0');
+        var tooLarge = !binary && show.Length > MaxInlineTextBytes;
+
+        return new GitFileDto(
+            Path: relative,
+            Name: Path.GetFileName(relative),
+            Binary: binary,
+            Size: show.Length,
+            BlobSha: blob.StdOut.Trim(),
+            Content: binary || tooLarge ? null : show,
+            ContentBase64: null,
+            TooLarge: tooLarge);
+    }
+
+    /// <summary>
+    /// A ref a client may name: a branch, sha, or relative spec like HEAD~2.
+    /// Charset-limited and never starting with '-', so it can only ever be a
+    /// value on a git command line; ".." is refused because a range would turn
+    /// `show` into something else entirely.
+    /// </summary>
+    private static string ValidateRef(string raw)
+    {
+        var reference = raw.Trim();
+        if (reference.Length is 0 or > 120
+            || reference[0] is '-' or '.'
+            || reference.Contains("..", StringComparison.Ordinal)
+            || reference.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('.' or '_' or '/' or '~' or '^' or '-')))
+        {
+            throw new ArgumentException($"'{raw}' is not a usable git ref.");
+        }
+
+        return reference;
     }
 
     public async Task<(string AbsolutePath, string ContentType, string FileName)> RawAsync(
@@ -459,7 +545,7 @@ public sealed class GitRepoService(
             }
         }
 
-        return await FileAsync(id, relative, ct);
+        return await FileAsync(id, relative, gitRef: null, ct);
     }
 
     public async Task<GitCommitResultDto> CommitAsync(
@@ -607,6 +693,182 @@ public sealed class GitRepoService(
         }
 
         return (await GetAsync(id, ct))!;
+    }
+
+    /// <summary>Record separators for machine-parsing log output — no content can contain them.</summary>
+    private const char FieldSep = '\x1f';
+    private const char RecordSep = '\x1e';
+
+    /// <summary>Patches are for reading in a panel, not mirroring a monorepo change.</summary>
+    private const int MaxPatchChars = 256 * 1024;
+
+    public async Task<IReadOnlyList<GitLogEntryDto>> LogAsync(
+        string id, string? path, int limit, CancellationToken ct = default)
+    {
+        var repo = await RequireReadyAsync(id, ct);
+        var relative = GitPaths.Normalize(path);
+        var count = Math.Clamp(limit, 1, 200);
+
+        var args = new List<string>
+        {
+            "log", $"-n{count}", $"--format=%H{FieldSep}%an{FieldSep}%ae{FieldSep}%aI{FieldSep}%s{RecordSep}",
+        };
+        if (relative.Length > 0)
+        {
+            // --follow: a file's history survives its renames, which is exactly
+            // what a "history of this page" view means.
+            args.Add("--follow");
+            args.Add("--");
+            args.Add(relative);
+        }
+
+        var output = await git.RunOkAsync(
+            RepoDir(repo.Id), args, basicAuth: null, GitCli.ReadTimeout, ct);
+
+        var entries = new List<GitLogEntryDto>();
+        foreach (var record in output.Split(RecordSep, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var fields = record.Trim('\n').Split(FieldSep);
+            if (fields.Length < 5) continue;
+            entries.Add(new GitLogEntryDto(
+                Sha: fields[0],
+                ShortSha: fields[0].Length >= 8 ? fields[0][..8] : fields[0],
+                Author: fields[1],
+                AuthorEmail: fields[2],
+                Date: DateTimeOffset.TryParse(fields[3], out var date) ? date : DateTimeOffset.UnixEpoch,
+                Subject: fields[4]));
+        }
+
+        return entries;
+    }
+
+    public async Task<GitCommitDetailDto> CommitDetailAsync(
+        string id, string sha, string? path, CancellationToken ct = default)
+    {
+        var repo = await RequireReadyAsync(id, ct);
+        var reference = ValidateRef(sha);
+        var relative = GitPaths.Normalize(path);
+        var dir = RepoDir(repo.Id);
+
+        var meta = await git.RunAsync(
+            dir,
+            ["log", "-n1", $"--format=%H{FieldSep}%an{FieldSep}%ae{FieldSep}%aI{FieldSep}%s{FieldSep}%b", reference],
+            basicAuth: null, GitCli.ReadTimeout, ct);
+        if (meta.ExitCode != 0)
+            throw new KeyNotFoundException($"'{sha}' is not a commit in {repo.Name}.");
+
+        var fields = meta.StdOut.TrimEnd('\n').Split(FieldSep);
+        if (fields.Length < 5)
+            throw new GitException($"Could not read commit '{sha}'.");
+
+        var patchArgs = new List<string> { "show", "--format=", "--patch", reference };
+        if (relative.Length > 0)
+        {
+            patchArgs.Add("--");
+            patchArgs.Add(relative);
+        }
+        var patch = await git.RunOkAsync(dir, patchArgs, basicAuth: null, GitCli.ReadTimeout, ct);
+        var truncated = patch.Length > MaxPatchChars;
+        if (truncated) patch = patch[..MaxPatchChars];
+
+        return new GitCommitDetailDto(
+            Sha: fields[0],
+            ShortSha: fields[0].Length >= 8 ? fields[0][..8] : fields[0],
+            Author: fields[1],
+            AuthorEmail: fields[2],
+            Date: DateTimeOffset.TryParse(fields[3], out var date) ? date : DateTimeOffset.UnixEpoch,
+            Subject: fields[4],
+            Body: fields.Length > 5 ? string.Join(FieldSep, fields[5..]).Trim() : string.Empty,
+            Patch: patch,
+            PatchTruncated: truncated);
+    }
+
+    public async Task<GitDiffDto> DiffAsync(string id, string? path, CancellationToken ct = default)
+    {
+        var repo = await RequireReadyAsync(id, ct);
+        var relative = GitPaths.Normalize(path);
+        var dir = RepoDir(repo.Id);
+
+        string patch;
+        if (relative.Length > 0)
+        {
+            var absolute = GitPaths.Resolve(dir, relative);
+            var tracked = await git.RunAsync(
+                dir, ["ls-files", "--error-unmatch", "--", relative],
+                basicAuth: null, GitCli.ReadTimeout, ct);
+            if (tracked.ExitCode != 0 && File.Exists(absolute))
+            {
+                // Untracked: `diff HEAD` says nothing about it, but "what would
+                // this commit add" has an obvious answer — the whole file.
+                // --no-index exits 1 when the sides differ; that is success here.
+                var noIndex = await git.RunAsync(
+                    dir, ["diff", "--no-index", "--", "/dev/null", relative],
+                    basicAuth: null, GitCli.ReadTimeout, ct);
+                patch = noIndex.StdOut;
+            }
+            else
+            {
+                patch = await git.RunOkAsync(
+                    dir, ["diff", "HEAD", "--", relative],
+                    basicAuth: null, GitCli.ReadTimeout, ct);
+            }
+        }
+        else
+        {
+            patch = await git.RunOkAsync(
+                dir, ["diff", "HEAD"], basicAuth: null, GitCli.ReadTimeout, ct);
+        }
+
+        var truncated = patch.Length > MaxPatchChars;
+        if (truncated) patch = patch[..MaxPatchChars];
+        return new GitDiffDto(relative.Length > 0 ? relative : null, patch, truncated);
+    }
+
+    public async Task DeleteFileAsync(string id, string? path, CancellationToken ct = default)
+    {
+        var repo = await RequireReadyAsync(id, ct);
+        var relative = GitPaths.Normalize(path);
+        if (relative.Length == 0)
+            throw new ArgumentException("A file path is required.");
+
+        using (await git.LockAsync(id, ct))
+        {
+            var absolute = GitPaths.Resolve(RepoDir(repo.Id), relative);
+            if (Directory.Exists(absolute))
+                throw new ArgumentException($"'{relative}' is a folder — delete its files instead.");
+            if (!File.Exists(absolute))
+                throw new KeyNotFoundException($"'{relative}' is not a file in {repo.Name}.");
+            // Working-tree only: the deletion shows as dirty and is undone by
+            // committing nothing — git still has the committed version.
+            File.Delete(absolute);
+        }
+    }
+
+    public async Task RenameAsync(string id, GitRenameRequest request, CancellationToken ct = default)
+    {
+        var repo = await RequireReadyAsync(id, ct);
+        var from = GitPaths.Normalize(request.From);
+        var to = GitPaths.Normalize(request.To);
+        if (from.Length == 0 || to.Length == 0)
+            throw new ArgumentException("Both the current and the new path are required.");
+        if (from == to) return;
+
+        using (await git.LockAsync(id, ct))
+        {
+            var dir = RepoDir(repo.Id);
+            var source = GitPaths.Resolve(dir, from);
+            var target = GitPaths.Resolve(dir, to);
+            if (File.Exists(target) || Directory.Exists(target))
+                throw new GitConflictException($"'{to}' already exists.");
+
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            if (File.Exists(source))
+                File.Move(source, target);
+            else if (Directory.Exists(source))
+                Directory.Move(source, target);
+            else
+                throw new KeyNotFoundException($"'{from}' does not exist in {repo.Name}.");
+        }
     }
 
     /// <summary>

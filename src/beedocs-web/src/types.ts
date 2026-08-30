@@ -1010,6 +1010,30 @@ export type GitBranch = {
   isRemote: boolean
 }
 
+export type GitLogEntry = {
+  sha: string
+  shortSha: string
+  author: string
+  authorEmail: string
+  date: string
+  subject: string
+}
+
+export type GitCommitDetail = GitLogEntry & {
+  body: string
+  /** Unified diff, capped at 256 KB. */
+  patch: string
+  patchTruncated: boolean
+}
+
+export type GitDiff = {
+  /** Null when the diff covers the whole working tree. */
+  path: string | null
+  /** Unified diff against HEAD. Empty = nothing changed. */
+  patch: string
+  truncated: boolean
+}
+
 export type GitCommitResult = {
   commitSha: string
   /** "Name <email>" as recorded in the commit. */

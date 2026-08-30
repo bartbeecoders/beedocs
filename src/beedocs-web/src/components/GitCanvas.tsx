@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -11,7 +11,7 @@ import {
 import { highlightCode } from '../syntaxHighlight'
 import { MarkdownView } from './MarkdownView'
 import { gitFilePath } from '../gitPaths'
-import type { GitBranch, GitFile, GitStatus, GitTreeEntry } from '../types'
+import type { GitBranch, GitCommitDetail, GitFile, GitLogEntry, GitStatus, GitTreeEntry } from '../types'
 import '../styles/git.css'
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp', '.avif']
@@ -184,6 +184,30 @@ function GitToolbar({ repoId }: { repoId: string }) {
       {error ? (
         <span className="git-toolbar-error" role="alert">
           {error}
+          {/* A conflicted pull was backed out; the honest retries are the two
+              merge strategies — keep the server's lines, or take the remote's. */}
+          {canWrite && /conflict/i.test(error) ? (
+            <>
+              <button
+                type="button"
+                className="btn sm"
+                disabled={busy !== null}
+                title="Re-pull, resolving conflicting lines in favour of this server's version"
+                onClick={() => void run('pull', () => api.pullGitRepo(repoId, 'ours'))}
+              >
+                Keep ours
+              </button>
+              <button
+                type="button"
+                className="btn sm"
+                disabled={busy !== null}
+                title="Re-pull, resolving conflicting lines in favour of the remote's version"
+                onClick={() => void run('pull', () => api.pullGitRepo(repoId, 'theirs'))}
+              >
+                Take theirs
+              </button>
+            </>
+          ) : null}
         </span>
       ) : null}
 
@@ -408,6 +432,7 @@ export function GitRepoCanvas() {
   const [entries, setEntries] = useState<GitTreeEntry[] | null>(null)
   const [readme, setReadme] = useState<GitFile | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
 
   const ready = repo?.status === 'ready'
 
@@ -477,6 +502,21 @@ export function GitRepoCanvas() {
           </ul>
         ) : null}
 
+        {ready ? (
+          <div className="git-readme">
+            <button
+              type="button"
+              className="btn sm"
+              aria-expanded={showHistory}
+              onClick={() => setShowHistory((v) => !v)}
+            >
+              {showHistory ? 'Hide history' : 'History'}
+            </button>
+            {/* Keyed by fetchedAt so a pull refreshes the list. */}
+            {showHistory ? <HistoryList key={repo.fetchedAt ?? ''} repoId={repoId} /> : null}
+          </div>
+        ) : null}
+
         {readme?.content ? (
           <div className="git-readme">
             <h2 className="book-overview-subhead">{readme.name}</h2>
@@ -497,6 +537,7 @@ export function GitRepoCanvas() {
  */
 export function GitFileCanvas() {
   const { canWrite } = useAuth()
+  const navigate = useNavigate()
   const { repoId, '*': splat } = useParams()
   const path = useMemo(
     () => (splat ?? '').split('/').map(decodeURIComponent).join('/'),
@@ -504,6 +545,13 @@ export function GitFileCanvas() {
   )
   const [file, setFile] = useState<GitFile | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // 'diff' and 'history' are read panels under the content; a ref view swaps
+  // the content itself for a historical version, read-only.
+  const [panel, setPanel] = useState<'none' | 'diff' | 'history'>('none')
+  const [refView, setRefView] = useState<{ entry: GitLogEntry; file: GitFile } | null>(null)
+  const [renaming, setRenaming] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -523,6 +571,9 @@ export function GitFileCanvas() {
     setEditing(false)
     setPreview(false)
     setSaveError(null)
+    setPanel('none')
+    setRefView(null)
+    setActionError(null)
     api
       .getGitFile(repoId, path)
       .then((f) => {
@@ -588,6 +639,34 @@ export function GitFileCanvas() {
   const editable = canWrite && file !== null && !file.binary && !file.tooLarge && !isImage
   const markdown = file !== null && isMarkdown(file.name)
 
+  const viewAt = async (entry: GitLogEntry) => {
+    setActionError(null)
+    try {
+      const historic = await api.getGitFile(repoId, path, entry.sha)
+      setRefView({ entry, file: historic })
+    } catch (e) {
+      setActionError(errText(e))
+    }
+  }
+
+  const removeFile = async () => {
+    if (
+      !window.confirm(
+        `Delete ${path} from the working copy? The deletion stays uncommitted until you commit it.`,
+      )
+    ) {
+      return
+    }
+    setActionError(null)
+    try {
+      await api.deleteGitFile(repoId, path)
+      bumpGitStatus()
+      void navigate(`/git/${repoId}`)
+    } catch (e) {
+      setActionError(errText(e))
+    }
+  }
+
   return (
     <div className="git-canvas">
       <GitToolbar repoId={repoId} />
@@ -625,15 +704,61 @@ export function GitFileCanvas() {
                 Done
               </button>
             </>
-          ) : editable ? (
-            <button type="button" className="btn sm" onClick={startEdit}>
-              Edit
-            </button>
-          ) : null}
+          ) : refView !== null ? null : (
+            <>
+              {editable ? (
+                <button type="button" className="btn sm" onClick={startEdit}>
+                  Edit
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="btn sm"
+                aria-expanded={panel === 'diff'}
+                title="Uncommitted changes to this file"
+                onClick={() => setPanel((p) => (p === 'diff' ? 'none' : 'diff'))}
+              >
+                Changes
+              </button>
+              <button
+                type="button"
+                className="btn sm"
+                aria-expanded={panel === 'history'}
+                onClick={() => setPanel((p) => (p === 'history' ? 'none' : 'history'))}
+              >
+                History
+              </button>
+              {canWrite ? (
+                <>
+                  <button type="button" className="btn sm" onClick={() => setRenaming(true)}>
+                    Rename
+                  </button>
+                  <button type="button" className="btn ghost danger sm" onClick={() => void removeFile()}>
+                    Delete
+                  </button>
+                </>
+              ) : null}
+            </>
+          )}
           <a className="btn sm" href={rawUrl} download>
             Download
           </a>
         </div>
+
+        {refView !== null ? (
+          <p className="git-refview-banner" role="status">
+            Viewing <code>{refView.entry.shortSha}</code> from{' '}
+            {new Date(refView.entry.date).toLocaleString()} ({refView.entry.author}) — read-only.
+            <button type="button" className="btn sm" onClick={() => setRefView(null)}>
+              Back to current
+            </button>
+          </p>
+        ) : null}
+        {actionError ? (
+          <p className="banner error" role="alert">
+            {actionError}
+          </p>
+        ) : null}
 
         {error ? <p className="banner error">{error}</p> : null}
         {saveError ? (
@@ -643,7 +768,17 @@ export function GitFileCanvas() {
         ) : null}
         {file === null && error === null ? <p className="muted">Loading…</p> : null}
 
-        {editing && file !== null ? (
+        {refView !== null ? (
+          refView.file.content !== null && markdown ? (
+            <div className="git-file-markdown">
+              <MarkdownView content={refView.file.content} />
+            </div>
+          ) : refView.file.content !== null ? (
+            <CodeView name={refView.file.name} content={refView.file.content} />
+          ) : (
+            <p className="muted">This version cannot be shown inline (binary or too large).</p>
+          )
+        ) : editing && file !== null ? (
           preview && markdown ? (
             <div className="git-file-markdown">
               <MarkdownView content={draft} />
@@ -680,8 +815,277 @@ export function GitFileCanvas() {
               : 'This is a binary file — use Download.'}
           </p>
         ) : null}
+
+        {panel === 'diff' && refView === null ? (
+          <div className="git-panel">
+            <h2 className="book-overview-subhead">Uncommitted changes</h2>
+            {/* Keyed by blobSha so a save refreshes the diff. */}
+            <FileDiffPanel key={file?.blobSha ?? ''} repoId={repoId} path={path} />
+          </div>
+        ) : null}
+        {panel === 'history' && refView === null ? (
+          <div className="git-panel">
+            <h2 className="book-overview-subhead">History</h2>
+            <HistoryList repoId={repoId} path={path} onViewAt={(entry) => void viewAt(entry)} />
+          </div>
+        ) : null}
+
+        {renaming ? (
+          <RenameDialog
+            repoId={repoId}
+            from={path}
+            onClose={() => setRenaming(false)}
+            onRenamed={(to) => {
+              bumpGitStatus()
+              void navigate(gitFilePath(repoId, to))
+            }}
+          />
+        ) : null}
       </div>
     </div>
+  )
+}
+
+/** The file's working-tree diff against HEAD, fetched when shown. */
+function FileDiffPanel({ repoId, path }: { repoId: string; path: string }) {
+  const [patch, setPatch] = useState<{ text: string; truncated: boolean } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .getGitDiff(repoId, path)
+      .then((d) => {
+        if (!cancelled) setPatch({ text: d.patch, truncated: d.truncated })
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(errText(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [repoId, path])
+
+  if (error !== null) return <p className="banner error">{error}</p>
+  if (patch === null) return <p className="muted sm">Loading…</p>
+  return <DiffView patch={patch.text} truncated={patch.truncated} />
+}
+
+function RenameDialog({
+  repoId,
+  from,
+  onClose,
+  onRenamed,
+}: {
+  repoId: string
+  from: string
+  onClose: () => void
+  onRenamed: (to: string) => void
+}) {
+  const [to, setTo] = useState(from)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const rename = async () => {
+    const target = to.trim()
+    if (busy || target === '' || target === from) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api.renameGitFile(repoId, from, target)
+      onRenamed(target)
+      onClose()
+    } catch (e) {
+      setError(errText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="git-dialog-overlay" onMouseDown={onClose} role="presentation">
+      <div
+        className="git-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Rename file"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <h3>Rename / move</h3>
+        <p className="muted sm">
+          The full path inside the repository — changing a folder segment moves the file. Stays
+          uncommitted until you commit it.
+        </p>
+        <input
+          className="llm-mono"
+          value={to}
+          autoFocus
+          spellCheck={false}
+          disabled={busy}
+          onChange={(e) => setTo(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              void rename()
+            }
+          }}
+        />
+        {error ? (
+          <p className="banner error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="git-dialog-actions">
+          <button type="button" className="btn sm" disabled={busy} onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn primary sm"
+            disabled={busy || to.trim() === '' || to.trim() === from}
+            onClick={() => void rename()}
+          >
+            {busy ? 'Renaming…' : 'Rename'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A unified diff, coloured line by line. Plain text in, spans out — nothing in
+ * a patch is ever interpreted as markup.
+ */
+function DiffView({ patch, truncated }: { patch: string; truncated?: boolean }) {
+  const lines = useMemo(() => patch.replace(/\n$/, '').split('\n'), [patch])
+
+  if (patch.trim() === '') {
+    return <p className="muted sm">No changes.</p>
+  }
+
+  return (
+    <pre className="git-diff">
+      {lines.map((line, i) => {
+        const kind = line.startsWith('diff --git') || line.startsWith('index ')
+          || line.startsWith('--- ') || line.startsWith('+++ ')
+          || line.startsWith('new file') || line.startsWith('deleted file')
+          || line.startsWith('rename ') || line.startsWith('similarity ')
+          ? 'meta'
+          : line.startsWith('@@')
+            ? 'hunk'
+            : line.startsWith('+')
+              ? 'add'
+              : line.startsWith('-')
+                ? 'del'
+                : 'ctx'
+        return (
+          <span key={i} className={`git-diff-line is-${kind}`}>
+            {line || ' '}
+            {'\n'}
+          </span>
+        )
+      })}
+      {truncated ? <span className="git-diff-line is-meta">… patch truncated at 256 KB</span> : null}
+    </pre>
+  )
+}
+
+/**
+ * Commit history — the whole branch or one file's. Each row expands into the
+ * commit's patch; for a file, `onViewAt` additionally offers "view the file as
+ * it was" at that commit.
+ */
+function HistoryList({
+  repoId,
+  path,
+  onViewAt,
+}: {
+  repoId: string
+  path?: string
+  onViewAt?: (entry: GitLogEntry) => void
+}) {
+  const [entries, setEntries] = useState<GitLogEntry[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [openSha, setOpenSha] = useState<string | null>(null)
+  const [detail, setDetail] = useState<GitCommitDetail | null>(null)
+  const [detailError, setDetailError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setEntries(null)
+    setError(null)
+    setOpenSha(null)
+    setDetail(null)
+    api
+      .getGitLog(repoId, path, 30)
+      .then((list) => {
+        if (!cancelled) setEntries(list)
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(errText(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [repoId, path])
+
+  const openCommit = (sha: string) => {
+    if (openSha === sha) {
+      setOpenSha(null)
+      setDetail(null)
+      return
+    }
+    setOpenSha(sha)
+    setDetail(null)
+    setDetailError(null)
+    api
+      .getGitCommit(repoId, sha, path)
+      .then(setDetail)
+      .catch((e: unknown) => setDetailError(errText(e)))
+  }
+
+  if (error !== null) return <p className="banner error">{error}</p>
+  if (entries === null) return <p className="muted sm">Loading history…</p>
+  if (entries.length === 0) return <p className="muted sm">No commits yet.</p>
+
+  return (
+    <ul className="git-history">
+      {entries.map((entry) => (
+        <li key={entry.sha}>
+          <button
+            type="button"
+            className={`git-history-row${openSha === entry.sha ? ' is-open' : ''}`}
+            onClick={() => openCommit(entry.sha)}
+          >
+            <code className="git-history-sha">{entry.shortSha}</code>
+            <span className="git-history-subject">{entry.subject}</span>
+            <span className="muted sm">
+              {entry.author} · {new Date(entry.date).toLocaleString()}
+            </span>
+          </button>
+          {openSha === entry.sha ? (
+            <div className="git-history-detail">
+              {onViewAt ? (
+                <button type="button" className="btn sm" onClick={() => onViewAt(entry)}>
+                  View the file at this commit
+                </button>
+              ) : null}
+              {detailError ? <p className="banner error">{detailError}</p> : null}
+              {detail === null && detailError === null ? (
+                <p className="muted sm">Loading patch…</p>
+              ) : null}
+              {detail !== null ? (
+                <>
+                  {detail.body ? <p className="git-history-body">{detail.body}</p> : null}
+                  <DiffView patch={detail.patch} truncated={detail.patchTruncated} />
+                </>
+              ) : null}
+            </div>
+          ) : null}
+        </li>
+      ))}
+    </ul>
   )
 }
 

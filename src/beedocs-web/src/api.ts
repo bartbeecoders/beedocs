@@ -52,8 +52,11 @@ import type {
   GitAvailableRepo,
   GitBranch,
   GitConnection,
+  GitCommitDetail,
   GitCommitResult,
   GitConnectionTestResult,
+  GitDiff,
+  GitLogEntry,
   GitFile,
   GitRepo,
   GitStatus,
@@ -816,8 +819,12 @@ export const api = {
       `/api/git/repos/${id}/tree${path ? `?path=${encodeURIComponent(path)}` : ''}`,
       { signal },
     ),
-  getGitFile: (id: string, path: string, signal?: AbortSignal) =>
-    request<GitFile>(`/api/git/repos/${id}/file?path=${encodeURIComponent(path)}`, { signal }),
+  /** Pass ref (branch, sha, HEAD~2 …) to read a historical version instead of the working tree. */
+  getGitFile: (id: string, path: string, ref?: string, signal?: AbortSignal) =>
+    request<GitFile>(
+      `/api/git/repos/${id}/file?path=${encodeURIComponent(path)}${ref ? `&ref=${encodeURIComponent(ref)}` : ''}`,
+      { signal },
+    ),
   /** URL of the byte stream — what <img> tags and Download links point at. */
   gitRawUrl: (id: string, path: string) =>
     withApiBase(`/api/git/repos/${id}/raw?path=${encodeURIComponent(path)}`),
@@ -839,9 +846,12 @@ export const api = {
     }),
   pushGitRepo: (id: string) =>
     request<GitStatus>(`/api/git/repos/${id}/push`, { method: 'POST', timeoutMs: 300_000 }),
-  /** Alias of syncGitRepo — pull is the verb the toolbar speaks. */
-  pullGitRepo: (id: string) =>
-    request<GitRepo>(`/api/git/repos/${id}/pull`, { method: 'POST', timeoutMs: 300_000 }),
+  /** Alias of syncGitRepo — pull is the verb the toolbar speaks. strategy=ours|theirs resolves a conflicted merge toward one side. */
+  pullGitRepo: (id: string, strategy?: 'ours' | 'theirs') =>
+    request<GitRepo>(`/api/git/repos/${id}/pull${strategy ? `?strategy=${strategy}` : ''}`, {
+      method: 'POST',
+      timeoutMs: 300_000,
+    }),
   checkoutGitBranch: (id: string, branch: string) =>
     request<GitRepo>(`/api/git/repos/${id}/checkout`, {
       method: 'POST',
@@ -852,6 +862,34 @@ export const api = {
     request<GitRepo>(`/api/git/repos/${id}/branches`, {
       method: 'POST',
       body: JSON.stringify({ name, checkout }),
+    }),
+  getGitLog: (id: string, path?: string, limit?: number, signal?: AbortSignal) => {
+    const q = new URLSearchParams()
+    if (path) q.set('path', path)
+    if (limit != null) q.set('limit', String(limit))
+    const qs = q.toString()
+    return request<GitLogEntry[]>(`/api/git/repos/${id}/log${qs ? `?${qs}` : ''}`, { signal })
+  },
+  getGitCommit: (id: string, sha: string, path?: string, signal?: AbortSignal) =>
+    request<GitCommitDetail>(
+      `/api/git/repos/${id}/commits/${encodeURIComponent(sha)}${path ? `?path=${encodeURIComponent(path)}` : ''}`,
+      { signal },
+    ),
+  getGitDiff: (id: string, path?: string, signal?: AbortSignal) =>
+    request<GitDiff>(
+      `/api/git/repos/${id}/diff${path ? `?path=${encodeURIComponent(path)}` : ''}`,
+      { signal },
+    ),
+  /** Working-tree delete — shows as dirty until committed. */
+  deleteGitFile: (id: string, path: string) =>
+    request<void>(`/api/git/repos/${id}/file?path=${encodeURIComponent(path)}`, {
+      method: 'DELETE',
+    }),
+  /** Working-tree move/rename — shows as dirty until committed. */
+  renameGitFile: (id: string, from: string, to: string) =>
+    request<void>(`/api/git/repos/${id}/rename`, {
+      method: 'POST',
+      body: JSON.stringify({ from, to }),
     }),
   /** Set your own git author email; "" clears it. Returns the refreshed auth state. */
   setGitEmail: (gitEmail: string) =>

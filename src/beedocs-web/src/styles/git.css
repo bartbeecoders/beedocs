@@ -344,3 +344,117 @@ a.git-root-entry:hover {
   color: inherit;
   tab-size: 2;
 }
+
+/* --- Phase 3: diffs, history, ref view --- */
+
+.git-diff {
+  margin: 0;
+  padding: 0.5rem 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.git-diff-line {
+  display: block;
+  padding: 0 0.75rem;
+  white-space: pre;
+}
+
+.git-diff-line.is-add {
+  background: rgba(46, 160, 67, 0.16);
+}
+
+.git-diff-line.is-del {
+  background: rgba(248, 81, 73, 0.14);
+}
+
+.git-diff-line.is-hunk {
+  color: var(--accent, #4078c0);
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.git-diff-line.is-meta {
+  color: var(--muted);
+}
+
+.git-history {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.git-history-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.git-history-row:hover,
+.git-history-row.is-open {
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+}
+
+.git-history-sha {
+  font-family: var(--mono, ui-monospace, monospace);
+  color: var(--muted);
+}
+
+.git-history-subject {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-history-detail {
+  padding: 0.4rem 0.4rem 0.6rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.git-history-detail .git-diff {
+  align-self: stretch;
+}
+
+.git-history-body {
+  margin: 0;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}
+
+.git-panel {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+}
+
+.git-refview-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 0 0 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}

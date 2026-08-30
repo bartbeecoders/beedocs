@@ -232,6 +232,28 @@ Deck-wide `theme` sets `background`, `color`, `accent`, `fontFamily`; slide
 `notes` are speaker notes (indexed for search, never rendered). The full
 document format is documented in [SLIDES.md](./SLIDES.md).
 
+### Git repositories (read-only)
+
+Repos an admin put on the shelf (Settings → Git repositories): server-side
+clones browsed like books. Read-only by design for now — the working copy is
+shared instance state, and agents get commit/push only after the concurrency
+guards have soaked with human use. To change repo content today, ask a person
+to drive the workspace UI.
+
+| Tool | Args | Description |
+|------|------|-------------|
+| `beedocs_git_list_repos` | — | Repos with id, connection, branch, status, last sync |
+| `beedocs_git_tree` | `repoId`, `path?` | One directory level of the working tree |
+| `beedocs_git_read_file` | `repoId`, `path`, `ref?` | File contents (text ≤2 MB inline, with `blobSha`); `ref` reads a historical version |
+| `beedocs_git_status` | `repoId` | Branch, ahead/behind, uncommitted files |
+| `beedocs_git_branches` | `repoId` | Local + remote-only branches, current marked |
+| `beedocs_git_log` | `repoId`, `path?`, `limit?` | History, newest first; `path` follows one file through renames |
+| `beedocs_git_show_commit` | `repoId`, `sha`, `path?` | One commit with its unified-diff patch (≤256 KB) |
+| `beedocs_git_diff` | `repoId`, `path?` | Uncommitted changes vs HEAD; per-path includes untracked files |
+
+Indexed repos also surface in `beedocs_search` as kind `gitfile` (id
+`{repoId}:{path}`).
+
 ### Library
 
 | Tool | Args | Description |

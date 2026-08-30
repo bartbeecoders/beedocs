@@ -415,8 +415,14 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   Commit authors as the signed-in user via the self-chosen `app_user.git_email`
   (`POST /api/auth/git-email`; commits refused until set, committer is
   `BeeDocs`), Push never forces, and the one checkout per repo is shared
-  instance state, honestly enforced. Remaining phases (history/diff, conflict
-  UX, MCP tools, per-user worktrees) live in
+  instance state, honestly enforced (`?strategy=ours|theirs` on pull is the
+  conflict answer). History/diff arrived with phase 3: `log` (rename-following
+  per path), `commits/{sha}` patches, working-tree `diff` (untracked included
+  per-path), `file?ref=` reads via plumbing (refs charset-validated, no
+  leading `-`, no `..`), working-tree delete/rename, and eight read-only
+  `beedocs_git_*` MCP tools (`BeeDocs.Mcp/Tools/GitTools.cs` — write verbs
+  deliberately wait on the shared-copy guards soaking). Phase 4 (MCP writes,
+  per-user worktrees, PR links) lives in
   `Vibecoding/git-information-integration.md`. See `Docs/GIT-INTEGRATION.md`.
 - **BeeDocs.Mcp** wraps the whole REST API for AI agents (official C# MCP SDK
   2.1.0, protocol revision `2026-07-28` with fallback to older ones).

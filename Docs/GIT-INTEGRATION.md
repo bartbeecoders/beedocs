@@ -90,8 +90,9 @@ shared drive. The rules keep that honest rather than hiding it:
 - Checkout refuses (409) while anything is uncommitted.
 - Pull merges; a conflicted merge is **backed out** (`merge --abort`) and
   reported with the file list — conflict markers never sit in a tree other
-  people are reading. Undo one side and pull again; in-place resolution is a
-  later phase.
+  people are reading. The retry the 409 points at: pull again with
+  `?strategy=ours` (keep this server's lines) or `?strategy=theirs` (take the
+  remote's) — the UI offers both buttons next to the error.
 - Push never forces; behind-the-remote is a 409 "pull first".
 - Creating a branch (toolbar → New branch…) may carry uncommitted edits along —
   that is how an accidental main edit gets taken somewhere safe.
@@ -106,17 +107,22 @@ GET             /api/git/connections/{id}/available-repos  admin
 POST            /api/git/connections/{id}/repos     admin   202-ish: row status=cloning, clone in background
 GET             /api/git/repos                      viewer  (feeds the tree; poll while cloning)
 GET/PUT/DELETE  /api/git/repos/{id}                 viewer/admin (PUT: name, indexed)
-POST            /api/git/repos/{id}/pull            editor  merge pull + reindex (/sync is the phase-1 alias)
+POST            /api/git/repos/{id}/pull?strategy=  editor  merge pull + reindex; ours|theirs resolves conflicts (/sync is the phase-1 alias)
 POST            /api/git/repos/{id}/push            editor  never --force; non-ff = 409
 POST            /api/git/repos/{id}/commit          editor  {message, paths?}; author = acting user
 PUT             /api/git/repos/{id}/file?path=      editor  {content, baseBlobSha}; stale sha = 409
+DELETE          /api/git/repos/{id}/file?path=      editor  working-tree delete (dirty until committed)
+POST            /api/git/repos/{id}/rename          editor  {from, to}; working-tree move (dirty until committed)
 POST            /api/git/repos/{id}/checkout        editor  {branch}; 409 while dirty
 POST            /api/git/repos/{id}/branches        editor  {name, checkout?}; validated by check-ref-format
 GET             /api/git/repos/{id}/tree?path=      viewer  one directory level
-GET             /api/git/repos/{id}/file?path=      viewer  text inline (≤2 MB) + blobSha
+GET             /api/git/repos/{id}/file?path=&ref= viewer  text inline (≤2 MB) + blobSha; ref (branch/sha/HEAD~2) reads history
 GET             /api/git/repos/{id}/raw?path=       viewer  byte stream (images, downloads)
 GET             /api/git/repos/{id}/status          viewer  branch, ahead/behind, dirty list (-uall)
 GET             /api/git/repos/{id}/branches        viewer  local + remote-only (checkout DWIMs those)
+GET             /api/git/repos/{id}/log?path=&limit= viewer history; path follows a file through renames
+GET             /api/git/repos/{id}/commits/{sha}?path= viewer commit meta + patch (≤256 KB)
+GET             /api/git/repos/{id}/diff?path=      viewer  uncommitted changes vs HEAD (untracked included per-path)
 ```
 
 `GitException` maps to 502 with a message phrased for the person fixing it;
@@ -124,10 +130,23 @@ GET             /api/git/repos/{id}/branches        viewer  local + remote-only 
 dirty checkout — maps to 409, because the fix is a user action, not a retry; a
 path the jail refuses is a 400.
 
+## History, diffs and the MCP tools
+
+Every repo canvas has **History** (expandable commits with their patches); a
+file canvas adds **Changes** (its uncommitted diff) and per-file history, where
+any commit can be opened as *the file at that ref* — read-only, via plumbing,
+never touching the working tree. Refs a client may name are charset-limited,
+never start with `-`, and refuse `..` (a range would turn `show` into
+something else).
+
+AI agents get the same reads over MCP: eight `beedocs_git_*` tools
+(`BeeDocs.Mcp/Tools/GitTools.cs` — list/tree/read at ref/status/branches/log/
+show-commit/diff), deliberately **read-only** until the shared-working-copy
+guards have soaked with human use. See `Docs/MCP-TOOLS.md`.
+
 ## Limits (on purpose)
 
 The checked-out branch and dirty state are shared instance state (per-user
-worktrees are a planned follow-up); no history/diff views yet; no in-place
-conflict resolution; no file delete/rename from the UI; no ssh remotes,
-submodules or LFS; binaries and >2 MB text render as Download. The plan
-document carries the phased path to the rest.
+worktrees are a planned follow-up); MCP has no write verbs yet; no ssh
+remotes, submodules or LFS; binaries and >2 MB text render as Download. The
+plan document carries the phased path to the rest.
