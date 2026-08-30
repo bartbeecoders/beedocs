@@ -232,13 +232,15 @@ Deck-wide `theme` sets `background`, `color`, `accent`, `fontFamily`; slide
 `notes` are speaker notes (indexed for search, never rendered). The full
 document format is documented in [SLIDES.md](./SLIDES.md).
 
-### Git repositories (read-only)
+### Git repositories
 
 Repos an admin put on the shelf (Settings → Git repositories): server-side
-clones browsed like books. Read-only by design for now — the working copy is
-shared instance state, and agents get commit/push only after the concurrency
-guards have soaked with human use. To change repo content today, ask a person
-to drive the workspace UI.
+clones browsed — and edited — like books. **The working copy is shared
+instance state**, one checkout per repo used by people through the UI at the
+same time; the server enforces the honesty rules (stale saves 409, checkout
+refuses while dirty, push never forces, a conflicted pull is backed out). The
+safe agent flow is `create_branch` → `write_file` → `commit` (only your paths)
+→ `push` → a person reviews the PR — and switch back when done.
 
 | Tool | Args | Description |
 |------|------|-------------|
@@ -250,6 +252,14 @@ to drive the workspace UI.
 | `beedocs_git_log` | `repoId`, `path?`, `limit?` | History, newest first; `path` follows one file through renames |
 | `beedocs_git_show_commit` | `repoId`, `sha`, `path?` | One commit with its unified-diff patch (≤256 KB) |
 | `beedocs_git_diff` | `repoId`, `path?` | Uncommitted changes vs HEAD; per-path includes untracked files |
+| `beedocs_git_write_file` | `repoId`, `path`, `content`, `baseBlobSha?` | Save to the working tree; pass the read's `blobSha` when editing (stale = 409), omit to create |
+| `beedocs_git_delete_file` | `repoId`, `path` | Working-tree delete; recoverable until committed |
+| `beedocs_git_rename_file` | `repoId`, `from`, `to` | Working-tree move; history records a rename |
+| `beedocs_git_commit` | `repoId`, `message`, `paths?`, `authorName?`, `authorEmail?` | Commit — only your paths; author fields name who the agent acts for (committer is always BeeDocs) |
+| `beedocs_git_pull` | `repoId`, `strategy?` | Merge the remote; conflicts back out (409) — retry `ours`/`theirs` only when the task says which side wins |
+| `beedocs_git_push` | `repoId` | Push the current branch; never force; behind = 409 pull first |
+| `beedocs_git_create_branch` | `repoId`, `name`, `checkout?` | Branch (and by default switch); the safe start of any multi-file change |
+| `beedocs_git_checkout` | `repoId`, `branch` | Switch the shared checkout (409 while dirty) — switch back when done |
 
 Indexed repos also surface in `beedocs_search` as kind `gitfile` (id
 `{repoId}:{path}`).

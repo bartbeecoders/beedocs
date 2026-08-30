@@ -120,6 +120,11 @@ builder.Services.AddSingleton<IGitConnectionService, GitConnectionService>();
 builder.Services.AddSingleton<IGitRepoService, GitRepoService>();
 builder.Services.AddSingleton<GitSearchIndexer>();
 builder.Services.AddSingleton<GitProviderCatalog>();
+// Opt-in background fetch (BeeDocs:GitFetchMinutes, default 0 = off): keeps
+// the behind-the-remote badges honest; pulling stays a person's explicit verb.
+builder.Services.AddSingleton(new GitFetchOptions(
+    builder.Configuration.GetValue("BeeDocs:GitFetchMinutes", 0)));
+builder.Services.AddHostedService<GitFetchService>();
 builder.Services.AddHttpClient(GitProviderCatalog.HttpClientName,
     client => client.Timeout = TimeSpan.FromMinutes(2));
 

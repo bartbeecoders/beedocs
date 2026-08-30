@@ -1141,9 +1141,16 @@ public sealed record GitWriteFileRequest(
 );
 
 /// <param name="Paths">Only these paths (staged with `git add --`); omit for everything (`git add -A`).</param>
+/// <param name="AuthorName">
+/// Honored only for machine callers (the API key / MCP) — an agent naming who
+/// it commits on behalf of. A signed-in person's identity is their own and
+/// these fields are ignored for them.
+/// </param>
 public sealed record GitCommitRequest(
     [property: Required, MinLength(1)] string Message,
-    IReadOnlyList<string>? Paths
+    IReadOnlyList<string>? Paths,
+    string? AuthorName = null,
+    string? AuthorEmail = null
 );
 
 /// <param name="Author">"Name &lt;email&gt;" as recorded in the commit.</param>

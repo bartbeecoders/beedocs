@@ -419,11 +419,17 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   conflict answer). History/diff arrived with phase 3: `log` (rename-following
   per path), `commits/{sha}` patches, working-tree `diff` (untracked included
   per-path), `file?ref=` reads via plumbing (refs charset-validated, no
-  leading `-`, no `..`), working-tree delete/rename, and eight read-only
-  `beedocs_git_*` MCP tools (`BeeDocs.Mcp/Tools/GitTools.cs` — write verbs
-  deliberately wait on the shared-copy guards soaking). Phase 4 (MCP writes,
-  per-user worktrees, PR links) lives in
-  `Vibecoding/git-information-integration.md`. See `Docs/GIT-INTEGRATION.md`.
+  leading `-`, no `..`), and working-tree delete/rename. Sixteen
+  `beedocs_git_*` MCP tools (`BeeDocs.Mcp/Tools/GitTools.cs`) cover reads *and*
+  writes — descriptions teach agents the safe flow (branch → write → commit
+  only your paths → push → PR), and `GitCommitRequest.AuthorName/Email` let a
+  machine caller name who it acts for (ignored for signed-in people). Pull's
+  merge commits are pinned to the BeeDocs identity; `BeeDocs:GitFetchMinutes`
+  (default 0) arms a background fetch that keeps behind-badges honest without
+  touching the working tree; the toolbar deep-links PR creation on
+  GitHub/DevOps. Per-user worktrees and the HybridPageEditor-over-git source
+  are deliberately deferred (see the plan's log for why). See
+  `Docs/GIT-INTEGRATION.md`.
 - **BeeDocs.Mcp** wraps the whole REST API for AI agents (official C# MCP SDK
   2.1.0, protocol revision `2026-07-28` with fallback to older ones).
   Tools/resources/prompts live under `Tools/`, `Resources/`, `Prompts/`; both

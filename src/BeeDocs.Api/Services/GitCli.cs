@@ -168,7 +168,20 @@ public sealed class GitCli
     /// <summary>A failed result as a sentence — for callers that ran RunAsync to branch on the failure first.</summary>
     internal static string Describe(IReadOnlyList<string> args, GitCliResult result)
     {
-        var verb = args.FirstOrDefault(a => !a.StartsWith('-')) ?? "git";
+        // The verb is the first non-option argument — skipping the value each
+        // "-c key=value" pair carries, which is not an option but not the verb.
+        var verb = "git";
+        for (var i = 0; i < args.Count; i++)
+        {
+            if (args[i] == "-c" || args[i] == "-X")
+            {
+                i++;
+                continue;
+            }
+            if (args[i].StartsWith('-')) continue;
+            verb = args[i];
+            break;
+        }
         var detail = (result.StdErr.Trim().Length > 0 ? result.StdErr : result.StdOut).Trim();
         // Never echo a URL that might carry credentials someone typed into it.
         if (detail.Length > 400) detail = detail[..400] + "…";

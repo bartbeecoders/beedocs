@@ -303,9 +303,20 @@ public sealed class GitRepoService(
                 // -X ours/-X theirs resolves *conflicting hunks* toward one side
                 // and merges the rest normally — the "keep mine / take theirs"
                 // answer to a pull that 409ed on a conflict.
-                var args = chosen.Length == 0
-                    ? new[] { "pull", "--no-rebase", "--no-recurse-submodules" }
-                    : new[] { "pull", "--no-rebase", "--no-recurse-submodules", "-X", chosen };
+                // The identity pins the *merge commit* a pull can create — left
+                // unset, git would sign it with whatever global config the host
+                // machine happens to carry.
+                var args = new List<string>
+                {
+                    "-c", "user.name=BeeDocs",
+                    "-c", "user.email=beedocs@beedocs.local",
+                    "pull", "--no-rebase", "--no-recurse-submodules",
+                };
+                if (chosen.Length > 0)
+                {
+                    args.Add("-X");
+                    args.Add(chosen);
+                }
                 var pull = await git.RunAsync(
                     RepoDir(id), args, connection.BasicAuth, GitCli.SyncTimeout, ct);
                 if (pull.ExitCode != 0)
@@ -558,7 +569,7 @@ public sealed class GitRepoService(
 
         // Resolved before the lock: "set your git email first" must not queue
         // behind a running pull to be said.
-        var (authorName, authorEmail) = await ResolveAuthorAsync(ct);
+        var (authorName, authorEmail) = await ResolveAuthorAsync(request, ct);
 
         string sha;
         using (await git.LockAsync(id, ct))
@@ -982,13 +993,30 @@ public sealed class GitRepoService(
     /// Who a commit is authored as. A signed-in account must have set its own
     /// git email (Settings → Your account) — commits carry the name into git
     /// history, so guessing one is worse than refusing. A machine caller (the
-    /// API key) or an open instance commits as the platform itself.
+    /// API key / MCP) or an open instance commits as the platform, unless the
+    /// request names who the machine acts on behalf of; a person's identity is
+    /// their own, so for them those fields are ignored.
     /// </summary>
-    private async Task<(string Name, string Email)> ResolveAuthorAsync(CancellationToken ct)
+    private async Task<(string Name, string Email)> ResolveAuthorAsync(
+        GitCommitRequest request, CancellationToken ct)
     {
         var actor = currentUser.Current;
         if (actor.Id is null)
-            return (actor.Name ?? "BeeDocs", "beedocs@beedocs.local");
+        {
+            var declaredName = (request.AuthorName ?? string.Empty).Trim();
+            var declaredEmail = (request.AuthorEmail ?? string.Empty).Trim();
+            if (declaredEmail.Length > 0
+                && (!declaredEmail.Contains('@') || declaredEmail.Contains(' ') || declaredEmail.Contains('>')))
+            {
+                throw new ArgumentException($"'{declaredEmail}' is not a usable git author email.");
+            }
+
+            return (
+                declaredName.Length > 0
+                    ? declaredName.Replace("<", "").Replace(">", "")
+                    : "BeeDocs",
+                declaredEmail.Length > 0 ? declaredEmail : "beedocs@beedocs.local");
+        }
 
         var user = await users.GetAsync(actor.Id, ct);
         var email = user?.GitEmail?.Trim();

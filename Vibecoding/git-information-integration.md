@@ -473,3 +473,40 @@ and a curl/UI exercise against a scratch instance (no test project exists yet;
     correctly over stateless HTTP.
   - Phase 4 remains: MCP write verbs, per-user worktrees, PR deep links,
     auto-fetch, `HybridPageEditor` over a git document source.
+- 2026-08-30 — **Phase 4 implemented** (power), with two deliberate deferrals:
+  - **MCP write verbs**: eight more tools (`beedocs_git_write_file` with the
+    blobSha guard, `_delete_file` (marked destructive), `_rename_file`,
+    `_commit`, `_pull` (+strategy), `_push`, `_create_branch`, `_checkout`),
+    thin wrappers over the phase-2/3 endpoints so every guard applies to
+    agents unchanged. Descriptions teach the safe flow: branch → write →
+    commit only your paths → push → a person reviews the PR — and switch
+    back. `GitCommitRequest` gained `AuthorName`/`AuthorEmail`, honored only
+    for machine callers (an agent naming its operator; a person's identity is
+    their own and ignored for them).
+  - **PR deep links**: the toolbar's PR ↗ opens the provider's
+    create-pull-request page for the current branch (GitHub `compare/{branch}`,
+    DevOps `pullrequestcreate?sourceRef=`), computed client-side — creating
+    PRs via provider APIs stays a non-goal, the link is the hand-off.
+  - **Auto-fetch**: `BeeDocs:GitFetchMinutes` (default 0 = off) arms
+    `GitFetchService` — a background `git fetch` per ready repo under the
+    per-repo lock; fetch only, so behind-badges stay honest while pulling
+    remains a person's verb.
+  - **Polish found in testing**: pull's merge commits are now committed as
+    `BeeDocs <beedocs@beedocs.local>` (previously they picked up the host
+    machine's global git config); `GitCli.Describe` names the right verb when
+    `-c` pairs precede it. Markdown editing gained an Edit/Split/Preview
+    switch (split = textarea + live preview side by side).
+  - Verified live: MCP agent flow end-to-end against the local smart-HTTP
+    remote (branch → create + sha-guarded edit → stale-sha 409 surfaced
+    verbatim → commit authored "Doc Agent (for Bart)" with committer BeeDocs,
+    confirmed in the remote's log → push → checkout back); auto-fetch cycle
+    (behind 0 → external push → behind 1 after ~75 s, no manual pull);
+    merge-commit identity confirmed as BeeDocs.
+  - **Deferred, with rationale**: *per-user worktrees* — Bart accepted the
+    shared checkout (§15.1) and the rework touches every endpoint, per-user
+    disk, and the merge model; building it without real shared-checkout pain
+    would be speculative architecture. *HybridPageEditor over a git source* —
+    the editor is deeply coupled to pages (autosave, revisions, uploads,
+    workspace context); the split view covers most of the value at none of
+    the risk to the core editing path. Both stay on the books for a future
+    phase driven by actual demand.

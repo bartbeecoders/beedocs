@@ -342,6 +342,54 @@ public sealed class BeeDocsApiClient(HttpClient http)
     public Task<JsonElement> GetGitDiffAsync(string repoId, string? path, CancellationToken ct = default)
         => GetAsync($"/api/git/repos/{Uri.EscapeDataString(repoId)}/diff{PathQuery(path)}", ct);
 
+    public Task<JsonElement> WriteGitFileAsync(
+        string repoId, string path, string content, string? baseBlobSha, CancellationToken ct = default)
+        => SendJsonAsync(
+            HttpMethod.Put,
+            $"/api/git/repos/{Uri.EscapeDataString(repoId)}/file?path={Uri.EscapeDataString(path)}",
+            new { content, baseBlobSha }, ct);
+
+    public Task<JsonElement> DeleteGitFileAsync(string repoId, string path, CancellationToken ct = default)
+        => SendAsync(
+            HttpMethod.Delete,
+            $"/api/git/repos/{Uri.EscapeDataString(repoId)}/file?path={Uri.EscapeDataString(path)}",
+            null, ct);
+
+    public Task<JsonElement> RenameGitFileAsync(
+        string repoId, string from, string to, CancellationToken ct = default)
+        => SendJsonAsync(
+            HttpMethod.Post, $"/api/git/repos/{Uri.EscapeDataString(repoId)}/rename",
+            new { from, to }, ct);
+
+    public Task<JsonElement> CommitGitAsync(
+        string repoId, string message, string[]? paths, string? authorName, string? authorEmail,
+        CancellationToken ct = default)
+        => SendJsonAsync(
+            HttpMethod.Post, $"/api/git/repos/{Uri.EscapeDataString(repoId)}/commit",
+            new { message, paths, authorName, authorEmail }, ct);
+
+    public Task<JsonElement> PullGitAsync(string repoId, string? strategy, CancellationToken ct = default)
+        => SendJsonAsync(
+            HttpMethod.Post,
+            $"/api/git/repos/{Uri.EscapeDataString(repoId)}/pull"
+                + (string.IsNullOrWhiteSpace(strategy) ? "" : $"?strategy={Uri.EscapeDataString(strategy)}"),
+            new { }, ct);
+
+    public Task<JsonElement> PushGitAsync(string repoId, CancellationToken ct = default)
+        => SendJsonAsync(
+            HttpMethod.Post, $"/api/git/repos/{Uri.EscapeDataString(repoId)}/push", new { }, ct);
+
+    public Task<JsonElement> CheckoutGitAsync(string repoId, string branch, CancellationToken ct = default)
+        => SendJsonAsync(
+            HttpMethod.Post, $"/api/git/repos/{Uri.EscapeDataString(repoId)}/checkout",
+            new { branch }, ct);
+
+    public Task<JsonElement> CreateGitBranchAsync(
+        string repoId, string name, bool checkout, CancellationToken ct = default)
+        => SendJsonAsync(
+            HttpMethod.Post, $"/api/git/repos/{Uri.EscapeDataString(repoId)}/branches",
+            new { name, checkout }, ct);
+
     private static string PathQuery(string? path)
         => string.IsNullOrWhiteSpace(path) ? "" : $"?path={Uri.EscapeDataString(path)}";
 

@@ -37,6 +37,24 @@ function errText(e: unknown): string {
 }
 
 /**
+ * Where the provider creates a pull request for the current branch. Both hosts
+ * pick their default base branch themselves, so only the source side is named.
+ */
+function prUrl(repo: { connectionKind: string; cloneUrl: string }, branch: string): string | null {
+  if (!branch) return null
+  if (repo.connectionKind === 'github') {
+    const base = repo.cloneUrl.replace(/\.git$/, '')
+    return `${base}/compare/${branch.split('/').map(encodeURIComponent).join('/')}?expand=1`
+  }
+  if (repo.connectionKind === 'azure-devops') {
+    // Clone URLs sometimes carry a user@ prefix; the web UI does not want it.
+    const base = repo.cloneUrl.replace(/^(https?:\/\/)[^@/]+@/, '$1')
+    return `${base}/pullrequestcreate?sourceRef=${encodeURIComponent(branch)}`
+  }
+  return null
+}
+
+/**
  * The repo's own toolbar — branch picker, ahead/behind, Pull, Push, Commit.
  * Shared by both git canvases so the git verbs are wherever the repo's content
  * is. All state here is the *server's* shared working copy, which is why every
@@ -178,6 +196,20 @@ function GitToolbar({ repoId }: { repoId: string }) {
           >
             {busy === 'push' ? 'Pushing…' : status && status.ahead > 0 ? `Push ↑${status.ahead}` : 'Push'}
           </button>
+          {(() => {
+            const url = prUrl(repo, branch)
+            return url ? (
+              <a
+                className="btn sm"
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                title={`Create a pull request for ${branch} on ${repo.connectionKind === 'github' ? 'GitHub' : 'Azure DevOps'}`}
+              >
+                PR ↗
+              </a>
+            ) : null
+          })()}
         </>
       ) : null}
 
@@ -555,7 +587,7 @@ export function GitFileCanvas() {
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
-  const [preview, setPreview] = useState(false)
+  const [mdView, setMdView] = useState<'edit' | 'split' | 'preview'>('edit')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [savedFlash, setSavedFlash] = useState(false)
@@ -569,7 +601,7 @@ export function GitFileCanvas() {
     setFile(null)
     setError(null)
     setEditing(false)
-    setPreview(false)
+    setMdView('edit')
     setSaveError(null)
     setPanel('none')
     setRefView(null)
@@ -622,7 +654,7 @@ export function GitFileCanvas() {
     if (!file) return
     setDraft(file.content ?? '')
     setEditing(true)
-    setPreview(false)
+    setMdView('edit')
     setSaveError(null)
   }
 
@@ -684,13 +716,19 @@ export function GitFileCanvas() {
           {editing ? (
             <>
               {markdown ? (
-                <button
-                  type="button"
-                  className="btn sm"
-                  onClick={() => setPreview((v) => !v)}
-                >
-                  {preview ? 'Edit source' : 'Preview'}
-                </button>
+                <span className="git-view-switch" role="group" aria-label="Markdown view">
+                  {(['edit', 'split', 'preview'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={`btn sm${mdView === mode ? ' active' : ''}`}
+                      aria-pressed={mdView === mode}
+                      onClick={() => setMdView(mode)}
+                    >
+                      {mode === 'edit' ? 'Edit' : mode === 'split' ? 'Split' : 'Preview'}
+                    </button>
+                  ))}
+                </span>
               ) : null}
               <button
                 type="button"
@@ -779,25 +817,39 @@ export function GitFileCanvas() {
             <p className="muted">This version cannot be shown inline (binary or too large).</p>
           )
         ) : editing && file !== null ? (
-          preview && markdown ? (
-            <div className="git-file-markdown">
-              <MarkdownView content={draft} />
-            </div>
-          ) : (
-            <textarea
-              className="git-editor"
-              value={draft}
-              spellCheck={markdown}
-              disabled={saving}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-                  e.preventDefault()
-                  void save()
-                }
-              }}
-            />
-          )
+          (() => {
+            const editorBox = (
+              <textarea
+                className="git-editor"
+                value={draft}
+                spellCheck={markdown}
+                disabled={saving}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                    e.preventDefault()
+                    void save()
+                  }
+                }}
+              />
+            )
+            if (!markdown || mdView === 'edit') return editorBox
+            if (mdView === 'preview') {
+              return (
+                <div className="git-file-markdown">
+                  <MarkdownView content={draft} />
+                </div>
+              )
+            }
+            return (
+              <div className="git-split">
+                {editorBox}
+                <div className="git-file-markdown git-split-preview">
+                  <MarkdownView content={draft} />
+                </div>
+              </div>
+            )
+          })()
         ) : file !== null && markdown && file.content !== null ? (
           <div className="git-file-markdown">
             <MarkdownView content={file.content} />

@@ -130,6 +130,26 @@ GET             /api/git/repos/{id}/diff?path=      viewer  uncommitted changes 
 dirty checkout — maps to 409, because the fix is a user action, not a retry; a
 path the jail refuses is a 400.
 
+## Pull requests, auto-fetch, and commit identity details
+
+- **PR deep link**: on GitHub and Azure DevOps connections the toolbar shows
+  **PR ↗** — the provider's create-pull-request page for the current branch
+  (the provider picks its own base branch). Creating PRs via provider APIs
+  stays out of scope; the link is the hand-off.
+- **Auto-fetch** (`BeeDocs:GitFetchMinutes`, default 0 = off): a background
+  `git fetch` across ready repos every N minutes, so the behind-the-remote
+  badge stays honest without anyone pressing Pull. Fetch only — it moves
+  remote-tracking refs and never touches the shared working tree; pulling
+  remains a person's explicit verb. Opt-in because every cycle spends PAT rate
+  limit.
+- **Merge-commit identity**: the merge commit a pull can create is committed as
+  `BeeDocs <beedocs@beedocs.local>` (pinned per invocation) — never whatever
+  global git config the host machine happens to carry.
+- **Machine commits**: `GitCommitRequest.AuthorName/AuthorEmail` are honored
+  only for machine callers (the API key / MCP) — an agent naming who it acts
+  on behalf of. A signed-in person's identity is their own; for them the
+  fields are ignored.
+
 ## History, diffs and the MCP tools
 
 Every repo canvas has **History** (expandable commits with their patches); a
@@ -139,14 +159,16 @@ never touching the working tree. Refs a client may name are charset-limited,
 never start with `-`, and refuse `..` (a range would turn `show` into
 something else).
 
-AI agents get the same reads over MCP: eight `beedocs_git_*` tools
-(`BeeDocs.Mcp/Tools/GitTools.cs` — list/tree/read at ref/status/branches/log/
-show-commit/diff), deliberately **read-only** until the shared-working-copy
-guards have soaked with human use. See `Docs/MCP-TOOLS.md`.
+AI agents get the full surface over MCP: sixteen `beedocs_git_*` tools
+(`BeeDocs.Mcp/Tools/GitTools.cs`) — the eight reads plus write_file /
+delete_file / rename_file / commit / pull / push / create_branch / checkout,
+each description teaching the safe flow (branch first, commit only your paths,
+switch back when done). See `Docs/MCP-TOOLS.md`.
 
 ## Limits (on purpose)
 
 The checked-out branch and dirty state are shared instance state (per-user
-worktrees are a planned follow-up); MCP has no write verbs yet; no ssh
-remotes, submodules or LFS; binaries and >2 MB text render as Download. The
-plan document carries the phased path to the rest.
+worktrees remain the designed follow-up once shared-checkout pressure is
+real); no ssh remotes, submodules or LFS; binaries and >2 MB text render as
+Download; PRs are a deep link, not an API integration. The plan document
+carries the reasoning.
