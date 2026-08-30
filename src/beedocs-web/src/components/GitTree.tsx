@@ -115,7 +115,11 @@ function RepoNode({ repo }: { repo: GitRepo }) {
           ) : null}
         </NavLink>
       </div>
-      {expanded && ready ? <FolderChildren repoId={repo.id} path="" /> : null}
+      {/* Keyed by fetchedAt: a pull replaces the tree's content, and remounting
+          the cached listings is how the sidebar learns. */}
+      {expanded && ready ? (
+        <FolderChildren key={repo.fetchedAt ?? ''} repoId={repo.id} path="" />
+      ) : null}
     </li>
   )
 }

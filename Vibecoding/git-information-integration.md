@@ -413,3 +413,34 @@ and a curl/UI exercise against a scratch instance (no test project exists yet;
     connection-delete refusal while repos exist, clone dir cleanup on delete.
   - Deviation from §6: reads have no `ref=` parameter yet (working tree only —
     ref-addressed reads arrive with history in Phase 3); `git.css` added.
+- 2026-08-30 — **Phase 2 implemented** (the git verbs):
+  - Identity: `app_user.git_email` (self-service `POST /api/auth/git-email`,
+    Settings → Your account card, format-checked; also settable by admins via
+    `UpdateUserRequest.GitEmail`). Commits are authored `Name <git_email>` with
+    committer `BeeDocs <beedocs@beedocs.local>`; an account without a git email
+    is refused with guidance (Bart's §15 answer — no fallback address). Machine
+    callers / sign-in-off commit as the platform.
+  - Backend: `PUT …/file` (baseBlobSha guard: stale save / create-over-existing
+    / deleted-under-you all 409; atomic temp+move write; new files allowed),
+    `POST …/commit` (path checklist or `add -A`, "nothing to commit" caught),
+    `POST …/push` (`-u origin HEAD`, never force, behind = 409 "pull first"),
+    `POST …/pull` (merge; conflicted merge backed out with the file list —
+    `/sync` stays as alias), `POST …/checkout` (409 while dirty, DWIMs remote
+    branches, reindexes), `POST …/branches` (create+switch, names validated by
+    `check-ref-format` plus a leading-dash guard). `GitConflictException` → 409
+    across the board; branch listing now includes remote-only branches; status
+    uses `-uall` so the commit checklist names real files.
+  - Web: toolbar grew a branch picker (with "New branch…" dialog), Pull, Push
+    (↑n), and Commit (n) opening a message + file-checklist dialog; file
+    canvases got explicit Edit/Save (Ctrl+S, unsaved-changes guard,
+    Markdown preview toggle, 409 surfaced verbatim); `bumpGitStatus` store
+    keeps toolbar/status in step; tree remounts per `fetchedAt` after pulls;
+    Git identity card in Settings → Your account.
+  - Verified against a local smart-HTTP remote (`git http-backend` wrapper) end
+    to end: save/stale-409/new-file, commit gate → git email set → commit
+    (author verified in the remote's log), push, external divergence → push 409
+    → merge pull → push, both-sides conflict → 409 with file list and a clean
+    tree after back-out, branch create/switch isolation, dirty-checkout 409,
+    bad branch names 400.
+  - Still open for later phases: history/diff views, in-place conflict
+    resolution, file delete/rename, MCP tools, per-user worktrees.

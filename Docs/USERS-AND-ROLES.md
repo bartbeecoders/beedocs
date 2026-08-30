@@ -180,6 +180,13 @@ document. It is a responsibility field, not a permission — an owner grants no
 extra rights, and any editor can still edit any page. Roles decide what you may
 do; the owner records who it belongs to.
 
+Related but distinct: each account may set its own **git email**
+(`app_user.git_email`, Settings → Your account, self-service via
+`POST /api/auth/git-email`). It is the author identity git-integration commits
+carry into git history — chosen by the user because that history is public and
+permanent, and required: a commit from an account without one is refused with
+guidance rather than authored with a guess. See `Docs/GIT-INTEGRATION.md`.
+
 - A **book** takes the account that created it, unless the request names another.
 - A **page** inherits its **book's** owner at creation, falling back to whoever
   created it when the book is unowned. It can be reassigned afterwards.

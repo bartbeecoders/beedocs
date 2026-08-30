@@ -670,6 +670,40 @@ auth.MapPost("/password", async (
     }
 });
 
+// Set your own git author email — the identity git-integration commits carry.
+// Self-service like /password: signing in is the only requirement, every role
+// included, because a viewer promoted to editor tomorrow should not need an
+// admin to write their own name.
+auth.MapPost("/git-email", async (
+    SetGitEmailRequest body,
+    HttpContext http,
+    RequestAuthenticator authenticator,
+    IUserService users,
+    CancellationToken ct) =>
+{
+    var caller = authenticator.Enabled ? await authenticator.ResolveAsync(http) : http.GetCurrentUser();
+    if (caller?.User is null)
+    {
+        return Results.Json(
+            new { error = "Unauthorized", message = "Sign in to set your git email." },
+            statusCode: StatusCodes.Status401Unauthorized);
+    }
+
+    try
+    {
+        var updated = await users.UpdateAsync(
+            caller.User.Id,
+            new UpdateUserRequest(null, null, null, null, null, GitEmail: body.GitEmail ?? ""),
+            ct);
+        if (updated is null) return Results.NotFound();
+        return Results.Ok(AuthState(authenticator.Enabled, RequestAuthenticator.ToCurrentUser(updated)));
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["gitEmail"] = [e.Message] });
+    }
+});
+
 // --- User management (admin only) ---
 // Admin for reads as well as writes: the list is who can reach this instance and
 // with what authority, which is not something an editor needs to enumerate.
@@ -1863,6 +1897,12 @@ var gitAdmin = RequireRole.Admin;
 static IResult GitFailure(GitException ex) =>
     Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: ex.Message);
 
+// A conflict is the caller's picture being stale (save over a changed blob,
+// push behind the remote, checkout over dirty files) — the fix is a user
+// action, so 409 with the sentence saying which action.
+static IResult GitConflict(GitConflictException ex) =>
+    Results.Problem(statusCode: StatusCodes.Status409Conflict, title: ex.Message);
+
 gitApi.MapGet("/connections", async (IGitConnectionService connections, CancellationToken ct) =>
     Results.Ok(await connections.ListAsync(ct))).WithMetadata(gitAdmin);
 
@@ -1985,15 +2025,140 @@ gitApi.MapDelete("/repos/{id}", async (string id, IGitRepoService repos, Cancell
     await repos.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound())
     .WithMetadata(gitAdmin);
 
-gitApi.MapPost("/repos/{id}/sync", async (string id, IGitRepoService repos, CancellationToken ct) =>
+// /sync and /pull are the same verb — /sync predates the git verbs and stays
+// for anything that learned it in phase 1.
+foreach (var pullPath in new[] { "/repos/{id}/sync", "/repos/{id}/pull" })
+{
+    gitApi.MapPost(pullPath, async (string id, IGitRepoService repos, CancellationToken ct) =>
+    {
+        try
+        {
+            return Results.Ok(await repos.SyncAsync(id, ct));
+        }
+        catch (KeyNotFoundException)
+        {
+            return Results.NotFound();
+        }
+        catch (GitConflictException ex)
+        {
+            return GitConflict(ex);
+        }
+        catch (GitException ex)
+        {
+            return GitFailure(ex);
+        }
+    });
+}
+
+gitApi.MapPut("/repos/{id}/file", async (
+    string id, string? path, GitWriteFileRequest body, IGitRepoService repos, CancellationToken ct) =>
 {
     try
     {
-        return Results.Ok(await repos.SyncAsync(id, ct));
+        return Results.Ok(await repos.WriteFileAsync(id, path, body, ct));
     }
     catch (KeyNotFoundException)
     {
         return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["path"] = [ex.Message] });
+    }
+    catch (GitConflictException ex)
+    {
+        return GitConflict(ex);
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+gitApi.MapPost("/repos/{id}/commit", async (
+    string id, GitCommitRequest body, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await repos.CommitAsync(id, body, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["commit"] = [ex.Message] });
+    }
+    catch (GitConflictException ex)
+    {
+        return GitConflict(ex);
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+gitApi.MapPost("/repos/{id}/push", async (string id, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await repos.PushAsync(id, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (GitConflictException ex)
+    {
+        return GitConflict(ex);
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+gitApi.MapPost("/repos/{id}/checkout", async (
+    string id, GitCheckoutRequest body, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await repos.CheckoutAsync(id, body.Branch, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["branch"] = [ex.Message] });
+    }
+    catch (GitConflictException ex)
+    {
+        return GitConflict(ex);
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+gitApi.MapPost("/repos/{id}/branches", async (
+    string id, GitCreateBranchRequest body, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await repos.CreateBranchAsync(id, body, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["branch"] = [ex.Message] });
     }
     catch (GitException ex)
     {

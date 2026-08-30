@@ -717,6 +717,8 @@ export type User = {
   lastLoginAt: string | null
   createdAt: string
   updatedAt: string
+  /** Author email for git-integration commits. Null until the user sets one. */
+  gitEmail: string | null
 }
 
 /** Resolved server-side, so the UI never re-derives the role rules. */
@@ -1001,4 +1003,16 @@ export type GitStatus = {
   dirty: GitDirtyEntry[]
 }
 
-export type GitBranch = { name: string; current: boolean }
+export type GitBranch = {
+  name: string
+  current: boolean
+  /** Exists only on the remote — checking it out creates the local branch. */
+  isRemote: boolean
+}
+
+export type GitCommitResult = {
+  commitSha: string
+  /** "Name <email>" as recorded in the commit. */
+  author: string
+  status: GitStatus
+}

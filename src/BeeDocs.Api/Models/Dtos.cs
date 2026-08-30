@@ -814,6 +814,11 @@ public sealed record UserSummaryDto(
     string Role
 );
 
+/// <param name="GitEmail">
+/// Author email for git-integration commits — separate from <paramref name="Email"/>
+/// because it ends up in public git history. Null until the user sets one; commits
+/// are refused (with guidance) rather than authored with a guess.
+/// </param>
 public sealed record UserDto(
     string Id,
     string Username,
@@ -824,7 +829,8 @@ public sealed record UserDto(
     bool MustChangePassword,
     DateTimeOffset? LastLoginAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt
+    DateTimeOffset UpdatedAt,
+    string? GitEmail = null
 );
 
 /// <param name="Role">Defaults to viewer — the role that cannot break anything.</param>
@@ -844,8 +850,12 @@ public sealed record UpdateUserRequest(
     string? DisplayName,
     string? Email,
     string? Role,
-    bool? Enabled
+    bool? Enabled,
+    string? GitEmail = null
 );
+
+/// <param name="GitEmail">"" clears the stored value.</param>
+public sealed record SetGitEmailRequest(string? GitEmail);
 
 /// <summary>Admin-initiated reset. Omit <paramref name="Password"/> to have one generated.</summary>
 public sealed record SetUserPasswordRequest(
@@ -1115,4 +1125,38 @@ public sealed record GitStatusDto(
     IReadOnlyList<GitDirtyEntryDto> Dirty
 );
 
-public sealed record GitBranchDto(string Name, bool Current);
+/// <param name="IsRemote">Exists only on the remote — checking it out creates the local tracking branch.</param>
+public sealed record GitBranchDto(string Name, bool Current, bool IsRemote = false);
+
+/// <summary>
+/// A working-tree save. <paramref name="BaseBlobSha"/> is the blob the editor
+/// loaded (from <see cref="GitFileDto.BlobSha"/>): if the file on disk no longer
+/// matches, the save is refused (409) rather than silently overwriting what
+/// someone else — or a pull — wrote. Null/empty means "this is a new file",
+/// refused if one already exists.
+/// </summary>
+public sealed record GitWriteFileRequest(
+    [property: Required] string Content,
+    string? BaseBlobSha
+);
+
+/// <param name="Paths">Only these paths (staged with `git add --`); omit for everything (`git add -A`).</param>
+public sealed record GitCommitRequest(
+    [property: Required, MinLength(1)] string Message,
+    IReadOnlyList<string>? Paths
+);
+
+/// <param name="Author">"Name &lt;email&gt;" as recorded in the commit.</param>
+public sealed record GitCommitResultDto(
+    string CommitSha,
+    string Author,
+    GitStatusDto Status
+);
+
+public sealed record GitCheckoutRequest([property: Required, MinLength(1)] string Branch);
+
+/// <param name="Checkout">Also switch the working copy to the new branch. Default true.</param>
+public sealed record GitCreateBranchRequest(
+    [property: Required, MinLength(1)] string Name,
+    bool? Checkout
+);

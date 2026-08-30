@@ -52,6 +52,7 @@ import type {
   GitAvailableRepo,
   GitBranch,
   GitConnection,
+  GitCommitResult,
   GitConnectionTestResult,
   GitFile,
   GitRepo,
@@ -823,6 +824,41 @@ export const api = {
   getGitStatus: (id: string, signal?: AbortSignal) =>
     request<GitStatus>(`/api/git/repos/${id}/status`, { signal }),
   getGitBranches: (id: string) => request<GitBranch[]>(`/api/git/repos/${id}/branches`),
+  /** Save to the working tree. baseBlobSha guards against overwriting a newer save (409). */
+  writeGitFile: (id: string, path: string, content: string, baseBlobSha: string | null) =>
+    request<GitFile>(`/api/git/repos/${id}/file?path=${encodeURIComponent(path)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content, baseBlobSha }),
+    }),
+  /** Commit staged-by-this-call changes; paths omitted = everything. */
+  commitGitRepo: (id: string, message: string, paths?: string[]) =>
+    request<GitCommitResult>(`/api/git/repos/${id}/commit`, {
+      method: 'POST',
+      body: JSON.stringify({ message, paths }),
+      timeoutMs: 120_000,
+    }),
+  pushGitRepo: (id: string) =>
+    request<GitStatus>(`/api/git/repos/${id}/push`, { method: 'POST', timeoutMs: 300_000 }),
+  /** Alias of syncGitRepo — pull is the verb the toolbar speaks. */
+  pullGitRepo: (id: string) =>
+    request<GitRepo>(`/api/git/repos/${id}/pull`, { method: 'POST', timeoutMs: 300_000 }),
+  checkoutGitBranch: (id: string, branch: string) =>
+    request<GitRepo>(`/api/git/repos/${id}/checkout`, {
+      method: 'POST',
+      body: JSON.stringify({ branch }),
+      timeoutMs: 120_000,
+    }),
+  createGitBranch: (id: string, name: string, checkout = true) =>
+    request<GitRepo>(`/api/git/repos/${id}/branches`, {
+      method: 'POST',
+      body: JSON.stringify({ name, checkout }),
+    }),
+  /** Set your own git author email; "" clears it. Returns the refreshed auth state. */
+  setGitEmail: (gitEmail: string) =>
+    request<AuthState>('/api/auth/git-email', {
+      method: 'POST',
+      body: JSON.stringify({ gitEmail }),
+    }),
 
   /**
    * Multipart file upload (images, PDF, 3D models) →

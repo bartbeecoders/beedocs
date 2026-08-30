@@ -4,9 +4,10 @@ BeeDocs can put git repositories next to its books: a **connection** (a GitHub
 account/org, an Azure DevOps organization, or plain clone URLs) is the
 bookshelf, each added **repo** is a book, and its folders and files browse and
 render in the workspace — Markdown as pages, code with syntax colour, images
-inline. Phase 1 is read-only browsing plus Sync; editing, commit, push/pull and
-branch switching are the next phase (see `Vibecoding/git-information-integration.md`,
-the plan of record).
+inline. Text files are **editable**: explicit Save writes the working tree,
+Commit/Push/Pull and branch switching are deliberate toolbar verbs. History,
+diffs and in-place conflict resolution are the next phase (see
+`Vibecoding/git-information-integration.md`, the plan of record).
 
 **Prefix:** `/api/git` · **Configured in:** Settings → **Git repositories** (admin)
 
@@ -65,6 +66,36 @@ treats unknown kinds as deletes; Reconcile ignores the kind for the same
 reason. Hits deep-link to `/git/{repoId}/files/{path}` and show under
 "Repository files" in Ctrl+K.
 
+## Editing, committing, and the shared working copy
+
+**Save ≠ commit.** A git file gets no autosave: **Save** (Ctrl+S) writes the
+working tree via `PUT …/file`, guarded by `baseBlobSha` — the blob id the
+editor loaded. If the file changed since (another save, a pull), the save is a
+**409** and the message says to reload; an empty `baseBlobSha` means "create
+this file" and 409s if one appeared. The toolbar then shows the dirty count,
+and **Commit** opens a dialog (message + changed-file checklist). **Push** and
+**Pull** are separate explicit buttons with ahead/behind badges.
+
+Commit identity: **author** is the signed-in account — its display name plus
+the **git email** each user sets for themselves under Settings → Your account
+(`app_user.git_email`, self-service via `POST /api/auth/git-email`). A commit
+without one is refused with guidance, never authored with a guess; history
+reads *authored by the person, committed by BeeDocs* (committer
+`BeeDocs <beedocs@beedocs.local>`). Machine callers (the MCP API key) and
+instances with sign-in off commit as the platform.
+
+**The working copy is shared instance state** — one checkout per repo, like a
+shared drive. The rules keep that honest rather than hiding it:
+
+- Checkout refuses (409) while anything is uncommitted.
+- Pull merges; a conflicted merge is **backed out** (`merge --abort`) and
+  reported with the file list — conflict markers never sit in a tree other
+  people are reading. Undo one side and pull again; in-place resolution is a
+  later phase.
+- Push never forces; behind-the-remote is a 409 "pull first".
+- Creating a branch (toolbar → New branch…) may carry uncommitted edits along —
+  that is how an accidental main edit gets taken somewhere safe.
+
 ## Endpoints
 
 ```
@@ -75,19 +106,28 @@ GET             /api/git/connections/{id}/available-repos  admin
 POST            /api/git/connections/{id}/repos     admin   202-ish: row status=cloning, clone in background
 GET             /api/git/repos                      viewer  (feeds the tree; poll while cloning)
 GET/PUT/DELETE  /api/git/repos/{id}                 viewer/admin (PUT: name, indexed)
-POST            /api/git/repos/{id}/sync            editor  git pull --ff-only + reindex
+POST            /api/git/repos/{id}/pull            editor  merge pull + reindex (/sync is the phase-1 alias)
+POST            /api/git/repos/{id}/push            editor  never --force; non-ff = 409
+POST            /api/git/repos/{id}/commit          editor  {message, paths?}; author = acting user
+PUT             /api/git/repos/{id}/file?path=      editor  {content, baseBlobSha}; stale sha = 409
+POST            /api/git/repos/{id}/checkout        editor  {branch}; 409 while dirty
+POST            /api/git/repos/{id}/branches        editor  {name, checkout?}; validated by check-ref-format
 GET             /api/git/repos/{id}/tree?path=      viewer  one directory level
 GET             /api/git/repos/{id}/file?path=      viewer  text inline (≤2 MB) + blobSha
 GET             /api/git/repos/{id}/raw?path=       viewer  byte stream (images, downloads)
-GET             /api/git/repos/{id}/status          viewer  branch, ahead/behind, dirty list
-GET             /api/git/repos/{id}/branches        viewer
+GET             /api/git/repos/{id}/status          viewer  branch, ahead/behind, dirty list (-uall)
+GET             /api/git/repos/{id}/branches        viewer  local + remote-only (checkout DWIMs those)
 ```
 
-`GitException` maps to 502 with a message phrased for the person fixing it; a
+`GitException` maps to 502 with a message phrased for the person fixing it;
+`GitConflictException` — a stale save, push behind the remote, conflicted pull,
+dirty checkout — maps to 409, because the fix is a user action, not a retry; a
 path the jail refuses is a 400.
 
-## Limits (phase 1, on purpose)
+## Limits (on purpose)
 
-Read-only working tree — no editing/commit/push yet; the checked-out branch is
-shared instance state; no ssh remotes, submodules or LFS; binaries and >2 MB
-text render as Download. The plan document carries the phased path to the rest.
+The checked-out branch and dirty state are shared instance state (per-user
+worktrees are a planned follow-up); no history/diff views yet; no in-place
+conflict resolution; no file delete/rename from the UI; no ssh remotes,
+submodules or LFS; binaries and >2 MB text render as Download. The plan
+document carries the phased path to the rest.

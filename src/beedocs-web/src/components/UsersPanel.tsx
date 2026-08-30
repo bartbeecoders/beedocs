@@ -39,6 +39,7 @@ export function UsersPanel() {
   return (
     <div className="users-panel">
       <AccountCard />
+      <GitEmailCard />
       {canManageUsers ? (
         <p className="muted sm">
           Other accounts are managed on the <Link to="/users">Users page</Link>.
@@ -50,6 +51,80 @@ export function UsersPanel() {
         </p>
       )}
     </div>
+  )
+}
+
+/**
+ * Your git author email — the identity git-integration commits carry into git
+ * history. Self-service for every role: the server refuses commits until one is
+ * set, and this is where that refusal points.
+ */
+function GitEmailCard() {
+  const { user, apply } = useAuth()
+  const [value, setValue] = useState(user?.gitEmail ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+
+  if (!user) return null
+
+  const dirty = value.trim() !== (user.gitEmail ?? '')
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (busy || !dirty) return
+    setBusy(true)
+    setError(null)
+    setDone(false)
+    try {
+      apply(await api.setGitEmail(value.trim()))
+      setDone(true)
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="users-card">
+      <header className="users-card-head">
+        <div>
+          <h3>Git identity</h3>
+          <p className="muted sm">
+            Commits made from the Repositories section are authored as{' '}
+            <strong>{user.displayName || user.username}</strong> with this email. It ends up in git
+            history, so it is yours to choose — commits are refused until one is set.
+          </p>
+        </div>
+      </header>
+
+      <form className="users-form" onSubmit={submit}>
+        <label className="users-field">
+          <span>Git email</span>
+          <input
+            type="email"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="you@example.com"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            disabled={busy}
+          />
+        </label>
+        <div className="users-form-actions">
+          <button type="submit" className="btn primary sm" disabled={busy || !dirty}>
+            {busy ? 'Saving…' : 'Save git email'}
+          </button>
+          {done && <span className="users-ok">Saved.</span>}
+          {error && (
+            <span className="users-error" role="alert">
+              {error}
+            </span>
+          )}
+        </div>
+      </form>
+    </section>
   )
 }
 

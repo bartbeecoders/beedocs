@@ -406,10 +406,17 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   remotes/submodules, per-repo mutation lock); `GitPaths` jails every client
   path (no `..`/absolute/`.git`/symlink hops). Opt-in per-repo search
   (`git_repo.indexed`): `GitSearchIndexer` rebuilds `search_doc` rows of kind
-  `gitfile` (`{repoId}:{path}`) directly on each sync — never via
-  `search_queue`, whose drain reads unknown kinds as deletes. Phase 1 is
-  read-only + Sync (`pull --ff-only`); the phased plan (editing, commit, push,
-  branches; per-user git email before commits) lives in
+  `gitfile` (`{repoId}:{path}`) directly on each sync/commit/checkout — never
+  via `search_queue`, whose drain reads unknown kinds as deletes. Editing:
+  save ≠ commit — `PUT …/file` writes the working tree guarded by
+  `baseBlobSha` (stale = 409 `GitConflictException`, the "caller's picture is
+  stale" class that also covers push-behind-remote, conflicted pull — backed
+  out with `merge --abort`, never left half-merged — and dirty checkout);
+  Commit authors as the signed-in user via the self-chosen `app_user.git_email`
+  (`POST /api/auth/git-email`; commits refused until set, committer is
+  `BeeDocs`), Push never forces, and the one checkout per repo is shared
+  instance state, honestly enforced. Remaining phases (history/diff, conflict
+  UX, MCP tools, per-user worktrees) live in
   `Vibecoding/git-information-integration.md`. See `Docs/GIT-INTEGRATION.md`.
 - **BeeDocs.Mcp** wraps the whole REST API for AI agents (official C# MCP SDK
   2.1.0, protocol revision `2026-07-28` with fallback to older ones).

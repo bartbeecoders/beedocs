@@ -69,3 +69,26 @@ export function useGitRepos(): GitRepo[] | null {
   }, [])
   return value
 }
+
+/**
+ * A counter that says "this repo's working-tree state changed" — a save landed,
+ * a commit ran, a branch switched. The toolbar (which owns the status fetch)
+ * subscribes; anything that mutates calls {@link bumpGitStatus}. Coarser than
+ * per-repo on purpose: at most one toolbar is mounted at a time.
+ */
+let statusVersion = 0
+const statusListeners = new Set<() => void>()
+
+export function bumpGitStatus(): void {
+  statusVersion += 1
+  for (const listener of statusListeners) listener()
+}
+
+function subscribeStatus(listener: () => void): () => void {
+  statusListeners.add(listener)
+  return () => statusListeners.delete(listener)
+}
+
+export function useGitStatusVersion(): number {
+  return useSyncExternalStore(subscribeStatus, () => statusVersion)
+}

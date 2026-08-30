@@ -18,11 +18,26 @@ public interface IGitRepoService
     Task<GitRepoDto?> UpdateAsync(string id, UpdateGitRepoRequest request, CancellationToken ct = default);
     Task<bool> DeleteAsync(string id, CancellationToken ct = default);
 
-    /// <summary>Pull --ff-only from the remote. Synchronous — the UI gives it a long timeout.</summary>
+    /// <summary>Pull from the remote (merge; a conflict is backed out and reported as 409).
+    /// Synchronous — the UI gives it a long timeout.</summary>
     Task<GitRepoDto> SyncAsync(string id, CancellationToken ct = default);
 
     Task<IReadOnlyList<GitTreeEntryDto>> TreeAsync(string id, string? path, CancellationToken ct = default);
     Task<GitFileDto> FileAsync(string id, string? path, CancellationToken ct = default);
+
+    /// <summary>Save to the working tree, guarded by the blob sha the editor loaded.</summary>
+    Task<GitFileDto> WriteFileAsync(string id, string? path, GitWriteFileRequest request, CancellationToken ct = default);
+
+    /// <summary>Stage and commit; author = the acting account's name + git email.</summary>
+    Task<GitCommitResultDto> CommitAsync(string id, GitCommitRequest request, CancellationToken ct = default);
+
+    /// <summary>Push the current branch. Never forces — non-fast-forward is a 409 "pull first".</summary>
+    Task<GitStatusDto> PushAsync(string id, CancellationToken ct = default);
+
+    /// <summary>Switch branches. Refused (409) while the shared working copy is dirty.</summary>
+    Task<GitRepoDto> CheckoutAsync(string id, string branch, CancellationToken ct = default);
+
+    Task<GitRepoDto> CreateBranchAsync(string id, GitCreateBranchRequest request, CancellationToken ct = default);
 
     /// <summary>Absolute path + content type + download name for streaming one file.</summary>
     Task<(string AbsolutePath, string ContentType, string FileName)> RawAsync(
@@ -46,6 +61,8 @@ public sealed class GitRepoService(
     GitOptions options,
     IGitConnectionService connections,
     GitSearchIndexer indexer,
+    ICurrentUserAccessor currentUser,
+    IUserService users,
     ILogger<GitRepoService> logger
 ) : IGitRepoService
 {
@@ -259,12 +276,42 @@ public sealed class GitRepoService(
         {
             using (await git.LockAsync(id, ct))
             {
-                // --ff-only: with a read-only working tree (phase 1) the pull is
-                // always fast-forward; anything else means the remote rewrote
-                // history, which a Sync button has no business papering over.
-                await git.RunOkAsync(
-                    RepoDir(id), ["pull", "--ff-only", "--no-recurse-submodules"],
-                    connection.BasicAuth, GitCli.SyncTimeout, ct);
+                var args = new[] { "pull", "--no-rebase", "--no-recurse-submodules" };
+                var pull = await git.RunAsync(
+                    RepoDir(id), args, connection.BasicAuth, GitCli.SyncTimeout, ct);
+                if (pull.ExitCode != 0)
+                {
+                    // A conflicted merge leaves the shared tree half-merged. Back
+                    // it out first, then say which files collided — leaving
+                    // conflict markers in a tree other people are reading is the
+                    // one thing a failed pull must never do.
+                    var conflicted = await git.RunAsync(
+                        RepoDir(id), ["diff", "--name-only", "--diff-filter=U"],
+                        basicAuth: null, GitCli.ReadTimeout, ct);
+                    var files = conflicted.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    if (files.Length > 0)
+                    {
+                        await git.RunAsync(
+                            RepoDir(id), ["merge", "--abort"],
+                            basicAuth: null, GitCli.ReadTimeout, ct);
+                        throw new GitConflictException(
+                            $"Pull would conflict in {string.Join(", ", files.Take(5))}" +
+                            $"{(files.Length > 5 ? $" and {files.Length - 5} more" : "")}. " +
+                            "The merge was backed out: both sides changed the same lines. Undo one " +
+                            "side (edit and commit again here, or on the remote), then pull — " +
+                            "in-place conflict resolution is a later phase.");
+                    }
+
+                    var detail = pull.StdErr + "\n" + pull.StdOut;
+                    if (detail.Contains("would be overwritten", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new GitConflictException(
+                            "Pull refused: uncommitted changes in the shared working copy would be " +
+                            "overwritten. Commit them first, then pull again.");
+                    }
+
+                    throw new GitException(GitCli.Describe(args, pull));
+                }
             }
 
             await MarkAsync(id, "ready", null, branch: null, touchFetched: true, ct);
@@ -353,11 +400,241 @@ public sealed class GitRepoService(
         return (absolute, contentType, name);
     }
 
+    public async Task<GitFileDto> WriteFileAsync(
+        string id, string? path, GitWriteFileRequest request, CancellationToken ct = default)
+    {
+        var repo = await RequireReadyAsync(id, ct);
+        var relative = GitPaths.Normalize(path);
+        if (relative.Length == 0)
+            throw new ArgumentException("A file path is required.");
+
+        using (await git.LockAsync(id, ct))
+        {
+            var absolute = GitPaths.Resolve(RepoDir(repo.Id), relative);
+            if (Directory.Exists(absolute))
+                throw new ArgumentException($"'{relative}' is a directory.");
+
+            // The guard that makes the shared working copy honest: the save only
+            // lands on the exact bytes the editor loaded. baseBlobSha empty means
+            // "I am creating this file", which its own existence can invalidate.
+            var exists = File.Exists(absolute);
+            var baseSha = (request.BaseBlobSha ?? string.Empty).Trim();
+            if (exists)
+            {
+                if (baseSha.Length == 0)
+                {
+                    throw new GitConflictException(
+                        $"'{relative}' already exists — open and edit it rather than creating over it.");
+                }
+
+                var current = BlobSha(await File.ReadAllBytesAsync(absolute, ct));
+                if (!current.Equals(baseSha, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new GitConflictException(
+                        $"'{relative}' changed on the server since you loaded it — someone saved, " +
+                        "or a pull rewrote it. Reload the file and reapply your edit.");
+                }
+            }
+            else if (baseSha.Length > 0)
+            {
+                throw new GitConflictException(
+                    $"'{relative}' no longer exists on the server — it was deleted or renamed. " +
+                    "Reload the repository tree.");
+            }
+
+            var directory = Path.GetDirectoryName(absolute)!;
+            Directory.CreateDirectory(directory);
+
+            // Sibling temp + move: a crash mid-write must never leave a torn
+            // file where readers (and the next commit) will find it.
+            var temp = Path.Combine(directory, $".beedocs-{Guid.NewGuid():N}.tmp");
+            try
+            {
+                await File.WriteAllBytesAsync(temp, Encoding.UTF8.GetBytes(request.Content), ct);
+                File.Move(temp, absolute, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+            }
+        }
+
+        return await FileAsync(id, relative, ct);
+    }
+
+    public async Task<GitCommitResultDto> CommitAsync(
+        string id, GitCommitRequest request, CancellationToken ct = default)
+    {
+        var repo = await RequireReadyAsync(id, ct);
+        var message = (request.Message ?? string.Empty).Trim();
+        if (message.Length == 0)
+            throw new ArgumentException("A commit message is required.");
+
+        // Resolved before the lock: "set your git email first" must not queue
+        // behind a running pull to be said.
+        var (authorName, authorEmail) = await ResolveAuthorAsync(ct);
+
+        string sha;
+        using (await git.LockAsync(id, ct))
+        {
+            var dir = RepoDir(repo.Id);
+            if (request.Paths is { Count: > 0 } paths)
+            {
+                var add = new List<string> { "add", "--" };
+                foreach (var p in paths)
+                {
+                    var rel = GitPaths.Normalize(p);
+                    if (rel.Length == 0)
+                        throw new ArgumentException("An empty path cannot be committed.");
+                    // Jail check only — the file may legitimately be a deletion.
+                    GitPaths.Resolve(dir, rel);
+                    add.Add(rel);
+                }
+                await git.RunOkAsync(dir, add, basicAuth: null, GitCli.ReadTimeout, ct);
+            }
+            else
+            {
+                await git.RunOkAsync(dir, ["add", "-A"], basicAuth: null, GitCli.ReadTimeout, ct);
+            }
+
+            var staged = await git.RunAsync(
+                dir, ["diff", "--cached", "--quiet"], basicAuth: null, GitCli.ReadTimeout, ct);
+            if (staged.ExitCode == 0)
+                throw new GitException("Nothing to commit — the selected files match the last commit.");
+
+            // Author = the person (their chosen git email); committer = BeeDocs,
+            // so history reads "written by X, recorded by the platform".
+            await git.RunOkAsync(
+                dir,
+                [
+                    "-c", "user.name=BeeDocs",
+                    "-c", "user.email=beedocs@beedocs.local",
+                    "commit", "-m", message, $"--author={authorName} <{authorEmail}>",
+                ],
+                basicAuth: null, GitCli.ReadTimeout, ct);
+
+            sha = (await git.RunOkAsync(
+                dir, ["rev-parse", "HEAD"], basicAuth: null, GitCli.ReadTimeout, ct)).Trim();
+        }
+
+        await IndexIfOptedInAsync(id, ct);
+        logger.LogInformation("Committed {Sha} to git repo {RepoId} as {Author}.", sha, id, authorName);
+        return new GitCommitResultDto(sha, $"{authorName} <{authorEmail}>", await StatusAsync(id, ct));
+    }
+
+    public async Task<GitStatusDto> PushAsync(string id, CancellationToken ct = default)
+    {
+        var repo = await RequireReadyAsync(id, ct);
+        var connection = await connections.ResolveAsync(repo.ConnectionId, ct)
+            ?? throw new GitException($"The connection behind {repo.Name} no longer exists.");
+
+        using (await git.LockAsync(id, ct))
+        {
+            // -u wires tracking on the first push of a new branch, so
+            // ahead/behind keeps meaning something afterwards. Never --force:
+            // rewriting a shared remote is not a button.
+            var args = new[] { "push", "-u", "origin", "HEAD" };
+            var result = await git.RunAsync(
+                RepoDir(id), args, connection.BasicAuth, GitCli.SyncTimeout, ct);
+            if (result.ExitCode != 0)
+            {
+                var detail = result.StdErr + "\n" + result.StdOut;
+                if (detail.Contains("non-fast-forward", StringComparison.OrdinalIgnoreCase)
+                    || detail.Contains("fetch first", StringComparison.OrdinalIgnoreCase)
+                    || detail.Contains("[rejected]", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new GitConflictException(
+                        "The remote has commits this server does not. Pull first, then push again.");
+                }
+
+                throw new GitException(GitCli.Describe(args, result));
+            }
+        }
+
+        return await StatusAsync(id, ct);
+    }
+
+    public async Task<GitRepoDto> CheckoutAsync(string id, string branch, CancellationToken ct = default)
+    {
+        var repo = await RequireReadyAsync(id, ct);
+        var name = await ValidateBranchNameAsync(repo.Id, branch, ct);
+
+        using (await git.LockAsync(id, ct))
+        {
+            var dir = RepoDir(repo.Id);
+
+            // The working copy is shared: switching branches under someone
+            // else's uncommitted edit would carry it silently onto another
+            // branch — or refuse halfway. All-or-nothing is the honest rule.
+            var status = await git.RunAsync(
+                dir, ["status", "--porcelain"], basicAuth: null, GitCli.ReadTimeout, ct);
+            if (status.StdOut.Trim().Length > 0)
+            {
+                throw new GitConflictException(
+                    "The working copy has uncommitted changes, and it is shared by everyone on " +
+                    "this server. Commit them (or remove them) before switching branches.");
+            }
+
+            // Plain checkout DWIMs an origin/<name> into a local tracking branch.
+            await git.RunOkAsync(dir, ["checkout", name], basicAuth: null, GitCli.ReadTimeout, ct);
+            await MarkAsync(id, "ready", null, branch: name, touchFetched: false, ct);
+        }
+
+        // The tree content just changed wholesale — the index must follow.
+        await IndexIfOptedInAsync(id, ct);
+        return (await GetAsync(id, ct))!;
+    }
+
+    public async Task<GitRepoDto> CreateBranchAsync(
+        string id, GitCreateBranchRequest request, CancellationToken ct = default)
+    {
+        var repo = await RequireReadyAsync(id, ct);
+        var name = await ValidateBranchNameAsync(repo.Id, request.Name, ct);
+        var checkout = request.Checkout ?? true;
+
+        using (await git.LockAsync(id, ct))
+        {
+            var dir = RepoDir(repo.Id);
+            // Branching with a dirty tree is allowed on purpose — the pending
+            // edit rides onto the new branch, which is exactly how you take an
+            // accidental main edit somewhere safe.
+            await git.RunOkAsync(
+                dir,
+                checkout ? ["checkout", "-b", name] : ["branch", name],
+                basicAuth: null, GitCli.ReadTimeout, ct);
+            if (checkout)
+                await MarkAsync(id, "ready", null, branch: name, touchFetched: false, ct);
+        }
+
+        return (await GetAsync(id, ct))!;
+    }
+
+    /// <summary>
+    /// git's own <c>check-ref-format --branch</c> is the authority on names; the
+    /// leading-dash check is ours, because a name like <c>-f</c> must never reach
+    /// any git command line even as a value.
+    /// </summary>
+    private async Task<string> ValidateBranchNameAsync(string repoId, string? branch, CancellationToken ct)
+    {
+        var name = (branch ?? string.Empty).Trim();
+        if (name.Length == 0 || name.StartsWith('-'))
+            throw new ArgumentException($"'{branch}' is not a valid branch name.");
+
+        var check = await git.RunAsync(
+            RepoDir(repoId), ["check-ref-format", "--branch", name],
+            basicAuth: null, GitCli.ReadTimeout, ct);
+        if (check.ExitCode != 0)
+            throw new ArgumentException($"'{branch}' is not a valid branch name.");
+        return name;
+    }
+
     public async Task<GitStatusDto> StatusAsync(string id, CancellationToken ct = default)
     {
         var repo = await RequireReadyAsync(id, ct);
+        // -uall: untracked *files*, not collapsed directories — the commit
+        // dialog's checklist has to name what would actually be committed.
         var output = await git.RunOkAsync(
-            RepoDir(repo.Id), ["status", "--porcelain=v2", "--branch"],
+            RepoDir(repo.Id), ["status", "--porcelain=v2", "--branch", "-uall"],
             basicAuth: null, GitCli.ReadTimeout, ct);
 
         var branch = repo.DefaultBranch;
@@ -408,20 +685,62 @@ public sealed class GitRepoService(
             dir, ["symbolic-ref", "--short", "-q", "HEAD"],
             basicAuth: null, GitCli.ReadTimeout, ct)).Trim();
 
+        // Remote-tracking refs too: a branch a colleague pushed is something a
+        // reader wants to switch to, and checkout DWIMs it into a local one.
         var output = await git.RunOkAsync(
-            dir, ["for-each-ref", "refs/heads", "--format=%(refname:short)"],
+            dir, ["for-each-ref", "refs/heads", "refs/remotes/origin", "--format=%(refname:short)"],
             basicAuth: null, GitCli.ReadTimeout, ct);
 
-        return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(name => name.Trim())
-            .Where(name => name.Length > 0)
+        var locals = new List<string>();
+        var remotes = new List<string>();
+        foreach (var raw in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var name = raw.Trim();
+            if (name.Length == 0) continue;
+            if (name.StartsWith("origin/", StringComparison.Ordinal))
+                remotes.Add(name["origin/".Length..]);
+            else if (name != "origin") // refs/remotes/origin/HEAD shortens to "origin"
+                locals.Add(name);
+        }
+
+        var branches = locals
             .Select(name => new GitBranchDto(name, name == current))
             .ToList();
+        branches.AddRange(remotes
+            .Where(name => !locals.Contains(name))
+            .Select(name => new GitBranchDto(name, Current: false, IsRemote: true)));
+        return branches;
     }
 
     // -------------------------------------------------------------------------
 
     private string RepoDir(string repoId) => Path.Combine(options.Root, repoId);
+
+    /// <summary>
+    /// Who a commit is authored as. A signed-in account must have set its own
+    /// git email (Settings → Your account) — commits carry the name into git
+    /// history, so guessing one is worse than refusing. A machine caller (the
+    /// API key) or an open instance commits as the platform itself.
+    /// </summary>
+    private async Task<(string Name, string Email)> ResolveAuthorAsync(CancellationToken ct)
+    {
+        var actor = currentUser.Current;
+        if (actor.Id is null)
+            return (actor.Name ?? "BeeDocs", "beedocs@beedocs.local");
+
+        var user = await users.GetAsync(actor.Id, ct);
+        var email = user?.GitEmail?.Trim();
+        if (string.IsNullOrEmpty(email))
+        {
+            throw new GitException(
+                "Your account has no git email yet, and a commit writes your identity into git " +
+                "history. Set one under Settings → Your account, then commit again.");
+        }
+
+        var name = string.IsNullOrWhiteSpace(user!.DisplayName) ? user.Username : user.DisplayName!;
+        // Angle brackets would corrupt the "Name <email>" author syntax.
+        return (name.Replace("<", "").Replace(">", "").Trim(), email);
+    }
 
     private async Task IndexIfOptedInAsync(string repoId, CancellationToken ct)
     {

@@ -171,11 +171,11 @@ public sealed class InvalidPasswordException() : Exception("The current password
 public sealed class UserService(SqliteConnectionFactory db, ILogger<UserService> logger) : IUserService
 {
     private const string SelectColumns =
-        "id, username, display_name, email, role, enabled, must_change_password, last_login_at, created_at, updated_at";
+        "id, username, display_name, email, role, enabled, must_change_password, last_login_at, created_at, updated_at, git_email";
 
-    /// <summary>The same columns, aliased for the session join. Kept in step with <see cref="SelectColumns"/> by hand — ten columns, one reader.</summary>
+    /// <summary>The same columns, aliased for the session join. Kept in step with <see cref="SelectColumns"/> by hand — eleven columns, one reader.</summary>
     private const string SelectColumnsFromUser =
-        "u.id, u.username, u.display_name, u.email, u.role, u.enabled, u.must_change_password, u.last_login_at, u.created_at, u.updated_at";
+        "u.id, u.username, u.display_name, u.email, u.role, u.enabled, u.must_change_password, u.last_login_at, u.created_at, u.updated_at, u.git_email";
 
     /// <summary>Letters, digits, and the three separators a login name is ever spelled with.</summary>
     private const string UsernamePattern = "abcdefghijklmnopqrstuvwxyz0123456789._-";
@@ -275,14 +275,24 @@ public sealed class UserService(SqliteConnectionFactory db, ILogger<UserService>
                 "This is the only enabled admin. Promote another account to admin before changing this one.");
         }
 
+        // Non-blank git emails must at least look like one — this string is
+        // written into public git history, where a typo is forever.
+        var gitEmail = request.GitEmail is null ? existing.GitEmail : Trimmed(request.GitEmail);
+        if (request.GitEmail is not null && gitEmail is not null
+            && (!gitEmail.Contains('@') || gitEmail.Contains(' ') || gitEmail.Contains('>')))
+        {
+            throw new ArgumentException($"'{gitEmail}' is not a usable git author email.");
+        }
+
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             UPDATE app_user SET username = $username, display_name = $display_name, email = $email,
-              role = $role, enabled = $enabled, updated_at = $updated_at
+              role = $role, enabled = $enabled, git_email = $git_email, updated_at = $updated_at
             WHERE id = $id
             """;
         SqliteHelpers.Add(cmd, "$id", id);
         SqliteHelpers.Add(cmd, "$username", username);
+        SqliteHelpers.Add(cmd, "$git_email", gitEmail);
         SqliteHelpers.Add(cmd, "$display_name", request.DisplayName is null ? existing.DisplayName : Trimmed(request.DisplayName));
         SqliteHelpers.Add(cmd, "$email", request.Email is null ? existing.Email : Trimmed(request.Email));
         SqliteHelpers.Add(cmd, "$role", role);
@@ -731,7 +741,8 @@ public sealed class UserService(SqliteConnectionFactory db, ILogger<UserService>
         MustChangePassword: !reader.IsDBNull(offset + 6) && reader.GetInt64(offset + 6) != 0,
         LastLoginAt: reader.IsDBNull(offset + 7) ? null : SqliteHelpers.ReadTimestamp(reader, offset + 7),
         CreatedAt: SqliteHelpers.ReadTimestamp(reader, offset + 8),
-        UpdatedAt: SqliteHelpers.ReadTimestamp(reader, offset + 9));
+        UpdatedAt: SqliteHelpers.ReadTimestamp(reader, offset + 9),
+        GitEmail: SqliteHelpers.GetNullableString(reader, offset + 10));
 
     private static string? Trimmed(string? raw) =>
         string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();

@@ -382,6 +382,11 @@ public static class DatabaseInitializer
         // NULL = "derive from source"; SlideDeckService backfills once at startup
         // and every save maintains it, so list projections never load the body.
         await AddColumnIfMissingAsync(connection, "slide_deck", "slide_count", "INTEGER", ct);
+        // Git commit author identity. Deliberately separate from `email`: the
+        // account email is contact data, this one ends up in public git history,
+        // and each user chooses it themselves (Settings → Your account). NULL
+        // means "not set" — commits are refused with guidance, never guessed.
+        await AddColumnIfMissingAsync(connection, "app_user", "git_email", "TEXT", ct);
 
         await using (var indexes = connection.CreateCommand())
         {

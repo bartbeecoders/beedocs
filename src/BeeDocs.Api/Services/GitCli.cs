@@ -14,6 +14,14 @@ public sealed record GitOptions(string Root);
 /// </summary>
 public sealed class GitException(string message, Exception? inner = null) : Exception(message, inner);
 
+/// <summary>
+/// The caller's picture of the repo is stale or in the way — a save over a
+/// changed blob, a push behind the remote, a pull that would conflict, a
+/// checkout over uncommitted changes. Endpoints answer 409: the fix is a user
+/// action (reload, pull, commit), not a retry.
+/// </summary>
+public sealed class GitConflictException(string message) : Exception(message);
+
 public sealed record GitCliResult(int ExitCode, string StdOut, string StdErr);
 
 /// <summary>
@@ -154,10 +162,11 @@ public sealed class GitCli
     {
         var result = await RunAsync(workingDirectory, args, basicAuth, timeout, ct);
         if (result.ExitCode == 0) return result.StdOut;
-        throw new GitException(FailureMessage(args, result));
+        throw new GitException(Describe(args, result));
     }
 
-    private static string FailureMessage(IReadOnlyList<string> args, GitCliResult result)
+    /// <summary>A failed result as a sentence — for callers that ran RunAsync to branch on the failure first.</summary>
+    internal static string Describe(IReadOnlyList<string> args, GitCliResult result)
     {
         var verb = args.FirstOrDefault(a => !a.StartsWith('-')) ?? "git";
         var detail = (result.StdErr.Trim().Length > 0 ? result.StdErr : result.StdOut).Trim();
