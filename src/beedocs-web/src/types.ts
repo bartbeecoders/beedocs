@@ -158,6 +158,7 @@ export type SearchKind =
   | 'book'
   | 'folder'
   | 'shelf'
+  | 'gitfile'
 
 /** Sentinels the API wraps matched terms in. Never present in stored content. */
 export const HIGHLIGHT_OPEN = '\ue000'
@@ -900,3 +901,104 @@ export type InstanceStats = {
   users: UserActivity[]
   generatedAt: string
 }
+
+// --- Git integration ---
+
+/** github and azure-devops can list repos; git means "paste a clone URL". */
+export type GitConnectionKind = 'github' | 'azure-devops' | 'git'
+
+/** A connection ("the bookshelf"). The token stays server-side, hasToken/hint only. */
+export type GitConnection = {
+  id: string
+  kind: GitConnectionKind
+  name: string
+  /** github: org/user name (may be blank = the token's user); azure-devops: org URL; git: ''. */
+  baseUrl: string
+  username: string
+  hasToken: boolean
+  tokenHint: string | null
+  repoCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type CreateGitConnectionRequest = {
+  kind: GitConnectionKind
+  name?: string
+  baseUrl?: string
+  username?: string
+  token?: string
+}
+
+/** token: undefined keeps the stored token, '' deletes it, anything else replaces it. */
+export type UpdateGitConnectionRequest = {
+  name?: string
+  baseUrl?: string
+  username?: string
+  token?: string
+}
+
+export type GitConnectionTestResult = {
+  ok: boolean
+  message: string
+  repoCount: number | null
+}
+
+/** A repo the provider lists that could be added. Never persisted server-side. */
+export type GitAvailableRepo = {
+  name: string
+  cloneUrl: string
+  defaultBranch: string | null
+  description: string | null
+  added: boolean
+}
+
+export type GitRepoStatusKind = 'cloning' | 'ready' | 'error'
+
+/** A repo on the shelf: a server-side clone plus this management row. */
+export type GitRepo = {
+  id: string
+  connectionId: string
+  connectionName: string
+  connectionKind: GitConnectionKind
+  name: string
+  cloneUrl: string
+  defaultBranch: string
+  status: GitRepoStatusKind
+  lastError: string | null
+  indexed: boolean
+  fetchedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type GitTreeEntry = {
+  name: string
+  path: string
+  type: 'file' | 'dir'
+  size: number | null
+}
+
+/** One working-tree file. Text arrives inline; binaries render via the raw route. */
+export type GitFile = {
+  path: string
+  name: string
+  binary: boolean
+  size: number
+  /** Git blob id of the served bytes — the future save-conflict handle. */
+  blobSha: string
+  content: string | null
+  contentBase64: string | null
+  tooLarge: boolean
+}
+
+export type GitDirtyEntry = { path: string; state: string }
+
+export type GitStatus = {
+  branch: string
+  ahead: number
+  behind: number
+  dirty: GitDirtyEntry[]
+}
+
+export type GitBranch = { name: string; current: boolean }

@@ -995,3 +995,124 @@ public sealed record FavoriteDto(
     string? BookId,
     DateTimeOffset CreatedAt
 );
+
+// --- Git integration ---
+
+/// <summary>
+/// A connection as the client sees it. No token field, ever — <paramref name="HasToken"/>
+/// and the last four characters are all a UI needs.
+/// </summary>
+/// <param name="Kind">github | azure-devops | git.</param>
+public sealed record GitConnectionDto(
+    string Id,
+    string Kind,
+    string Name,
+    string BaseUrl,
+    string Username,
+    bool HasToken,
+    string? TokenHint,
+    int RepoCount,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+public sealed record CreateGitConnectionRequest(
+    [property: Required, MinLength(1)] string Kind,
+    string? Name,
+    string? BaseUrl,
+    string? Username,
+    string? Token
+);
+
+/// <param name="Token">null = leave the stored token untouched; "" = delete it; anything else = replace it.</param>
+public sealed record UpdateGitConnectionRequest(
+    string? Name,
+    string? BaseUrl,
+    string? Username,
+    string? Token
+);
+
+/// <param name="Message">Human-readable either way — show it verbatim.</param>
+public sealed record GitConnectionTestResultDto(
+    bool Ok,
+    string Message,
+    int? RepoCount
+);
+
+/// <summary>A repo the provider lists that could be added. Never persisted.</summary>
+public sealed record GitAvailableRepoDto(
+    string Name,
+    string CloneUrl,
+    string? DefaultBranch,
+    string? Description,
+    /// <summary>Already added to this instance — the UI greys it out.</summary>
+    bool Added
+);
+
+public sealed record AddGitRepoRequest(
+    [property: Required, MinLength(1)] string CloneUrl,
+    string? Name,
+    bool? Indexed
+);
+
+/// <param name="Name">null leaves it alone. Indexed toggles search indexing.</param>
+public sealed record UpdateGitRepoRequest(
+    string? Name,
+    bool? Indexed
+);
+
+/// <param name="Status">cloning | ready | error.</param>
+public sealed record GitRepoDto(
+    string Id,
+    string ConnectionId,
+    string ConnectionName,
+    string ConnectionKind,
+    string Name,
+    string CloneUrl,
+    string DefaultBranch,
+    string Status,
+    string? LastError,
+    bool Indexed,
+    DateTimeOffset? FetchedAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="Type">file | dir.</param>
+public sealed record GitTreeEntryDto(
+    string Name,
+    string Path,
+    string Type,
+    long? Size
+);
+
+/// <summary>
+/// One file from the working tree. Text arrives in <paramref name="Content"/>,
+/// small binaries in <paramref name="ContentBase64"/>; past the size caps both
+/// are null and <paramref name="TooLarge"/> says why — the raw route still
+/// streams it for download.
+/// </summary>
+public sealed record GitFileDto(
+    string Path,
+    string Name,
+    bool Binary,
+    long Size,
+    /// <summary>Git blob SHA of the served bytes — the optimistic-concurrency handle for later saves.</summary>
+    string BlobSha,
+    string? Content,
+    string? ContentBase64,
+    bool TooLarge
+);
+
+public sealed record GitDirtyEntryDto(string Path, string State);
+
+/// <param name="Ahead">Commits the local branch has that the remote does not.</param>
+/// <param name="Behind">Commits the remote has that the local branch does not.</param>
+public sealed record GitStatusDto(
+    string Branch,
+    int Ahead,
+    int Behind,
+    IReadOnlyList<GitDirtyEntryDto> Dirty
+);
+
+public sealed record GitBranchDto(string Name, bool Current);

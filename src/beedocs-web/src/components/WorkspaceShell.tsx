@@ -8,6 +8,9 @@ import { api } from '../api'
 import { withBase } from '../basePath'
 import { bookshelfSitePath } from '../markdownLinks'
 import { FavoritesPanel } from './FavoritesPanel'
+import { GitTree } from './GitTree'
+import { GitFileCanvas, GitRepoCanvas } from './GitCanvas'
+import { useGitRepos } from '../hooks/useGitRepos'
 import { NavTree } from './NavTree'
 import { ResizablePane } from './ResizablePane'
 import { PageCanvas, type PageEditorState } from './PageCanvas'
@@ -38,6 +41,7 @@ export function WorkspaceShell() {
   const params = useParams()
   const { themeDef } = useTheme()
   const { books, shelves, expandBook, syncSelectionFromRoute } = useWorkspace()
+  const gitRepos = useGitRepos()
   const [layout, setLayout] = useState<PaneLayout>(() => loadPaneLayout())
   const [pageState, setPageState] = useState<PageEditorState | null>(null)
   const [diagramState, setDiagramState] = useState<DiagramEditorState | null>(null)
@@ -104,6 +108,11 @@ export function WorkspaceShell() {
     if (location.pathname.startsWith('/users')) return 'users' as const
     if (location.pathname.startsWith('/stats')) return 'stats' as const
     if (location.pathname.startsWith('/help')) return 'help' as const
+    // Git routes carry repoId; the /files/ segment separates a file canvas
+    // from the repo's front page.
+    if (params.repoId) {
+      return location.pathname.includes('/files/') ? ('gitFile' as const) : ('gitRepo' as const)
+    }
     if (params.pageId) return 'page' as const
     if (params.diagramId) return 'diagram' as const
     if (params.deckId) return 'slides' as const
@@ -113,6 +122,7 @@ export function WorkspaceShell() {
     return 'welcome' as const
   }, [
     location.pathname,
+    params.repoId,
     params.shelfId,
     params.bookId,
     params.pageId,
@@ -161,6 +171,18 @@ export function WorkspaceShell() {
     if (view === 'users') return [{ label: 'Users' }]
     if (view === 'stats') return [{ label: 'Statistics' }]
     if (view === 'help') return [{ label: 'About & Help' }]
+    if (view === 'gitRepo' || view === 'gitFile') {
+      const repo = gitRepos?.find((r) => r.id === params.repoId)
+      const crumbs: { label: string; to?: string }[] = [{ label: 'Library', to: '/' }]
+      crumbs.push({
+        label: repo?.name ?? 'Repository',
+        to: view === 'gitFile' ? `/git/${params.repoId}` : undefined,
+      })
+      if (view === 'gitFile' && params['*']) {
+        crumbs.push({ label: decodeURIComponent(params['*'].split('/').pop() ?? '') })
+      }
+      return crumbs
+    }
     const book = books.find((b) => b.id === params.bookId)
     const crumbs: { label: string; to?: string }[] = [{ label: 'Library', to: '/' }]
     // A shelf is the level above books, so it goes in front of the book crumb
@@ -189,12 +211,8 @@ export function WorkspaceShell() {
     view,
     books,
     shelves,
-    params.shelfId,
-    params.bookId,
-    params.pageId,
-    params.diagramId,
-    params.deckId,
-    params.attachmentId,
+    gitRepos,
+    params,
     pageState?.title,
     diagramState?.title,
     slideState?.title,
@@ -269,6 +287,7 @@ export function WorkspaceShell() {
         >
           <FavoritesPanel />
           <NavTree />
+          <GitTree />
         </ResizablePane>
 
         <main className="ws-center">
@@ -294,6 +313,8 @@ export function WorkspaceShell() {
           {view === 'diagram' && <DiagramCanvas onStateChange={setDiagramState} />}
           {view === 'slides' && <SlideCanvas onStateChange={setSlideState} />}
           {view === 'attachment' && <AttachmentCanvas onStateChange={setAttachmentState} />}
+          {view === 'gitRepo' && <GitRepoCanvas />}
+          {view === 'gitFile' && <GitFileCanvas />}
         </main>
 
         <ResizablePane

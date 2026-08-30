@@ -11,6 +11,7 @@ import type { DiagramEditorState } from './DiagramCanvas'
 import type { SlideEditorState } from './SlideCanvas'
 import type { AttachmentEditorState } from './AttachmentCanvas'
 import { OwnerField } from './OwnerField'
+import { useGitRepos } from '../hooks/useGitRepos'
 import { PageHistoryPanel } from './PageHistoryPanel'
 import { SyncedInput } from './SyncedText'
 import {
@@ -36,6 +37,8 @@ type Props = {
     | 'users'
     | 'stats'
     | 'help'
+    | 'gitRepo'
+    | 'gitFile'
 }
 
 export function PropertiesPane({
@@ -584,6 +587,10 @@ export function PropertiesPane({
     )
   }
 
+  if (view === 'gitRepo' || view === 'gitFile') {
+    return <GitRepoProps />
+  }
+
   return (
     <div className="props-pane">
       <h3>Properties</h3>
@@ -947,5 +954,57 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <span className="props-label">{label}</span>
       {children}
     </label>
+  )
+}
+
+/**
+ * Facts about the git repo behind the current /git route. Read-only on
+ * purpose: a repo has no owner/history machinery — git itself is both.
+ */
+function GitRepoProps() {
+  const { repoId } = useParams()
+  const repos = useGitRepos()
+  const repo = repos?.find((r) => r.id === repoId)
+
+  if (!repo) {
+    return (
+      <div className="props-pane">
+        <h3>Repository</h3>
+        <p className="muted sm">Loading…</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="props-pane">
+      <h3>Repository</h3>
+      <Field label="Name">
+        <span>{repo.name}</span>
+      </Field>
+      <Field label="Connection">
+        <span>{repo.connectionName}</span>
+      </Field>
+      <Field label="Remote">
+        <code className="mono-block">{repo.cloneUrl}</code>
+      </Field>
+      <Field label="Branch">
+        <span>{repo.defaultBranch || '—'}</span>
+      </Field>
+      <Field label="Status">
+        <span>{repo.status}</span>
+      </Field>
+      {repo.fetchedAt && (
+        <Field label="Last synced">
+          <span>{new Date(repo.fetchedAt).toLocaleString()}</span>
+        </Field>
+      )}
+      <Field label="In search">
+        <span>{repo.indexed ? 'Yes' : 'No'}</span>
+      </Field>
+      <p className="muted sm">
+        Content comes live from the server-side clone — git history is this repo’s change log.
+        Manage connections and repos in Settings.
+      </p>
+    </div>
   )
 }

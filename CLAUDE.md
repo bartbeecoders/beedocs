@@ -393,6 +393,24 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   bill waiting to happen, and setting the key also switches the feature off in
   the UI (the browser has nowhere to keep the secret). See
   `Docs/LLM-PROVIDERS.md`.
+- **Git integration** (`/api/git`, `Services/GitCli.cs` + `GitConnectionService.cs`
+  + `GitRepoService.cs` + `GitProviderCatalog.cs` + `GitSearchIndexer.cs`; UI
+  `GitConnections.tsx`, `GitTree.tsx`, `GitCanvas.tsx`, routes `/git/:repoId[/files/*]`)
+  — repos browsed like books on a shelf. The load-bearing decision: repo content
+  is **never imported into entities** — each added repo is a server-side clone
+  under `BeeDocs:GitPath` (default `data/git/{repoId}`) read live, and SQLite
+  holds only `git_connection` (kinds `github | azure-devops | git`, PAT
+  write-only) and `git_repo` (status `cloning|ready|error`; add clones in the
+  background). `GitCli` is the one place git is spawned (ArgumentList only,
+  token via `GIT_CONFIG_*` env never argv, hooks disabled, no file://
+  remotes/submodules, per-repo mutation lock); `GitPaths` jails every client
+  path (no `..`/absolute/`.git`/symlink hops). Opt-in per-repo search
+  (`git_repo.indexed`): `GitSearchIndexer` rebuilds `search_doc` rows of kind
+  `gitfile` (`{repoId}:{path}`) directly on each sync — never via
+  `search_queue`, whose drain reads unknown kinds as deletes. Phase 1 is
+  read-only + Sync (`pull --ff-only`); the phased plan (editing, commit, push,
+  branches; per-user git email before commits) lives in
+  `Vibecoding/git-information-integration.md`. See `Docs/GIT-INTEGRATION.md`.
 - **BeeDocs.Mcp** wraps the whole REST API for AI agents (official C# MCP SDK
   2.1.0, protocol revision `2026-07-28` with fallback to older ones).
   Tools/resources/prompts live under `Tools/`, `Resources/`, `Prompts/`; both
@@ -427,6 +445,7 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/DIAGRAM-STUDIO.md` — BeeDiagram Studio editor interactions and JSON format.
 - `Docs/SLIDES.md` — slide decks: document format, designer, presentation mode.
 - `Docs/ATTACHMENTS.md` — book attachments: storage, upload rules, and why they are not uploads.
+- `Docs/GIT-INTEGRATION.md` — git/DevOps repos browsed as books; clones, security, search.
 - `Docs/USERS-AND-ROLES.md` — accounts, roles, sessions, and the opt-in sign-in wall.
 - `Docs/RBA-INTEGRATION.md` — delegating sign-in to the central RBA service (application DOC).
 - `Docs/LLM-PROVIDERS.md` — LLM providers, key storage, and the `/api/llm` security trade-off.

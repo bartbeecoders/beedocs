@@ -28,6 +28,8 @@ export type WorkspaceView =
   | 'users'
   | 'stats'
   | 'help'
+  | 'gitRepo'
+  | 'gitFile'
 
 type Props = {
   view: WorkspaceView

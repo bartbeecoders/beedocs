@@ -300,6 +300,42 @@ public static class DatabaseInitializer
 
             -- The cleanup triggers below delete by target, across every user.
             CREATE INDEX IF NOT EXISTS idx_favorite_entity ON favorite(kind, entity_id);
+
+            -- Git integration: a connection is an account/org plus a credential
+            -- ("the bookshelf"), a repo is a server-side clone under
+            -- BeeDocs:GitPath ("a book"). token is write-only in the
+            -- llm_provider.api_key sense. Repo content is never rows here —
+            -- the clone is the source of truth and is read live.
+            CREATE TABLE IF NOT EXISTS git_connection (
+              id TEXT PRIMARY KEY NOT NULL,
+              kind TEXT NOT NULL,
+              name TEXT NOT NULL,
+              base_url TEXT NOT NULL DEFAULT '',
+              username TEXT NOT NULL DEFAULT '',
+              token TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS git_repo (
+              id TEXT PRIMARY KEY NOT NULL,
+              connection_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              clone_url TEXT NOT NULL,
+              default_branch TEXT NOT NULL DEFAULT '',
+              -- cloning | ready | error. The clone runs in the background.
+              status TEXT NOT NULL DEFAULT 'cloning',
+              last_error TEXT,
+              -- 1 = text files feed search_doc rows of kind 'gitfile' on every
+              -- successful clone/sync. GitSearchIndexer writes those directly —
+              -- the search_queue drain would read an unknown kind as a delete.
+              indexed INTEGER NOT NULL DEFAULT 0,
+              fetched_at TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_git_repo_connection ON git_repo(connection_id);
             """;
 
         await cmd.ExecuteNonQueryAsync(ct);

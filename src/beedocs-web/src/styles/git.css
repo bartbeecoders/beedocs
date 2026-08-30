@@ -1,0 +1,258 @@
+/* ===== Git integration: tree section, canvases, settings extras ===== */
+/* Tree rows reuse .tree-row / .tree-label like favorites.css does; the
+   settings panel reuses the llm-* card chrome. Only git-specific chrome
+   lives here, painted with the app's theme tokens. */
+
+/* --- Left pane section --- */
+
+.git-tree-panel {
+  padding: 0.55rem 0.45rem 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.git-tree-header {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.git-tree-title {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.git-conn-row .tree-text {
+  font-weight: 600;
+}
+
+.git-badge {
+  margin-left: 0.35rem;
+  font-size: 0.62rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.git-badge.is-error {
+  color: var(--danger, #c0392b);
+  border-color: currentColor;
+}
+
+.git-tree-note {
+  padding: 0.15rem 0.5rem 0.15rem 1.6rem;
+  font-size: 0.75rem;
+}
+
+.git-tree-note.is-warn {
+  color: var(--danger, #c0392b);
+}
+
+/* --- Canvases --- */
+
+.git-canvas {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+}
+
+.git-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  background: var(--bg, inherit);
+  z-index: 2;
+}
+
+.git-toolbar-branch {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-weight: 600;
+}
+
+.git-toolbar-ab,
+.git-toolbar-dirty {
+  font-size: 0.72rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.git-toolbar-spacer {
+  flex: 1;
+}
+
+.git-toolbar-error {
+  color: var(--danger, #c0392b);
+  font-size: 0.75rem;
+}
+
+.git-clone-url {
+  font-family: var(--mono, ui-monospace, monospace);
+  overflow-wrap: anywhere;
+}
+
+.git-root-list {
+  list-style: none;
+  margin: 0.75rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.git-root-entry {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.15rem 0.25rem;
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.git-root-entry:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+}
+
+.git-readme {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+}
+
+.git-file-canvas {
+  padding: 0.75rem 1rem 2rem;
+  max-width: 70rem;
+}
+
+.git-file-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.git-file-path {
+  font-size: 1rem;
+  font-family: var(--mono, ui-monospace, monospace);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.git-file-image img {
+  max-width: 100%;
+}
+
+.git-code {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* --- Settings: repo management inside a connection card --- */
+
+.git-repos-block {
+  margin-top: 0.9rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+}
+
+.git-repos-block h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.git-repo-rows,
+.git-available-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.git-available-list {
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.git-repo-row,
+.git-available-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+}
+
+.git-repo-name {
+  font-family: var(--mono, ui-monospace, monospace);
+  overflow-wrap: anywhere;
+}
+
+.git-available-row .git-repo-name {
+  flex: 1;
+}
+
+.git-repo-row .git-repo-indexed {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.git-repo-status {
+  font-size: 0.68rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.git-repo-status.is-error {
+  color: var(--danger, #c0392b);
+  border-color: currentColor;
+}
+
+.git-repo-error {
+  font-size: 0.72rem;
+  color: var(--danger, #c0392b);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 18rem;
+}
+
+.git-add-repos {
+  margin-top: 0.4rem;
+}

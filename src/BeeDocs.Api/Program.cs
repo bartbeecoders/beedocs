@@ -37,6 +37,16 @@ var attachmentsRoot = string.IsNullOrWhiteSpace(configuredAttachments)
 Directory.CreateDirectory(attachmentsRoot);
 
 builder.Services.AddSingleton(new StorageOptions(uploadsRoot, attachmentsRoot));
+
+// Git integration: server-side clones live here, one directory per repo row.
+// A sibling of the SQLite/uploads/attachments dirs so container deployments
+// point one persistent volume at all of them.
+var configuredGit = builder.Configuration["BeeDocs:GitPath"];
+var gitRoot = string.IsNullOrWhiteSpace(configuredGit)
+    ? Path.Combine(builder.Environment.ContentRootPath, "data", "git")
+    : Path.GetFullPath(configuredGit, builder.Environment.ContentRootPath);
+Directory.CreateDirectory(gitRoot);
+builder.Services.AddSingleton(new GitOptions(gitRoot));
 builder.Services.Configure<ApiKeyOptions>(builder.Configuration.GetSection(ApiKeyOptions.SectionName));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.Configure<RbaOptions>(builder.Configuration.GetSection(RbaOptions.SectionName));
@@ -100,6 +110,16 @@ builder.Services.AddSingleton<ILlmClient, LlmClient>();
 
 // Backstop only — LlmClient gives each call its own budget with a linked token.
 builder.Services.AddHttpClient(LlmClient.HttpClientName,
+    client => client.Timeout = TimeSpan.FromMinutes(2));
+
+// Git integration: the CLI runner, connection rows (token write-only), the
+// repos with their clones, provider repo discovery, and the opt-in search feed.
+builder.Services.AddSingleton<GitCli>();
+builder.Services.AddSingleton<IGitConnectionService, GitConnectionService>();
+builder.Services.AddSingleton<IGitRepoService, GitRepoService>();
+builder.Services.AddSingleton<GitSearchIndexer>();
+builder.Services.AddSingleton<GitProviderCatalog>();
+builder.Services.AddHttpClient(GitProviderCatalog.HttpClientName,
     client => client.Timeout = TimeSpan.FromMinutes(2));
 
 // Imported archives carry their images, so the 30 MB Kestrel default is too
@@ -1831,6 +1851,254 @@ storageProviders.MapGet("/google/callback", async (
         </body></html>
         """, "text/html");
 }).WithMetadata(new AllowAnonymousEndpoint());
+
+// --- Git integration ---
+// Connections and repo management are admin (credentials + server disk); the
+// content reads below them ride the default read-for-everyone rule, and Sync —
+// the one non-admin write — the default write-for-editors rule. GitException
+// carries a message already phrased for the person who has to fix it.
+var gitApi = api.MapGroup("/git").WithTags("Git");
+var gitAdmin = RequireRole.Admin;
+
+static IResult GitFailure(GitException ex) =>
+    Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: ex.Message);
+
+gitApi.MapGet("/connections", async (IGitConnectionService connections, CancellationToken ct) =>
+    Results.Ok(await connections.ListAsync(ct))).WithMetadata(gitAdmin);
+
+gitApi.MapPost("/connections", async (CreateGitConnectionRequest body, IGitConnectionService connections, CancellationToken ct) =>
+{
+    try
+    {
+        var created = await connections.CreateAsync(body, ct);
+        return Results.Created($"/api/git/connections/{created.Id}", created);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["connection"] = [ex.Message] });
+    }
+}).WithMetadata(gitAdmin);
+
+gitApi.MapGet("/connections/{id}", async (string id, IGitConnectionService connections, CancellationToken ct) =>
+{
+    var connection = await connections.GetAsync(id, ct);
+    return connection is null ? Results.NotFound() : Results.Ok(connection);
+}).WithMetadata(gitAdmin);
+
+gitApi.MapPut("/connections/{id}", async (string id, UpdateGitConnectionRequest body, IGitConnectionService connections, CancellationToken ct) =>
+{
+    try
+    {
+        var updated = await connections.UpdateAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["connection"] = [ex.Message] });
+    }
+}).WithMetadata(gitAdmin);
+
+gitApi.MapDelete("/connections/{id}", async (string id, IGitConnectionService connections, CancellationToken ct) =>
+{
+    try
+    {
+        var ok = await connections.DeleteAsync(id, ct);
+        return ok ? Results.NoContent() : Results.NotFound();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: ex.Message);
+    }
+}).WithMetadata(gitAdmin);
+
+// Failure lands in the payload, not the status — the settings UI shows the
+// message either way (the storage provider test's convention).
+gitApi.MapPost("/connections/{id}/test", async (
+    string id, string? cloneUrl, IGitConnectionService connections, GitProviderCatalog catalog, CancellationToken ct) =>
+{
+    var secret = await connections.ResolveAsync(id, ct);
+    if (secret is null) return Results.NotFound();
+    return Results.Ok(await catalog.TestAsync(secret, cloneUrl, ct));
+}).WithMetadata(gitAdmin);
+
+gitApi.MapGet("/connections/{id}/available-repos", async (
+    string id, IGitConnectionService connections, GitProviderCatalog catalog, IGitRepoService repos, CancellationToken ct) =>
+{
+    var secret = await connections.ResolveAsync(id, ct);
+    if (secret is null) return Results.NotFound();
+    try
+    {
+        var available = await catalog.ListAsync(secret, ct);
+        // Flag what is already on the shelf so the picker greys it out.
+        var added = (await repos.ListAsync(ct))
+            .Where(r => r.ConnectionId == id)
+            .Select(r => r.CloneUrl)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return Results.Ok(available
+            .Select(r => added.Contains(r.CloneUrl) ? r with { Added = true } : r)
+            .ToList());
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["connection"] = [ex.Message] });
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+}).WithMetadata(gitAdmin);
+
+gitApi.MapPost("/connections/{id}/repos", async (
+    string id, AddGitRepoRequest body, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        var created = await repos.AddAsync(id, body, ct);
+        return Results.Created($"/api/git/repos/{created.Id}", created);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["repo"] = [ex.Message] });
+    }
+}).WithMetadata(gitAdmin);
+
+gitApi.MapGet("/repos", async (IGitRepoService repos, CancellationToken ct) =>
+    Results.Ok(await repos.ListAsync(ct)));
+
+gitApi.MapGet("/repos/{id}", async (string id, IGitRepoService repos, CancellationToken ct) =>
+{
+    var repo = await repos.GetAsync(id, ct);
+    return repo is null ? Results.NotFound() : Results.Ok(repo);
+});
+
+gitApi.MapPut("/repos/{id}", async (string id, UpdateGitRepoRequest body, IGitRepoService repos, CancellationToken ct) =>
+{
+    var updated = await repos.UpdateAsync(id, body, ct);
+    return updated is null ? Results.NotFound() : Results.Ok(updated);
+}).WithMetadata(gitAdmin);
+
+gitApi.MapDelete("/repos/{id}", async (string id, IGitRepoService repos, CancellationToken ct) =>
+    await repos.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound())
+    .WithMetadata(gitAdmin);
+
+gitApi.MapPost("/repos/{id}/sync", async (string id, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await repos.SyncAsync(id, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+// Content reads. Every path parameter goes through GitPaths (reject '..',
+// absolute paths, .git, symlink hops) inside the service — an ArgumentException
+// here is a client sending a path the jail refuses.
+gitApi.MapGet("/repos/{id}/tree", async (string id, string? path, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await repos.TreeAsync(id, path, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["path"] = [ex.Message] });
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+gitApi.MapGet("/repos/{id}/file", async (string id, string? path, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await repos.FileAsync(id, path, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["path"] = [ex.Message] });
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+// The byte stream — what <img> tags render and the Download button fetches.
+// Inline disposition: the browser decides, and nothing executable is served
+// from this origin as a page (the content type comes from the extension map).
+gitApi.MapGet("/repos/{id}/raw", async (string id, string? path, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        var (absolute, contentType, name) = await repos.RawAsync(id, path, ct);
+        return Results.File(absolute, contentType, fileDownloadName: name, enableRangeProcessing: true);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["path"] = [ex.Message] });
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+gitApi.MapGet("/repos/{id}/status", async (string id, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await repos.StatusAsync(id, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+gitApi.MapGet("/repos/{id}/branches", async (string id, IGitRepoService repos, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await repos.BranchesAsync(id, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
 
 // --- Export ---
 // PDF is produced in the browser (Print → Save as PDF) because rendering

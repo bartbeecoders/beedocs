@@ -47,6 +47,16 @@ import type {
   StorageProvider,
   StorageTestResult,
   UpdateStorageProviderRequest,
+  CreateGitConnectionRequest,
+  UpdateGitConnectionRequest,
+  GitAvailableRepo,
+  GitBranch,
+  GitConnection,
+  GitConnectionTestResult,
+  GitFile,
+  GitRepo,
+  GitStatus,
+  GitTreeEntry,
 } from './types'
 import { withApiBase } from './basePath'
 
@@ -761,6 +771,58 @@ export const api = {
       body: JSON.stringify({ providerId }),
       timeoutMs: 600_000,
     }),
+
+  // --- Git integration ---
+
+  listGitConnections: () => request<GitConnection[]>('/api/git/connections'),
+  createGitConnection: (body: CreateGitConnectionRequest) =>
+    request<GitConnection>('/api/git/connections', { method: 'POST', body: JSON.stringify(body) }),
+  updateGitConnection: (id: string, body: UpdateGitConnectionRequest) =>
+    request<GitConnection>(`/api/git/connections/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteGitConnection: (id: string) =>
+    request<void>(`/api/git/connections/${id}`, { method: 'DELETE' }),
+  /** Listing a whole DevOps org walks its projects — give it more than the 30s default. */
+  testGitConnection: (id: string, signal?: AbortSignal) =>
+    request<GitConnectionTestResult>(`/api/git/connections/${id}/test`, {
+      method: 'POST',
+      signal,
+      timeoutMs: 120_000,
+    }),
+  listGitAvailableRepos: (id: string, signal?: AbortSignal) =>
+    request<GitAvailableRepo[]>(`/api/git/connections/${id}/available-repos`, {
+      signal,
+      timeoutMs: 120_000,
+    }),
+  /** Answers immediately with status "cloning"; poll getGitRepo until ready|error. */
+  addGitRepo: (connectionId: string, body: { cloneUrl: string; name?: string; indexed?: boolean }) =>
+    request<GitRepo>(`/api/git/connections/${connectionId}/repos`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  listGitRepos: () => request<GitRepo[]>('/api/git/repos'),
+  getGitRepo: (id: string) => request<GitRepo>(`/api/git/repos/${id}`),
+  updateGitRepo: (id: string, body: { name?: string; indexed?: boolean }) =>
+    request<GitRepo>(`/api/git/repos/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteGitRepo: (id: string) => request<void>(`/api/git/repos/${id}`, { method: 'DELETE' }),
+  /** git pull, synchronous — proportional to what the remote has piled up. */
+  syncGitRepo: (id: string) =>
+    request<GitRepo>(`/api/git/repos/${id}/sync`, { method: 'POST', timeoutMs: 300_000 }),
+  getGitTree: (id: string, path?: string, signal?: AbortSignal) =>
+    request<GitTreeEntry[]>(
+      `/api/git/repos/${id}/tree${path ? `?path=${encodeURIComponent(path)}` : ''}`,
+      { signal },
+    ),
+  getGitFile: (id: string, path: string, signal?: AbortSignal) =>
+    request<GitFile>(`/api/git/repos/${id}/file?path=${encodeURIComponent(path)}`, { signal }),
+  /** URL of the byte stream — what <img> tags and Download links point at. */
+  gitRawUrl: (id: string, path: string) =>
+    withApiBase(`/api/git/repos/${id}/raw?path=${encodeURIComponent(path)}`),
+  getGitStatus: (id: string, signal?: AbortSignal) =>
+    request<GitStatus>(`/api/git/repos/${id}/status`, { signal }),
+  getGitBranches: (id: string) => request<GitBranch[]>(`/api/git/repos/${id}/branches`),
 
   /**
    * Multipart file upload (images, PDF, 3D models) →

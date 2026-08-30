@@ -18,7 +18,8 @@ RUN pnpm build
 # --- Runtime ---
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+# git backs the git-integration provider kinds (server-side clones).
+RUN apt-get update && apt-get install -y --no-install-recommends curl git && rm -rf /var/lib/apt/lists/*
 COPY --from=api-build /app/api ./
 COPY --from=web-build /web/dist ./wwwroot
 ENV ASPNETCORE_URLS=http://+:8080

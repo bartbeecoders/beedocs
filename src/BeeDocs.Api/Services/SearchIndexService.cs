@@ -715,6 +715,10 @@ public sealed partial class SearchIndexService(
     /// <summary>Workspace route for a hit, so clients can navigate without a lookup.</summary>
     private static string BuildUrl(string kind, string entityId, string? bookId) => kind switch
     {
+        // Git files: entity id is "{repoId}:{path}" (see GitSearchIndexer).
+        GitSearchIndexer.Kind when entityId.IndexOf(':') is > 0 and var split =>
+            $"/git/{entityId[..split]}/files/" + string.Join('/',
+                entityId[(split + 1)..].Split('/').Select(Uri.EscapeDataString)),
         "page" when bookId is not null => $"/books/{bookId}/pages/{entityId}",
         "diagram" when bookId is not null => $"/books/{bookId}/diagrams/{entityId}",
         "slides" when bookId is not null => $"/books/{bookId}/slides/{entityId}",

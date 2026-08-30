@@ -361,17 +361,55 @@ and a curl/UI exercise against a scratch instance (no test project exists yet;
 
 1. **Shared checkout acceptable for v1?** (§7 — single working copy, branch
    switching affects everyone on the instance.)
+
+   ok for me
+
 2. **Commit identity**: BeeDocs account name + email as author — is the
    `login@users.beedocs.local` fallback for email-less accounts OK, or should
    each user store a git email in their profile?
+
+   each user need to have their own git email in the profile
+
 3. **Azure DevOps shape**: connection per *organization* or per *project*?
    (Plan assumes org-level with optional project filter in `base_url`.)
+
+   per oganisation
+
 4. Is opt-in search indexing (§11) wanted early, or genuinely later?
+
+   early
+
 5. Any need to *render* non-Markdown docs richly (e.g. `.docx` in a repo), or
    is download enough there?
+
+    download is ok (we can add the render later)
 
 ---
 
 ## Log
 
 - 2026-08-30 — Plan written; branch `feature/git-integration` created. No code yet.
+- 2026-08-30 — Bart's answers to §15 recorded in place: shared checkout OK for
+  v1; commit identity needs a per-user git email in the profile (lands with
+  Phase 2's commit work — `app_user` gets a `git_email` column then); DevOps
+  per organization; search indexing pulled forward into Phase 1; download-only
+  for rich docs.
+- 2026-08-30 — **Phase 1 implemented** (read-only browsing + opt-in search):
+  - Backend: `git_connection`/`git_repo` tables; `GitCli` (hardened runner +
+    `GitPaths` jail), `GitConnectionService`, `GitRepoService` (background
+    clone → status row, sync = `pull --ff-only`), `GitProviderCatalog`
+    (GitHub + DevOps discovery, `ls-remote` test), `GitSearchIndexer`
+    (kind `gitfile`, direct `search_doc` writes); `/api/git/*` endpoints;
+    `gitfile` case in `SearchIndexService.BuildUrl`; Dockerfile installs git.
+  - Web: Settings → Git repositories (`GitConnections.tsx`), left-pane
+    "Repositories" section (`GitTree.tsx`, lazy folders), `/git/:repoId` +
+    `/git/:repoId/files/*` canvases (`GitCanvas.tsx`: README/Markdown render,
+    syntax-highlighted code, images, download; toolbar with branch,
+    ahead/behind, dirty count, Sync), properties pane repo facts, `gitfile`
+    group in Ctrl+K, `useGitRepos` store with clone polling.
+  - Verified against a scratch instance: clone/status/tree/file (blob sha
+    matches git's), sync, branches, GitHub discovery (octocat), search
+    index + unindex, raw streaming, traversal guards (`../`, `.git` → 400),
+    connection-delete refusal while repos exist, clone dir cleanup on delete.
+  - Deviation from §6: reads have no `ref=` parameter yet (working tree only —
+    ref-addressed reads arrive with history in Phase 3); `git.css` added.

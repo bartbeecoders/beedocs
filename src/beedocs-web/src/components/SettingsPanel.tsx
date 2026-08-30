@@ -6,6 +6,7 @@ import { ApiKeyPanel } from './ApiKeyPanel'
 import { RbaPanel } from './RbaPanel'
 import { LlmProviders } from './LlmProviders'
 import { StorageProviders } from './StorageProviders'
+import { GitConnections } from './GitConnections'
 import { UsersPanel } from './UsersPanel'
 import '../styles/llm-providers.css'
 import '../styles/storage-providers.css'
@@ -156,6 +157,14 @@ export function SettingsPanel({ onResetPanes }: Props) {
         <section className="settings-section">
           <h2>Storage providers</h2>
           <StorageProviders />
+        </section>
+      )}
+
+      {/* Git tokens are credentials too — the API answers only to admins. */}
+      {canManageUsers && (
+        <section className="settings-section">
+          <h2>Git repositories</h2>
+          <GitConnections />
         </section>
       )}
 

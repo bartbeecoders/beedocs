@@ -371,3 +371,51 @@ public sealed class Attachment
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
+
+/// <summary>
+/// A git account/organization the instance can reach — the "bookshelf" of the
+/// git integration. The token is write-only in the llm_provider.api_key sense:
+/// selected only by <c>GitConnectionService.ResolveAsync</c> to authenticate git
+/// and provider-API calls, never put in a DTO.
+/// </summary>
+public sealed class GitConnection
+{
+    public string Id { get; set; } = string.Empty;
+    /// <summary>github | azure-devops | git (see GitConnectionKinds).</summary>
+    public string Kind { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    /// <summary>
+    /// GitHub: the org/user to list repos for (blank = the token's user).
+    /// Azure DevOps: https://dev.azure.com/{organization}. Generic git: blank —
+    /// repos are added by pasting clone URLs.
+    /// </summary>
+    public string BaseUrl { get; set; } = string.Empty;
+    /// <summary>Basic-auth username sent with the PAT. DevOps accepts anything.</summary>
+    public string Username { get; set; } = string.Empty;
+    public string? Token { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
+/// A repository someone chose to put on the shelf: a row plus a server-side
+/// clone under BeeDocs:GitPath/{id}. Only management metadata lives here —
+/// branches, file lists and file bodies are asked of the clone live, so SQLite
+/// never becomes a second master of repo content.
+/// </summary>
+public sealed class GitRepo
+{
+    public string Id { get; set; } = string.Empty;
+    public string ConnectionId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string CloneUrl { get; set; } = string.Empty;
+    public string DefaultBranch { get; set; } = string.Empty;
+    /// <summary>cloning | ready | error — cloning is minutes-scale and async.</summary>
+    public string Status { get; set; } = "cloning";
+    public string? LastError { get; set; }
+    /// <summary>Whether text files are indexed for Ctrl+K search (kind 'gitfile').</summary>
+    public bool Indexed { get; set; }
+    public DateTimeOffset? FetchedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
