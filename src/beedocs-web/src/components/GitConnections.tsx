@@ -404,7 +404,7 @@ export function GitConnections() {
                       {c.kind === 'github'
                         ? 'A fine-grained PAT with Contents read (write for later phases) is enough.'
                         : c.kind === 'azure-devops'
-                          ? 'A PAT with Code (Read) — Read & write once editing lands.'
+                          ? 'A PAT with Code (Read) for this organization. Organization URL or just the org name.'
                           : 'Only https clone URLs are supported. Leave the token empty for public repos.'}{' '}
                       A token is stored server-side; leave the box blank to keep it, or save with a
                       new one to replace it.

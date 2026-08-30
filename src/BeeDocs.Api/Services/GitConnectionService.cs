@@ -244,17 +244,65 @@ public sealed class GitConnectionService(SqliteConnectionFactory db) : IGitConne
         }
 
         if (kind == GitConnectionKinds.AzureDevOps)
-        {
-            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
-                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-            {
-                throw new ArgumentException(
-                    $"'{raw}' must be the organization URL, e.g. https://dev.azure.com/my-org.");
-            }
-            return value;
-        }
+            return NormalizeAzureDevOpsBaseUrl(raw!, value);
 
         return string.Empty;
+    }
+
+    /// <summary>
+    /// Accepts https://dev.azure.com/{org}, https://{org}.visualstudio.com,
+    /// extra project path, or a bare org name. Always stored as
+    /// https://dev.azure.com/{org} for Azure DevOps Services.
+    /// </summary>
+    private static string NormalizeAzureDevOpsBaseUrl(string raw, string value)
+    {
+        if (!value.Contains('/') && !value.Contains('\\')
+            && value.IndexOf('.') < 0 && !value.Contains(':'))
+        {
+            if (value.Contains(' '))
+                throw new ArgumentException($"'{raw}' is not an Azure DevOps organization name.");
+            return "https://dev.azure.com/" + value;
+        }
+
+        if (!value.Contains("://", StringComparison.Ordinal))
+            value = "https://" + value;
+
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new ArgumentException(
+                $"'{raw}' must be the organization URL, e.g. https://dev.azure.com/my-org.");
+        }
+
+        var host = uri.Host;
+        if (host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase))
+        {
+            var org = host[..^".visualstudio.com".Length];
+            if (string.IsNullOrEmpty(org) || org.Contains('.'))
+            {
+                throw new ArgumentException(
+                    $"'{raw}' must be https://{{org}}.visualstudio.com or https://dev.azure.com/{{org}}.");
+            }
+
+            return "https://dev.azure.com/" + org;
+        }
+
+        if (host.Equals("dev.azure.com", StringComparison.OrdinalIgnoreCase)
+            || host.Equals("www.dev.azure.com", StringComparison.OrdinalIgnoreCase))
+        {
+            var org = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault();
+            if (string.IsNullOrEmpty(org) || org.StartsWith('_') || org.Contains(' '))
+            {
+                throw new ArgumentException(
+                    $"'{raw}' is missing the organization name. Use https://dev.azure.com/my-org.");
+            }
+
+            return "https://dev.azure.com/" + org;
+        }
+
+        // Azure DevOps Server / custom host — keep scheme+host+path.
+        return uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
     }
 
     private static string? NormalizeToken(string? raw) =>

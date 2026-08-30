@@ -127,8 +127,19 @@ builder.Services.AddSingleton<GitAssistService>();
 builder.Services.AddSingleton(new GitFetchOptions(
     builder.Configuration.GetValue("BeeDocs:GitFetchMinutes", 0)));
 builder.Services.AddHostedService<GitFetchService>();
-builder.Services.AddHttpClient(GitProviderCatalog.HttpClientName,
-    client => client.Timeout = TimeSpan.FromMinutes(2));
+builder.Services.AddHttpClient(GitProviderCatalog.HttpClientName, client =>
+    {
+        client.Timeout = TimeSpan.FromMinutes(2);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("BeeDocs");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        // Azure DevOps 302s older orgs from dev.azure.com → {org}.visualstudio.com.
+        // The default handler drops Authorization on that hop, and the follow-up
+        // is a 203 HTML sign-in page. Catalog code follows trusted hosts itself.
+        AllowAutoRedirect = false,
+        UseCookies = false,
+    });
 
 // Imported archives carry their images, so the 30 MB Kestrel default is too
 // tight for a book of screenshots. Individual uploads are capped by type in

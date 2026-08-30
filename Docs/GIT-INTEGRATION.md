@@ -33,7 +33,7 @@ UI (GitTree/GitCanvas) → /api/git/* → GitRepoService → GitCli → git(1) �
 | Kind | Discovery | Base URL field | Auth |
 |---|---|---|---|
 | `github` | org/user repos via api.github.com | org or user name; blank = what the token can access | fine-grained PAT, Contents read |
-| `azure-devops` | walks the org's projects → repos | `https://dev.azure.com/{org}` (one connection per organization) | PAT, Code (Read) |
+| `azure-devops` | org-level git repositories list | `https://dev.azure.com/{org}` (one connection per organization; org name or `{org}.visualstudio.com` also accepted) | PAT, Code (Read) |
 | `git` | none — paste clone URLs | — | optional PAT for private remotes |
 
 Only **https** clone URLs are accepted. Tokens are write-only
