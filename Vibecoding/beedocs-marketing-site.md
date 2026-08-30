@@ -15,3 +15,8 @@ Update the marketing site with the latest features (grid pages, isometric).
 Add a releases page, which shows all the releases and improvements
 
 Include more screenshots and working videos of new features.
+
+
+Add following improvements to the bedocshome site:
+- light/dark theme toggle
+- clear indication of the latest release

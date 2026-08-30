@@ -57,3 +57,6 @@ Use the beedocs mcp to create a book with pages describing in detail, with Beedi
 /run/media/bart/Development/dev/bartbeecoders/InSyncBee
 
 Make it technical.
+
+
+Add as AI providers claude CLI and grok CLI. Meaning when running the app locally (within omarchy as an app or locally in a browser), let it connect to the default model that is used by the installed claude code or grok cli.
