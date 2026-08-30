@@ -47,7 +47,7 @@
       <a href="#agents">Agents</a>
       <a href="#desktop">Desktop</a>
       <a href="#selfhost">Self-host</a>
-      <a href="releases.html">Releases<span class="nav-badge">v0.6</span></a>
+      <a href="releases.html">Releases<span class="nav-badge">v0.7</span></a>
     </nav>
     <div class="head-actions">
       <a class="btn btn-ghost" href="https://github.com/bartbeecoders/beedocs" rel="noopener">
@@ -71,8 +71,8 @@
       <div class="hero-copy">
         <p class="eyebrow"><span class="dot" aria-hidden="true"></span>self-hosted · single container · SQLite inside</p>
         <a class="release-flag" href="releases.html">
-          <span class="flag-badge">v0.6</span>
-          <span>New: attachments, favorites &amp; desktop plugin</span>
+          <span class="flag-badge">v0.7</span>
+          <span>New: git repos on the shelf &amp; AI-drafted docs</span>
           <span class="flag-arrow" aria-hidden="true">→</span>
         </a>
         <h1>Documentation that draws its own architecture.</h1>
@@ -243,6 +243,21 @@
           <p>Every page keeps a change log of who left it in what state. Owners
              can turn on full revision copies, with pruning they control.</p>
         </article>
+        <article class="card">
+          <h3>Git repos on the shelf</h3>
+          <p>Connect GitHub, Azure DevOps or any clone URL and browse repos like
+             books — Markdown rendered, code highlighted, edits saved, committed
+             and pushed from the workspace, with history and diffs one click
+             away.</p>
+        </article>
+        <article class="card">
+          <h3>AI-drafted docs, your model</h3>
+          <p>Right-click a repo and let your own AI provider — OpenRouter,
+             OpenAI, xAI, LM&nbsp;Studio, or the <span class="mono">claude</span>
+             / <span class="mono">grok</span> CLI already on your machine —
+             draft its README, documentation or user manual. Nothing lands
+             without your review and commit.</p>
+        </article>
       </div>
     </div>
   </section>
@@ -325,8 +340,10 @@
         <h2>Your agents write here too.</h2>
         <p>BeeDocs ships an MCP server that wraps the whole API: create books,
            write pages, build BeeDiagrams and isometric views, assemble slide
-           decks, search the library. Add a shape to the palette and a generated
-           catalog carries it to your agents — no second edit.</p>
+           decks, search the library — and work the git shelf, from reading a
+           file at any ref to branching, committing and pushing. Add a shape to
+           the palette and a generated catalog carries it to your agents — no
+           second edit.</p>
         <p>Connect Claude Code, Cursor, VS&nbsp;Code or Claude Desktop over stdio
            or HTTP, with optional bearer-token auth in front.</p>
         <ul class="chip-row" aria-label="Example MCP tools">
@@ -334,6 +351,7 @@
           <li class="mono">beedocs_create_beediagram_with_nodes</li>
           <li class="mono">beedocs_create_isometric_with_items</li>
           <li class="mono">beedocs_search</li>
+          <li class="mono">beedocs_git_commit</li>
         </ul>
       </div>
       <div class="split-panel">
