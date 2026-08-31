@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useI18n, type MessageKey, type TFunction } from '../i18n'
 import {
   isTreeDrag,
@@ -8,6 +8,8 @@ import {
 import {
   cellStyleClass,
   CELL_STYLES,
+  clampMdRowHeight,
+  MIN_MD_ROW_HEIGHT,
   parseMarkdownTable,
   serializeMarkdownTable,
   tableThemeClass,
@@ -25,6 +27,9 @@ type Props = {
 /** A live drag of one row or one column, by source index. */
 type DragState = { kind: 'row' | 'col'; from: number } | null
 
+/** A live drag of a row's bottom edge, resizing that row. */
+type ResizeState = { row: number | 'h'; startY: number; startH: number }
+
 /** The cell a library-tree drag is hovering: 'h' = the header row. */
 type LinkCell = { r: number | 'h'; c: number } | null
 
@@ -33,10 +38,10 @@ type StylePopover = { r: number | 'h'; c: number; left: number; top: number } | 
 
 /**
  * Grid designer over a Markdown pipe table: edit cells in place, add, remove
- * and drag-reorder rows and columns. Cell edits live in a local model so typed
- * spaces are not trimmed out from under the cursor by a serialize/parse round
- * trip; the model re-syncs only when the incoming raw is not our own last
- * emission.
+ * and drag-reorder rows and columns, and drag a row's bottom edge to set its
+ * height. Cell edits live in a local model so typed spaces are not trimmed out
+ * from under the cursor by a serialize/parse round trip; the model re-syncs
+ * only when the incoming raw is not our own last emission.
  *
  * Reordering follows the page's block-reorder conventions: drags start on a
  * grip (so dragging in a cell input still selects text), drops target the gap
@@ -51,6 +56,8 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
   const [draft, setDraft] = useState(raw)
   const [drag, setDrag] = useState<DragState>(null)
   const [overGap, setOverGap] = useState<number | null>(null)
+  const [resize, setResize] = useState<ResizeState | null>(null)
+  const [liveHeight, setLiveHeight] = useState<number | null>(null)
   const [linkCell, setLinkCell] = useState<LinkCell>(null)
   const [stylePopover, setStylePopover] = useState<StylePopover>(null)
   const lastEmitted = useRef(raw)
@@ -100,6 +107,49 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
     lastEmitted.current = md
     onChange(md)
   }
+
+  const commitRef = useRef(commit)
+  commitRef.current = commit
+  const modelRef = useRef(model)
+  modelRef.current = model
+  const liveHeightRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!resize) return
+    const prevCursor = document.body.style.cursor
+    const prevUserSelect = document.body.style.userSelect
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+    const move = (e: MouseEvent) => {
+      const h = clampMdRowHeight(resize.startH + (e.clientY - resize.startY))
+      liveHeightRef.current = h
+      setLiveHeight(h)
+    }
+    const up = () => {
+      const h = liveHeightRef.current
+      const m = modelRef.current
+      if (m && h != null && Math.abs(h - resize.startH) >= 2) {
+        if (resize.row === 'h') commitRef.current({ ...m, headerHeight: h })
+        else {
+          commitRef.current({
+            ...m,
+            rowHeights: m.rowHeights.map((x, i) => (i === resize.row ? h : x)),
+          })
+        }
+      }
+      setResize(null)
+      setLiveHeight(null)
+      liveHeightRef.current = null
+    }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+    return () => {
+      document.body.style.cursor = prevCursor
+      document.body.style.userSelect = prevUserSelect
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+    }
+  }, [resize])
 
   // Source edits commit on blur, not per keystroke: a half-typed separator line
   // is no longer a table, and emitting it would unmount this block mid-edit.
@@ -239,6 +289,7 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
       ...model,
       rows: [...model.rows, Array<string>(cols).fill('')],
       cellStyles: [...model.cellStyles, Array<string | null>(cols).fill(null)],
+      rowHeights: [...model.rowHeights, null],
     })
 
   const removeRow = (r: number) =>
@@ -246,6 +297,7 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
       ...model,
       rows: model.rows.filter((_, i) => i !== r),
       cellStyles: model.cellStyles.filter((_, i) => i !== r),
+      rowHeights: model.rowHeights.filter((_, i) => i !== r),
     })
 
   const addColumn = () =>
@@ -281,7 +333,12 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
       return a
     }
     if (!model.rows[from]) return
-    commit({ ...model, rows: reorder(model.rows), cellStyles: reorder(model.cellStyles) })
+    commit({
+      ...model,
+      rows: reorder(model.rows),
+      cellStyles: reorder(model.cellStyles),
+      rowHeights: reorder(model.rowHeights),
+    })
   }
 
   /** Move a column (header, alignment, styles and every row's cell) to sit before gap `to`. */
@@ -425,6 +482,84 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
     return (cls ? ' ' + cls : '') + active
   }
 
+  const storedHeight = (row: number | 'h'): number | null =>
+    row === 'h' ? model.headerHeight : (model.rowHeights[row] ?? null)
+
+  const heightOf = (row: number | 'h'): number | null =>
+    resize?.row === row ? liveHeight : storedHeight(row)
+
+  const rowStyle = (row: number | 'h'): CSSProperties | undefined => {
+    const h = heightOf(row)
+    return h != null ? ({ ['--md-row-h']: `${h}px` } as CSSProperties) : undefined
+  }
+
+  const rowSizedClass = (row: number | 'h'): string => {
+    const parts: string[] = []
+    if (heightOf(row) != null) parts.push('md-table-row--sized')
+    if (resize?.row === row) parts.push('is-row-resizing')
+    return parts.length ? ' ' + parts.join(' ') : ''
+  }
+
+  const commitHeight = (row: number | 'h', height: number | null) => {
+    if (row === 'h') commit({ ...model, headerHeight: height })
+    else {
+      commit({
+        ...model,
+        rowHeights: model.rowHeights.map((x, i) => (i === row ? height : x)),
+      })
+    }
+  }
+
+  const startResize = (e: React.MouseEvent, row: number | 'h') => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    const tr = (e.currentTarget as HTMLElement).closest('tr')
+    const current = storedHeight(row)
+    const startH = clampMdRowHeight(
+      current ?? Math.round(tr?.getBoundingClientRect().height ?? MIN_MD_ROW_HEIGHT),
+    )
+    liveHeightRef.current = startH
+    setLiveHeight(startH)
+    setResize({ row, startY: e.clientY, startH })
+  }
+
+  const rowResizer = (row: number | 'h', c: number) => (
+    <button
+      type="button"
+      className="md-table-row-resizer"
+      tabIndex={c === 0 ? 0 : -1}
+      aria-hidden={c === 0 ? undefined : true}
+      aria-label={
+        c === 0
+          ? row === 'h'
+            ? t('editor.table.resizeHeaderAria')
+            : t('editor.table.resizeRowAria', { n: row + 1 })
+          : undefined
+      }
+      title={c === 0 ? t('editor.table.resizeRowTitle') : undefined}
+      onMouseDown={(e) => startResize(e, row)}
+      onDoubleClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        commitHeight(row, null)
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Delete' && e.key !== 'Backspace') {
+          return
+        }
+        e.preventDefault()
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          commitHeight(row, null)
+          return
+        }
+        const tr = (e.currentTarget as HTMLElement).closest('tr')
+        const base = storedHeight(row) ?? Math.round(tr?.getBoundingClientRect().height ?? MIN_MD_ROW_HEIGHT)
+        commitHeight(row, clampMdRowHeight(base + (e.key === 'ArrowDown' ? 8 : -8)))
+      }}
+    />
+  )
+
   const styleButton = (r: number | 'h', c: number) => (
     <button
       type="button"
@@ -441,7 +576,7 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
   )
 
   return (
-    <div className="md-table-editor" ref={rootRef}>
+    <div className={`md-table-editor${resize ? ' is-row-resizing' : ''}`} ref={rootRef}>
       <Chrome
         summary={summarize(model, t)}
         showSource={false}
@@ -457,7 +592,7 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
       <div className="md-table-scroll">
         <table className={`md-table ${tableThemeClass(model.theme)}`.trimEnd()}>
           <thead>
-            <tr>
+            <tr className={`md-table-row${rowSizedClass('h')}`} style={rowStyle('h')}>
               <th className="md-table-rowctl" aria-hidden />
               {model.header.map((h, c) => (
                 <th
@@ -510,6 +645,7 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
                       ×
                     </button>
                   </div>
+                  {rowResizer('h', c)}
                 </th>
               ))}
               <th className="md-table-rowctl" aria-hidden />
@@ -517,7 +653,11 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
           </thead>
           <tbody>
             {model.rows.map((row, r) => (
-              <tr key={`r-${r}`} className={`md-table-row${rowClass(r)}`}>
+              <tr
+                key={`r-${r}`}
+                className={`md-table-row${rowClass(r)}${rowSizedClass(r)}`}
+                style={rowStyle(r)}
+              >
                 <td className="md-table-rowctl" {...cellTargetProps(r, 0)}>
                   <button
                     type="button"
@@ -569,6 +709,7 @@ export function MarkdownTableEditor({ raw, onChange, onRemove }: Props) {
                       title={t('editor.table.lineBreakTitle')}
                     />
                     {styleButton(r, c)}
+                    {rowResizer(r, c)}
                   </td>
                 ))}
                 <td className="md-table-rowctl" {...cellTargetProps(r, cols)}>

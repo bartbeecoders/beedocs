@@ -173,6 +173,10 @@ const en = {
   'editor.table.moveColAria': 'Move column {n}. Drag, or use arrow left and right.',
   'editor.table.moveColTitle': 'Drag to reorder · ← / → to move',
   'editor.table.moveRowAria': 'Move row {n}. Drag, or use arrow up and down.',
+  'editor.table.resizeRowTitle': 'Drag to change height · double-click to reset',
+  'editor.table.resizeRowAria': 'Change height of row {n}. Drag, or use arrow up and down. Delete to reset.',
+  'editor.table.resizeHeaderAria':
+    'Change height of the header row. Drag, or use arrow up and down. Delete to reset.',
   'editor.table.removeCol': 'Remove column',
   'editor.table.removeColAria': 'Remove column {n}',
   'editor.table.removeRow': 'Remove row',
@@ -383,6 +387,11 @@ const fr: Msgs = {
   'editor.table.moveColAria': 'Déplacer la colonne {n}. Glissez, ou utilisez les flèches gauche et droite.',
   'editor.table.moveColTitle': 'Glisser pour réordonner · ← / → pour déplacer',
   'editor.table.moveRowAria': 'Déplacer la ligne {n}. Glissez, ou utilisez les flèches haut et bas.',
+  'editor.table.resizeRowTitle': 'Glisser pour changer la hauteur · double-clic pour réinitialiser',
+  'editor.table.resizeRowAria':
+    'Modifier la hauteur de la ligne {n}. Glissez, ou utilisez les flèches haut et bas. Suppr pour réinitialiser.',
+  'editor.table.resizeHeaderAria':
+    'Modifier la hauteur de la ligne d’en-tête. Glissez, ou utilisez les flèches haut et bas. Suppr pour réinitialiser.',
   'editor.table.removeCol': 'Supprimer la colonne',
   'editor.table.removeColAria': 'Supprimer la colonne {n}',
   'editor.table.removeRow': 'Supprimer la ligne',
@@ -591,6 +600,11 @@ const de: Msgs = {
   'editor.table.moveColAria': 'Spalte {n} verschieben. Ziehen, oder Pfeil links und rechts verwenden.',
   'editor.table.moveColTitle': 'Ziehen zum Umordnen · ← / → zum Verschieben',
   'editor.table.moveRowAria': 'Zeile {n} verschieben. Ziehen, oder Pfeil hoch und runter verwenden.',
+  'editor.table.resizeRowTitle': 'Ziehen, um die Höhe zu ändern · Doppelklick zum Zurücksetzen',
+  'editor.table.resizeRowAria':
+    'Höhe von Zeile {n} ändern. Ziehen, oder Pfeil hoch und runter verwenden. Entf zum Zurücksetzen.',
+  'editor.table.resizeHeaderAria':
+    'Höhe der Kopfzeile ändern. Ziehen, oder Pfeil hoch und runter verwenden. Entf zum Zurücksetzen.',
   'editor.table.removeCol': 'Spalte entfernen',
   'editor.table.removeColAria': 'Spalte {n} entfernen',
   'editor.table.removeRow': 'Zeile entfernen',
@@ -799,6 +813,11 @@ const es: Msgs = {
   'editor.table.moveColAria': 'Mover la columna {n}. Arrastra, o usa las flechas izquierda y derecha.',
   'editor.table.moveColTitle': 'Arrastra para reordenar · ← / → para mover',
   'editor.table.moveRowAria': 'Mover la fila {n}. Arrastra, o usa las flechas arriba y abajo.',
+  'editor.table.resizeRowTitle': 'Arrastre para cambiar la altura · doble clic para restablecer',
+  'editor.table.resizeRowAria':
+    'Cambiar la altura de la fila {n}. Arrastre, o use las flechas arriba y abajo. Supr para restablecer.',
+  'editor.table.resizeHeaderAria':
+    'Cambiar la altura de la fila de encabezado. Arrastre, o use las flechas arriba y abajo. Supr para restablecer.',
   'editor.table.removeCol': 'Eliminar columna',
   'editor.table.removeColAria': 'Eliminar la columna {n}',
   'editor.table.removeRow': 'Eliminar fila',
@@ -1006,6 +1025,11 @@ const nl: Msgs = {
   'editor.table.moveColAria': 'Kolom {n} verplaatsen. Sleep, of gebruik pijl links en rechts.',
   'editor.table.moveColTitle': 'Sleep om te herordenen · ← / → om te verplaatsen',
   'editor.table.moveRowAria': 'Rij {n} verplaatsen. Sleep, of gebruik pijl omhoog en omlaag.',
+  'editor.table.resizeRowTitle': 'Sleep om de hoogte te wijzigen · dubbelklikken om te herstellen',
+  'editor.table.resizeRowAria':
+    'Hoogte van rij {n} wijzigen. Sleep, of gebruik pijl omhoog en omlaag. Delete om te herstellen.',
+  'editor.table.resizeHeaderAria':
+    'Hoogte van de koprij wijzigen. Sleep, of gebruik pijl omhoog en omlaag. Delete om te herstellen.',
   'editor.table.removeCol': 'Kolom verwijderen',
   'editor.table.removeColAria': 'Kolom {n} verwijderen',
   'editor.table.removeRow': 'Rij verwijderen',
@@ -1212,6 +1236,11 @@ const ja: Msgs = {
   'editor.table.moveColAria': '列 {n} を移動します。ドラッグするか、左右の矢印キーを使います。',
   'editor.table.moveColTitle': 'ドラッグで並べ替え · ← / → で移動',
   'editor.table.moveRowAria': '行 {n} を移動します。ドラッグするか、上下の矢印キーを使います。',
+  'editor.table.resizeRowTitle': 'ドラッグして高さを変更 · ダブルクリックでリセット',
+  'editor.table.resizeRowAria':
+    '行 {n} の高さを変更します。ドラッグするか、上下の矢印キーを使います。Delete でリセット。',
+  'editor.table.resizeHeaderAria':
+    '見出し行の高さを変更します。ドラッグするか、上下の矢印キーを使います。Delete でリセット。',
   'editor.table.removeCol': '列を削除',
   'editor.table.removeColAria': '列 {n} を削除',
   'editor.table.removeRow': '行を削除',
@@ -1405,6 +1434,9 @@ const zh: Msgs = {
   'editor.table.moveColAria': '移动第 {n} 列。拖动，或使用左右方向键。',
   'editor.table.moveColTitle': '拖动以重新排序 · ← / → 移动',
   'editor.table.moveRowAria': '移动第 {n} 行。拖动，或使用上下方向键。',
+  'editor.table.resizeRowTitle': '拖动以更改高度 · 双击重置',
+  'editor.table.resizeRowAria': '更改第 {n} 行的高度。拖动，或使用上下方向键。Delete 重置。',
+  'editor.table.resizeHeaderAria': '更改表头行的高度。拖动，或使用上下方向键。Delete 重置。',
   'editor.table.removeCol': '删除列',
   'editor.table.removeColAria': '删除第 {n} 列',
   'editor.table.removeRow': '删除行',

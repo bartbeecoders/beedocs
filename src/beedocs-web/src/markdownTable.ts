@@ -18,6 +18,18 @@ export type MarkdownTable = {
   headerStyles: (string | null)[]
   /** Per-body-cell style ids, parallel to `rows`. Null = unstyled. */
   cellStyles: (string | null)[][]
+  /** Header row height in px. Null = size to content. */
+  headerHeight: number | null
+  /** Per-body-row height in px, parallel to `rows`. Null = size to content. */
+  rowHeights: (number | null)[]
+}
+
+/** Floor / ceiling for a designer-dragged row, in CSS pixels. */
+export const MIN_MD_ROW_HEIGHT = 24
+export const MAX_MD_ROW_HEIGHT = 480
+
+export function clampMdRowHeight(n: number): number {
+  return Math.max(MIN_MD_ROW_HEIGHT, Math.min(MAX_MD_ROW_HEIGHT, Math.round(n)))
 }
 
 /**
@@ -50,22 +62,31 @@ export const CELL_STYLES: ReadonlyArray<{ id: string; label: string }> = [
 /** One styled cell in the marker: row 'h' = the header row. */
 export type MarkerCell = { row: number | 'h'; col: number; style: string }
 
-export type TableMarker = { theme: string | null; cells: MarkerCell[] }
+/** One row-height override in the marker: row 'h' = the header row. */
+export type MarkerRowHeight = { row: number | 'h'; height: number }
+
+export type TableMarker = {
+  theme: string | null
+  cells: MarkerCell[]
+  rowHeights: MarkerRowHeight[]
+}
 
 const MARKER_LINE = /^<!--\s*bee-table:\s*(.*?)\s*-->$/
 const THEME_TOKEN = /^theme=([a-z][a-z0-9-]*)$/
 const CELLS_TOKEN = /^cells=(\S+)$/
+const ROWS_TOKEN = /^rows=(\S+)$/
 const CELL_REF = /^(?:h(\d+)|r(\d+)c(\d+)):([a-z][a-z0-9-]*)$/
+const ROW_H_REF = /^(h|\d+):(\d+)$/
 
 /**
- * Parse a `<!-- bee-table: theme=x cells=h0:accent,r1c2:ok -->` line. Null when
- * the line is not a bee-table marker at all; unknown tokens are skipped so a
- * newer document degrades gracefully in an older build.
+ * Parse a `<!-- bee-table: theme=x cells=h0:accent,r1c2:ok rows=h:40,0:72 -->`
+ * line. Null when the line is not a bee-table marker at all; unknown tokens are
+ * skipped so a newer document degrades gracefully in an older build.
  */
 export function parseTableMarker(line: string): TableMarker | null {
   const m = MARKER_LINE.exec(line.trim())
   if (!m) return null
-  const marker: TableMarker = { theme: null, cells: [] }
+  const marker: TableMarker = { theme: null, cells: [], rowHeights: [] }
   for (const token of m[1].split(/\s+/).filter(Boolean)) {
     const t = THEME_TOKEN.exec(token)
     if (t) {
@@ -73,18 +94,41 @@ export function parseTableMarker(line: string): TableMarker | null {
       continue
     }
     const cs = CELLS_TOKEN.exec(token)
-    if (!cs) continue
-    for (const ref of cs[1].split(',')) {
-      const r = CELL_REF.exec(ref)
+    if (cs) {
+      for (const ref of cs[1].split(',')) {
+        const r = CELL_REF.exec(ref)
+        if (!r) continue
+        marker.cells.push(
+          r[1] != null
+            ? { row: 'h', col: Number(r[1]), style: r[4] }
+            : { row: Number(r[2]), col: Number(r[3]), style: r[4] },
+        )
+      }
+      continue
+    }
+    const rs = ROWS_TOKEN.exec(token)
+    if (!rs) continue
+    for (const ref of rs[1].split(',')) {
+      const r = ROW_H_REF.exec(ref)
       if (!r) continue
-      marker.cells.push(
-        r[1] != null
-          ? { row: 'h', col: Number(r[1]), style: r[4] }
-          : { row: Number(r[2]), col: Number(r[3]), style: r[4] },
-      )
+      const n = Number(r[2])
+      if (!Number.isFinite(n) || n < MIN_MD_ROW_HEIGHT) continue
+      marker.rowHeights.push({
+        row: r[1] === 'h' ? 'h' : Number(r[1]),
+        height: clampMdRowHeight(n),
+      })
     }
   }
   return marker
+}
+
+/** Pixel height stored for `row`, or null when that row sizes to its content. */
+export function markerRowHeight(
+  marker: TableMarker | null | undefined,
+  row: number | 'h',
+): number | null {
+  const hit = marker?.rowHeights.find((x) => x.row === row)
+  return hit ? hit.height : null
 }
 
 function serializeTableMarker(table: MarkdownTable): string | null {
@@ -100,6 +144,12 @@ function serializeTableMarker(table: MarkdownTable): string | null {
     }),
   )
   if (refs.length) parts.push(`cells=${refs.join(',')}`)
+  const rowRefs: string[] = []
+  if (table.headerHeight != null) rowRefs.push(`h:${table.headerHeight}`)
+  table.rowHeights.forEach((h, r) => {
+    if (h != null) rowRefs.push(`${r}:${h}`)
+  })
+  if (rowRefs.length) parts.push(`rows=${rowRefs.join(',')}`)
   return parts.length ? `<!-- bee-table: ${parts.join(' ')} -->` : null
 }
 
@@ -251,7 +301,18 @@ export function parseMarkdownTable(raw: string): MarkdownTable | null {
     if (c.row === 'h') headerStyles[c.col] = c.style
     else if (c.row < rows.length) cellStyles[c.row][c.col] = c.style
   }
-  return { header, align, rows, theme: marker?.theme ?? null, headerStyles, cellStyles }
+  const headerHeight = markerRowHeight(marker, 'h')
+  const rowHeights: (number | null)[] = rows.map((_, r) => markerRowHeight(marker, r))
+  return {
+    header,
+    align,
+    rows,
+    theme: marker?.theme ?? null,
+    headerStyles,
+    cellStyles,
+    headerHeight,
+    rowHeights,
+  }
 }
 
 /** Serialize a cell model back to padded, aligned pipe-table Markdown. */
@@ -316,13 +377,24 @@ const addClass = (node: MdNode, cls: string) => {
   }
 }
 
+/** Append a CSS declaration onto an mdast node's hProperties.style string. */
+const appendStyle = (node: MdNode, extra: string) => {
+  const hp = node.data?.hProperties ?? {}
+  const prev = typeof hp.style === 'string' ? hp.style.trim() : ''
+  const sep = prev && !prev.endsWith(';') ? ';' : ''
+  node.data = {
+    ...node.data,
+    hProperties: { ...hp, style: `${prev}${sep}${extra}` },
+  }
+}
+
 /**
  * remark plugin: a marker comment before a table becomes a `bee-tbl--x` class
- * on the rendered `<table>` and `bee-cell--x` classes on the referenced cells.
- * The transfer must happen on the mdast tree — by the time react-markdown maps
- * components, the comment and the table are unrelated elements. The marker node
- * itself is dropped (react-markdown skips raw HTML anyway, but not under a
- * future rehype-raw).
+ * on the rendered `<table>`, `bee-cell--x` classes on the referenced cells, and
+ * a pixel height on any row the designer resized. The transfer must happen on
+ * the mdast tree — by the time react-markdown maps components, the comment and
+ * the table are unrelated elements. The marker node itself is dropped
+ * (react-markdown skips raw HTML anyway, but not under a future rehype-raw).
  */
 /**
  * remark plugin: an inline `<br>` becomes a hard-break node. react-markdown
@@ -365,6 +437,14 @@ export function remarkTableThemes() {
             const cellNode = rowNode?.children?.[ref.col]
             const cls = cellStyleClass(ref.style)
             if (cellNode && cls) addClass(cellNode, cls)
+          }
+          for (const rh of marker.rowHeights) {
+            const rowNode = rh.row === 'h' ? tableRows[0] : tableRows[rh.row + 1]
+            if (!rowNode) continue
+            appendStyle(rowNode, `height:${rh.height}px`)
+            for (const cell of rowNode.children ?? []) {
+              appendStyle(cell, `min-height:${rh.height}px`)
+            }
           }
           kids.splice(i, 1)
           i--

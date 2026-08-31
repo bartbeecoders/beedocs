@@ -5988,8 +5988,12 @@ html[data-theme='high-contrast'] {
 
 /* :where keeps the stripe at (0,2,1) so the later drag/link highlights still win. */
 .md-table td:not(.md-table-rowctl) {
-  position: relative; /* anchors the cell-style button */
+  position: relative; /* anchors the cell-style button and the row-resize handle */
   background: var(--cell-bg, var(--tbl-cell-bg, transparent));
+}
+
+.md-table th.md-table-col {
+  position: relative; /* same handles on the header row */
 }
 
 .md-table :where(tbody tr:nth-child(even)) td:not(.md-table-rowctl) {
@@ -6010,11 +6014,64 @@ html[data-theme='high-contrast'] {
 }
 
 /* Body cells are textareas so Shift+Enter can break a line; they size by their
-   rows attribute (kept at the cell's line count), never by a drag handle. */
+   rows attribute (kept at the cell's line count) unless the row was dragged
+   taller — then --md-row-h from the designer wins. */
 .md-table textarea {
   display: block;
   resize: none;
   overflow: hidden;
+  box-sizing: border-box;
+}
+
+.md-table-editor.is-row-resizing {
+  cursor: row-resize;
+  user-select: none;
+}
+
+.md-table tr.md-table-row--sized {
+  height: var(--md-row-h);
+}
+
+.md-table tr.md-table-row--sized > td:not(.md-table-rowctl) {
+  vertical-align: top;
+}
+
+.md-table tr.md-table-row--sized textarea {
+  height: var(--md-row-h);
+  overflow-y: auto;
+}
+
+.md-table thead tr.md-table-row--sized .md-table-headcell {
+  min-height: var(--md-row-h);
+  box-sizing: border-box;
+}
+
+/* Bottom-edge handle: drag to set a row's height, double-click to size-to-content.
+   One handle per cell so the whole row border is a hit target; :has lights them
+   all when any is hovered. */
+.md-table-row-resizer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 7px;
+  z-index: 3;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  cursor: row-resize;
+  opacity: 0;
+  touch-action: none;
+  user-select: none;
+}
+
+.md-table-row-resizer:hover,
+.md-table-row-resizer:focus-visible,
+.md-table tr:has(.md-table-row-resizer:hover) .md-table-row-resizer,
+.md-table tr.is-row-resizing .md-table-row-resizer {
+  opacity: 1;
+  background: var(--accent);
 }
 
 .md-table th input {

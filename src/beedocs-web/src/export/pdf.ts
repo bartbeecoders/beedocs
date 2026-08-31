@@ -4,7 +4,13 @@ import { withApiBase } from '../basePath'
 import { getBrandTitle } from '../branding'
 import { excelGridToHtml } from '../excelgrid/model'
 import { freeDrawToSvg } from '../freedraw/model'
-import { cellStyleClass, parseTableMarker, tableThemeClass, type TableMarker } from '../markdownTable'
+import {
+  cellStyleClass,
+  markerRowHeight,
+  parseTableMarker,
+  tableThemeClass,
+  type TableMarker,
+} from '../markdownTable'
 import { isLayoutMarkerLine, parsePageLayout } from '../pageLayout'
 import type { Chapter, Page } from '../types'
 import { beeDiagramToSvg } from './beeDiagramSvg'
@@ -306,14 +312,18 @@ function renderProse(text: string): string {
       const cls = ref ? cellStyleClass(ref.style) : ''
       return cls ? ` class="${cls}"` : ''
     }
+    const rowAttr = (row: number | 'h'): string => {
+      const h = markerRowHeight(marker, row)
+      return h != null ? ` style="height:${h}px"` : ''
+    }
     const [header, ...rest] = tableRows
     // skip separator row |---|
     const body = rest.filter((r) => !r.every((c) => /^:?-+:?$/.test(c.trim())))
-    out.push(`<table${themeCls ? ` class="${themeCls}"` : ''}><thead><tr>`)
+    out.push(`<table${themeCls ? ` class="${themeCls}"` : ''}><thead><tr${rowAttr('h')}>`)
     header.forEach((c, ci) => out.push(`<th${cellAttr('h', ci)}>${inlineMd(c.trim())}</th>`))
     out.push('</tr></thead><tbody>')
     body.forEach((row, ri) => {
-      out.push('<tr>')
+      out.push(`<tr${rowAttr(ri)}>`)
       row.forEach((c, ci) => out.push(`<td${cellAttr(ri, ci)}>${inlineMd(c.trim())}</td>`))
       out.push('</tr>')
     })
