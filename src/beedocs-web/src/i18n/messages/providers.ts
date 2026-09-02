@@ -159,6 +159,13 @@ const en = {
   'providers.rbaAppCode': 'Application code',
   'providers.rbaPlantCode': 'Plant code (optional — empty accepts any plant)',
   'providers.rbaSyncRoles': 'Re-sync roles from RBA groups on every login',
+  'providers.rbaOffline': 'Offline mode — this server cannot reach RBA (only the users’ browsers can)',
+  'providers.rbaOfflineHint':
+    'Sign-in still happens in the browser. Paste RBA’s public keys ({url}) below so tokens can be verified without contacting RBA. Roles are then managed locally on the Users page — new accounts start as viewer, and role sync from RBA groups is off. If RBA ever rotates its keys, update the paste once.',
+  'providers.rbaJwks': 'RBA public keys (JWKS JSON)',
+  'providers.rbaJwksFetch': 'Fetch via this browser',
+  'providers.rbaJwksFetchFailed':
+    'Could not fetch from this browser (CORS or connectivity) — open {url} yourself and paste the JSON here.',
   'providers.rbaAdminNotice': 'Before signing out, make sure your own RBA account holds an admin group (e.g. {group}) — with RBA on, it is the only way back to this page. Your current session stays valid either way.',
   'providers.rbaSave': 'Save sign-in settings',
   'providers.rbaRevert': 'Revert to server configuration',
@@ -331,6 +338,13 @@ const fr: Msgs = {
   'providers.rbaAppCode': 'Code application',
   'providers.rbaPlantCode': 'Code site (facultatif — vide accepte tous les sites)',
   'providers.rbaSyncRoles': 'Resynchroniser les rôles depuis les groupes RBA à chaque connexion',
+  'providers.rbaOffline': 'Mode hors ligne — ce serveur ne peut pas joindre RBA (seuls les navigateurs des utilisateurs le peuvent)',
+  'providers.rbaOfflineHint':
+    'La connexion se fait toujours dans le navigateur. Collez ci-dessous les clés publiques de RBA ({url}) pour vérifier les jetons sans contacter RBA. Les rôles sont alors gérés localement sur la page Utilisateurs — les nouveaux comptes démarrent en lecteur, et la synchronisation des rôles depuis les groupes RBA est désactivée. Si RBA change un jour ses clés, mettez à jour le collage une fois.',
+  'providers.rbaJwks': 'Clés publiques RBA (JSON JWKS)',
+  'providers.rbaJwksFetch': 'Récupérer via ce navigateur',
+  'providers.rbaJwksFetchFailed':
+    'Impossible de récupérer depuis ce navigateur (CORS ou connectivité) — ouvrez {url} vous-même et collez le JSON ici.',
   'providers.rbaAdminNotice': 'Avant de vous déconnecter, vérifiez que votre propre compte RBA appartient à un groupe administrateur (p. ex. {group}) — avec RBA activé, c’est le seul moyen de revenir sur cette page. Votre session actuelle reste valide dans tous les cas.',
   'providers.rbaSave': 'Enregistrer les paramètres de connexion',
   'providers.rbaRevert': 'Revenir à la configuration du serveur',
@@ -500,6 +514,13 @@ const de: Msgs = {
   'providers.rbaAppCode': 'Anwendungscode',
   'providers.rbaPlantCode': 'Werkscode (optional — leer akzeptiert jedes Werk)',
   'providers.rbaSyncRoles': 'Rollen bei jeder Anmeldung neu aus den RBA-Gruppen übernehmen',
+  'providers.rbaOffline': 'Offline-Modus — dieser Server erreicht RBA nicht (nur die Browser der Benutzer können das)',
+  'providers.rbaOfflineHint':
+    'Die Anmeldung läuft weiterhin im Browser. Fügen Sie unten die öffentlichen Schlüssel von RBA ({url}) ein, damit Token ohne Kontakt zu RBA geprüft werden können. Rollen werden dann lokal auf der Benutzerseite verwaltet — neue Konten starten als Betrachter, und die Rollenübernahme aus den RBA-Gruppen ist aus. Sollte RBA seine Schlüssel je wechseln, aktualisieren Sie den Eintrag einmal.',
+  'providers.rbaJwks': 'Öffentliche RBA-Schlüssel (JWKS-JSON)',
+  'providers.rbaJwksFetch': 'Über diesen Browser abrufen',
+  'providers.rbaJwksFetchFailed':
+    'Abruf über diesen Browser nicht möglich (CORS oder Verbindung) — öffnen Sie {url} selbst und fügen Sie das JSON hier ein.',
   'providers.rbaAdminNotice': 'Stellen Sie vor dem Abmelden sicher, dass Ihr eigenes RBA-Konto eine Administratorgruppe hat (z. B. {group}) — mit aktiviertem RBA ist das der einzige Weg zurück zu dieser Seite. Ihre aktuelle Sitzung bleibt in jedem Fall gültig.',
   'providers.rbaSave': 'Anmeldeeinstellungen speichern',
   'providers.rbaRevert': 'Zur Serverkonfiguration zurückkehren',
@@ -669,6 +690,13 @@ const es: Msgs = {
   'providers.rbaAppCode': 'Código de aplicación',
   'providers.rbaPlantCode': 'Código de planta (opcional — vacío acepta cualquier planta)',
   'providers.rbaSyncRoles': 'Resincronizar los roles desde los grupos RBA en cada inicio de sesión',
+  'providers.rbaOffline': 'Modo sin conexión — este servidor no puede alcanzar RBA (solo los navegadores de los usuarios pueden)',
+  'providers.rbaOfflineHint':
+    'El inicio de sesión sigue ocurriendo en el navegador. Pega abajo las claves públicas de RBA ({url}) para verificar los tokens sin contactar con RBA. Los roles se gestionan entonces localmente en la página de Usuarios — las cuentas nuevas empiezan como lector, y la sincronización de roles desde los grupos RBA queda desactivada. Si RBA rota sus claves algún día, actualiza el pegado una vez.',
+  'providers.rbaJwks': 'Claves públicas de RBA (JSON JWKS)',
+  'providers.rbaJwksFetch': 'Obtener con este navegador',
+  'providers.rbaJwksFetchFailed':
+    'No se pudo obtener desde este navegador (CORS o conectividad) — abre {url} tú mismo y pega el JSON aquí.',
   'providers.rbaAdminNotice': 'Antes de cerrar sesión, asegúrate de que tu propia cuenta RBA pertenezca a un grupo de administrador (p. ej. {group}) — con RBA activado, es la única forma de volver a esta página. Tu sesión actual sigue siendo válida en cualquier caso.',
   'providers.rbaSave': 'Guardar configuración de acceso',
   'providers.rbaRevert': 'Volver a la configuración del servidor',
@@ -838,6 +866,13 @@ const nl: Msgs = {
   'providers.rbaAppCode': 'Applicatiecode',
   'providers.rbaPlantCode': 'Fabriekscode (optioneel — leeg accepteert elke fabriek)',
   'providers.rbaSyncRoles': 'Rollen bij elke aanmelding opnieuw uit de RBA-groepen overnemen',
+  'providers.rbaOffline': 'Offline-modus — deze server kan RBA niet bereiken (alleen de browsers van gebruikers kunnen dat)',
+  'providers.rbaOfflineHint':
+    'Aanmelden gebeurt nog steeds in de browser. Plak hieronder de publieke sleutels van RBA ({url}) zodat tokens zonder contact met RBA geverifieerd kunnen worden. Rollen worden dan lokaal beheerd op de pagina Gebruikers — nieuwe accounts starten als lezer, en rolsynchronisatie vanuit de RBA-groepen staat uit. Wisselt RBA ooit van sleutels, werk de plak dan één keer bij.',
+  'providers.rbaJwks': 'Publieke RBA-sleutels (JWKS-JSON)',
+  'providers.rbaJwksFetch': 'Ophalen via deze browser',
+  'providers.rbaJwksFetchFailed':
+    'Ophalen via deze browser lukte niet (CORS of connectiviteit) — open {url} zelf en plak de JSON hier.',
   'providers.rbaAdminNotice': 'Controleer vóór het uitloggen dat je eigen RBA-account in een beheerdersgroep zit (bijv. {group}) — met RBA aan is dat de enige weg terug naar deze pagina. Je huidige sessie blijft hoe dan ook geldig.',
   'providers.rbaSave': 'Aanmeldinstellingen opslaan',
   'providers.rbaRevert': 'Terug naar de serverconfiguratie',
@@ -1007,6 +1042,13 @@ const ja: Msgs = {
   'providers.rbaAppCode': 'アプリケーションコード',
   'providers.rbaPlantCode': 'プラントコード（任意 — 空欄はすべてのプラントを受け入れ）',
   'providers.rbaSyncRoles': 'ログインのたびに RBA グループからロールを再同期する',
+  'providers.rbaOffline': 'オフラインモード — このサーバーは RBA に到達できません（ユーザーのブラウザーのみ到達可能）',
+  'providers.rbaOfflineHint':
+    'サインインは引き続きブラウザーで行われます。RBA の公開鍵（{url}）を下に貼り付けると、RBA に接続せずにトークンを検証できます。ロールはユーザーページでローカルに管理されます — 新しいアカウントは閲覧者として開始し、RBA グループからのロール同期は無効になります。RBA が鍵を更新した場合は、貼り付けを一度更新してください。',
+  'providers.rbaJwks': 'RBA 公開鍵（JWKS JSON）',
+  'providers.rbaJwksFetch': 'このブラウザーで取得',
+  'providers.rbaJwksFetchFailed':
+    'このブラウザーから取得できませんでした（CORS または接続の問題）— {url} を自分で開き、JSON をここに貼り付けてください。',
   'providers.rbaAdminNotice': 'サインアウトする前に、自分の RBA アカウントが管理者グループ（例：{group}）に属していることを確認してください。RBA がオンの間、それがこのページに戻る唯一の方法です。現在のセッションはいずれにせよ有効なままです。',
   'providers.rbaSave': 'サインイン設定を保存',
   'providers.rbaRevert': 'サーバー設定に戻す',
@@ -1176,6 +1218,13 @@ const zh: Msgs = {
   'providers.rbaAppCode': '应用代码',
   'providers.rbaPlantCode': '工厂代码（可选 — 留空接受任何工厂）',
   'providers.rbaSyncRoles': '每次登录时从 RBA 组重新同步角色',
+  'providers.rbaOffline': '离线模式 — 此服务器无法访问 RBA（只有用户的浏览器可以）',
+  'providers.rbaOfflineHint':
+    '登录仍在浏览器中进行。请在下方粘贴 RBA 的公钥（{url}），以便在不联系 RBA 的情况下验证令牌。角色随后在用户页面本地管理 — 新账户以查看者身份开始，且不再从 RBA 组同步角色。如果 RBA 日后更换密钥，更新一次粘贴即可。',
+  'providers.rbaJwks': 'RBA 公钥（JWKS JSON）',
+  'providers.rbaJwksFetch': '通过此浏览器获取',
+  'providers.rbaJwksFetchFailed':
+    '无法通过此浏览器获取（CORS 或连接问题）— 请自行打开 {url} 并将 JSON 粘贴到此处。',
   'providers.rbaAdminNotice': '退出登录前，请确认你自己的 RBA 账户属于某个管理员组（例如 {group}）— RBA 开启后，这是回到此页面的唯一途径。无论如何，你当前的会话保持有效。',
   'providers.rbaSave': '保存登录设置',
   'providers.rbaRevert': '恢复为服务器配置',

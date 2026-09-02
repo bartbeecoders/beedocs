@@ -692,6 +692,8 @@ export const api = {
     applicationCd: string
     plantCd: string
     syncRoles: boolean
+    offline: boolean
+    jwks: string
     timeoutSeconds: number
   }) =>
     request<RbaSettings>('/api/settings/rba', {

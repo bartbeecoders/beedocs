@@ -70,6 +70,15 @@ public sealed class RbaAuthService(
             return new RbaAuthResult(RbaAuthStatus.Unavailable);
         }
 
+        if (opts.Offline)
+        {
+            // No route to RBA: the server-side credential check cannot exist.
+            // Browsers sign in client-side and land on AuthenticateWithTokenAsync
+            // instead, so reaching this is a local-account typo, not an outage.
+            logger.LogWarning("RBA offline mode: server-side credential login is not available.");
+            return new RbaAuthResult(RbaAuthStatus.Unavailable);
+        }
+
         return await LoginAsync(new { username, password }, opts, ct);
     }
 
@@ -88,17 +97,55 @@ public sealed class RbaAuthService(
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(opts.TimeoutSeconds));
 
-        using var claims = await RbaTokenValidator.ValidateAsync(http, opts.BaseUrl, token, cts.Token);
-        if (claims is null)
+        var validation = await RbaTokenValidator.ValidateAsync(
+            http, opts.BaseUrl, opts.Jwks, allowNetwork: !opts.Offline, token, logger, cts.Token);
+        if (validation.Status == RbaTokenStatus.JwksUnavailable)
+            return new RbaAuthResult(RbaAuthStatus.Unavailable);
+        if (validation.Status != RbaTokenStatus.Valid)
             return new RbaAuthResult(RbaAuthStatus.InvalidCredentials);
 
+        using var claims = validation.Claims!;
         var username = ReadClaim(claims, "preferred_username") ?? ReadClaim(claims, "username") ?? ReadClaim(claims, "name");
         if (string.IsNullOrWhiteSpace(username))
+        {
+            logger.LogWarning(
+                "RBA token verified, but no preferred_username/username/name claim — cannot identify the account.");
             return new RbaAuthResult(RbaAuthStatus.InvalidCredentials);
+        }
+
+        if (opts.Offline)
+        {
+            // The verified token proves *who* this is; the DOC groups live in a
+            // database this server cannot reach, so roles are managed locally
+            // instead: new accounts start as viewer and an admin promotes them
+            // on the Users page. SyncRoles is forced off in offline settings,
+            // so the viewer default below never overwrites a promoted account.
+            var name = ReadClaim(claims, "name");
+            return new RbaAuthResult(
+                RbaAuthStatus.Success,
+                new RbaUserInfo(
+                    username.Trim(),
+                    !string.IsNullOrWhiteSpace(name) && !string.Equals(name, username, StringComparison.OrdinalIgnoreCase)
+                        ? name.Trim()
+                        : null,
+                    ReadClaim(claims, "email")?.Trim() is { Length: > 0 } mail ? mail : null,
+                    UserRoles.Viewer));
+        }
 
         // The roles live only in RBA's database; the adfsToken variant of the
         // login endpoint returns the fresh MultiAuthuser without a password.
-        return await LoginAsync(new { username, adfsToken = token }, opts, ct);
+        var result = await LoginAsync(new { username, adfsToken = token }, opts, ct);
+        if (result.Status == RbaAuthStatus.InvalidCredentials)
+        {
+            // The signature already proved the token genuine, so a 401 on the
+            // lookup is RBA declining its own token (adfsToken variant not
+            // supported, or the token already invalidated) — worth a trace.
+            logger.LogWarning(
+                "RBA rejected the adfsToken lookup for '{User}' even though the token's signature verified.",
+                username);
+        }
+
+        return result;
     }
 
     private static string? ReadClaim(System.Text.Json.JsonDocument claims, string name) =>
@@ -180,6 +227,26 @@ public sealed class RbaAuthService(
         if (opts.BaseUrl.Length == 0)
             return new RbaTestResultDto(false, "unavailable", null, null, "No RBA base URL is set.");
 
+        if (opts.Offline)
+        {
+            // Nothing to dial: the only server-side ingredient is the pinned
+            // key set, so that is what the test reports on.
+            var keys = opts.Jwks.Length > 0 ? RbaTokenValidator.TryParseKeys(opts.Jwks) : null;
+            return keys is { Count: > 0 }
+                ? new RbaTestResultDto(true, "reachable", null, null,
+                    $"Offline mode: {keys.Count} pinned RBA key(s) ready. Sign-in happens in the browser; " +
+                    "this server never contacts RBA, and new accounts start as viewer until promoted on the Users page.")
+                : new RbaTestResultDto(false, "unavailable", null, null,
+                    "Offline mode, but no usable pinned JWKS is stored — paste the JSON from " +
+                    $"{opts.BaseUrl}/.well-known/jwks.json and save.");
+        }
+
+        // The JWKS is what verifies browser sign-in tokens; the login probe
+        // below cannot see this hop, so a broken JWKS is reported alongside
+        // whatever the login endpoint answers.
+        var jwksProblem = await RbaTokenValidator.ProbeJwksAsync(http, opts.BaseUrl, logger, ct);
+        string WithJwks(string message) => jwksProblem is null ? message : $"{message} Warning: {jwksProblem}";
+
         if (!string.IsNullOrWhiteSpace(username) && !string.IsNullOrEmpty(password))
         {
             var result = await AuthenticateAsync(username, password, ct);
@@ -187,13 +254,13 @@ public sealed class RbaAuthService(
             {
                 RbaAuthStatus.Success => new RbaTestResultDto(
                     true, "success", result.User!.Role, result.User.UserCd,
-                    $"Signed in as {result.User.UserCd}; this account would get the '{result.User.Role}' role."),
+                    WithJwks($"Signed in as {result.User.UserCd}; this account would get the '{result.User.Role}' role.")),
                 RbaAuthStatus.InvalidCredentials => new RbaTestResultDto(
                     true, "invalidCredentials", null, null,
-                    "RBA is reachable, but it rejected these credentials."),
+                    WithJwks("RBA is reachable, but it rejected these credentials.")),
                 RbaAuthStatus.NoAccess => new RbaTestResultDto(
                     true, "noAccess", null, null,
-                    $"RBA accepted the credentials, but the account holds no {opts.ApplicationCd} group."),
+                    WithJwks($"RBA accepted the credentials, but the account holds no {opts.ApplicationCd} group.")),
                 _ => new RbaTestResultDto(false, "unavailable", null, null, "RBA could not be reached."),
             };
         }
@@ -206,7 +273,7 @@ public sealed class RbaAuthService(
             ? new RbaTestResultDto(false, "unavailable", null, null,
                 "RBA could not be reached at that URL.")
             : new RbaTestResultDto(true, "reachable", null, null,
-                "RBA answered — the login endpoint is reachable.");
+                WithJwks("RBA answered — the login endpoint is reachable."));
     }
 
     /// <summary>

@@ -121,3 +121,61 @@ one plant's grants.
 
 Custom RBA groups work too: name them with an `_ADMIN` / `_EDITOR` / `_VIEWER`
 suffix, or rely on the action fallback (any `*_WRITE` action ⇒ editor).
+
+## Offline mode: cloud-hosted BeeDocs, on-prem RBA
+
+When the API is hosted where it has no route to RBA (e.g. BeeDocs in Azure, RBA
+on the intranet) but the users' browsers reach both, the standard design cannot
+work: the server can neither fetch the JWKS nor run the role lookup. **Offline
+mode** (Settings → Sign-in provider → "Offline mode", or `BeeDocs:Rba:Offline`
+plus `BeeDocs:Rba:Jwks`) restructures the trust so nothing server→RBA remains:
+
+- **Sign-in is unchanged for users**: the browser still posts credentials to
+  RBA and hands BeeDocs the JWT.
+- **Signature verification uses pinned keys**: the admin pastes the JSON from
+  `{baseUrl}/.well-known/jwks.json` into the settings (the panel has a
+  "Fetch via this browser" button — the browser is on RBA's network, so it can
+  fill the field itself). The JWKS is public key material, not a secret, and
+  changes only when RBA rotates keys — after a rotation, update the paste once.
+  This keeps the load-bearing property intact: a hand-crafted token still dies
+  on the signature check.
+- **Roles are managed locally**: the DOC groups live in a database the server
+  cannot reach, so the role lookup is skipped. New accounts are provisioned as
+  **viewer** and an admin promotes them on the Users page; `SyncRoles` is
+  forced off so a login never demotes a promoted account. The admin who enables
+  offline mode already has an account (the settings are admin-gated), so there
+  is no bootstrap gap.
+- **The server never dials the base URL** — it exists only so the login screen
+  can hand it to browsers. Server-side RBA credential login answers 503; the
+  connection test reports on the pinned keys instead of probing.
+
+Pinned keys also work in online mode: when set, they are tried first (saving
+the JWKS round trip), with the live fetch as fallback after a rotation.
+
+## Troubleshooting: 401 on `POST /api/auth/rba`
+
+The login is two hops that fail independently: the browser reaching RBA (step
+one — if this worked, the login dialog got past the credential prompt) and the
+**BeeDocs server** reaching RBA (step two — signature check against the JWKS,
+then the `adfsToken` role lookup). A 401 on `/api/auth/rba` means step two
+rejected the token, and "RBA works from other apps" only proves step one: those
+apps talk to RBA from the user's machine, while BeeDocs talks to it from
+wherever the API is hosted — different DNS, different proxy, different
+certificate trust.
+
+The API log names the exact reason (`RbaTokenValidator` / `RbaAuthService`
+warnings), and Settings → Sign-in provider → **Test** probes the JWKS from the
+server and reports it in the result. The usual causes:
+
+- **The server cannot fetch `{BaseUrl}/.well-known/jwks.json`** — a short
+  intranet hostname the server (or its container) cannot resolve, an internal
+  CA certificate the server does not trust, or a proxy in between. With no key
+  to verify against, every login is refused (503 "sign-in service is
+  unavailable"). Verify from the API host itself, not from a workstation.
+- **RBA does not serve a JWKS at that path** (older RBA build) — same symptom;
+  open the URL in a browser to check what answers.
+- **The token is not RS256** — the log shows the actual `alg`; only RS256 is
+  accepted.
+- **RBA refuses the `adfsToken` lookup** despite a valid signature — the log
+  says so explicitly; check the RBA version supports the
+  `{username, adfsToken}` variant of `/v1/auth/token/basic`.

@@ -380,6 +380,14 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   local admin out; `/api/auth/password` stays open because the current-password
   check already makes it unusable for RBA-provisioned accounts. `AuthStateDto.RbaEnabled`
   drives the UI copy. RBA-side records: `scripts/rba/create-rba-doc-data.sql`.
+  **Offline mode** (`RbaSettings.Offline` + pasted `Jwks`) covers a cloud-hosted
+  API with no route to on-prem RBA: browsers still sign in against RBA, the
+  server verifies tokens against the pinned JWKS (public material, pasted in
+  settings — the panel can fetch it via the admin's browser) and never dials
+  out; the role lookup is skipped, so new accounts land as viewer, roles are
+  managed on the Users page, and `SyncRoles` is forced off so a login never
+  demotes a promoted account. `RbaTokenValidator` logs every rejection reason,
+  and "no key to verify against" maps to 503 Unavailable, never 401.
   See `Docs/RBA-INTEGRATION.md`.
 - **LLM writing help** (`/api/llm`, `Services/LlmProviderService.cs` +
   `LlmClient.cs`, `components/AiAssist.tsx` + `hooks/useLlmAssist.ts`) — inline

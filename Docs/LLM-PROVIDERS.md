@@ -115,6 +115,16 @@ a warning at startup when it finds a stored provider key and no `BeeDocs:ApiKey`
 | Config | Env var | Effect |
 |---|---|---|
 | `BeeDocs:ApiKey` | `BeeDocs__ApiKey` | When set, `/api/llm` and `/api/v1` require `Authorization: Bearer <key>` or `X-Api-Key: <key>` |
+| `BeeDocs:Llm:ApiKey` | `BeeDocs__Llm__ApiKey` | When set at startup, upsert an enabled provider of `BeeDocs:Llm:Kind` with this key |
+| `BeeDocs:Llm:Kind` | `BeeDocs__Llm__Kind` | `openrouter` (default), `xai`, or `openai` |
+| `BeeDocs:Llm:Model` | `BeeDocs__Llm__Model` | Optional. Empty keeps the stored model (or the kind's default on create) |
+
+The Azure zip-deploy script writes those `BeeDocs:Llm:*` values as App Service
+settings (`.\azure-deploy\deploy.ps1 -LlmApiKey …`, or `BEEDOCS_LLM_API_KEY` so
+the secret stays off the command line). Terraform `ignore_changes` keeps them
+out of state, same as `BeeDocs__ApiKey`. A non-empty key upserts one enabled
+provider of that kind at the next app start — which is how a hosted instance
+gets a key at all when Settings cannot save one (`BeeDocs:ApiKey` set).
 
 There is a trade-off, and it is worth knowing before you set the key: **the web
 UI cannot send it.** The browser client has no place to hold a shared secret, so

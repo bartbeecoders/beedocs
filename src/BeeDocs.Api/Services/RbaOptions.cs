@@ -34,9 +34,27 @@ public sealed class RbaOptions
     /// <summary>
     /// Re-derive the BeeDocs role from RBA groups on every login (default). Turn
     /// off to let a local admin override roles in the Users page without the next
-    /// sign-in undoing it.
+    /// sign-in undoing it. Forced off in <see cref="Offline"/> mode — there is no
+    /// server-side lookup to sync from.
     /// </summary>
     public bool SyncRoles { get; set; } = true;
+
+    /// <summary>
+    /// The BeeDocs server cannot reach RBA (cloud-hosted API, on-prem RBA) but
+    /// the users' browsers can. Sign-in stays client-side; tokens are verified
+    /// against <see cref="Jwks"/> instead of a live JWKS fetch, the role lookup
+    /// is skipped (new accounts start as viewer, roles are managed on the Users
+    /// page), and the server never dials the base URL.
+    /// </summary>
+    public bool Offline { get; set; }
+
+    /// <summary>
+    /// RBA's public signing keys, pasted as the JWKS JSON from
+    /// <c>{BaseUrl}/.well-known/jwks.json</c>. Required in <see cref="Offline"/>
+    /// mode; when set in online mode it is tried first, with the live JWKS as
+    /// fallback. Public material, not a secret.
+    /// </summary>
+    public string Jwks { get; set; } = "";
 
     public int TimeoutSeconds { get; set; } = 15;
 }

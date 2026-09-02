@@ -134,6 +134,15 @@ public interface ILlmProviderService
 
     /// <summary>Whether any stored key exists. Drives the startup warning about an unprotected API.</summary>
     Task<bool> AnyKeyStoredAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Upsert the provider described by <paramref name="options"/>. No-op (and
+    /// null) when <see cref="LlmOptions.ApiKey"/> is empty, or the kind is a CLI
+    /// kind that does not take a stored key. A row of that kind is updated in
+    /// place (key replaced, enabled); otherwise one is created and made the
+    /// default. Idempotent across restarts.
+    /// </summary>
+    Task<LlmProviderDto?> EnsureFromConfigAsync(LlmOptions options, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -364,6 +373,57 @@ public sealed class LlmProviderService(SqliteConnectionFactory db) : ILlmProvide
 
         var row = ReadEntity(reader);
         return new LlmProviderSecret(row.Id, row.Kind, row.Name, row.BaseUrl, row.ApiKey, row.Model);
+    }
+
+    public async Task<LlmProviderDto?> EnsureFromConfigAsync(LlmOptions options, CancellationToken ct = default)
+    {
+        var key = NormalizeKey(options.ApiKey);
+        if (key is null) return null;
+
+        var kind = LlmProviderKinds.Normalize(
+            string.IsNullOrWhiteSpace(options.Kind) ? LlmProviderKinds.OpenRouter : options.Kind)
+            ?? throw new ArgumentException(
+                $"Unknown provider kind '{options.Kind}'. Use one of: {string.Join(", ", LlmProviderKinds.All)}.");
+        if (LlmProviderKinds.IsCli(kind))
+            return null;
+
+        string? existingId = null;
+        await using (var conn = await db.OpenConnectionAsync(ct))
+        {
+            await using var find = conn.CreateCommand();
+            find.CommandText = $"""
+                SELECT id FROM llm_provider
+                WHERE kind = $kind
+                ORDER BY sort_order, created_at
+                LIMIT 1
+                """;
+            SqliteHelpers.Add(find, "$kind", kind);
+            var found = await find.ExecuteScalarAsync(ct);
+            var foundId = found as string ?? found?.ToString();
+            if (!string.IsNullOrEmpty(foundId))
+                existingId = foundId;
+        }
+
+        if (existingId is not null)
+        {
+            return await UpdateAsync(existingId, new UpdateLlmProviderRequest(
+                Name: string.IsNullOrWhiteSpace(options.Name) ? null : options.Name,
+                BaseUrl: string.IsNullOrWhiteSpace(options.BaseUrl) ? null : options.BaseUrl,
+                ApiKey: key,
+                Model: string.IsNullOrWhiteSpace(options.Model) ? null : options.Model,
+                Enabled: true,
+                SortOrder: null), ct);
+        }
+
+        var created = await CreateAsync(new CreateLlmProviderRequest(
+            Kind: kind,
+            Name: options.Name,
+            BaseUrl: options.BaseUrl,
+            ApiKey: key,
+            Model: options.Model,
+            Enabled: true,
+            SortOrder: null), ct);
+        return await MakeDefaultAsync(created.Id, ct) ?? created;
     }
 
     public async Task<bool> AnyKeyStoredAsync(CancellationToken ct = default)

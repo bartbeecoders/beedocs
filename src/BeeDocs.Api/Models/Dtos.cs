@@ -253,6 +253,8 @@ public sealed record RbaSettingsDto(
     string ApplicationCd,
     string PlantCd,
     bool SyncRoles,
+    bool Offline,
+    string Jwks,
     int TimeoutSeconds,
     string Source
 );
@@ -264,6 +266,8 @@ public sealed record UpdateRbaSettingsRequest(
     string? ApplicationCd,
     string? PlantCd,
     bool? SyncRoles,
+    bool? Offline,
+    string? Jwks,
     int? TimeoutSeconds
 );
 

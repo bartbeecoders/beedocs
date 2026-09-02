@@ -839,6 +839,14 @@ export type RbaSettings = {
   applicationCd: string
   plantCd: string
   syncRoles: boolean
+  /**
+   * The API server has no route to RBA (cloud API, on-prem RBA): tokens are
+   * verified against the pasted `jwks` and roles are managed locally — new
+   * accounts start as viewer. The browser-side login is unchanged.
+   */
+  offline: boolean
+  /** Pasted JWKS JSON from {baseUrl}/.well-known/jwks.json. Public keys, not a secret. */
+  jwks: string
   timeoutSeconds: number
   source: 'settings' | 'config'
 }

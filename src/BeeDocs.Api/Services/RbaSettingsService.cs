@@ -5,12 +5,16 @@ using Microsoft.Extensions.Options;
 namespace BeeDocs.Api.Services;
 
 /// <summary>The effective RBA configuration one request runs with, wherever it came from.</summary>
+/// <param name="Offline">The server cannot reach RBA: verify tokens against <paramref name="Jwks"/>, skip the role lookup, never dial out.</param>
+/// <param name="Jwks">Pasted JWKS JSON (public keys). Required when offline; tried first when online.</param>
 public sealed record RbaSettings(
     bool Enabled,
     string BaseUrl,
     string ApplicationCd,
     string PlantCd,
     bool SyncRoles,
+    bool Offline,
+    string Jwks,
     int TimeoutSeconds);
 
 /// <summary>
@@ -51,16 +55,23 @@ public sealed class RbaSettingsService(SqliteConnectionFactory db, IOptions<RbaO
     /// <exception cref="ArgumentException">Enabled with no base URL, or an invalid URL.</exception>
     public async Task<RbaSettingsDto> SetAsync(UpdateRbaSettingsRequest request, CancellationToken ct = default)
     {
+        var offline = request.Offline ?? false;
         var settings = new RbaSettings(
             Enabled: request.Enabled,
             BaseUrl: (request.BaseUrl ?? "").Trim().TrimEnd('/'),
             ApplicationCd: ((request.ApplicationCd ?? "").Trim() is { Length: > 0 } app ? app : "DOC").ToUpperInvariant(),
             PlantCd: (request.PlantCd ?? "").Trim(),
-            SyncRoles: request.SyncRoles ?? true,
+            // Offline has no server-side lookup to sync from; a stale sync
+            // would demote every locally-promoted account back to viewer.
+            SyncRoles: (request.SyncRoles ?? true) && !offline,
+            Offline: offline,
+            Jwks: (request.Jwks ?? "").Trim(),
             TimeoutSeconds: request.TimeoutSeconds is > 0 and <= 120 ? request.TimeoutSeconds.Value : 15);
 
         if (settings.Enabled)
         {
+            // The base URL is required even offline — the *browser* signs in
+            // against it, offline only means the server never dials it.
             if (settings.BaseUrl.Length == 0)
                 throw new ArgumentException("An RBA base URL is required to enable RBA sign-in.");
             if (!Uri.TryCreate(settings.BaseUrl, UriKind.Absolute, out var uri)
@@ -68,6 +79,20 @@ public sealed class RbaSettingsService(SqliteConnectionFactory db, IOptions<RbaO
             {
                 throw new ArgumentException("The RBA base URL must be an absolute http(s) URL.");
             }
+        }
+
+        if (settings.Jwks.Length > 0 && RbaTokenValidator.TryParseKeys(settings.Jwks) is not { Count: > 0 })
+        {
+            throw new ArgumentException(
+                "The pasted JWKS is not valid: expected the JSON served at " +
+                "{baseUrl}/.well-known/jwks.json with at least one RSA key.");
+        }
+
+        if (settings.Enabled && settings.Offline && settings.Jwks.Length == 0)
+        {
+            throw new ArgumentException(
+                "Offline mode needs RBA's public keys: paste the JSON from " +
+                "{baseUrl}/.well-known/jwks.json so sign-in tokens can be verified without reaching RBA.");
         }
 
         await using var conn = await db.OpenConnectionAsync(ct);
@@ -115,6 +140,17 @@ public sealed class RbaSettingsService(SqliteConnectionFactory db, IOptions<RbaO
             try
             {
                 value = JsonSerializer.Deserialize<RbaSettings>(raw, Json);
+                if (value is not null)
+                {
+                    // Rows stored before offline mode existed lack the new
+                    // fields (Jwks deserializes to null); and offline always
+                    // implies no role sync, hand-edited rows included.
+                    value = value with
+                    {
+                        Jwks = value.Jwks ?? "",
+                        SyncRoles = value.SyncRoles && !value.Offline,
+                    };
+                }
             }
             catch (JsonException)
             {
@@ -135,7 +171,9 @@ public sealed class RbaSettingsService(SqliteConnectionFactory db, IOptions<RbaO
             BaseUrl: o.BaseUrl.Trim().TrimEnd('/'),
             ApplicationCd: string.IsNullOrWhiteSpace(o.ApplicationCd) ? "DOC" : o.ApplicationCd.Trim().ToUpperInvariant(),
             PlantCd: o.PlantCd.Trim(),
-            SyncRoles: o.SyncRoles,
+            SyncRoles: o.SyncRoles && !o.Offline,
+            Offline: o.Offline,
+            Jwks: (o.Jwks ?? "").Trim(),
             TimeoutSeconds: o.TimeoutSeconds is > 0 and <= 120 ? o.TimeoutSeconds : 15);
     }
 
@@ -145,6 +183,8 @@ public sealed class RbaSettingsService(SqliteConnectionFactory db, IOptions<RbaO
         ApplicationCd: s.ApplicationCd,
         PlantCd: s.PlantCd,
         SyncRoles: s.SyncRoles,
+        Offline: s.Offline,
+        Jwks: s.Jwks,
         TimeoutSeconds: s.TimeoutSeconds,
         Source: source);
 }

@@ -63,6 +63,7 @@ builder.Services.AddSingleton<BrandingService>();
 builder.Services.Configure<ApiKeyOptions>(builder.Configuration.GetSection(ApiKeyOptions.SectionName));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.Configure<RbaOptions>(builder.Configuration.GetSection(RbaOptions.SectionName));
+builder.Services.Configure<LlmOptions>(builder.Configuration.GetSection(LlmOptions.SectionName));
 
 // RBA as a switchable login provider: settings saved on the Settings page live
 // in app_setting and win over the BeeDocs:Rba configuration fallback, so an
@@ -302,6 +303,28 @@ using (var scope = app.Services.CreateScope())
             "this instance can claim the admin account, so do not leave it publicly reachable while " +
             "it is unclaimed.");
     }
+
+    // Hosted deploys (Azure App Settings, K8s secrets) seed one provider from
+    // BeeDocs:Llm so a key can land without the Settings UI. Empty is a no-op.
+    try
+    {
+        var llmOpts = scope.ServiceProvider.GetRequiredService<IOptions<LlmOptions>>().Value;
+        var seeded = await scope.ServiceProvider
+            .GetRequiredService<ILlmProviderService>()
+            .EnsureFromConfigAsync(llmOpts);
+        if (seeded is not null)
+        {
+            app.Logger.LogInformation(
+                "LLM provider {Kind} applied from BeeDocs:Llm configuration (key ends …{Hint}).",
+                seeded.Kind, seeded.KeyHint ?? "????");
+        }
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(
+            ex,
+            "BeeDocs:Llm configuration could not be applied — set a provider in Settings → AI providers.");
+    }
 }
 
 var api = app.MapGroup("/api");
@@ -389,6 +412,15 @@ if (rbaAtStartup.Enabled)
         app.Logger.LogWarning(
             "RBA sign-in is enabled but its base URL is empty — every sign-in will fail " +
             "with 503 until one is set (Settings → Sign-in, or BeeDocs:Rba:BaseUrl).");
+    }
+    else if (rbaAtStartup.Offline)
+    {
+        app.Logger.LogInformation(
+            "RBA sign-in is on in offline mode: browsers sign in against {BaseUrl}, this server verifies " +
+            "tokens with the pinned JWKS and never contacts RBA. Roles are managed locally " +
+            "(new accounts start as viewer).{JwksNote}",
+            rbaAtStartup.BaseUrl,
+            rbaAtStartup.Jwks.Length > 0 ? "" : " WARNING: no JWKS is pinned — every sign-in will fail with 503.");
     }
     else
     {

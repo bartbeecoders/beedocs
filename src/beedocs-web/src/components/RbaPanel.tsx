@@ -29,6 +29,12 @@ export function RbaPanel() {
   const [applicationCd, setApplicationCd] = useState('DOC')
   const [plantCd, setPlantCd] = useState('')
   const [syncRoles, setSyncRoles] = useState(true)
+  const [offline, setOffline] = useState(false)
+  const [jwks, setJwks] = useState('')
+  const [jwksError, setJwksError] = useState<string | null>(null)
+  const [fetchingJwks, setFetchingJwks] = useState(false)
+
+  const jwksUrl = `${baseUrl.replace(/\/+$/, '')}/.well-known/jwks.json`
 
   // Connection test
   const [testUser, setTestUser] = useState('')
@@ -43,6 +49,8 @@ export function RbaPanel() {
     setApplicationCd(s.applicationCd)
     setPlantCd(s.plantCd)
     setSyncRoles(s.syncRoles)
+    setOffline(s.offline)
+    setJwks(s.jwks)
   }
 
   useEffect(() => {
@@ -64,6 +72,8 @@ export function RbaPanel() {
           applicationCd,
           plantCd,
           syncRoles,
+          offline,
+          jwks,
           timeoutSeconds: settings?.timeoutSeconds ?? 15,
         }),
       )
@@ -148,12 +158,67 @@ export function RbaPanel() {
         <label className="check-row">
           <input
             type="checkbox"
-            checked={syncRoles}
+            checked={syncRoles && !offline}
             onChange={(e) => setSyncRoles(e.target.checked)}
-            disabled={busy}
+            disabled={busy || offline}
           />
           <span>{t('providers.rbaSyncRoles')}</span>
         </label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={offline}
+            onChange={(e) => setOffline(e.target.checked)}
+            disabled={busy}
+          />
+          <span>{t('providers.rbaOffline')}</span>
+        </label>
+        {offline && (
+          <>
+            <p className="muted sm">{t('providers.rbaOfflineHint', { url: jwksUrl })}</p>
+            <label className="users-field">
+              <span>{t('providers.rbaJwks')}</span>
+              <textarea
+                value={jwks}
+                onChange={(e) => setJwks(e.target.value)}
+                disabled={busy}
+                rows={4}
+                spellCheck={false}
+                placeholder='{"keys":[{"kty":"RSA", …}]}'
+                style={{ fontFamily: 'var(--mono, monospace)', fontSize: 12 }}
+              />
+            </label>
+            <div>
+              <button
+                type="button"
+                className="btn sm"
+                disabled={busy || fetchingJwks || !baseUrl.trim()}
+                onClick={async () => {
+                  // This browser sits on the network RBA lives on — the whole
+                  // reason offline mode exists — so it can fill the field itself.
+                  setFetchingJwks(true)
+                  setJwksError(null)
+                  try {
+                    const res = await fetch(jwksUrl)
+                    if (!res.ok) throw new Error(String(res.status))
+                    setJwks(JSON.stringify(await res.json()))
+                  } catch {
+                    setJwksError(t('providers.rbaJwksFetchFailed', { url: jwksUrl }))
+                  } finally {
+                    setFetchingJwks(false)
+                  }
+                }}
+              >
+                {fetchingJwks ? t('providers.testing') : t('providers.rbaJwksFetch')}
+              </button>
+            </div>
+            {jwksError && (
+              <p className="sm" role="alert" style={{ color: 'var(--danger)' }}>
+                {jwksError}
+              </p>
+            )}
+          </>
+        )}
       </div>
 
       {enabled && !settings?.enabled && (
