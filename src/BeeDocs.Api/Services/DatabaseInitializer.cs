@@ -370,7 +370,7 @@ public static class DatabaseInitializer
             CREATE TABLE IF NOT EXISTS git_assist_job (
               id TEXT PRIMARY KEY NOT NULL,
               repo_id TEXT NOT NULL,
-              -- readme | documentation | manual | summary (GitAssistService.Kinds).
+              -- readme | documentation | manual | summary | book (GitAssistService.Kinds).
               kind TEXT NOT NULL,
               instructions TEXT,
               provider_id TEXT,

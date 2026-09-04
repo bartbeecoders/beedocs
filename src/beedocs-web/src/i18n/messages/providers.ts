@@ -3,7 +3,7 @@ import type { Lang } from '../langs'
 /**
  * The admin settings panels: LlmProviders, StorageProviders, BrandingPanel,
  * RbaPanel, ApiKeyPanel. Provider/product names (OpenRouter, xAI, OpenAI,
- * LM Studio, Azure Blob Storage, Google Drive, RBA) stay untranslated.
+ * LM Studio, Cerebras, Azure Blob Storage, Google Drive, RBA) stay untranslated.
  */
 const en = {
   // ── Shared across the provider panels ────────────────────────────────────
@@ -30,6 +30,7 @@ const en = {
   'providers.kindHint.openrouter': 'One key, hundreds of models',
   'providers.kindHint.xai': 'Grok, straight from x.ai',
   'providers.kindHint.openai': 'GPT models, no middleman',
+  'providers.kindHint.cerebras': 'Open models, extremely fast',
   'providers.kindHint.lmstudio': 'Runs on this machine, no key',
   'providers.kindHint.claude-cli': 'Your installed claude CLI, its sign-in',
   'providers.kindHint.grok-cli': 'Your installed grok CLI, its sign-in',
@@ -212,6 +213,7 @@ const fr: Msgs = {
   'providers.kindHint.openrouter': 'Une clé, des centaines de modèles',
   'providers.kindHint.xai': 'Grok, directement depuis x.ai',
   'providers.kindHint.openai': 'Les modèles GPT, sans intermédiaire',
+  'providers.kindHint.cerebras': 'Modèles ouverts, extrêmement rapide',
   'providers.kindHint.lmstudio': 'Tourne sur cette machine, sans clé',
   'providers.kindHint.claude-cli': 'Votre CLI claude installé, avec sa connexion',
   'providers.kindHint.grok-cli': 'Votre CLI grok installé, avec sa connexion',
@@ -388,6 +390,7 @@ const de: Msgs = {
   'providers.kindHint.openrouter': 'Ein Schlüssel, Hunderte Modelle',
   'providers.kindHint.xai': 'Grok, direkt von x.ai',
   'providers.kindHint.openai': 'GPT-Modelle, ohne Zwischenhändler',
+  'providers.kindHint.cerebras': 'Offene Modelle, extrem schnell',
   'providers.kindHint.lmstudio': 'Läuft auf dieser Maschine, ohne Schlüssel',
   'providers.kindHint.claude-cli': 'Ihre installierte claude-CLI mit deren Anmeldung',
   'providers.kindHint.grok-cli': 'Ihre installierte grok-CLI mit deren Anmeldung',
@@ -564,6 +567,7 @@ const es: Msgs = {
   'providers.kindHint.openrouter': 'Una clave, cientos de modelos',
   'providers.kindHint.xai': 'Grok, directo desde x.ai',
   'providers.kindHint.openai': 'Modelos GPT, sin intermediarios',
+  'providers.kindHint.cerebras': 'Modelos abiertos, extremadamente rápido',
   'providers.kindHint.lmstudio': 'Corre en esta máquina, sin clave',
   'providers.kindHint.claude-cli': 'Tu CLI claude instalada, con su sesión',
   'providers.kindHint.grok-cli': 'Tu CLI grok instalada, con su sesión',
@@ -740,6 +744,7 @@ const nl: Msgs = {
   'providers.kindHint.openrouter': 'Eén sleutel, honderden modellen',
   'providers.kindHint.xai': 'Grok, rechtstreeks van x.ai',
   'providers.kindHint.openai': 'GPT-modellen, zonder tussenpersoon',
+  'providers.kindHint.cerebras': 'Open modellen, extreem snel',
   'providers.kindHint.lmstudio': 'Draait op deze machine, geen sleutel',
   'providers.kindHint.claude-cli': 'Je geïnstalleerde claude-CLI, met diens aanmelding',
   'providers.kindHint.grok-cli': 'Je geïnstalleerde grok-CLI, met diens aanmelding',
@@ -916,6 +921,7 @@ const ja: Msgs = {
   'providers.kindHint.openrouter': '1つのキーで数百のモデル',
   'providers.kindHint.xai': 'Grok を x.ai から直接',
   'providers.kindHint.openai': 'GPT モデルを仲介なしで',
+  'providers.kindHint.cerebras': 'オープンモデル、非常に高速',
   'providers.kindHint.lmstudio': 'このマシンで動作、キー不要',
   'providers.kindHint.claude-cli': 'インストール済みの claude CLI とそのサインイン',
   'providers.kindHint.grok-cli': 'インストール済みの grok CLI とそのサインイン',
@@ -1092,6 +1098,7 @@ const zh: Msgs = {
   'providers.kindHint.openrouter': '一个密钥，数百个模型',
   'providers.kindHint.xai': 'Grok，直连 x.ai',
   'providers.kindHint.openai': 'GPT 模型，无中间商',
+  'providers.kindHint.cerebras': '开源模型，极速推理',
   'providers.kindHint.lmstudio': '在本机运行，无需密钥',
   'providers.kindHint.claude-cli': '已安装的 claude CLI 及其登录',
   'providers.kindHint.grok-cli': '已安装的 grok CLI 及其登录',

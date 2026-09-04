@@ -13,8 +13,8 @@ public sealed class LlmOptions
     public const string SectionName = "BeeDocs:Llm";
 
     /// <summary>
-    /// <c>openrouter</c> (default), <c>xai</c>, or <c>openai</c>. CLI kinds are
-    /// ignored — they do not take a stored key.
+    /// <c>openrouter</c> (default), <c>xai</c>, <c>openai</c>, or <c>cerebras</c>.
+    /// CLI kinds are ignored — they do not take a stored key.
     /// </summary>
     public string Kind { get; set; } = LlmProviderKinds.OpenRouter;
 

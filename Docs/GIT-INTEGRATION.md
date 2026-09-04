@@ -123,6 +123,14 @@ GET             /api/git/repos/{id}/branches        viewer  local + remote-only 
 GET             /api/git/repos/{id}/log?path=&limit= viewer history; path follows a file through renames
 GET             /api/git/repos/{id}/commits/{sha}?path= viewer commit meta + patch (≤256 KB)
 GET             /api/git/repos/{id}/diff?path=      viewer  uncommitted changes vs HEAD (untracked included per-path)
+POST            /api/git/repos/{id}/assist          editor  {kind, instructions?} → Markdown draft (not kind=book)
+POST            /api/git/repos/{id}/assist/publish  editor  reviewed draft → library page (existing or new book)
+POST            /api/git/repos/{id}/assist/jobs     editor  background job; kind=book is this path
+GET             /api/git/repos/{id}/assist/jobs     viewer  job list for one repo (no markdown)
+GET             /api/git/assist/jobs/{jobId}        viewer  one job including markdown
+POST            /api/git/assist/jobs/{jobId}/publish editor completed job → library book/pages
+POST            /api/git/assist/jobs/{jobId}/rerun  editor  same params + page linkage
+DELETE          /api/git/assist/jobs/{jobId}        editor  cancel if running; published content stays
 ```
 
 `GitException` maps to 502 with a message phrased for the person fixing it;
@@ -133,10 +141,12 @@ path the jail refuses is a 400.
 ## AI actions (repo context menu)
 
 Right-click a repo in the left tree: **Draft README… / Draft documentation… /
-Draft user manual… / Summarize repository…** — each opens a dialog, takes
-optional extra instructions, and generates a Markdown draft grounded in the
-repository, through the **configured AI provider** (Settings → AI providers —
-any kind works, the local Claude Code / Grok CLI providers included).
+Draft user manual… / Summarize repository… / Draft documentation book…** —
+each opens a dialog, takes optional extra instructions, and generates a
+Markdown draft grounded in the repository, through the **configured AI
+provider** (Settings → AI providers — any kind works, the local Claude Code
+/ Grok CLI providers included). A documentation book is always a background
+job (several pages, several completions).
 
 How it stays honest:
 
@@ -149,11 +159,29 @@ How it stays honest:
   a system prompt that forbids inventing commands or behaviour the source does
   not show.
 - **Nothing is written until reviewed**: the dialog renders the draft
-  (preview/source toggle), and *Save draft to repo* is the ordinary
-  blob-guarded working-tree write — the AI's words enter history through the
-  same diff → commit → push gate as any human edit.
+  (preview/source toggle). From there you can *Save draft to repo* (the
+  ordinary blob-guarded working-tree write) **or add it as a page in a
+  library book** — pick an existing book, or create a new one on a shelf
+  (`POST /api/git/repos/{id}/assist/publish`). The page is titled by kind
+  (README / Developer documentation / User manual / Repository summary);
+  a page with that title already in the target book is updated rather than
+  duplicated.
 - Generating is editor-and-up (`POST /api/git/repos/{id}/assist`): it spends
   the provider's money/plan, which a viewer should not be able to do.
+
+## Documentation books
+
+A **documentation book** (`kind: book`) is several pages about the repo —
+typically overview, getting started, architecture, usage — not one Markdown
+blob. It is always a background job (`POST /api/git/repos/{id}/assist/jobs`
+with `kind=book`): the server first asks the model for a JSON outline (5–8
+pages, `LlmPrompts.BookOutline`, `response_format: json_object`, thinking off),
+then one `docdraft` completion per page. The outline parser accepts camelCase
+or snake_case and a Markdown list if the model still wraps the object.
+The job stores a JSON envelope in the `markdown` column; publishing creates
+a library book (titled from the outline, or into a book you picked) with
+those pages, matching by title on re-publish so links survive. The tree
+context menu's *Draft documentation book…* is this path.
 
 ## Background drafting jobs
 
@@ -161,11 +189,12 @@ The dialog's **Run in the background** option (or a direct
 `POST /api/git/repos/{id}/assist/jobs`) turns the same generation into a job:
 the request answers immediately with a row in `git_assist_job`
 (`Services/GitAssistJobService.cs`) whose status tells the story — **queued →
-running → completed | failed** — the git-clone pattern, polled by the UI. The
-repo's front page grows an **AI documentation jobs** panel
-(`GitAssistJobs.tsx`) listing every job with status, requester, provider,
-timing and errors; it polls every few seconds while anything is active and
-renders nothing until the first job exists.
+running → completed | failed** — the git-clone pattern. The header grows an
+**✨ AI documentation jobs** button (`GitAssistJobsMenu`) whenever any git
+repo is on the shelf: it lists **every job on the instance**, across
+repositories, with a live badge while anything is queued or running, and
+polls every few seconds until they finish. The same list also sits on the
+repo's front page (above the file listing) for that repo's jobs only.
 
 - **The draft survives everything**: the generated Markdown is stored on the
   job row *before* publishing is attempted, so a publish failure (or a
@@ -173,12 +202,13 @@ renders nothing until the first job exists.
   *Publish to library* again. Jobs left queued/running by a server restart are
   swept to `failed` at startup.
 - **Publish to the library** (`POST /api/git/assist/jobs/{jobId}/publish`, or
-  the *add it to the library as a book* option when starting): the result
-  becomes a book page — a book named after the repo is created on the chosen
-  shelf (or the library root) unless an existing book is targeted, and the
-  page is titled by kind (README / Developer documentation / User manual /
-  Repository summary). Publishing the same kind into the same book **updates
-  the page in place** rather than duplicating it, and the job remembers its
+  the *add it to the library* option when starting): the result becomes
+  library pages. You can target an **existing book** or create a new one on
+  a chosen shelf (or the library root). A single-page kind is titled by
+  kind (README / Developer documentation / User manual / Repository
+  summary); a `book` kind creates one page per outline entry. Publishing
+  the same titles into the same book **updates those pages in place**
+  rather than duplicating them, and the job remembers its
   `bookId`/`pageId`. Page history names whoever queued the job
   (`AmbientActor` carries the actor into the background task).
 - **Re-generate** (`POST /api/git/assist/jobs/{jobId}/rerun`): a fresh job

@@ -624,7 +624,7 @@ h3 { font-size: 1.14rem; font-weight: 700; line-height: 1.3; }
 
 /* The nav needs its full width to stay on one line; below this it goes
    rather than wrapping. */
-@media (max-width: 1080px) {
+@media (max-width: 1180px) {
   .head-nav { display: none; }
 }
 

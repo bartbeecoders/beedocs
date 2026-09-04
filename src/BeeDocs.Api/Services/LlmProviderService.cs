@@ -5,7 +5,7 @@ namespace BeeDocs.Api.Services;
 
 /// <summary>
 /// The supported providers, and what to assume when the user only picks a kind.
-/// Four speak the OpenAI chat-completions API over HTTP; the two CLI kinds hand
+/// Five speak the OpenAI chat-completions API over HTTP; the two CLI kinds hand
 /// the request to a locally installed agent CLI instead (see <see cref="LlmCli"/>).
 /// </summary>
 public static class LlmProviderKinds
@@ -13,12 +13,13 @@ public static class LlmProviderKinds
     public const string OpenRouter = "openrouter";
     public const string XAi = "xai";
     public const string OpenAi = "openai";
+    public const string Cerebras = "cerebras";
     public const string LmStudio = "lmstudio";
     public const string ClaudeCli = "claude-cli";
     public const string GrokCli = "grok-cli";
 
     public static readonly IReadOnlyList<string> All =
-        [OpenRouter, XAi, OpenAi, LmStudio, ClaudeCli, GrokCli];
+        [OpenRouter, XAi, OpenAi, Cerebras, LmStudio, ClaudeCli, GrokCli];
 
     /// <summary>Accepts the spellings a UI or a hand-written request is likely to send.</summary>
     public static string? Normalize(string? raw) =>
@@ -29,6 +30,7 @@ public static class LlmProviderKinds
             // must be asked for by its full name.
             "xai" or "grok" or "x" => XAi,
             "openai" or "chatgpt" or "gpt" => OpenAi,
+            "cerebras" or "cbrs" => Cerebras,
             "lmstudio" or "local" or "lm" => LmStudio,
             "claudecli" or "claude" or "claudecode" => ClaudeCli,
             "grokcli" => GrokCli,
@@ -40,6 +42,7 @@ public static class LlmProviderKinds
         OpenRouter => "https://openrouter.ai/api/v1",
         XAi => "https://api.x.ai/v1",
         OpenAi => "https://api.openai.com/v1",
+        Cerebras => "https://api.cerebras.ai/v1",
         LmStudio => "http://localhost:1234/v1",
         _ => "",
     };
@@ -49,6 +52,7 @@ public static class LlmProviderKinds
         OpenRouter => "OpenRouter",
         XAi => "xAI",
         OpenAi => "OpenAI",
+        Cerebras => "Cerebras",
         LmStudio => "LM Studio",
         ClaudeCli => "Claude Code",
         GrokCli => "Grok CLI",
@@ -65,6 +69,7 @@ public static class LlmProviderKinds
         OpenRouter => "openai/gpt-4o-mini",
         XAi => "grok-3-mini",
         OpenAi => "gpt-4o-mini",
+        Cerebras => "gpt-oss-120b",
         _ => "",
     };
 

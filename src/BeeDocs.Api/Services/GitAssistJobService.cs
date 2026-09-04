@@ -98,7 +98,7 @@ public sealed class GitAssistJobService(
             ProviderId = source.ProviderId,
             Model = source.Model,
             // A rerun of a published job republishes; of an unpublished one, not.
-            PublishBook = source.PublishBook || source.PageId is not null,
+            PublishBook = source.PublishBook || source.PageId is not null || source.BookId is not null,
             ShelfId = source.ShelfId,
             BookId = source.BookId,
             PageId = source.PageId,
@@ -260,11 +260,10 @@ public sealed class GitAssistJobService(
     }
 
     /// <summary>
-    /// The result as library content: one book per repo (unless the caller chose
-    /// one), one page per document kind, updated in place on every re-publish.
-    /// Page-id linkage wins; failing that, a page in the target book already
-    /// titled like this kind is updated rather than duplicated — publishing the
-    /// same manual twice should converge, not multiply.
+    /// The result as library content. A single-page kind becomes one page
+    /// titled by kind; a <c>book</c> kind becomes a book of pages from the JSON
+    /// envelope. One book per repo unless the caller chose one; pages of the
+    /// same title in the target book are updated rather than duplicated.
     /// </summary>
     private async Task<(string BookId, string PageId)> PublishCoreAsync(
         GitAssistJob job, GitRepoDto repo, string? markdown,
@@ -272,6 +271,13 @@ public sealed class GitAssistJobService(
     {
         if (string.IsNullOrEmpty(markdown))
             throw new GitException("The job has no generated result to publish.");
+
+        if (GitAssistBookDraft.TryParse(markdown, out var draft))
+            return await PublishBookDraftAsync(job, repo, draft, shelfId, bookId, ct);
+
+        if (job.Kind == GitAssistService.Kinds.Book)
+            throw new GitException("The generated book draft is not valid JSON.");
+
         var title = GitAssistService.KindTitle(job.Kind);
 
         if (pageId is not null && await documents.GetPageAsync(pageId, ct) is { } existing)
@@ -285,18 +291,8 @@ public sealed class GitAssistJobService(
             return (existing.BookId, existing.Id);
         }
 
-        BookDto? book = bookId is null ? null : await documents.GetBookAsync(bookId, ct);
-        if (book is null)
-        {
-            if (shelfId is not null && await documents.GetShelfAsync(shelfId, ct) is null)
-                throw new GitException($"Shelf '{shelfId}' no longer exists — pick another destination.");
-            book = await documents.CreateBookAsync(new CreateBookRequest(
-                Title: repo.Name,
-                Description: $"AI-generated documentation for the {repo.Name} repository.",
-                Slug: null,
-                OwnerId: job.CreatedById,
-                ShelfId: shelfId), ct);
-        }
+        var book = await ResolveBookAsync(job, shelfId, bookId, title: repo.Name,
+            description: $"AI-generated documentation for the {repo.Name} repository.", ct);
 
         var pages = await documents.ListPagesAsync(book.Id, ct);
         var match = pages.FirstOrDefault(p =>
@@ -317,9 +313,114 @@ public sealed class GitAssistJobService(
             Slug: null,
             Content: markdown,
             ChapterId: null,
-            SortOrder: null,
+            SortOrder: pages.Count == 0 ? 0 : pages.Max(p => p.SortOrder) + 1,
             OwnerId: job.CreatedById), ct);
         return (book.Id, page.Id);
+    }
+
+    private async Task<(string BookId, string PageId)> PublishBookDraftAsync(
+        GitAssistJob job, GitRepoDto repo, GitAssistBookDraft draft,
+        string? shelfId, string? bookId, CancellationToken ct)
+    {
+        var bookTitle = string.IsNullOrWhiteSpace(draft.BookTitle) ? repo.Name : draft.BookTitle;
+        var description = string.IsNullOrWhiteSpace(draft.BookDescription)
+            ? $"AI-generated documentation for the {repo.Name} repository."
+            : draft.BookDescription;
+
+        var book = await ResolveBookAsync(job, shelfId, bookId, bookTitle, description, ct);
+        var existing = (await documents.ListPagesAsync(book.Id, ct)).ToList();
+        var nextOrder = existing.Count == 0 ? 0 : existing.Max(p => p.SortOrder) + 1;
+        string? firstPageId = null;
+
+        foreach (var page in draft.Pages)
+        {
+            var match = existing.FirstOrDefault(p =>
+                string.Equals(p.Title, page.Title, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                await documents.UpdatePageAsync(match.Id, new UpdatePageRequest(
+                    Title: match.Title,
+                    Slug: null,
+                    Content: page.Markdown,
+                    ChapterId: null,
+                    SortOrder: null), ct);
+                firstPageId ??= match.Id;
+                continue;
+            }
+
+            var created = await documents.CreatePageAsync(book.Id, new CreatePageRequest(
+                Title: page.Title,
+                Slug: null,
+                Content: page.Markdown,
+                ChapterId: null,
+                SortOrder: nextOrder++,
+                OwnerId: job.CreatedById), ct);
+            existing.Add(new PageSummaryDto(
+                created.Id, created.BookId, created.ChapterId, created.Title, created.Slug,
+                created.SortOrder, created.Version, created.OwnerId, created.OwnerName,
+                created.UpdatedAt));
+            firstPageId ??= created.Id;
+        }
+
+        return (book.Id, firstPageId ?? throw new GitException("The book draft had no pages to publish."));
+    }
+
+    private async Task<BookDto> ResolveBookAsync(
+        GitAssistJob job, string? shelfId, string? bookId,
+        string title, string? description, CancellationToken ct)
+    {
+        if (bookId is not null && await documents.GetBookAsync(bookId, ct) is { } existing)
+            return existing;
+
+        if (shelfId is not null && await documents.GetShelfAsync(shelfId, ct) is null)
+            throw new GitException($"Shelf '{shelfId}' no longer exists — pick another destination.");
+
+        return await documents.CreateBookAsync(new CreateBookRequest(
+            Title: title,
+            Description: description,
+            Slug: null,
+            OwnerId: job.CreatedById,
+            ShelfId: shelfId), ct);
+    }
+
+    /// <summary>
+    /// Publish a reviewed single-page draft from the inline dialog — no job row,
+    /// same title-matching rules as a job publish.
+    /// </summary>
+    public async Task<GitAssistPublishResultDto> PublishDraftAsync(
+        string repoId, PublishGitAssistDraftRequest request, CancellationToken ct = default)
+    {
+        var repo = await repos.GetAsync(repoId, ct)
+            ?? throw new KeyNotFoundException($"Repository '{repoId}' not found.");
+        var kind = GitAssistService.Normalize(request.Kind)
+            ?? throw new ArgumentException(
+                $"Unknown assist kind '{request.Kind}'. Use one of: {string.Join(", ", GitAssistService.Kinds.All)}.");
+        if (kind == GitAssistService.Kinds.Book)
+        {
+            throw new ArgumentException(
+                "A documentation book is published from its background job, not from this endpoint.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Markdown))
+            throw new ArgumentException("The draft is empty.");
+
+        var shelfId = Normalize(request.ShelfId);
+        var bookId = Normalize(request.BookId);
+        if (shelfId is not null && await documents.GetShelfAsync(shelfId, ct) is null)
+            throw new ArgumentException($"Shelf '{shelfId}' was not found.");
+        if (bookId is not null && await documents.GetBookAsync(bookId, ct) is null)
+            throw new ArgumentException($"Book '{bookId}' was not found.");
+
+        var actor = currentUser.Current;
+        var job = new GitAssistJob
+        {
+            Kind = kind,
+            CreatedById = actor.Id,
+            CreatedByName = actor.Name,
+        };
+        var (finalBookId, finalPageId) =
+            await PublishCoreAsync(job, repo, request.Markdown, shelfId, bookId, pageId: null, ct);
+        return new GitAssistPublishResultDto(finalBookId, finalPageId);
     }
 
     // ----- persistence -----

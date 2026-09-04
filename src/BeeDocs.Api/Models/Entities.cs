@@ -288,7 +288,7 @@ public sealed class SlideTemplate
 public sealed class LlmProvider
 {
     public string Id { get; set; } = string.Empty;
-    /// <summary>openrouter | xai | openai | lmstudio</summary>
+    /// <summary>openrouter | xai | openai | cerebras | lmstudio | claude-cli | grok-cli</summary>
     public string Kind { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     /// <summary>Root of the OpenAI-compatible API, without a trailing slash.</summary>
@@ -477,10 +477,11 @@ public sealed class GitRepo
 
 /// <summary>
 /// One background AI-drafting run against a repo (README / documentation /
-/// manual / summary). The row is the job's whole story: parameters in, status
-/// while running, the generated Markdown and its provenance when done, and —
-/// when the result was published into the library — which book/page it became,
-/// so a re-run updates the same page instead of creating a sibling.
+/// manual / summary / a multi-page book). The row is the job's whole story:
+/// parameters in, status while running, the generated Markdown (or JSON
+/// envelope for a book) and its provenance when done, and — when the result
+/// was published into the library — which book/page it became, so a re-run
+/// updates the same page(s) instead of creating a sibling.
 /// </summary>
 public sealed class GitAssistJob
 {

@@ -543,3 +543,13 @@ Improve the generation the AI assisted manuals and documentation for the repos:
 - add the possibility to see the status of these background jobs (started, running, completed etc)
 - add the possibility to add the documentation/manual etc as a book on a bookshelf
 - add the possibility to re-generate, update this documentation
+
+Check the generation of documentation or manuals based on a git repo. I'm testing with cerebras (qwen-3.8-27b), but it generates an empty document.
+
+Add the possibiliy to add the generated git documentation as a page in a book. And even have the option to generate full multi page books based on the repo.
+
+
+When running a generation in background, I have no possibility to see what is running, should we not have somewhare the possibility to see all the background jobs, status, etc
+
+I get this from cerebras
+Cerebras returned a book outline that was not valid JSON (qwen-3.8-27b). Try again, or pick a different model.

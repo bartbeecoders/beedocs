@@ -60,6 +60,7 @@ import type {
   GitConnection,
   GitAssistJob,
   GitAssistKind,
+  GitAssistPublishResult,
   GitAssistResult,
   GitCommitDetail,
   GitCommitResult,
@@ -1003,7 +1004,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ instructions }),
     }),
-  /** Publish a completed job's draft into the library as a book page. */
+  /** Reviewed inline draft → a page in an existing book, or a new book on a shelf. */
+  publishGitAssistDraft: (
+    id: string,
+    body: { kind: GitAssistKind; markdown: string; shelfId?: string; bookId?: string },
+  ) =>
+    request<GitAssistPublishResult>(`/api/git/repos/${id}/assist/publish`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  /** Publish a completed job's draft into the library as a book page (or a multi-page book). */
   publishGitAssistJob: (jobId: string, body: { shelfId?: string; bookId?: string }) =>
     request<GitAssistJob>(`/api/git/assist/jobs/${jobId}/publish`, {
       method: 'POST',

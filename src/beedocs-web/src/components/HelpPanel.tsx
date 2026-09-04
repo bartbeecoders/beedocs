@@ -459,6 +459,8 @@ export function HelpPanel() {
           <strong>xAI</strong>
           {', '}
           <strong>OpenAI</strong>
+          {', '}
+          <strong>Cerebras</strong>
           {t('helpdoc.or')}
           <strong>LM Studio</strong>
           {t('helpdoc.ai.config2')}

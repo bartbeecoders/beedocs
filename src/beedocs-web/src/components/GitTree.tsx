@@ -10,7 +10,8 @@ import type { GitAssistKind, GitRepo, GitTreeEntry } from '../types'
 import '../styles/git.css'
 
 // Labels come from `git.assist.${kind}` at render time.
-const ASSIST_KINDS: GitAssistKind[] = ['readme', 'documentation', 'manual', 'summary']
+// Single-document drafts first; a full book is a bigger, always-background action.
+const ASSIST_DOC_KINDS: GitAssistKind[] = ['readme', 'documentation', 'manual', 'summary']
 
 function fileIcon(name: string): string {
   const ext = name.slice(name.lastIndexOf('.')).toLowerCase()
@@ -71,7 +72,7 @@ export function GitTree() {
     setMenu({
       repo,
       x: Math.min(e.clientX, window.innerWidth - 220 - pad),
-      y: Math.min(e.clientY, window.innerHeight - 260 - pad),
+      y: Math.min(e.clientY, window.innerHeight - 340 - pad),
     })
   }
 
@@ -177,7 +178,7 @@ export function GitTree() {
           {canWrite && menu.repo.status === 'ready' ? (
             <>
               <div className="tree-context-sep" />
-              {ASSIST_KINDS.map((kind) => (
+              {ASSIST_DOC_KINDS.map((kind) => (
                 <button
                   key={kind}
                   type="button"
@@ -191,6 +192,18 @@ export function GitTree() {
                   ✨ {t(`git.assist.${kind}` as MessageKey)}
                 </button>
               ))}
+              <div className="tree-context-sep" />
+              <button
+                type="button"
+                role="menuitem"
+                className="tree-context-item"
+                onClick={() => {
+                  setAssist({ repo: menu.repo, kind: 'book' })
+                  setMenu(null)
+                }}
+              >
+                ✨ {t('git.assist.book')}
+              </button>
             </>
           ) : null}
         </div>

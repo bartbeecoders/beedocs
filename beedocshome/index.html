@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BeeDocs — self-hosted systems documentation with a diagram studio inside</title>
-  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks, searchable file attachments — and an MCP server so AI agents write docs alongside you." />
+  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks, kanban boards, Gantt project plans, searchable file attachments — and an MCP server so AI agents write docs alongside you." />
   <meta property="og:title" content="BeeDocs — documentation that draws its own architecture" />
-  <meta property="og:description" content="Self-hosted docs for systems teams: Markdown books, BeeDiagram Studio, isometric views, slides, searchable file attachments, full-text search, and an MCP server for AI agents. One container, SQLite inside. MIT-licensed and free forever." />
+  <meta property="og:description" content="Self-hosted docs for systems teams: Markdown books, BeeDiagram Studio, isometric views, slides, kanban boards, Gantt plans, searchable file attachments, full-text search, and an MCP server for AI agents. One container, SQLite inside. MIT-licensed and free forever." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://beedocshome.hideterms.com/" />
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
@@ -43,11 +43,12 @@
     <nav class="head-nav" aria-label="Sections">
       <a href="#tour">Tour</a>
       <a href="#features">Features</a>
+      <a href="#boards">Boards</a>
       <a href="#diagrams">Diagrams</a>
       <a href="#agents">Agents</a>
       <a href="#desktop">Desktop</a>
       <a href="#selfhost">Self-host</a>
-      <a href="releases.html">Releases<span class="nav-badge">v0.7</span></a>
+      <a href="releases.html">Releases<span class="nav-badge">v0.8</span></a>
     </nav>
     <div class="head-actions">
       <a class="btn btn-ghost" href="https://github.com/bartbeecoders/beedocs" rel="noopener">
@@ -71,16 +72,17 @@
       <div class="hero-copy">
         <p class="eyebrow"><span class="dot" aria-hidden="true"></span>self-hosted · single container · SQLite inside</p>
         <a class="release-flag" href="releases.html">
-          <span class="flag-badge">v0.7</span>
-          <span>New: git repos on the shelf &amp; AI-drafted docs</span>
+          <span class="flag-badge">v0.8</span>
+          <span>New: kanban boards &amp; Gantt project plans</span>
           <span class="flag-arrow" aria-hidden="true">→</span>
         </a>
         <h1>Documentation that draws its own architecture.</h1>
         <p class="lede">
           BeeDocs is a self-hosted platform for documenting software and hardware
           systems: a library of books and Markdown pages with a draw.io-class
-          diagram studio, isometric architecture views and slide decks built in.
-          It ships an MCP server too, so your AI agents write docs right next to you.
+          diagram studio, isometric architecture views, slide decks, kanban boards
+          and Gantt plans built in. It ships an MCP server too, so your AI agents
+          write docs right next to you.
         </p>
         <div class="cta-row">
           <a class="btn btn-honey btn-lg" href="https://beedocs.hideterms.com" rel="noopener">Open the live demo</a>
@@ -183,6 +185,33 @@
     </div>
   </section>
 
+  <!-- ======================================================== boards -->
+  <section id="boards" class="section section-alt reveal">
+    <div class="container">
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>boards &amp; plans</p>
+      <h2>Track the work in the same library.</h2>
+      <p class="section-lede">A kanban board and a Gantt plan are first-class
+         book items — next to pages, diagrams and decks. Drag cards, indent a
+         WBS, embed either on a page with one fence. Agents build them too.</p>
+      <div class="shot-grid">
+        <figure class="shot">
+          <img src="assets/tour/kanban.jpg" loading="lazy" width="1440" height="780"
+               alt="The BeeDocs workspace showing a Checkout board: Backlog, To do, In progress and Done columns of coloured cards with assignees, WIP limit 3 on In progress, library tree on the left with the board selected." />
+          <figcaption class="mono">fig. 10 — a checkout board in the tree: four
+            columns, WIP on In progress, colour and an assignee per card. Embed
+            it with a <span class="mono">kanban-ref</span> fence.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/tour/project.jpg" loading="lazy" width="1440" height="780"
+               alt="A Launch plan in BeeDocs: WBS table on the left with nested Discovery and Build tasks plus a Launch milestone, Gantt bars and dependency arrows on the right, today's date marked." />
+          <figcaption class="mono">fig. 11 — WBS on the left, Gantt on the
+            right. Indent for summaries, diamonds for milestones, drag a bar
+            to move it. The same JSON embeds on a page.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
   <!-- ======================================================== features -->
   <section id="features" class="section reveal">
     <div class="container">
@@ -213,6 +242,19 @@
              Slides opens natively.</p>
         </article>
         <article class="card">
+          <h3>Kanban boards</h3>
+          <p>Columns of cards you drag, with optional colour, assignee and a
+             WIP limit. A board is a book-tree item and a page embed —
+             <span class="mono">kanban</span> inline or
+             <span class="mono">kanban-ref</span> to the stored board.</p>
+        </article>
+        <article class="card">
+          <h3>Project plans with a Gantt</h3>
+          <p>A WBS of tasks and milestones plus a Gantt chart: indent to nest,
+             drag bars to move, edges to resize, finish-to-start links. Same
+             two embed paths as boards.</p>
+        </article>
+        <article class="card">
           <h3>Attachments a book keeps</h3>
           <p>Drop PDFs, Office and OpenDocument files onto a book and they file
              themselves there — versioned, behind the API gate, links surviving
@@ -227,9 +269,15 @@
         </article>
         <article class="card">
           <h3>Favorites at hand</h3>
-          <p>Star any book, page, diagram, deck or attachment and it waits in a
-             panel above the tree. Personal, per-account, and open to read-only
-             viewers too.</p>
+          <p>Star any book, page, diagram, deck, board, plan or attachment and
+             it waits in a panel above the tree. Personal, per-account, and
+             open to read-only viewers too.</p>
+        </article>
+        <article class="card">
+          <h3>Your name on the door</h3>
+          <p>Rename the instance, swap the mark for a logo — uploaded or drafted
+             by your AI provider — and pick from thirteen colour themes. The UI
+             ships in seven languages; documents stay exactly as you wrote them.</p>
         </article>
         <article class="card">
           <h3>Accounts when you want them</h3>
@@ -253,10 +301,12 @@
         <article class="card">
           <h3>AI-drafted docs, your model</h3>
           <p>Right-click a repo and let your own AI provider — OpenRouter,
-             OpenAI, xAI, LM&nbsp;Studio, or the <span class="mono">claude</span>
+             OpenAI, xAI, Cerebras, LM&nbsp;Studio, or the
+             <span class="mono">claude</span>
              / <span class="mono">grok</span> CLI already on your machine —
-             draft its README, documentation or user manual. Nothing lands
-             without your review and commit.</p>
+             draft its README, documentation or user manual. Run it in the
+             background, then publish the result as a book page. Nothing lands
+             without your review.</p>
         </article>
       </div>
     </div>
@@ -310,7 +360,7 @@
           <source src="assets/tour/isometric-editor.webm" type="video/webm" />
           <source src="assets/tour/isometric-editor.mp4" type="video/mp4" />
         </video>
-        <figcaption class="mono">fig. 10 — moving <span class="mono">checkout-1</span>
+        <figcaption class="mono">fig. 12 — moving <span class="mono">checkout-1</span>
           to a new tile (connectors follow), placing a cache from the palette,
           renaming it <span class="mono">sessions</span>. Auto-saved throughout.</figcaption>
       </figure>
@@ -318,14 +368,14 @@
         <figure class="shot">
           <img src="assets/tour/iso-editor.jpg" loading="lazy" width="1280" height="640"
                alt="The isometric editor: shape palette with compute, data and network stencils on the left, a checkout topology of firewall, load balancer, servers, database, cache and queue on the 2:1 tile grid." />
-          <figcaption class="mono">fig. 11 — palette, tile grid, one JSON
+          <figcaption class="mono">fig. 13 — palette, tile grid, one JSON
             document. Embed it in any page with an
             <span class="mono">isometric-ref</span> fence.</figcaption>
         </figure>
         <figure class="shot">
           <img src="assets/tour/iso-connect.jpg" loading="lazy" width="1280" height="640"
                alt="Hovering a server in the isometric editor shows four amber connect arrows pointing to the neighbouring tiles, ready to drag a connector to another shape." />
-          <figcaption class="mono">fig. 12 — hover for connect arrows: drag one
+          <figcaption class="mono">fig. 14 — hover for connect arrows: drag one
             to link shapes, or click it for a connected copy.</figcaption>
         </figure>
       </div>
@@ -340,16 +390,17 @@
         <h2>Your agents write here too.</h2>
         <p>BeeDocs ships an MCP server that wraps the whole API: create books,
            write pages, build BeeDiagrams and isometric views, assemble slide
-           decks, search the library — and work the git shelf, from reading a
-           file at any ref to branching, committing and pushing. Add a shape to
-           the palette and a generated catalog carries it to your agents — no
-           second edit.</p>
+           decks, stand up a kanban board or a Gantt plan, search the library
+           — and work the git shelf, from reading a file at any ref to
+           branching, committing and pushing. Add a shape to the palette and a
+           generated catalog carries it to your agents — no second edit.</p>
         <p>Connect Claude Code, Cursor, VS&nbsp;Code or Claude Desktop over stdio
            or HTTP, with optional bearer-token auth in front.</p>
         <ul class="chip-row" aria-label="Example MCP tools">
           <li class="mono">beedocs_create_page</li>
           <li class="mono">beedocs_create_beediagram_with_nodes</li>
-          <li class="mono">beedocs_create_isometric_with_items</li>
+          <li class="mono">beedocs_create_kanban_board_with_columns</li>
+          <li class="mono">beedocs_create_project_plan_with_tasks</li>
           <li class="mono">beedocs_search</li>
           <li class="mono">beedocs_git_commit</li>
         </ul>
@@ -394,7 +445,7 @@ claude mcp add beedocs -- dotnet run \
         <figure class="shot" style="max-width:420px;margin-inline:auto">
           <img src="assets/tour/omarchy-panel.jpg" loading="lazy" width="368" height="574"
                alt="The BeeDocs Omarchy bar panel: server status and library counts, a search for 'diagram', and matching pages with highlighted snippets." />
-          <figcaption class="mono">fig. 13 — the bar panel searching a live
+          <figcaption class="mono">fig. 15 — the bar panel searching a live
             library from the Omarchy shell.</figcaption>
         </figure>
         <div class="code-panel" role="img" aria-label="Terminal command installing BeeDocs as a systemd user service on Omarchy">

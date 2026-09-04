@@ -13,6 +13,7 @@ import { bookshelfSitePath } from '../markdownLinks'
 import { FavoritesPanel } from './FavoritesPanel'
 import { GitTree } from './GitTree'
 import { GitFileCanvas, GitRepoCanvas } from './GitCanvas'
+import { GitAssistJobsMenu } from './GitAssistJobs'
 import { useGitRepos } from '../hooks/useGitRepos'
 import { NavTree } from './NavTree'
 import { ResizablePane } from './ResizablePane'
@@ -272,6 +273,7 @@ export function WorkspaceShell() {
           </nav>
         </div>
         <div className="ws-header-right">
+          <GitAssistJobsMenu />
           <button
             type="button"
             className="ws-search-trigger"

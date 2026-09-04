@@ -632,3 +632,111 @@ a.git-root-entry:hover {
   font: inherit;
   padding: 0.4rem 0.5rem;
 }
+
+.git-job-exit.git-job-exit-stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.git-assist-dest {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.git-assist-book-preview h4 {
+  margin: 0.6rem 0 0.25rem;
+}
+
+.git-assist-book-page {
+  border-top: 1px solid var(--border);
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+}
+
+/* --- Header: instance-wide AI job panel --- */
+
+.git-jobs-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.git-jobs-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.55rem;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.git-jobs-trigger:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.git-jobs-trigger.is-active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+
+.git-jobs-badge {
+  min-width: 1.15rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.git-jobs-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 40;
+  width: min(38rem, calc(100vw - 2rem));
+  max-height: min(70vh, 34rem);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+.git-jobs-panel-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.git-jobs-panel-head p {
+  margin: 0.25rem 0 0;
+}
+
+.git-job-repo {
+  display: block;
+  text-decoration: none;
+}
+
+.git-job-repo:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 1100px) {
+  .git-jobs-trigger-text {
+    display: none;
+  }
+}

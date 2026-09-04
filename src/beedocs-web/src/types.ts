@@ -616,7 +616,7 @@ export type BeeDiagramDoc = {
  * differ. The `-cli` kinds run the locally installed `claude`/`grok` command on
  * the machine the API runs on instead — no base URL, no key.
  */
-export type LlmKind = 'openrouter' | 'xai' | 'openai' | 'lmstudio' | 'claude-cli' | 'grok-cli'
+export type LlmKind = 'openrouter' | 'xai' | 'openai' | 'cerebras' | 'lmstudio' | 'claude-cli' | 'grok-cli'
 
 /** Canonical task names. The API also accepts aliases, but send these. */
 export type LlmTask = 'continue' | 'rewrite' | 'grammar' | 'format' | 'summarize'
@@ -1099,7 +1099,12 @@ export type GitDiff = {
 }
 
 /** The AI actions on a repo's context menu. */
-export type GitAssistKind = 'readme' | 'documentation' | 'manual' | 'summary'
+export type GitAssistKind = 'readme' | 'documentation' | 'manual' | 'summary' | 'book'
+
+export type GitAssistPublishResult = {
+  bookId: string
+  pageId: string
+}
 
 export type GitAssistResult = {
   kind: GitAssistKind

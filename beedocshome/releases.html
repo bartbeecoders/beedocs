@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BeeDocs releases — every version and what it brought</title>
-  <meta name="description" content="The BeeDocs release history: grid page layouts, the isometric editor, slide decks, the bookshelf reader sites, full-text search, users and roles — version by version, all in the same free MIT-licensed build." />
+  <meta name="description" content="The BeeDocs release history: kanban boards, Gantt project plans, git repos on the shelf, grid page layouts, the isometric editor, slide decks — version by version, all in the same free MIT-licensed build." />
   <meta property="og:title" content="BeeDocs releases" />
-  <meta property="og:description" content="Every BeeDocs version and what it brought — from the first commit to grid page layouts. All features ship in the same free, MIT-licensed build." />
+  <meta property="og:description" content="Every BeeDocs version and what it brought — from the first commit to kanban boards and Gantt plans. All features ship in the same free, MIT-licensed build." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://beedocshome.hideterms.com/releases.html" />
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
@@ -43,11 +43,12 @@
     <nav class="head-nav" aria-label="Sections">
       <a href="index.html#tour">Tour</a>
       <a href="index.html#features">Features</a>
+      <a href="index.html#boards">Boards</a>
       <a href="index.html#diagrams">Diagrams</a>
       <a href="index.html#agents">Agents</a>
       <a href="index.html#desktop">Desktop</a>
       <a href="index.html#selfhost">Self-host</a>
-      <a href="releases.html" aria-current="page">Releases<span class="nav-badge">v0.7</span></a>
+      <a href="releases.html" aria-current="page">Releases<span class="nav-badge">v0.8</span></a>
     </nav>
     <div class="head-actions">
       <a class="btn btn-ghost" href="https://github.com/bartbeecoders/beedocs" rel="noopener">
@@ -76,12 +77,77 @@
 
       <ol class="timeline" reversed>
 
-        <!-- ================================================== v0.7 -->
+        <!-- ================================================== v0.8 -->
         <li class="release release--latest">
           <div class="release-head">
-            <span class="release-badge release-badge--latest mono">v0.7</span>
+            <span class="release-badge release-badge--latest mono">v0.8</span>
+            <h2>Kanban boards, Gantt plans, and a workspace that wears your name</h2>
+            <p class="release-date mono">4 Sep 2026 · latest</p>
+          </div>
+          <p>The library learned to track work — and to look like yours. Boards
+             and project plans sit next to pages and diagrams; the instance can
+             carry your title, mark and language.</p>
+          <ul class="release-list">
+            <li><strong>Kanban boards</strong>: ordered columns of cards in one
+                JSON document, as a book-tree item or a page embed
+                (<span class="mono">kanban</span> inline /
+                <span class="mono">kanban-ref</span> to the stored board). Drag
+                cards and columns, optional colour, a WIP limit, and an
+                assignee from the user directory. Agents build them with
+                <span class="mono">beedocs_create_kanban_board_with_columns</span>.</li>
+            <li><strong>Project plans</strong>: a WBS of tasks and milestones
+                plus a Gantt chart — indent to nest, drag bars to move and
+                edges to resize, finish-to-start predecessors, optional
+                assignee. Same two embed paths
+                (<span class="mono">project</span> /
+                <span class="mono">project-ref</span>). Agents use
+                <span class="mono">beedocs_create_project_plan_with_tasks</span>.</li>
+            <li><strong>Your name on the door</strong>: an admin can rename the
+                instance and replace the mark with an uploaded or AI-drafted
+                logo. Thirteen colour themes (including Nord, Gruvbox,
+                Catppuccin, Tokyo Night, Rosé Pine, Solarized Light, and the
+                Omarchy desktop palette when the server runs on one). The UI
+                ships in seven languages — English, Français, Deutsch, Español,
+                Nederlands, 日本語, 中文 — with documents left exactly as their
+                authors wrote them.</li>
+            <li><strong>Cerebras as an AI provider</strong>: the same
+                OpenAI-compatible writing help, pointed at
+                <span class="mono">https://api.cerebras.ai/v1</span> — open
+                models at wafer-scale speed, a key required like the other
+                hosted kinds.</li>
+            <li><strong>AI drafts as background jobs</strong>: run a repo's
+                README, documentation or manual generation in the background,
+                watch status from the header or the repo page, and publish the
+                result as a page in an existing or new library book.
+                Re-generating updates that same page as a new revision. The
+                draft is stored before publish, so a failed write never costs
+                the generation.</li>
+            <li><strong>Documentation books from a repo</strong>: a background
+                job asks for a JSON outline, then writes 5–8 pages one at a
+                time, and publishes them as a multi-page book. Same titles
+                update in place on re-run.</li>
+          </ul>
+          <div class="release-shot-row">
+            <figure class="release-shot">
+              <img src="assets/tour/kanban.jpg" loading="lazy" width="1440" height="780"
+                   alt="The BeeDocs workspace showing a Checkout board with Backlog, To do, In progress and Done columns of coloured cards." />
+              <figcaption class="mono">a kanban board in the library —
+                <a href="index.html#boards">see it on the home page</a></figcaption>
+            </figure>
+            <figure class="release-shot">
+              <img src="assets/tour/project.jpg" loading="lazy" width="1440" height="780"
+                   alt="A Launch plan: nested WBS tasks on the left and a Gantt chart with bars, dependency arrows and a Launch milestone on the right." />
+              <figcaption class="mono">WBS + Gantt, same JSON document</figcaption>
+            </figure>
+          </div>
+        </li>
+
+        <!-- ================================================== v0.7 -->
+        <li class="release">
+          <div class="release-head">
+            <span class="release-badge mono">v0.7</span>
             <h2>Git repos on the shelf, and AI that drafts their docs</h2>
-            <p class="release-date mono">30 Aug 2026 · latest</p>
+            <p class="release-date mono">30 Aug 2026</p>
           </div>
           <p>The library learned git. Connect an account, put repositories on
              the shelf next to your books, and read, edit and publish to them
@@ -111,8 +177,9 @@
                 writes, taught to branch first, commit only their own paths, and
                 hand the result to a person as a PR.</li>
             <li><strong>Your CLI as an AI provider</strong>: alongside
-                OpenRouter, OpenAI, xAI and LM&nbsp;Studio, the writing help can
-                now run the <span class="mono">claude</span> (Claude Code) or
+                OpenRouter, OpenAI, xAI, Cerebras and LM&nbsp;Studio, the writing
+                help can now run the <span class="mono">claude</span> (Claude
+                Code) or
                 <span class="mono">grok</span> CLI already installed and signed
                 in on your machine — no second API key.</li>
             <li><strong>AI-drafted docs</strong>: right-click a repo for a

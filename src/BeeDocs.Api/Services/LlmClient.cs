@@ -26,7 +26,7 @@ public interface ILlmClient
 }
 
 /// <summary>
-/// One OpenAI-compatible chat client for the four HTTP providers — they differ
+/// One OpenAI-compatible chat client for the HTTP providers — they differ
 /// only in base URL and whether a key is required, so the wire format is shared.
 /// The two CLI kinds branch to <see cref="LlmCli"/> instead, which runs the
 /// locally installed `claude`/`grok` command with the same prompts.
@@ -191,7 +191,7 @@ public sealed class LlmClient(
 
         // Anonymous objects cannot omit a property conditionally without building a
         // dictionary: LM Studio (and strict local servers) 400 on unknown fields, so
-        // `reasoning` is only sent to cloud providers that understand it.
+        // reasoning controls are only sent to cloud providers that understand them.
         var payload = new Dictionary<string, object?>
         {
             ["model"] = model,
@@ -205,15 +205,8 @@ public sealed class LlmClient(
             ["stream"] = false,
         };
 
-        // Inline autocomplete and light edits are ruined by reasoning models that
-        // spend 800–1000 tokens thinking and 7–10s before emitting a sentence —
-        // measured on qwen3.7-flash via OpenRouter at the default effort. `none`
-        // drops that to ~25 tokens and sub-second answers; non-reasoning models
-        // ignore the field. Rewrite/summarize keep a little thinking room.
-        if (SupportsReasoningControl(provider.Kind))
-        {
-            payload["reasoning"] = new { effort = LlmPrompts.ReasoningEffort(task) };
-        }
+        ApplyReasoningControl(payload, provider.Kind, task, model);
+        ApplyJsonResponseFormat(payload, provider.Kind, task);
 
         using var content = new StringContent(
             JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
@@ -222,20 +215,91 @@ public sealed class LlmClient(
             provider, HttpMethod.Post, "chat/completions", content, timeout, ct);
         var root = document.RootElement;
 
-        // Empty is a normal outcome, not a fault — surfacing it as a provider error
-        // makes the editor decide the provider is broken and stop asking for minutes.
+        // Empty is a normal outcome for `continue`, not a fault — surfacing it as
+        // a provider error makes the editor decide the provider is broken and stop
+        // asking for minutes. DocDraft treats empty as a failure further up.
         var text = ReadChoiceText(root) ?? string.Empty;
         var (promptTokens, completionTokens) = ReadUsage(root);
+        if (text.Length == 0 && task == LlmPrompts.BookOutline)
+        {
+            // qwen-3.8-27b on Cerebras puts the reply in message.reasoning and
+            // leaves content empty. That is chain-of-thought for a document, but
+            // for an outline we only need a JSON object — salvage it rather than
+            // fail the whole book job.
+            var reasoning = ReadReasoningText(root);
+            if (!string.IsNullOrWhiteSpace(reasoning) && reasoning.IndexOf('{') >= 0)
+            {
+                logger.LogWarning(
+                    "{Provider} {Model} book outline had empty content; using JSON from message.reasoning ({Chars} chars)",
+                    provider.Name, model, reasoning.Length);
+                text = reasoning;
+            }
+        }
+        if (text.Length == 0)
+        {
+            logger.LogWarning(
+                "{Provider} {Model} returned empty content (finish_reason={Finish}, completion_tokens={Tokens}, max_tokens={Budget})",
+                provider.Name, model, ReadFinishReason(root) ?? "?", completionTokens, maxTokens);
+        }
         return (text, promptTokens, completionTokens);
     }
 
     /// <summary>
-    /// Cloud OpenAI-compatible gateways accept OpenRouter's unified <c>reasoning</c>
-    /// object. Local servers usually do not, and a 400 on every continue is worse
-    /// than a slow reasoning model.
+    /// Inline autocomplete and light edits are ruined by reasoning models that
+    /// spend hundreds of tokens thinking before a short phrase — measured on
+    /// qwen via OpenRouter at the default effort. Non-reasoning models ignore
+    /// the field. Local servers 400 on unknown keys, so LM Studio is skipped.
     /// </summary>
-    private static bool SupportsReasoningControl(string kind) =>
-        kind is LlmProviderKinds.OpenRouter or LlmProviderKinds.XAi or LlmProviderKinds.OpenAi;
+    private static void ApplyReasoningControl(
+        Dictionary<string, object?> payload, string kind, string task, string model)
+    {
+        var effort = LlmPrompts.ReasoningEffort(task);
+        if (kind is LlmProviderKinds.OpenRouter or LlmProviderKinds.XAi or LlmProviderKinds.OpenAi)
+        {
+            payload["reasoning"] = new { effort };
+            return;
+        }
+
+        if (kind == LlmProviderKinds.Cerebras)
+        {
+            // OpenAI-style field, not OpenRouter's `reasoning` object.
+            // qwen-3.8-27b defaults to high, accepts "none" (which actually
+            // disables thinking), and returns thinking in message.reasoning —
+            // without this, max_tokens is spent on thinking and content is
+            // empty. gpt-oss-120b rejects "none", so that model alone is
+            // remapped to "low".
+            payload["reasoning_effort"] = effort == "none" && CerebrasRejectsReasoningNone(model)
+                ? "low"
+                : effort;
+        }
+    }
+
+    /// <summary>
+    /// gpt-oss-120b is the one Cerebras model that 400s on <c>reasoning_effort: none</c>.
+    /// Qwen treats none as "do not think", which is what BookOutline needs.
+    /// </summary>
+    private static bool CerebrasRejectsReasoningNone(string model)
+    {
+        var id = model.Trim().ToLowerInvariant();
+        return id.Contains("gpt-oss") || id.Contains("gptoss");
+    }
+
+    /// <summary>
+    /// A book outline is parsed as JSON; without a response format the model
+    /// (especially Qwen) answers in prose or puts the object in a fence.
+    /// LM Studio and the CLI kinds 400 or ignore the field, so they stay text.
+    /// </summary>
+    private static void ApplyJsonResponseFormat(Dictionary<string, object?> payload, string kind, string task)
+    {
+        if (task != LlmPrompts.BookOutline) return;
+        if (kind is not (LlmProviderKinds.OpenRouter or LlmProviderKinds.XAi
+            or LlmProviderKinds.OpenAi or LlmProviderKinds.Cerebras))
+        {
+            return;
+        }
+
+        payload["response_format"] = new { type = "json_object" };
+    }
 
     /// <summary>
     /// The configured model, or the provider's first — LM Studio serves whatever is
@@ -463,6 +527,9 @@ public sealed class LlmClient(
             && message.TryGetProperty("content", out var content))
         {
             // Some providers return content as an array of parts rather than a string.
+            // Null content is normal for a reasoning model that never left the
+            // thinking phase — do not fall back to message.reasoning; that is
+            // chain-of-thought, not the document.
             if (content.ValueKind == JsonValueKind.String)
                 return content.GetString();
 
@@ -487,6 +554,46 @@ public sealed class LlmClient(
             return legacy.GetString();
 
         return null;
+    }
+
+    /// <summary>
+    /// Cerebras Qwen puts thinking (and sometimes the whole reply) in
+    /// <c>message.reasoning</c>. Only BookOutline reads this, and only when
+    /// <c>content</c> was empty — see AttemptAsync.
+    /// </summary>
+    private static string? ReadReasoningText(JsonElement root)
+    {
+        if (!root.TryGetProperty("choices", out var choices)
+            || choices.ValueKind != JsonValueKind.Array
+            || choices.GetArrayLength() == 0)
+        {
+            return null;
+        }
+
+        var first = choices[0];
+        if (first.TryGetProperty("message", out var message)
+            && message.TryGetProperty("reasoning", out var reasoning)
+            && reasoning.ValueKind == JsonValueKind.String)
+        {
+            return reasoning.GetString();
+        }
+
+        return null;
+    }
+
+    private static string? ReadFinishReason(JsonElement root)
+    {
+        if (!root.TryGetProperty("choices", out var choices)
+            || choices.ValueKind != JsonValueKind.Array
+            || choices.GetArrayLength() == 0)
+        {
+            return null;
+        }
+
+        var first = choices[0];
+        return first.TryGetProperty("finish_reason", out var reason) && reason.ValueKind == JsonValueKind.String
+            ? reason.GetString()
+            : null;
     }
 
     private static (int? Prompt, int? Completion) ReadUsage(JsonElement root)
@@ -524,6 +631,13 @@ public static class LlmPrompts
     public const string DocDraft = "docdraft";
 
     /// <summary>
+    /// The outline step of a multi-page documentation book: same repository
+    /// bundle as DocDraft, but the answer is JSON listing pages to write, not
+    /// the pages themselves.
+    /// </summary>
+    public const string BookOutline = "bookoutline";
+
+    /// <summary>
     /// A standalone SVG logo mark (the branding settings' "generate with AI").
     /// The context is the instance title, the prompt is the description, and the
     /// answer is a lone &lt;svg&gt; element — which BrandingService then
@@ -532,7 +646,7 @@ public static class LlmPrompts
     public const string Logo = "logo";
 
     public static readonly IReadOnlyList<string> Tasks =
-        [Continue, Rewrite, Grammar, Format, Summarize, DocDraft, Logo];
+        [Continue, Rewrite, Grammar, Format, Summarize, DocDraft, BookOutline, Logo];
 
     /// <summary>Enough context to be grounded, not enough to blow up the bill.</summary>
     private const int MaxContextChars = 6000;
@@ -554,6 +668,7 @@ public static class LlmPrompts
             "format" or "markdown" or "formatasmarkdown" or "formatmarkdown" => Format,
             "summarize" or "summarise" or "summary" => Summarize,
             "docdraft" or "document" or "docgen" => DocDraft,
+            "bookoutline" or "bookplan" => BookOutline,
             "logo" or "icon" => Logo,
             _ => null,
         };
@@ -637,6 +752,24 @@ public static class LlmPrompts
               the whole answer in a code fence — fences inside the document are fine.
             """,
 
+        BookOutline => """
+            You plan a multi-page documentation book about a software project,
+            from its repository. Respond in JSON.
+
+            Rules:
+            - Ground every page in the source material. Do not invent features,
+              commands or audiences the material does not support.
+            - Reply with ONLY a JSON object, no preamble, no commentary, no Markdown
+              fence. Shape:
+              {"bookTitle":"...","bookDescription":"...","pages":[{"title":"...","brief":"..."}]}
+            - 5 to 8 pages. Each page is a focused chapter a reader can open alone.
+            - Titles are short (2–6 words). Briefs are one sentence of what that
+              page must cover — not the page itself.
+            - Typical pages: Overview, Getting started, Architecture, Usage,
+              Configuration, Development, Operations — include only those the
+              source material can actually support.
+            """,
+
         Logo => """
             You design small vector logo marks as standalone SVG.
 
@@ -660,7 +793,7 @@ public static class LlmPrompts
 
     public static string UserMessage(string task, LlmCompleteRequest request)
     {
-        if (task == DocDraft)
+        if (task is DocDraft or BookOutline)
         {
             // Head, not Tail: the bundle is ordered most-important-first
             // (README, manifests, docs, then source), so the start must survive
@@ -728,15 +861,20 @@ public static class LlmPrompts
     {
         Grammar or Format => 0.1,
         Rewrite or DocDraft => 0.4,
+        BookOutline => 0.2,
         // Creative work — identical retries of a rejected logo would be useless.
         Logo => 0.8,
         _ => 0.3,
     };
 
     /// <summary>
-    /// OpenRouter/xAI/OpenAI reasoning control. Continuations and light edits want
+    /// Reasoning control for OpenRouter/xAI/OpenAI (<c>reasoning.effort</c>) and
+    /// Cerebras (<c>reasoning_effort</c>). Continuations and light edits want
     /// zero thinking — otherwise a "flash" model spends ~900 reasoning tokens and
     /// several seconds before a short phrase lands. Rewrite/summarize keep a little.
+    /// A book outline is a small JSON object: thinking eats the token budget and
+    /// leaves <c>content</c> empty (Cerebras qwen-3.8-27b). Cerebras gpt-oss-120b
+    /// still remaps <c>none</c> to <c>low</c> on the wire.
     /// </summary>
     public static string ReasoningEffort(string task) => task switch
     {
@@ -756,6 +894,9 @@ public static class LlmPrompts
         // A whole README or manual, not an edit — room to finish a long
         // document without inviting padding.
         DocDraft => 4096,
+        // A JSON outline of ≤ 8 pages. Reasoning is off for this task; 2048
+        // still leaves room if a model ignores that and thinks a little.
+        BookOutline => 2048,
         // SVG path data is token-hungry; a modest mark still runs long.
         Logo => 4096,
         // Roughly two tokens of headroom per token of input, since these tasks

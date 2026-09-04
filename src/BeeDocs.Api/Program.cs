@@ -2503,10 +2503,11 @@ gitApi.MapGet("/repos/{id}/branches", async (string id, IGitRepoService repos, C
     }
 });
 
-// AI-assisted drafting (README / documentation / manual / summary) grounded in
-// the clone. POST = the default editor rule — generating spends the configured
-// LLM provider's money/plan, which a viewer should not be able to do. Nothing
-// here writes the repo: saving the draft is the ordinary PUT …/file.
+// AI-assisted drafting (README / documentation / manual / summary / book)
+// grounded in the clone. POST = the default editor rule — generating spends
+// the configured LLM provider's money/plan, which a viewer should not be able
+// to do. Nothing here writes the repo: saving a single-page draft is the
+// ordinary PUT …/file; a book is published into the library as pages.
 gitApi.MapPost("/repos/{id}/assist", async (
     string id, GitAssistRequest body, GitAssistService assist, CancellationToken ct) =>
 {
@@ -2525,6 +2526,28 @@ gitApi.MapPost("/repos/{id}/assist", async (
     catch (LlmException ex)
     {
         return Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: ex.Message);
+    }
+    catch (GitException ex)
+    {
+        return GitFailure(ex);
+    }
+});
+
+// Reviewed inline draft → library page (existing book, or a new one on a shelf).
+gitApi.MapPost("/repos/{id}/assist/publish", async (
+    string id, PublishGitAssistDraftRequest body, GitAssistJobService jobs, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await jobs.PublishDraftAsync(id, body, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["assist"] = [ex.Message] });
     }
     catch (GitException ex)
     {

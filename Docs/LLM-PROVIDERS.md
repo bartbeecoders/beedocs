@@ -12,7 +12,7 @@ editor until one exists, is enabled, and answers.
 
 ## Supported providers
 
-The four HTTP kinds speak the OpenAI chat-completions API, so there is one
+The five HTTP kinds speak the OpenAI chat-completions API, so there is one
 client in the API (`Services/LlmClient.cs`) and they differ only in base URL and
 whether a key is required. The two CLI kinds have no endpoint at all — see the
 next section.
@@ -22,6 +22,7 @@ next section.
 | `openrouter` | `https://openrouter.ai/api/v1` | required | `openai/gpt-4o-mini` |
 | `xai` | `https://api.x.ai/v1` | required | `grok-3-mini` |
 | `openai` | `https://api.openai.com/v1` | required | `gpt-4o-mini` |
+| `cerebras` | `https://api.cerebras.ai/v1` | required | `gpt-oss-120b` |
 | `lmstudio` | `http://localhost:1234/v1` | none | _(whatever is loaded)_ |
 | `claude-cli` | _(none — runs `claude`)_ | none | _(the CLI's own default)_ |
 | `grok-cli` | _(none — runs `grok`)_ | none | _(the CLI's own default)_ |
@@ -116,7 +117,7 @@ a warning at startup when it finds a stored provider key and no `BeeDocs:ApiKey`
 |---|---|---|
 | `BeeDocs:ApiKey` | `BeeDocs__ApiKey` | When set, `/api/llm` and `/api/v1` require `Authorization: Bearer <key>` or `X-Api-Key: <key>` |
 | `BeeDocs:Llm:ApiKey` | `BeeDocs__Llm__ApiKey` | When set at startup, upsert an enabled provider of `BeeDocs:Llm:Kind` with this key |
-| `BeeDocs:Llm:Kind` | `BeeDocs__Llm__Kind` | `openrouter` (default), `xai`, or `openai` |
+| `BeeDocs:Llm:Kind` | `BeeDocs__Llm__Kind` | `openrouter` (default), `xai`, `openai`, or `cerebras` |
 | `BeeDocs:Llm:Model` | `BeeDocs__Llm__Model` | Optional. Empty keeps the stored model (or the kind's default on create) |
 
 The Azure zip-deploy script writes those `BeeDocs:Llm:*` values as App Service
@@ -202,8 +203,15 @@ output tokens because an autocomplete is a sentence, not an essay; `summarize`
 at 512; the rest scale with the input up to 4096. On OpenRouter/xAI/OpenAI,
 `continue` / `grammar` / `format` also send `reasoning.effort: "none"` so a
 reasoning model does not spend hundreds of tokens thinking before a short phrase;
-`rewrite` / `summarize` use `"low"`. Timeouts: 90s for a completion, 20s for a
-model list, 15s for a test.
+`rewrite` / `summarize` / `docdraft` use `"low"`. A documentation-book outline
+(`bookoutline`) uses `"none"` and asks the provider for `response_format:
+json_object`, because a thinking model otherwise spends the token budget on
+hidden reasoning and returns prose (or nothing) instead of JSON. Cerebras
+qwen-3.8-27b accepts `reasoning_effort: none` (that actually disables thinking);
+gpt-oss-120b rejects `none`, so that model alone is sent `low`. Without any
+effort field, qwen defaults to **high** and can return an empty `content`.
+Timeouts: 90s for a completion, 240s for a document draft, 20s for a model list,
+15s for a test.
 
 The response `text` is cleaned before it is returned — wrapping code fences,
 surrounding quotes and the `<think>` block that local reasoning models emit are
@@ -242,7 +250,9 @@ loopback only.
 | No AI controls in the editor | No provider is enabled, or the list call failed. The bar is hidden rather than shown broken |
 | "Not available on this deployment" | `BeeDocs:ApiKey` is set — see the trade-off above |
 | Ghost text never appears | Inline suggestions toggled off in the editor bar (off until you enable them under **AI help**), the field is empty, a text selection is active (that is for rewrite/grammar instead), or the provider is in backoff after a failure (the AI help pill says **Paused** — use **Resume now**, or wait) |
-| Continuations are very slow / empty | A reasoning model is thinking for hundreds of tokens before answering. BeeDocs sends `reasoning.effort: none` for `continue` on OpenRouter/xAI/OpenAI; pick a non-reasoning or "flash" instruct model if it is still slow |
+| Continuations are very slow / empty | A reasoning model is thinking for hundreds of tokens before answering. BeeDocs sends `reasoning.effort: none` for `continue` on OpenRouter/xAI/OpenAI, and `reasoning_effort: none` on Cerebras except gpt-oss-120b (`low`, because that model rejects `none`). qwen-3.8-27b defaults to **high** and otherwise spends `max_tokens` on thinking with an empty `content`; pick a non-reasoning or "flash" instruct model if it is still slow |
+| Git AI draft is empty | Same Cerebras/Qwen default: reasoning fills the DocDraft budget and the document never starts. BeeDocs sends `reasoning_effort`. If it still happens, try again or another model |
+| Git documentation book fails with "not valid JSON" | The outline step got prose or empty `content` from a reasoning model. BeeDocs now forces JSON mode and turns thinking off for that step; restart the API and retry |
 | `502` "rejected the API key" | Wrong or expired key, or a model the key has no access to |
 | `502` "returned 404 … check the base URL and the model id" | Base URL missing `/v1`, or a model id that provider does not serve |
 | `502` "reports no remaining credit" | Out of credit upstream |

@@ -416,8 +416,8 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
 - **LLM writing help** (`/api/llm`, `Services/LlmProviderService.cs` +
   `LlmClient.cs`, `components/AiAssist.tsx` + `hooks/useLlmAssist.ts`) — inline
   autocomplete and selection actions (rewrite / grammar / format / summarize) in
-  the page editor. OpenRouter, xAI, OpenAI and LM Studio all speak the OpenAI
-  chat-completions API, so one client covers them; providers are rows in
+  the page editor. OpenRouter, xAI, OpenAI, Cerebras and LM Studio all speak the
+  OpenAI chat-completions API, so one client covers them; providers are rows in
   `llm_provider` and the key column is read only by `ResolveAsync`, never put in
   a DTO. Every call is proxied by the API so no key reaches the browser. Two
   more kinds, `claude-cli` and `grok-cli` (`Services/LlmCli.cs`), spawn the
@@ -508,18 +508,25 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `…/assist`, editor-gated) draft README/docs/manual/summary grounded in a
   server-built repo bundle (≤40 KB, most-informative-first) through the
   configured LLM provider via the `docdraft` task in `LlmPrompts` (own 240s
-  budget); drafts land only through the ordinary review→save→commit gate.
-  The same generation also runs as a **background job** (`GitAssistJobService`,
+  budget); a reviewed draft can be saved into the repo *or* added as a page
+  in an existing/new library book (`POST …/assist/publish`). A **documentation
+  book** (`kind: book`) is always a background job: outline JSON then one
+  completion per page (5–8), published as a multi-page book. The outline call
+  uses JSON mode with thinking off so Cerebras Qwen does not return an empty
+  or non-JSON plan. The same
+  generation also runs as a **background job** (`GitAssistJobService`,
   POST `…/assist/jobs`, rows in `git_assist_job`, status
-  queued→running→completed|failed polled by `GitAssistJobs.tsx` on the repo
-  front page — the clone pattern): the Markdown is stored on the row *before*
-  publishing so a publish failure never costs the generation,
+  queued→running→completed|failed). The header **✨ AI documentation jobs**
+  button lists every job on the instance (badge while anything is running);
+  `GitAssistJobs.tsx` on the repo front page lists that repo's jobs. Both
+  poll the shared store while a job is active. The Markdown is stored on the row
+  *before* publishing so a publish failure never costs the generation,
   restart-orphaned jobs are swept to failed at startup, and deleting a
   running job cancels it. A job can publish its result into the library as a
-  book page (book named after the repo on a chosen shelf, page titled by
-  kind; publishing the same kind into the same book updates the page in
-  place), and `…/jobs/{id}/rerun` copies parameters *and* page linkage so
-  regenerated docs land on the same page as a new revision. `AmbientActor`
+  book page or a multi-page book (existing book, or a new one on a chosen
+  shelf; same titles update in place), and `…/jobs/{id}/rerun` copies
+  parameters *and* page linkage so regenerated docs land on the same page(s)
+  as a new revision. `AmbientActor`
   (`CurrentUserAccessor.cs`) carries the queuing user into the background
   task so page history names them. See `Docs/GIT-INTEGRATION.md`.
 - **BeeDocs.Mcp** wraps the whole REST API for AI agents (official C# MCP SDK

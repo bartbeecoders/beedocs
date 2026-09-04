@@ -769,7 +769,7 @@ public sealed record BookshelfSitePageContentDto(
 /// is write-only, and <paramref name="KeyHint"/> is all a UI needs to tell two
 /// keys apart.
 /// </summary>
-/// <param name="Kind">openrouter | xai | openai | lmstudio | claude-cli | grok-cli.</param>
+/// <param name="Kind">openrouter | xai | openai | cerebras | lmstudio | claude-cli | grok-cli.</param>
 /// <param name="Model">Preferred model id. Empty = whatever the provider lists first.</param>
 /// <param name="KeyHint">Last four characters of the stored key, or null when none is stored.</param>
 public sealed record LlmProviderDto(
@@ -1329,7 +1329,7 @@ public sealed record GitRenameRequest(
     [property: Required, MinLength(1)] string To
 );
 
-/// <param name="Kind">readme | documentation | manual | summary.</param>
+/// <param name="Kind">readme | documentation | manual | summary | book.</param>
 /// <param name="Instructions">Extra guidance folded into the assignment (audience, focus, tone…).</param>
 /// <param name="ProviderId">Omit to use the default (first enabled) AI provider.</param>
 public sealed record GitAssistRequest(
@@ -1339,10 +1339,10 @@ public sealed record GitAssistRequest(
     string? Model
 );
 
-/// <param name="Kind">readme | documentation | manual | summary.</param>
+/// <param name="Kind">readme | documentation | manual | summary | book.</param>
 /// <param name="PublishBook">Publish the result into the library when generation ends.</param>
 /// <param name="ShelfId">Shelf for a book created by publishing; omit for the library root.</param>
-/// <param name="BookId">Existing book to publish into; omit to create one named after the repo.</param>
+/// <param name="BookId">Existing book to publish into; omit to create one named after the repo (or the generated book title).</param>
 public sealed record StartGitAssistJobRequest(
     [property: Required, MinLength(1)] string Kind,
     string? Instructions,
@@ -1359,6 +1359,19 @@ public sealed record RerunGitAssistJobRequest(string? Instructions);
 /// <param name="ShelfId">Shelf for a book created by publishing; null falls back to the job's, "" the library root.</param>
 /// <param name="BookId">Existing book to publish into; null falls back to the job's own.</param>
 public sealed record PublishGitAssistJobRequest(string? ShelfId, string? BookId);
+
+/// <param name="Kind">readme | documentation | manual | summary — not book (those publish from the job).</param>
+/// <param name="Markdown">The reviewed draft from the inline generate dialog.</param>
+/// <param name="ShelfId">Shelf for a book created by publishing; omit for the library root.</param>
+/// <param name="BookId">Existing book to add the page to; omit to create one named after the repo.</param>
+public sealed record PublishGitAssistDraftRequest(
+    [property: Required, MinLength(1)] string Kind,
+    [property: Required, MinLength(1)] string Markdown,
+    string? ShelfId = null,
+    string? BookId = null
+);
+
+public sealed record GitAssistPublishResultDto(string BookId, string PageId);
 
 /// <param name="Status">queued | running | completed | failed.</param>
 /// <param name="Markdown">The generated draft — only on the single-job GET; lists omit it.</param>

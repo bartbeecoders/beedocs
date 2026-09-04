@@ -533,6 +533,11 @@ export function GitRepoCanvas() {
         ) : null}
         {error ? <p className="banner error">{error}</p> : null}
 
+        {/* Background AI-drafting jobs for this repo — above the file list so a
+            running job is not buried under a long tree. The header panel lists
+            every repo's jobs. */}
+        <GitAssistJobs repoId={repoId} />
+
         {entries !== null && ready ? (
           <ul className="git-root-list">
             {entries.map((entry) => (
@@ -552,10 +557,6 @@ export function GitRepoCanvas() {
             ))}
           </ul>
         ) : null}
-
-        {/* Background AI-drafting jobs for this repo — renders nothing until
-            the first job exists. */}
-        <GitAssistJobs repoId={repoId} />
 
         {ready ? (
           <div className="git-readme">

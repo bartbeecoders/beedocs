@@ -1,17 +1,26 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useI18n, type MessageKey, type TFunction } from '../i18n'
 import { useAuth } from '../auth/AuthContext'
 import { useWorkspace } from '../workspace/WorkspaceContext'
-import { bumpGitStatus } from '../hooks/useGitRepos'
+import { bumpGitStatus, useGitRepos } from '../hooks/useGitRepos'
+import { refreshGitAssistJobs, useGitAssistJobs } from '../hooks/useGitAssistJobs'
 import { gitFilePath } from '../gitPaths'
 import { MarkdownView } from './MarkdownView'
+import { parseGitAssistBookDraft, flattenGitAssistBookDraft } from '../gitAssistBook'
+import {
+  GitAssistDestination,
+  defaultDest,
+  destToPublishBody,
+  type GitAssistDest,
+} from './GitAssistDestination'
 import type { GitAssistJob, GitAssistKind } from '../types'
+import '../styles/git.css'
 
-const JOB_KINDS: readonly GitAssistKind[] = ['readme', 'documentation', 'manual', 'summary']
+const JOB_KINDS: readonly GitAssistKind[] = ['readme', 'documentation', 'manual', 'summary', 'book']
 
-const SUGGESTED_PATHS: Record<GitAssistKind, string> = {
+const SUGGESTED_PATHS: Partial<Record<GitAssistKind, string>> = {
   readme: 'README.md',
   documentation: 'docs/DOCUMENTATION.md',
   manual: 'docs/MANUAL.md',
@@ -30,76 +39,97 @@ function kindLabel(t: TFunction, kind: string): string {
 }
 
 /**
- * The repo page's window onto background AI drafting: every job for this repo,
- * newest first, polled while any is still queued or running — the git-clone
- * pattern, the row is the status. From here a finished draft is reviewed,
- * published into the library (or its book page updated), saved into the repo,
- * re-generated, or deleted.
+ * Header control: every background drafting job on the instance, with a live
+ * badge while anything is queued or running. Renders nothing until a git repo
+ * exists — there is nowhere to start a job without one.
+ */
+export function GitAssistJobsMenu() {
+  const repos = useGitRepos()
+  if (!repos?.length) return null
+  return <GitAssistJobsMenuInner />
+}
+
+function GitAssistJobsMenuInner() {
+  const { t } = useI18n()
+  const { jobs, error } = useGitAssistJobs()
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const active = (jobs ?? []).filter((j) => j.status === 'queued' || j.status === 'running').length
+
+  useEffect(() => {
+    if (!open) return
+    refreshGitAssistJobs()
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current?.contains(e.target as Node)) return
+      setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div className="git-jobs-menu" ref={wrapRef}>
+      <button
+        type="button"
+        className={`git-jobs-trigger ${active > 0 ? 'is-active' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        title={t('gitadmin.jobsMenuTooltip')}
+        aria-label={
+          active > 0
+            ? active === 1
+              ? t('gitadmin.jobsRunning.one', { count: active })
+              : t('gitadmin.jobsRunning.other', { count: active })
+            : t('gitadmin.jobsMenuAria')
+        }
+      >
+        <span aria-hidden>✨</span>
+        <span className="git-jobs-trigger-text">{t('gitadmin.jobsTitle')}</span>
+        {active > 0 ? <span className="git-jobs-badge">{active}</span> : null}
+      </button>
+      {open ? (
+        <div className="git-jobs-panel" role="dialog" aria-label={t('gitadmin.jobsMenuAria')}>
+          <div className="git-jobs-panel-head">
+            <h2>✨ {t('gitadmin.jobsTitle')}</h2>
+            <p className="muted sm">{t('gitadmin.jobsAllHint')}</p>
+          </div>
+          <GitAssistJobList
+            jobs={jobs}
+            error={error}
+            showRepo
+            empty={t('gitadmin.jobsAllEmpty')}
+            onNavigate={() => setOpen(false)}
+          />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * The repo page's window onto background AI drafting for this repo. The header
+ * panel is the instance-wide list; this section stays so a repo's own jobs sit
+ * with its files. Polling lives in the shared store, not here.
  */
 export function GitAssistJobs({ repoId }: { repoId: string }) {
   const { t } = useI18n()
   const { canWrite } = useAuth()
-  const [jobs, setJobs] = useState<GitAssistJob[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [openJobId, setOpenJobId] = useState<string | null>(null)
-  const [busyId, setBusyId] = useState<string | null>(null)
+  const { jobs, error } = useGitAssistJobs()
+  const mine = jobs?.filter((j) => j.repoId === repoId) ?? null
 
-  const reload = useCallback(async () => {
-    try {
-      setJobs(await api.listGitAssistJobs(repoId))
-      setError(null)
-    } catch (e) {
-      setError(errText(e))
-    }
-  }, [repoId])
-
-  useEffect(() => {
-    setJobs(null)
-    void reload()
-  }, [reload])
-
-  // Re-poll every few seconds while anything is active — an LLM run is
-  // minutes-scale and the row is the only progress signal. Each reload replaces
-  // `jobs`, re-arming this effect, so polling stops by itself once all jobs
-  // are done and restarts when a re-run adds an active one.
-  useEffect(() => {
-    if (!jobs?.some((j) => j.status === 'queued' || j.status === 'running')) return
-    const timer = window.setTimeout(() => void reload(), 3000)
-    return () => window.clearTimeout(timer)
-  }, [jobs, reload])
-
-  const rerun = async (job: GitAssistJob) => {
-    setBusyId(job.id)
-    try {
-      await api.rerunGitAssistJob(job.id)
-      await reload()
-    } catch (e) {
-      setError(errText(e))
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  const remove = async (job: GitAssistJob) => {
-    setBusyId(job.id)
-    try {
-      await api.deleteGitAssistJob(job.id)
-      await reload()
-    } catch (e) {
-      setError(errText(e))
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  if (jobs === null) {
-    // Not loaded yet — no flash of an empty section.
+  if (mine === null) {
     return error ? <p className="banner error">{error}</p> : null
   }
 
-  if (jobs.length === 0) {
-    // Editors get a one-line pointer to where jobs come from; viewers (who
-    // cannot start one) see nothing.
+  if (mine.length === 0) {
     return canWrite ? (
       <div className="git-assist-jobs">
         <h2 className="book-overview-subhead">✨ {t('gitadmin.jobsTitle')}</h2>
@@ -111,87 +141,175 @@ export function GitAssistJobs({ repoId }: { repoId: string }) {
     ) : null
   }
 
-  const openJob = openJobId ? (jobs.find((j) => j.id === openJobId) ?? null) : null
-
   return (
     <div className="git-assist-jobs">
       <h2 className="book-overview-subhead">✨ {t('gitadmin.jobsTitle')}</h2>
+      <GitAssistJobList jobs={mine} error={error} />
+    </div>
+  )
+}
+
+function GitAssistJobList({
+  jobs,
+  error,
+  showRepo = false,
+  empty,
+  onNavigate,
+}: {
+  jobs: GitAssistJob[] | null
+  error: string | null
+  showRepo?: boolean
+  empty?: string
+  onNavigate?: () => void
+}) {
+  const { t } = useI18n()
+  const { canWrite } = useAuth()
+  const [openJobId, setOpenJobId] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const rerun = async (job: GitAssistJob) => {
+    setBusyId(job.id)
+    setActionError(null)
+    try {
+      await api.rerunGitAssistJob(job.id)
+      refreshGitAssistJobs()
+    } catch (e) {
+      setActionError(errText(e))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const remove = async (job: GitAssistJob) => {
+    setBusyId(job.id)
+    setActionError(null)
+    try {
+      await api.deleteGitAssistJob(job.id)
+      refreshGitAssistJobs()
+    } catch (e) {
+      setActionError(errText(e))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  if (jobs === null) {
+    return error ? <p className="banner error">{error}</p> : <p className="muted sm">{t('common.loading')}</p>
+  }
+
+  const openJob = openJobId ? (jobs.find((j) => j.id === openJobId) ?? null) : null
+
+  return (
+    <>
       {error ? <p className="banner error">{error}</p> : null}
-      <ul className="git-job-list">
-        {jobs.map((job) => (
-          <li key={job.id} className="git-job-row">
-            <span className={`git-job-chip ${job.status}`}>
-              {t(`gitadmin.jobStatus.${job.status}` as MessageKey)}
-            </span>
-            <div className="git-job-main">
-              <strong>{kindLabel(t, job.kind)}</strong>
-              <span className="muted sm">
-                {job.createdByName ? `${job.createdByName} · ` : ''}
-                {new Date(job.createdAt).toLocaleString()}
-                {job.providerName ? ` · ${job.providerName}` : ''}
-                {job.model ? ` · ${job.model}` : ''}
-                {job.elapsedMs != null ? ` · ${(job.elapsedMs / 1000).toFixed(1)}s` : ''}
+      {actionError ? (
+        <p className="banner error" role="alert">
+          {actionError}
+        </p>
+      ) : null}
+      {jobs.length === 0 ? (
+        empty ? <p className="muted sm">{empty}</p> : null
+      ) : (
+        <ul className="git-job-list">
+          {jobs.map((job) => (
+            <li key={job.id} className="git-job-row">
+              <span className={`git-job-chip ${job.status}`}>
+                {t(`gitadmin.jobStatus.${job.status}` as MessageKey)}
               </span>
-              {job.status === 'failed' && job.error ? (
-                <span className="git-job-error">{job.error}</span>
-              ) : null}
-              {job.bookId && job.pageId ? (
-                <span className="muted sm">
-                  {t('gitadmin.published')}{' '}
-                  <Link to={`/books/${job.bookId}/pages/${job.pageId}`}>
-                    {t('gitadmin.openBookPage')}
+              <div className="git-job-main">
+                <strong>{kindLabel(t, job.kind)}</strong>
+                {showRepo ? (
+                  <Link
+                    to={`/git/${job.repoId}`}
+                    className="git-job-repo muted sm"
+                    onClick={onNavigate}
+                  >
+                    {job.repoName}
                   </Link>
+                ) : null}
+                <span className="muted sm">
+                  {job.createdByName ? `${job.createdByName} · ` : ''}
+                  {new Date(job.createdAt).toLocaleString()}
+                  {job.providerName ? ` · ${job.providerName}` : ''}
+                  {job.model ? ` · ${job.model}` : ''}
+                  {job.elapsedMs != null ? ` · ${(job.elapsedMs / 1000).toFixed(1)}s` : ''}
                 </span>
-              ) : null}
-            </div>
-            <div className="git-job-actions">
-              {job.status === 'completed' ? (
-                <button type="button" className="btn ghost sm" onClick={() => setOpenJobId(job.id)}>
-                  {t('gitadmin.viewDraft')}
-                </button>
-              ) : null}
-              {canWrite && (job.status === 'completed' || job.status === 'failed') ? (
-                <button
-                  type="button"
-                  className="btn ghost sm"
-                  disabled={busyId === job.id}
-                  onClick={() => void rerun(job)}
-                  title={job.pageId ? t('gitadmin.rerunUpdateTitle') : t('gitadmin.rerunTitle')}
-                >
-                  {job.pageId ? t('gitadmin.rerunUpdate') : t('gitadmin.rerun')}
-                </button>
-              ) : null}
-              {canWrite ? (
-                <button
-                  type="button"
-                  className="btn ghost sm"
-                  disabled={busyId === job.id}
-                  onClick={() => void remove(job)}
-                  title={
-                    job.status === 'running' || job.status === 'queued'
-                      ? t('gitadmin.cancelJobTitle')
-                      : t('gitadmin.removeJobTitle')
-                  }
-                >
-                  {job.status === 'running' || job.status === 'queued'
-                    ? t('common.cancel')
-                    : t('common.remove')}
-                </button>
-              ) : null}
-            </div>
-          </li>
-        ))}
-      </ul>
+                {job.status === 'failed' && job.error ? (
+                  <span className="git-job-error">{job.error}</span>
+                ) : null}
+                {job.bookId ? (
+                  <span className="muted sm">
+                    {t('gitadmin.published')}{' '}
+                    {job.kind === 'book' ? (
+                      <Link to={`/books/${job.bookId}`} onClick={onNavigate}>
+                        {t('gitadmin.openBook')}
+                      </Link>
+                    ) : job.pageId ? (
+                      <Link to={`/books/${job.bookId}/pages/${job.pageId}`} onClick={onNavigate}>
+                        {t('gitadmin.openBookPage')}
+                      </Link>
+                    ) : (
+                      <Link to={`/books/${job.bookId}`} onClick={onNavigate}>
+                        {t('gitadmin.openBook')}
+                      </Link>
+                    )}
+                  </span>
+                ) : null}
+              </div>
+              <div className="git-job-actions">
+                {job.status === 'completed' ? (
+                  <button
+                    type="button"
+                    className="btn ghost sm"
+                    onClick={() => setOpenJobId(job.id)}
+                  >
+                    {t('gitadmin.viewDraft')}
+                  </button>
+                ) : null}
+                {canWrite && (job.status === 'completed' || job.status === 'failed') ? (
+                  <button
+                    type="button"
+                    className="btn ghost sm"
+                    disabled={busyId === job.id}
+                    onClick={() => void rerun(job)}
+                    title={job.bookId ? t('gitadmin.rerunUpdateTitle') : t('gitadmin.rerunTitle')}
+                  >
+                    {job.bookId ? t('gitadmin.rerunUpdate') : t('gitadmin.rerun')}
+                  </button>
+                ) : null}
+                {canWrite ? (
+                  <button
+                    type="button"
+                    className="btn ghost sm"
+                    disabled={busyId === job.id}
+                    onClick={() => void remove(job)}
+                    title={
+                      job.status === 'running' || job.status === 'queued'
+                        ? t('gitadmin.cancelJobTitle')
+                        : t('gitadmin.removeJobTitle')
+                    }
+                  >
+                    {job.status === 'running' || job.status === 'queued'
+                      ? t('common.cancel')
+                      : t('common.remove')}
+                  </button>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {openJob ? (
         <JobResultDialog
           job={openJob}
-          repoId={repoId}
+          repoId={openJob.repoId}
           onClose={() => setOpenJobId(null)}
-          onChanged={() => void reload()}
+          onChanged={() => refreshGitAssistJobs()}
         />
       ) : null}
-    </div>
+    </>
   )
 }
 
@@ -214,15 +332,20 @@ function JobResultDialog({
   const navigate = useNavigate()
   const { t } = useI18n()
   const { canWrite } = useAuth()
-  const { shelves, refreshTree } = useWorkspace()
+  const { refreshTree } = useWorkspace()
   const [markdown, setMarkdown] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [shelfId, setShelfId] = useState(job.shelfId ?? '')
+  const [dest, setDest] = useState<GitAssistDest>(
+    job.bookId ? { mode: 'existing', bookId: job.bookId } : defaultDest(),
+  )
   const [repoPath, setRepoPath] = useState(
     SUGGESTED_PATHS[job.kind as GitAssistKind] ?? 'docs/DRAFT.md',
   )
   const [busy, setBusy] = useState<null | 'publish' | 'save'>(null)
+  const isBook = job.kind === 'book'
+  const bookDraft = parseGitAssistBookDraft(markdown)
+  const copyText = bookDraft ? flattenGitAssistBookDraft(bookDraft) : (markdown ?? '')
 
   useEffect(() => {
     let cancelled = false
@@ -251,13 +374,12 @@ function JobResultDialog({
     setBusy('publish')
     setActionError(null)
     try {
-      const updated = await api.publishGitAssistJob(job.id, {
-        shelfId: job.pageId ? undefined : shelfId || undefined,
-      })
+      const updated = await api.publishGitAssistJob(job.id, destToPublishBody(dest))
       await refreshTree()
       onChanged()
       onClose()
-      if (updated.bookId && updated.pageId)
+      if (updated.bookId && job.kind === 'book') void navigate(`/books/${updated.bookId}`)
+      else if (updated.bookId && updated.pageId)
         void navigate(`/books/${updated.bookId}/pages/${updated.pageId}`)
     } catch (e) {
       setActionError(errText(e))
@@ -331,6 +453,24 @@ function JobResultDialog({
             <p className="banner error">{loadError}</p>
           ) : markdown === null ? (
             <p className="muted">{t('gitadmin.loadingDraft')}</p>
+          ) : bookDraft ? (
+            <div className="git-assist-book-preview">
+              {bookDraft.bookTitle ? <h4>{bookDraft.bookTitle}</h4> : null}
+              {bookDraft.bookDescription ? (
+                <p className="muted sm">{bookDraft.bookDescription}</p>
+              ) : null}
+              <p className="muted sm">
+                {bookDraft.pages.length === 1
+                  ? t('gitadmin.bookPages.one', { count: bookDraft.pages.length })
+                  : t('gitadmin.bookPages.other', { count: bookDraft.pages.length })}
+              </p>
+              {bookDraft.pages.map((page, i) => (
+                <section key={`${page.title}-${i}`} className="git-assist-book-page">
+                  <h4>{page.title}</h4>
+                  <MarkdownView content={page.markdown} />
+                </section>
+              ))}
+            </div>
           ) : (
             <MarkdownView content={markdown} />
           )}
@@ -338,36 +478,29 @@ function JobResultDialog({
 
         {canWrite && markdown !== null ? (
           <div className="git-job-exits">
-            <div className="git-job-exit">
-              {job.pageId ? (
+            <div className="git-job-exit git-job-exit-stack">
+              {job.bookId ? (
                 <>
-                  <span className="muted sm">{t('gitadmin.alreadyPublished')}</span>
+                  <span className="muted sm">
+                    {isBook ? t('gitadmin.alreadyPublishedBook') : t('gitadmin.alreadyPublished')}
+                  </span>
                   <button
                     type="button"
                     className="btn primary sm"
                     disabled={busy !== null}
                     onClick={() => void publish()}
                   >
-                    {busy === 'publish' ? t('gitadmin.updating') : t('gitadmin.updateBookPage')}
+                    {busy === 'publish'
+                      ? t('gitadmin.updating')
+                      : isBook
+                        ? t('gitadmin.updateBookPages')
+                        : t('gitadmin.updateBookPage')}
                   </button>
                 </>
               ) : (
                 <>
-                  <label className="git-assist-field">
-                    <span>{t('gitadmin.addToLibrary')}</span>
-                    <select
-                      value={shelfId}
-                      disabled={busy !== null}
-                      onChange={(e) => setShelfId(e.target.value)}
-                    >
-                      <option value="">{t('gitadmin.libraryRoot')}</option>
-                      {shelves.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <span className="muted sm">{t('gitadmin.addToLibrary')}</span>
+                  <GitAssistDestination value={dest} onChange={setDest} disabled={busy !== null} />
                   <button
                     type="button"
                     className="btn primary sm"
@@ -379,26 +512,28 @@ function JobResultDialog({
                 </>
               )}
             </div>
-            <div className="git-job-exit">
-              <label className="git-assist-field git-assist-path">
-                <span>{t('gitadmin.saveInRepoAs')}</span>
-                <input
-                  className="llm-mono"
-                  spellCheck={false}
-                  value={repoPath}
-                  disabled={busy !== null}
-                  onChange={(e) => setRepoPath(e.target.value)}
-                />
-              </label>
-              <button
-                type="button"
-                className="btn sm"
-                disabled={busy !== null || repoPath.trim() === ''}
-                onClick={() => void saveToRepo()}
-              >
-                {busy === 'save' ? t('common.saving') : t('gitadmin.saveDraftToRepo')}
-              </button>
-            </div>
+            {!isBook ? (
+              <div className="git-job-exit">
+                <label className="git-assist-field git-assist-path">
+                  <span>{t('gitadmin.saveInRepoAs')}</span>
+                  <input
+                    className="llm-mono"
+                    spellCheck={false}
+                    value={repoPath}
+                    disabled={busy !== null}
+                    onChange={(e) => setRepoPath(e.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn sm"
+                  disabled={busy !== null || repoPath.trim() === ''}
+                  onClick={() => void saveToRepo()}
+                >
+                  {busy === 'save' ? t('common.saving') : t('gitadmin.saveDraftToRepo')}
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -416,7 +551,7 @@ function JobResultDialog({
             type="button"
             className="btn sm"
             disabled={markdown === null}
-            onClick={() => void navigator.clipboard?.writeText(markdown ?? '')}
+            onClick={() => void navigator.clipboard?.writeText(copyText)}
           >
             {t('gitadmin.copyMarkdown')}
           </button>
