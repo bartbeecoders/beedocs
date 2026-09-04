@@ -50,6 +50,9 @@ export const EXCELGRID_FENCE_LANGS = new Set(['excelgrid', 'spreadsheet', 'grid'
 /** Kanban board: inline JSON (`kanban`) or a stored board id (`kanban-ref`) */
 export const KANBAN_FENCE_LANGS = new Set(['kanban', 'kanban-ref'])
 
+/** Project plan: inline JSON (`project`) or a stored plan id (`project-ref`) */
+export const PROJECT_FENCE_LANGS = new Set(['project', 'project-ref'])
+
 /** PDF / 3D model fence languages — hybrid editor shows MediaEmbed, not source-only */
 export const MEDIA_FENCE_LANGS = new Set(['pdf', 'glb', 'gltf', 'obj', 'model'])
 
@@ -178,6 +181,10 @@ export function isExcelGridFenceLang(lang: string): boolean {
 
 export function isKanbanFenceLang(lang: string): boolean {
   return KANBAN_FENCE_LANGS.has(lang.toLowerCase())
+}
+
+export function isProjectFenceLang(lang: string): boolean {
+  return PROJECT_FENCE_LANGS.has(lang.toLowerCase())
 }
 
 export function isMediaFenceLang(lang: string): boolean {

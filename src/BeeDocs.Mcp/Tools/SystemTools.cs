@@ -31,7 +31,7 @@ public sealed class SystemTools(BeeDocsApiClient client)
         apiBaseUrl = client.BaseUrl,
         entities = new[]
         {
-            "shelf", "book", "chapter (folder)", "page", "diagram", "slide deck", "kanban board", "attachment", "upload",
+            "shelf", "book", "chapter (folder)", "page", "diagram", "slide deck", "kanban board", "project plan", "attachment", "upload",
         },
         hierarchy = "shelf → book → chapter (folder) → page. Only the book level is required: "
             + "a book sits on at most one shelf, and an unshelved book sits at the library root.",
@@ -104,6 +104,8 @@ public sealed class SystemTools(BeeDocsApiClient client)
             excelgrid = "```excelgrid\\n{\"version\":1,\"rowCount\":16,\"colCount\":8,\"cells\":[{\"r\":0,\"c\":0,\"v\":\"Item\"}]}\\n```",
             kanbanInline = "```kanban\\n{\"version\":1,\"columns\":[{\"id\":\"col-1\",\"title\":\"To do\",\"cards\":[]}]}\\n```",
             kanbanRef = "```kanban-ref\\nBOARD_ID\\n```",
+            projectInline = "```project\\n{\"version\":1,\"tasks\":[{\"id\":\"task-1\",\"title\":\"Design\",\"kind\":\"task\",\"start\":\"2026-09-08\",\"duration\":5,\"progress\":0}]}\\n```",
+            projectRef = "```project-ref\\nPLAN_ID\\n```",
             image = "![alt](/uploads/...)",
         },
         slides = new
@@ -120,6 +122,12 @@ public sealed class SystemTools(BeeDocsApiClient client)
             colors = new[] { "accent", "info", "ok", "warn", "danger", "muted" },
             tools = "beedocs_create_kanban_board_with_columns / beedocs_update_kanban_board_columns (structured), or raw JSON via beedocs_create_kanban_board",
             embed = "```kanban-ref\\nBOARD_ID\\n``` on a page; the same board is a tree item at /books/{bookId}/kanban/{boardId}",
+        },
+        project = new
+        {
+            model = "A plan is a WBS of tasks: {version:1, tasks:[{id, title, kind, start, duration, progress, parentId, predecessors, assigneeId, assigneeName}]}. kind is task|milestone; start is YYYY-MM-DD; duration is calendar days (0 for a milestone).",
+            tools = "beedocs_create_project_plan_with_tasks / beedocs_update_project_plan_tasks (structured), or raw JSON via beedocs_create_project_plan",
+            embed = "```project-ref\\nPLAN_ID\\n``` on a page; the same plan is a tree item at /books/{bookId}/project/{planId}",
         },
         attachments = new
         {
@@ -146,6 +154,7 @@ public sealed class SystemTools(BeeDocsApiClient client)
             diagrams = "beedocs_list_diagram_shapes for the shape/Azure-stencil catalog, then beedocs_create_beediagram_with_nodes / beedocs_update_beediagram_nodes; isometric views via beedocs_create_isometric_with_items",
             slides = "beedocs_create_slide_deck_with_slides for presentations; present from the UI at /books/{bookId}/slides/{deckId}",
             kanban = "beedocs_create_kanban_board_with_columns for a board; embed with ```kanban-ref on a page or open /books/{bookId}/kanban/{boardId}",
+            project = "beedocs_create_project_plan_with_tasks for a Gantt plan; embed with ```project-ref on a page or open /books/{bookId}/project/{planId}",
             attachments = "beedocs_upload_attachment files a document in a book; beedocs_link_attachment_in_page references it from the docs that discuss it",
             export = "beedocs_export_book or beedocs_export_library_snapshot",
         },

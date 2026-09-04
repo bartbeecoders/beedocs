@@ -111,6 +111,7 @@ builder.Services.AddSingleton<IDocumentService, DocumentService>();
 builder.Services.AddSingleton<IDiagramService, DiagramService>();
 builder.Services.AddSingleton<ISlideDeckService, SlideDeckService>();
 builder.Services.AddSingleton<IKanbanBoardService, KanbanBoardService>();
+builder.Services.AddSingleton<IProjectPlanService, ProjectPlanService>();
 builder.Services.AddSingleton<IAttachmentService, AttachmentService>();
 builder.Services.AddSingleton<ISlideTemplateService, SlideTemplateService>();
 builder.Services.AddSingleton<SlideDeckPptxExporter>();
@@ -1522,6 +1523,47 @@ api.MapPut("/kanban/{id}", async (string id, UpdateKanbanBoardRequest body, IKan
 api.MapDelete("/kanban/{id}", async (string id, IKanbanBoardService boards, CancellationToken ct) =>
 {
     var ok = await boards.DeleteAsync(id, ct);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
+// --- Project plans (Gantt) ---
+api.MapGet("/books/{bookId}/project", async (string bookId, IProjectPlanService plans, CancellationToken ct) =>
+    Results.Ok(await plans.ListByBookAsync(bookId, ct)));
+
+api.MapPost("/books/{bookId}/project", async (string bookId, CreateProjectPlanRequest body, IProjectPlanService plans, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    try
+    {
+        var created = await plans.CreateAsync(bookId, body, ct);
+        return Results.Created($"/api/project/{created.Id}", created);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+
+api.MapGet("/project/{id}", async (string id, IProjectPlanService plans, CancellationToken ct) =>
+{
+    var plan = await plans.GetAsync(id, ct);
+    return plan is null ? Results.NotFound() : Results.Ok(plan);
+});
+
+api.MapPut("/project/{id}", async (string id, UpdateProjectPlanRequest body, IProjectPlanService plans, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    var updated = await plans.UpdateAsync(id, body, ct);
+    return updated is null ? Results.NotFound() : Results.Ok(updated);
+});
+
+api.MapDelete("/project/{id}", async (string id, IProjectPlanService plans, CancellationToken ct) =>
+{
+    var ok = await plans.DeleteAsync(id, ct);
     return ok ? Results.NoContent() : Results.NotFound();
 });
 

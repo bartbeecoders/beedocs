@@ -338,6 +338,22 @@ export function HelpPanel() {
               </td>
               <td>{t('helpdoc.pg.fenceKanbanRef')}</td>
             </tr>
+            <tr>
+              <td>
+                <code>```project</code>
+              </td>
+              <td>
+                {t('helpdoc.pg.fenceProject1')}
+                <strong>{t('helpdoc.pg.fenceProjectMenu')}</strong>
+                {t('helpdoc.pg.fenceProject2')}
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>```project-ref</code>
+              </td>
+              <td>{t('helpdoc.pg.fenceProjectRef')}</td>
+            </tr>
           </tbody>
         </table>
         <p className="muted sm">

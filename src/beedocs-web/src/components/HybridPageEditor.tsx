@@ -10,6 +10,7 @@ import {
   isFreedrawFenceLang,
   isIsometricFenceLang,
   isKanbanFenceLang,
+  isProjectFenceLang,
   isMediaFenceLang,
   isVisualFenceLang,
   joinMarkdownSegments,
@@ -49,7 +50,7 @@ import {
   extensionFromPath,
   modelFormatFromExtension,
 } from '../media/mediaKinds'
-import { segmentsForInsert, segmentsForLinkedDiagram, segmentsForLinkedKanban, type InsertKind } from '../pageBlocks'
+import { segmentsForInsert, segmentsForLinkedDiagram, segmentsForLinkedKanban, segmentsForLinkedProject, type InsertKind } from '../pageBlocks'
 import {
   LAYOUT_PRESETS,
   cellCount,
@@ -71,6 +72,8 @@ import { MarkdownTableEditor } from './MarkdownTableEditor'
 import { MediaEmbed, parseMediaFenceBody } from './media/MediaEmbed'
 import { KanbanBoard } from '../kanban/KanbanBoard'
 import { KanbanView } from '../kanban/KanbanView'
+import { ProjectEditor } from '../project/ProjectEditor'
+import { ProjectView } from '../project/ProjectView'
 
 // Lazy so pages without an isometric section don't load the iso editor module.
 const IsometricEditor = lazy(() => import('../isometric/IsometricEditor'))
@@ -414,9 +417,34 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
   )
 
   const handleInsert = useCallback(
-    async (kind: InsertKind | 'beediagram-linked' | 'kanban-linked', at?: InsertTarget) => {
+    async (kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked', at?: InsertTarget) => {
       setInsertError(null)
       const target = at ?? { cell: activeCellRef.current, at: 'end' as const }
+      if (kind === 'project-linked') {
+        if (!bookId) {
+          setInsertError(t('editor.linkedNeedBook'))
+          return
+        }
+        const title = window
+          .prompt(t('editor.promptProjectTitle'), t('editor.projectTitleDefault'))
+          ?.trim()
+        if (!title) return
+        setBusy(true)
+        try {
+          const starter = segmentsForInsert('project').find((s): s is FenceSegment => s.type === 'fence')
+          const plan = await api.createProjectPlan(bookId, {
+            title,
+            source: starter?.body,
+          })
+          insertAt(target, segmentsForLinkedProject(plan.id))
+          await renameInTree()
+        } catch (e) {
+          setInsertError(e instanceof Error ? e.message : String(e))
+        } finally {
+          setBusy(false)
+        }
+        return
+      }
       if (kind === 'kanban-linked') {
         if (!bookId) {
           setInsertError(t('editor.linkedNeedBook'))
@@ -906,6 +934,13 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             onBodyChange={(body) => updateFenceBody(cellIdx, index, body)}
             onRemove={() => removeSegment(cellIdx, index)}
           />
+        ) : isProjectFenceLang(seg.lang) ? (
+          <ProjectFenceBlock
+            segment={seg}
+            bookId={bookId}
+            onBodyChange={(body) => updateFenceBody(cellIdx, index, body)}
+            onRemove={() => removeSegment(cellIdx, index)}
+          />
         ) : isIsometricFenceLang(seg.lang) ? (
           <IsometricFenceBlock
             segment={seg}
@@ -1359,7 +1394,7 @@ function InsertToolbar({
   /** Current layout as "COLSxROWS" ("1x1" = single flow). */
   layoutSpec: string
   onLayoutChange: (spec: string) => void
-  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked') => void
+  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked') => void
   onPickImage?: () => void
   onPickPdf?: () => void
   onPickModel?: () => void
@@ -1404,6 +1439,15 @@ function InsertToolbar({
           title={t('editor.insert.kanbanTitle')}
         >
           {t('editor.insert.kanban')}
+        </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
+          onClick={() => onInsert('project')}
+          title={t('editor.insert.projectTitle')}
+        >
+          {t('editor.insert.project')}
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('callout')}>
           {t('editor.insert.callout')}
@@ -1472,6 +1516,15 @@ function InsertToolbar({
           type="button"
           className="btn sm"
           disabled={busy}
+          onClick={() => onInsert('project-linked')}
+          title={t('editor.insert.linkedProjectTitle')}
+        >
+          {t('editor.insert.linkedProject')}
+        </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
           onClick={() => onInsert('isometric')}
           title={t('editor.insert.isometricTitle')}
         >
@@ -1533,7 +1586,7 @@ function InsertGap({
   reorderActive,
 }: {
   busy: boolean
-  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked') => void
+  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked') => void
   label?: string
   dropSlot?: string
   dropLabel?: string
@@ -1582,6 +1635,8 @@ function InsertGap({
               ['excelgrid', t('editor.insert.spreadsheet')],
               ['kanban', t('editor.insert.kanban')],
               ['kanban-linked', t('editor.insert.linkedKanban')],
+              ['project', t('editor.insert.project')],
+              ['project-linked', t('editor.insert.linkedProject')],
               ['mermaid-flow', t('editor.insert.flowchart')],
               ['mermaid-sequence', t('editor.insert.sequence')],
               ['table', t('editor.insert.table')],
@@ -1931,6 +1986,121 @@ function KanbanRefFence({
             />
           ) : (
             <KanbanView source={source} compact />
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ProjectFenceBlock({
+  segment,
+  bookId,
+  onBodyChange,
+  onRemove,
+}: {
+  segment: FenceSegment
+  bookId?: string
+  onBodyChange: (body: string) => void
+  onRemove: () => void
+}) {
+  const { t } = useI18n()
+  if (segment.lang === 'project-ref') {
+    return <ProjectRefFence planId={segment.body.trim().split(/\s+/)[0] ?? ''} bookId={bookId} onRemove={onRemove} />
+  }
+
+  return (
+    <div className="hybrid-visual-diagram hybrid-project-block">
+      <div className="hybrid-fence-chrome">
+        <span className="inline-diagram-badge">{t('editor.insert.project')}</span>
+        <span className="hybrid-fence-title">{t('editor.project.storedTitle')}</span>
+        <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+          {t('common.remove')}
+        </button>
+      </div>
+      <div className="hybrid-visual-body">
+        <ProjectEditor source={segment.body} onChange={onBodyChange} compact />
+      </div>
+    </div>
+  )
+}
+
+function ProjectRefFence({
+  planId,
+  bookId,
+  onRemove,
+}: {
+  planId: string
+  bookId?: string
+  onRemove: () => void
+}) {
+  const { t } = useI18n()
+  const { canWrite } = useAuth()
+  const [source, setSource] = useState<string | null>(null)
+  const [title, setTitle] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const saving = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setError(null)
+    void api
+      .getProjectPlan(planId)
+      .then((p) => {
+        if (cancelled) return
+        setSource(p.source)
+        setTitle(p.title)
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [planId])
+
+  const persist = async (next: string) => {
+    if (saving.current) return
+    saving.current = true
+    try {
+      await api.updateProjectPlan(planId, { title, source: next })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      saving.current = false
+    }
+  }
+
+  return (
+    <div className="hybrid-visual-diagram hybrid-project-block">
+      <div className="hybrid-fence-chrome">
+        <span className="inline-diagram-badge">{t('editor.project.linkedBadge')}</span>
+        <span className="hybrid-fence-title">{title || t('editor.insert.linkedProject')}</span>
+        {bookId && (
+          <Link className="btn ghost sm" to={`/books/${bookId}/project/${planId}`}>
+            {t('project.openPlan')}
+          </Link>
+        )}
+        <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+          {t('common.remove')}
+        </button>
+      </div>
+      {error && <div className="banner error compact">{t('editor.projectError', { id: planId, error })}</div>}
+      {source == null && !error ? (
+        <p className="muted sm">{t('editor.loadingProject')}</p>
+      ) : source != null ? (
+        <div className="hybrid-visual-body">
+          {canWrite ? (
+            <ProjectEditor
+              source={source}
+              compact
+              onChange={(next) => {
+                setSource(next)
+                void persist(next)
+              }}
+            />
+          ) : (
+            <ProjectView source={source} compact />
           )}
         </div>
       ) : null}

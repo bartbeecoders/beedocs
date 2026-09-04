@@ -46,7 +46,7 @@ export type Book = {
 }
 
 /** What a favorite can point at. `slides` names a slide deck, as in search. */
-export type FavoriteKind = 'book' | 'page' | 'diagram' | 'slides' | 'kanban' | 'attachment'
+export type FavoriteKind = 'book' | 'page' | 'diagram' | 'slides' | 'kanban' | 'project' | 'attachment'
 
 /**
  * One starred item as GET /api/favorites returns it: the target, its live
@@ -155,6 +155,7 @@ export type SearchKind =
   | 'diagram'
   | 'slides'
   | 'kanban'
+  | 'project'
   | 'attachment'
   | 'book'
   | 'folder'
@@ -255,6 +256,7 @@ export type SearchStatus = {
   diagrams: number
   slideDecks: number
   kanbanBoards: number
+  projectPlans: number
   attachments: number
   books: number
   folders: number
@@ -369,6 +371,29 @@ export type KanbanBoardSummary = {
 
 /** The full board. No `cardCount` — the client holding `source` can count for itself. */
 export type KanbanBoard = {
+  id: string
+  bookId: string
+  title: string
+  source: string
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * An MS Project-style plan stored in a book next to pages and diagrams.
+ * `source` is a JSON task/Gantt document — see project/projectModel.ts.
+ */
+export type ProjectPlanSummary = {
+  id: string
+  bookId: string
+  title: string
+  /** Tasks in the plan, counted server-side from the stored document. */
+  taskCount: number
+  updatedAt: string
+}
+
+/** The full plan. No `taskCount` — the client holding `source` can count for itself. */
+export type ProjectPlan = {
   id: string
   bookId: string
   title: string
@@ -894,8 +919,9 @@ export type DocumentCounts = {
   diagrams: number
   slideDecks: number
   kanbanBoards: number
+  projectPlans: number
   attachments: number
-  /** Content documents only: pages + diagrams + slide decks + kanban boards + attachments. */
+  /** Content documents only: pages + diagrams + slide decks + kanban boards + project plans + attachments. */
   total: number
 }
 

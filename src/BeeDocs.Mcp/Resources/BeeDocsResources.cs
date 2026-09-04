@@ -102,6 +102,14 @@ public sealed class BeeDocsResources(BeeDocsApiClient client)
         return Text($"beedocs://kanban/{boardId}", board);
     }
 
+    [McpServerResource(UriTemplate = "beedocs://project/{planId}", Name = "beedocs-project-plan", MimeType = "application/json")]
+    [Description("Full project plan including its JSON document.")]
+    public async Task<TextResourceContents> ProjectPlan(string planId, CancellationToken ct = default)
+    {
+        var plan = await client.GetProjectPlanAsync(planId, ct);
+        return Text($"beedocs://project/{planId}", plan);
+    }
+
     private static TextResourceContents Text(string uri, System.Text.Json.JsonElement data) => new()
     {
         Uri = uri,

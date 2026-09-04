@@ -4,6 +4,7 @@ import { withApiBase } from '../basePath'
 import { getBrandTitle } from '../branding'
 import { excelGridToHtml } from '../excelgrid/model'
 import { kanbanToHtml } from '../kanban/kanbanModel'
+import { projectToHtml } from '../project/projectModel'
 import { freeDrawToSvg } from '../freedraw/model'
 import {
   cellStyleClass,
@@ -281,6 +282,18 @@ async function renderFence(
       return kanbanToHtml(board.source, board.title)
     } catch {
       return `<div class="export-error">Missing kanban ${esc(id)}</div>`
+    }
+  }
+  if (lang === 'project') {
+    return projectToHtml(body)
+  }
+  if (lang === 'project-ref') {
+    const id = body.trim().split(/\s+/)[0] ?? ''
+    try {
+      const plan = await api.getProjectPlan(id)
+      return projectToHtml(plan.source, plan.title)
+    } catch {
+      return `<div class="export-error">Missing project ${esc(id)}</div>`
     }
   }
   if (lang === 'plantuml') {
@@ -655,6 +668,9 @@ const PRINT_CSS = `
     font-size: 11px;
   }
   .export-kanban-assignee { font-size: 10px; color: #5b6270; margin-top: 4px; }
+  .export-project-table { border-collapse: collapse; width: 100%; font-size: 11px; }
+  .export-project-table th, .export-project-table td { border: 1px solid #d0d4dc; padding: 4px 6px; text-align: left; }
+  .export-project-table th { background: #f3f4f7; }
   .export-diagram svg, .export-mermaid svg {
     max-width: 100%;
     height: auto;

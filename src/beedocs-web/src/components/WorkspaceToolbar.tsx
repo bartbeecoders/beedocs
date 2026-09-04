@@ -14,6 +14,7 @@ import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
 import type { SlideEditorState } from './SlideCanvas'
 import type { KanbanEditorState } from './KanbanCanvas'
+import type { ProjectEditorState } from './ProjectCanvas'
 import type { AttachmentEditorState } from './AttachmentCanvas'
 import { ATTACHMENT_ACCEPT, attachmentIcon } from '../media/attachments'
 import { useAttachmentUpload } from '../hooks/useAttachmentUpload'
@@ -26,6 +27,7 @@ export type WorkspaceView =
   | 'diagram'
   | 'slides'
   | 'kanban'
+  | 'project'
   | 'attachment'
   | 'settings'
   | 'users'
@@ -42,11 +44,13 @@ type Props = {
   diagramId?: string
   deckId?: string
   boardId?: string
+  planId?: string
   attachmentId?: string
   pageState?: PageEditorState | null
   diagramState?: DiagramEditorState | null
   slideState?: SlideEditorState | null
   kanbanState?: KanbanEditorState | null
+  projectState?: ProjectEditorState | null
   attachmentState?: AttachmentEditorState | null
 }
 
@@ -154,6 +158,12 @@ const ICONS = {
       <rect x="10.6" y="3" width="3.4" height="8.5" rx="0.8" stroke="currentColor" strokeWidth="1.25" />
     </Icon>
   ),
+  project: (
+    <Icon>
+      <rect x="2" y="3.2" width="12" height="9.6" rx="1.2" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M4.2 10.2 6.6 7.4 8.4 8.8 11.6 5.6" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+    </Icon>
+  ),
   settings: (
     <Icon>
       <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.35" />
@@ -219,11 +229,13 @@ export function WorkspaceToolbar({
   diagramId,
   deckId,
   boardId,
+  planId,
   attachmentId,
   pageState,
   diagramState,
   slideState,
   kanbanState,
+  projectState,
   attachmentState,
 }: Props) {
   const {
@@ -240,12 +252,14 @@ export function WorkspaceToolbar({
     createDiagram,
     createSlideDeck,
     createKanbanBoard,
+    createProjectPlan,
     deleteBook,
     deletePage,
     deleteFolder,
     deleteDiagram,
     deleteSlideDeck,
     deleteKanbanBoard,
+    deleteProjectPlan,
     deleteAttachment,
     renameFolder,
     movePage,
@@ -278,9 +292,10 @@ export function WorkspaceToolbar({
         diagramId,
         deckId,
         boardId,
+        planId,
         attachmentId,
       ),
-    [view, selection, books, shelves, t, shelfId, bookId, pageId, diagramId, deckId, boardId, attachmentId],
+    [view, selection, books, shelves, t, shelfId, bookId, pageId, diagramId, deckId, boardId, planId, attachmentId],
   )
 
   if (view === 'settings' || view === 'users' || view === 'stats' || view === 'help') {
@@ -602,6 +617,24 @@ export function WorkspaceToolbar({
                   }
                 >
                   {t('shell.newKanban')}
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: t('shell.newProject'),
+                      label: t('shell.projectTitle'),
+                      placeholder: t('shell.projectPlaceholder'),
+                      confirmLabel: t('shell.createProject'),
+                      run: async (title) => {
+                        const p = await createProjectPlan(context.bookId, title)
+                        void navigate(`/books/${context.bookId}/project/${p.id}`)
+                      },
+                    })
+                  }
+                >
+                  {t('shell.newProject')}
                 </button>
                 <button
                   type="button"
@@ -942,6 +975,48 @@ export function WorkspaceToolbar({
         </>
       )}
 
+      {context.kind === 'project' && (
+        <>
+          <Group>
+            {(view !== 'project' || planId !== context.planId) && (
+              <button
+                type="button"
+                className="btn primary sm"
+                onClick={() =>
+                  void navigate(`/books/${context.bookId}/project/${context.planId}`)
+                }
+              >
+                {t('common.open')}
+              </button>
+            )}
+          </Group>
+          {projectState?.dirty && (
+            <>
+              <Sep />
+              <span className="ws-toolbar-status muted sm">{t('shell.unsavedChanges')}</span>
+            </>
+          )}
+          <span className="ws-toolbar-spacer" />
+          {canWrite && (
+            <Group>
+              <button
+                type="button"
+                className="btn ghost danger sm"
+                onClick={() => {
+                  if (!confirm(t('shell.deleteProjectConfirm', { name: context.title }))) return
+                  void deleteProjectPlan(context.planId, context.bookId).then(() => {
+                    setSelection({ kind: 'book', bookId: context.bookId })
+                    if (planId === context.planId) void navigate(`/books/${context.bookId}`)
+                  })
+                }}
+              >
+                {t('shell.deleteProject')}
+              </button>
+            </Group>
+          )}
+        </>
+      )}
+
       {context.kind === 'attachment' && (
         <>
           <Group>
@@ -1056,6 +1131,7 @@ type BookLike = {
   diagrams: { id: string; title: string }[]
   slideDecks: { id: string; title: string }[]
   kanbanBoards: { id: string; title: string }[]
+  projectPlans: { id: string; title: string }[]
   attachments: { id: string; title: string; fileName: string; contentType: string; sizeBytes: number }[]
   chapters: { id: string; title: string }[]
 }
@@ -1120,6 +1196,14 @@ type ToolbarContext =
       dirtyHint?: string
     }
   | {
+      kind: 'project'
+      icon: ReactNode
+      title: string
+      bookId: string
+      planId: string
+      dirtyHint?: string
+    }
+  | {
       kind: 'attachment'
       icon: ReactNode
       title: string
@@ -1143,6 +1227,7 @@ function resolveToolbarContext(
   diagramId?: string,
   deckId?: string,
   boardId?: string,
+  planId?: string,
   attachmentId?: string,
 ): ToolbarContext {
   if (selection.kind === 'folder') {
@@ -1211,6 +1296,20 @@ function resolveToolbarContext(
       title: board?.title ?? t('common.kanban'),
       bookId: bId,
       boardId: kId,
+    }
+  }
+
+  if (selection.kind === 'project' || (view === 'project' && bookId && planId)) {
+    const bId = selection.kind === 'project' ? selection.bookId : bookId!
+    const pId = selection.kind === 'project' ? selection.planId : planId!
+    const book = books.find((b) => b.id === bId)
+    const plan = book?.projectPlans.find((d) => d.id === pId)
+    return {
+      kind: 'project',
+      icon: ICONS.project,
+      title: plan?.title ?? t('common.project'),
+      bookId: bId,
+      planId: pId,
     }
   }
 

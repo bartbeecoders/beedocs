@@ -60,8 +60,8 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_create_book` | `title`, `description?`, `slug?`, `shelfId?` | Create book (optionally on a shelf) |
 | `beedocs_update_book` | `bookId`, `title`, `description?`, `slug?`, `sortOrder?`, `shelfId?` | Update book (omitted fields are left alone; `shelfId: ""` unshelves) |
 | `beedocs_delete_book` | `bookId` | Delete book (+ cascade pages/chapters) |
-| `beedocs_get_book_tree` | `bookId` | Folders + root pages + diagrams + slide decks + kanban boards tree |
-| `beedocs_export_book` | `bookId`, `includePageContent?`, `includeDiagramSource?`, `includeSlideSource?`, `includeKanbanSource?` | Structured export of one book |
+| `beedocs_get_book_tree` | `bookId` | Folders + root pages + diagrams + slide decks + kanban boards + project plans tree |
+| `beedocs_export_book` | `bookId`, `includePageContent?`, `includeDiagramSource?`, `includeSlideSource?`, `includeKanbanSource?`, `includeProjectSource?` | Structured export of one book |
 
 ### Chapters (folders)
 
@@ -259,6 +259,36 @@ Pages embed a stored board with ```` ```kanban-ref\nBOARD_ID\n``` ````, or an
 inline copy with ```` ```kanban\n{json}\n``` ````. The full document format is
 documented in [KANBAN.md](./KANBAN.md).
 
+### Project plans
+
+| Tool | Args | Description |
+|------|------|-------------|
+| `beedocs_list_project_plans` | `bookId` | Plan summaries incl. `taskCount` |
+| `beedocs_get_project_plan` | `planId` | Full plan + JSON document |
+| `beedocs_create_project_plan` | `bookId`, `title`, `source?` | Raw JSON create; omit source for one empty task |
+| `beedocs_update_project_plan` | `planId`, `title?`, `source?` | Update title and/or document (null keeps current) |
+| `beedocs_delete_project_plan` | `planId` | Delete plan |
+| `beedocs_create_project_plan_with_tasks` | `bookId`, `title`, `tasks?` | Structured create — validated tasks |
+| `beedocs_update_project_plan_tasks` | `planId`, `tasks[]`, `title?` | Replace tasks with the same structured model |
+
+#### Structured tasks
+
+Each task is `{ id?, title, kind?, start?, duration?, progress?, parentId?, predecessors?, assigneeId?, assigneeName? }` in WBS order.
+
+| Task field | Notes |
+|------------|-------|
+| `kind` | `task` \| `milestone` (default `task`) |
+| `start` | Inclusive `YYYY-MM-DD`; omit for unscheduled |
+| `duration` | Calendar days; 0 / omit for a milestone, default 1 for a task |
+| `progress` | 0–100 |
+| `parentId` | Parent task id for WBS indent; summaries are derived |
+| `predecessors` | Finish-to-start predecessor task ids |
+| `assigneeId`, `assigneeName` | Account id from the user directory, plus a display-name snapshot |
+
+Pages embed a stored plan with ```` ```project-ref\nPLAN_ID\n``` ````, or an
+inline copy with ```` ```project\n{json}\n``` ````. The full document format is
+documented in [PROJECT.md](./PROJECT.md).
+
 ### Git repositories
 
 Repos an admin put on the shelf (Settings → Git repositories): server-side
@@ -316,12 +346,13 @@ Indexed repos also surface in `beedocs_search` as kind `gitfile` (id
 | `beedocs://books/{bookId}/pages` | Page summaries |
 | `beedocs://books/{bookId}/chapters` | Folder list |
 | `beedocs://books/{bookId}/attachments` | Attachment metadata (contents via `beedocs_read_attachment`) |
-| `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams + slide decks + kanban boards + attachments |
+| `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams + slide decks + kanban boards + project plans + attachments |
 | `beedocs://pages/{pageId}` | Full page |
 | `beedocs://diagram/catalog` | Every shape, Azure stencil, palette group, anchor, route and arrow head |
 | `beedocs://diagrams/{diagramId}` | Full diagram |
 | `beedocs://slides/{deckId}` | Full slide deck |
 | `beedocs://kanban/{boardId}` | Full kanban board |
+| `beedocs://project/{planId}` | Full project plan |
 
 ---
 

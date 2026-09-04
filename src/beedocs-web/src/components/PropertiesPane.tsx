@@ -11,6 +11,7 @@ import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
 import type { SlideEditorState } from './SlideCanvas'
 import type { KanbanEditorState } from './KanbanCanvas'
+import type { ProjectEditorState } from './ProjectCanvas'
 import type { AttachmentEditorState } from './AttachmentCanvas'
 import { OwnerField } from './OwnerField'
 import { useGitRepos } from '../hooks/useGitRepos'
@@ -27,6 +28,7 @@ type Props = {
   diagramState: DiagramEditorState | null
   slideState: SlideEditorState | null
   kanbanState: KanbanEditorState | null
+  projectState: ProjectEditorState | null
   attachmentState: AttachmentEditorState | null
   view:
     | 'welcome'
@@ -36,6 +38,7 @@ type Props = {
     | 'diagram'
     | 'slides'
     | 'kanban'
+    | 'project'
     | 'attachment'
     | 'settings'
     | 'users'
@@ -50,6 +53,7 @@ export function PropertiesPane({
   diagramState,
   slideState,
   kanbanState,
+  projectState,
   attachmentState,
   view,
 }: Props) {
@@ -410,6 +414,63 @@ export function PropertiesPane({
     )
   }
 
+  if (view === 'project' && projectState) {
+    const p = projectState.plan
+    return (
+      <div className="props-pane">
+        <h3>{t('props.project')}</h3>
+        <Field label={t('common.title')}>
+          {canWrite ? (
+            <SyncedInput value={projectState.title} onValueChange={projectState.setTitle} />
+          ) : (
+            <span>{projectState.title}</span>
+          )}
+        </Field>
+        <Field label={t('props.tasks')}>
+          <span>{projectState.taskCount}</span>
+        </Field>
+        <Field label={t('props.updated')}>
+          <span className="sm">{p ? new Date(p.updatedAt).toLocaleString() : '—'}</span>
+        </Field>
+        <div className="props-actions">
+          {canWrite && (
+            <>
+              <button
+                type="button"
+                className="btn primary sm"
+                disabled={projectState.saving || !projectState.dirty}
+                onClick={() => void projectState.save()}
+              >
+                {projectState.saving ? t('common.saving') : t('props.saveProject')}
+              </button>
+              <button
+                type="button"
+                className="btn danger ghost sm"
+                onClick={() => void projectState.deletePlan()}
+              >
+                {t('common.delete')}
+              </button>
+            </>
+          )}
+        </div>
+        <div className="props-hint">
+          <h4>{t('props.markdownEmbed')}</h4>
+          <pre className="embed-snippet sm">{`\`\`\`project-ref\n${p?.id ?? ''}\n\`\`\``}</pre>
+          <button
+            type="button"
+            className="btn sm"
+            onClick={() =>
+              void navigator.clipboard.writeText(`\`\`\`project-ref\n${p?.id ?? ''}\n\`\`\``)
+            }
+          >
+            {t('props.copyEmbed')}
+          </button>
+          <p className="muted sm">{t('props.projectHint')}</p>
+        </div>
+      </div>
+    )
+  }
+
   if (view === 'attachment' && attachmentState) {
     const a = attachmentState.attachment
     return (
@@ -621,6 +682,9 @@ export function PropertiesPane({
         </Field>
         <Field label={t('common.kanbanBoards')}>
           <span>{book.kanbanBoards.length}</span>
+        </Field>
+        <Field label={t('common.projectPlans')}>
+          <span>{book.projectPlans.length}</span>
         </Field>
         <Field label={t('common.owner')}>
           <BookOwnerField bookId={book.id} title={book.title} ownerId={book.ownerId ?? ''} ownerName={book.ownerName} />

@@ -517,6 +517,37 @@ public sealed record UpdateKanbanBoardRequest(
     string? Source
 );
 
+public sealed record ProjectPlanDto(
+    string Id,
+    string BookId,
+    string Title,
+    /// <summary>JSON project document — see src/beedocs-web/src/project/projectModel.ts.</summary>
+    string Source,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="TaskCount">Tasks in the plan, counted from the stored document.</param>
+public sealed record ProjectPlanSummaryDto(
+    string Id,
+    string BookId,
+    string Title,
+    int TaskCount,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="Source">Omit to start with a small sample plan (tasks + a milestone).</param>
+public sealed record CreateProjectPlanRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Source
+);
+
+/// <param name="Source">null leaves the stored document untouched.</param>
+public sealed record UpdateProjectPlanRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Source
+);
+
 public sealed record SlideTemplateDto(
     string Id,
     string Name,
@@ -661,6 +692,7 @@ public sealed record SearchStatusDto(
     int Diagrams,
     int SlideDecks,
     int KanbanBoards,
+    int ProjectPlans,
     int Attachments,
     int Books,
     int Folders,
@@ -1019,7 +1051,7 @@ public sealed record AuthStateDto(
     string? RbaBaseUrl = null
 );
 
-/// <summary>How many of each thing the library holds. Total counts content documents (pages + diagrams + slide decks + kanban boards + attachments), not the containers around them.</summary>
+/// <summary>How many of each thing the library holds. Total counts content documents (pages + diagrams + slide decks + kanban boards + project plans + attachments), not the containers around them.</summary>
 public sealed record DocumentCountsDto(
     int Shelves,
     int Books,
@@ -1028,6 +1060,7 @@ public sealed record DocumentCountsDto(
     int Diagrams,
     int SlideDecks,
     int KanbanBoards,
+    int ProjectPlans,
     int Attachments,
     int Total
 );

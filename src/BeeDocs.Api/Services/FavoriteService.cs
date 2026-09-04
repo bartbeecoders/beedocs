@@ -35,6 +35,7 @@ public sealed class FavoriteService(SqliteConnectionFactory db, ICurrentUserAcce
         ["diagram"] = "diagram",
         ["slides"] = "slide_deck",
         ["kanban"] = "kanban_board",
+        ["project"] = "project_plan",
         ["attachment"] = "attachment",
     };
 
@@ -55,8 +56,8 @@ public sealed class FavoriteService(SqliteConnectionFactory db, ICurrentUserAcce
         // blank panel entry.
         cmd.CommandText = """
             SELECT f.kind, f.entity_id,
-                   COALESCE(b.title, p.title, d.title, s.title, k.title, a.title) AS title,
-                   COALESCE(p.book_id, d.book_id, s.book_id, k.book_id, a.book_id) AS book_id,
+                   COALESCE(b.title, p.title, d.title, s.title, k.title, pr.title, a.title) AS title,
+                   COALESCE(p.book_id, d.book_id, s.book_id, k.book_id, pr.book_id, a.book_id) AS book_id,
                    f.created_at
             FROM favorite f
             LEFT JOIN book b ON f.kind = 'book' AND b.id = f.entity_id
@@ -64,9 +65,10 @@ public sealed class FavoriteService(SqliteConnectionFactory db, ICurrentUserAcce
             LEFT JOIN diagram d ON f.kind = 'diagram' AND d.id = f.entity_id
             LEFT JOIN slide_deck s ON f.kind = 'slides' AND s.id = f.entity_id
             LEFT JOIN kanban_board k ON f.kind = 'kanban' AND k.id = f.entity_id
+            LEFT JOIN project_plan pr ON f.kind = 'project' AND pr.id = f.entity_id
             LEFT JOIN attachment a ON f.kind = 'attachment' AND a.id = f.entity_id
             WHERE f.user_id = $user
-              AND COALESCE(b.title, p.title, d.title, s.title, k.title, a.title) IS NOT NULL
+              AND COALESCE(b.title, p.title, d.title, s.title, k.title, pr.title, a.title) IS NOT NULL
             ORDER BY f.created_at DESC, f.entity_id
             """;
         SqliteHelpers.Add(cmd, "$user", UserKey);

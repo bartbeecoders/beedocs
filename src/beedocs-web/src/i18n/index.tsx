@@ -21,6 +21,7 @@ import { slidesEditor } from './messages/slidesEditor'
 import { helpdoc } from './messages/helpdoc'
 import { site } from './messages/site'
 import { kanban } from './messages/kanban'
+import { project } from './messages/project'
 
 export { LANGUAGES, type Lang, type LangDef } from './langs'
 
@@ -60,6 +61,7 @@ const MESSAGES = {
   helpdoc,
   site,
   kanban,
+  project,
 } as const
 
 type NsMap = typeof MESSAGES

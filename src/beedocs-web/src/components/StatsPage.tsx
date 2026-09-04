@@ -23,7 +23,7 @@ function formatInt(n: number): string {
   return n.toLocaleString()
 }
 
-type CountKind = 'page' | 'diagram' | 'slideDeck' | 'kanban' | 'file' | 'book' | 'shelf' | 'document'
+type CountKind = 'page' | 'diagram' | 'slideDeck' | 'kanban' | 'project' | 'file' | 'book' | 'shelf' | 'document'
 
 /** "3 pages" via the stats.count.* .one/.other key pairs. */
 function plural(t: TFunction, kind: CountKind, n: number): string {
@@ -109,6 +109,7 @@ export function StatsPage() {
                 {plural(t, 'diagram', stats.documents.diagrams)} ·{' '}
                 {plural(t, 'slideDeck', stats.documents.slideDecks)} ·{' '}
                 {plural(t, 'kanban', stats.documents.kanbanBoards)} ·{' '}
+                {plural(t, 'project', stats.documents.projectPlans)} ·{' '}
                 {plural(t, 'file', stats.documents.attachments)}
               </span>
               <span className="stats-tile-detail muted sm">

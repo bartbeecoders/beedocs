@@ -14,6 +14,7 @@ export type TreeSelection =
   | { kind: 'diagram'; bookId: string; diagramId: string }
   | { kind: 'slides'; bookId: string; deckId: string }
   | { kind: 'kanban'; bookId: string; boardId: string }
+  | { kind: 'project'; bookId: string; planId: string }
   | { kind: 'attachment'; bookId: string; attachmentId: string }
 
 export type RouteSelectionParams = {
@@ -23,6 +24,7 @@ export type RouteSelectionParams = {
   diagramId?: string
   deckId?: string
   boardId?: string
+  planId?: string
   attachmentId?: string
   /** 'settings' | 'help' | other workspace views — clears structural selection */
   view?: string
@@ -47,6 +49,9 @@ export function selectionFromRoute(params: RouteSelectionParams): TreeSelection 
   }
   if (params.bookId && params.boardId) {
     return { kind: 'kanban', bookId: params.bookId, boardId: params.boardId }
+  }
+  if (params.bookId && params.planId) {
+    return { kind: 'project', bookId: params.bookId, planId: params.planId }
   }
   if (params.bookId && params.attachmentId) {
     return { kind: 'attachment', bookId: params.bookId, attachmentId: params.attachmentId }
@@ -80,6 +85,8 @@ export function selectionEquals(a: TreeSelection, b: TreeSelection): boolean {
       return b.kind === 'slides' && a.bookId === b.bookId && a.deckId === b.deckId
     case 'kanban':
       return b.kind === 'kanban' && a.bookId === b.bookId && a.boardId === b.boardId
+    case 'project':
+      return b.kind === 'project' && a.bookId === b.bookId && a.planId === b.planId
     case 'attachment':
       return (
         b.kind === 'attachment' &&

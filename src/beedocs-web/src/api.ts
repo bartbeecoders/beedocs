@@ -45,6 +45,8 @@ import type {
   SlideDeckSummary,
   KanbanBoard,
   KanbanBoardSummary,
+  ProjectPlan,
+  ProjectPlanSummary,
   SlideTemplate,
   SlideTemplateSummary,
   CreateStorageProviderRequest,
@@ -534,6 +536,18 @@ export const api = {
   updateKanbanBoard: (id: string, body: { title: string; source?: string }) =>
     request<KanbanBoard>(`/api/kanban/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteKanbanBoard: (id: string) => request<void>(`/api/kanban/${id}`, { method: 'DELETE' }),
+
+  /** Project plans. `source` is the JSON task/Gantt document. */
+  listProjectPlans: (bookId: string) => request<ProjectPlanSummary[]>(`/api/books/${bookId}/project`),
+  getProjectPlan: (id: string) => request<ProjectPlan>(`/api/project/${id}`),
+  createProjectPlan: (bookId: string, body: { title: string; source?: string }) =>
+    request<ProjectPlan>(`/api/books/${bookId}/project`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateProjectPlan: (id: string, body: { title: string; source?: string }) =>
+    request<ProjectPlan>(`/api/project/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteProjectPlan: (id: string) => request<void>(`/api/project/${id}`, { method: 'DELETE' }),
   /**
    * Server-rendered PowerPoint download. The same file imports into Google
    * Slides (Drive converts .pptx), so both export flows point here.

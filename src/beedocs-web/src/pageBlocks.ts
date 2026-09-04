@@ -1,6 +1,7 @@
 import { serializeBeeDoc, EMPTY_BEE_DOC, createNode } from './diagram/beeModel'
 import { serializeExcelGridDoc, starterExcelGridDoc } from './excelgrid/model'
 import { serializeBoard, starterBoard } from './kanban/kanbanModel'
+import { serializePlan, starterPlan } from './project/projectModel'
 import { serializeFreeDrawDoc, EMPTY_FREE_DRAW_DOC } from './freedraw/model'
 import type { ContentSegment } from './markdownFences'
 
@@ -17,6 +18,7 @@ export type InsertKind =
   | 'freedraw'
   | 'excelgrid'
   | 'kanban'
+  | 'project'
   | 'mermaid-flow'
   | 'mermaid-sequence'
   | 'mermaid-er'
@@ -124,6 +126,14 @@ export function segmentsForInsert(kind: InsertKind, opts?: { diagramId?: string;
           body: serializeBoard(starterBoard()),
         },
       ]
+    case 'project':
+      return [
+        {
+          type: 'fence',
+          lang: 'project',
+          body: serializePlan(starterPlan()),
+        },
+      ]
     case 'mermaid-flow':
       return [
         {
@@ -160,4 +170,8 @@ export function segmentsForLinkedDiagram(diagramId: string): ContentSegment[] {
 
 export function segmentsForLinkedKanban(boardId: string): ContentSegment[] {
   return [{ type: 'fence', lang: 'kanban-ref', body: boardId }]
+}
+
+export function segmentsForLinkedProject(planId: string): ContentSegment[] {
+  return [{ type: 'fence', lang: 'project-ref', body: planId }]
 }

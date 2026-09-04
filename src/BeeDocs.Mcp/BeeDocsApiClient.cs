@@ -134,6 +134,21 @@ public sealed class BeeDocsApiClient(HttpClient http)
     public Task DeleteKanbanBoardAsync(string id, CancellationToken ct = default)
         => SendAsync(HttpMethod.Delete, $"/api/kanban/{Uri.EscapeDataString(id)}", null, ct);
 
+    public Task<JsonElement> ListProjectPlansAsync(string bookId, CancellationToken ct = default)
+        => GetAsync($"/api/books/{Uri.EscapeDataString(bookId)}/project", ct);
+
+    public Task<JsonElement> GetProjectPlanAsync(string id, CancellationToken ct = default)
+        => GetAsync($"/api/project/{Uri.EscapeDataString(id)}", ct);
+
+    public Task<JsonElement> CreateProjectPlanAsync(string bookId, object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Post, $"/api/books/{Uri.EscapeDataString(bookId)}/project", body, ct);
+
+    public Task<JsonElement> UpdateProjectPlanAsync(string id, object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Put, $"/api/project/{Uri.EscapeDataString(id)}", body, ct);
+
+    public Task DeleteProjectPlanAsync(string id, CancellationToken ct = default)
+        => SendAsync(HttpMethod.Delete, $"/api/project/{Uri.EscapeDataString(id)}", null, ct);
+
     public async Task<byte[]> ExportSlideDeckPptxAsync(string id, CancellationToken ct = default)
     {
         var path = $"/api/slides/{Uri.EscapeDataString(id)}/export/pptx";

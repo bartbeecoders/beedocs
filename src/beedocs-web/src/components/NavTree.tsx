@@ -19,6 +19,7 @@ import type {
   PageSummary,
   SlideDeckSummary,
   KanbanBoardSummary,
+  ProjectPlanSummary,
 } from '../types'
 import { ATTACHMENT_ACCEPT, attachmentIcon, dragHasFiles, formatFileSize } from '../media/attachments'
 import { useAttachmentUpload } from '../hooks/useAttachmentUpload'
@@ -83,6 +84,14 @@ type CtxMenu =
       y: number
     }
   | {
+      kind: 'project'
+      bookId: string
+      planId: string
+      title: string
+      x: number
+      y: number
+    }
+  | {
       kind: 'attachment'
       bookId: string
       attachmentId: string
@@ -107,6 +116,7 @@ type Creating =
   | { bookId: string; kind: 'diagram'; diagramKind?: 'beediagram' | 'isometric' }
   | { bookId: string; kind: 'slides' }
   | { bookId: string; kind: 'kanban' }
+  | { bookId: string; kind: 'project' }
   | { bookId: string; kind: 'folder' }
 
 export function NavTree() {
@@ -125,6 +135,7 @@ export function NavTree() {
     createDiagram,
     createSlideDeck,
     createKanbanBoard,
+    createProjectPlan,
     deleteBook,
     deleteShelf,
     renameShelf,
@@ -134,6 +145,7 @@ export function NavTree() {
     deleteDiagram,
     deleteSlideDeck,
     deleteKanbanBoard,
+    deleteProjectPlan,
     deleteAttachment,
     renameFolder,
     movePage,
@@ -304,6 +316,11 @@ export function NavTree() {
       setChildTitle('')
       setCreatingIn(null)
       void navigate(`/books/${bookId}/kanban/${board.id}`)
+    } else if (kind === 'project') {
+      const plan = await createProjectPlan(bookId, childTitle.trim())
+      setChildTitle('')
+      setCreatingIn(null)
+      void navigate(`/books/${bookId}/project/${plan.id}`)
     } else {
       const diagram = await createDiagram(bookId, childTitle.trim(), creatingIn.diagramKind)
       setChildTitle('')
@@ -692,6 +709,14 @@ export function NavTree() {
                 }}
               />
               <MenuItem
+                label={t('nav.newProject')}
+                write
+                onClick={() => {
+                  setCreatingIn({ bookId: menu.bookId, kind: 'project' })
+                  setMenu(null)
+                }}
+              />
+              <MenuItem
                 label={t('nav.uploadFile')}
                 write
                 onClick={() => {
@@ -907,6 +932,34 @@ export function NavTree() {
                   if (confirm(t('nav.deleteKanbanConfirm', { title: menu.title }))) {
                     void deleteKanbanBoard(menu.boardId, menu.bookId).then(() => {
                       if (params.boardId === menu.boardId)
+                        void navigate(`/books/${menu.bookId}`)
+                    })
+                  }
+                  setMenu(null)
+                }}
+              />
+            </>
+          )}
+          {menu.kind === 'project' && (
+            <>
+              <div className="tree-context-heading">📊 {menu.title}</div>
+              <MenuItem
+                label={t('common.open')}
+                onClick={() => {
+                  void navigate(`/books/${menu.bookId}/project/${menu.planId}`)
+                  setMenu(null)
+                }}
+              />
+              <FavoriteMenuItem kind="project" entityId={menu.planId} onDone={() => setMenu(null)} />
+              <div className="tree-context-sep" />
+              <MenuItem
+                label={t('nav.deleteProject')}
+                write
+                danger
+                onClick={() => {
+                  if (confirm(t('nav.deleteProjectConfirm', { title: menu.title }))) {
+                    void deleteProjectPlan(menu.planId, menu.bookId).then(() => {
+                      if (params.planId === menu.planId)
                         void navigate(`/books/${menu.bookId}`)
                     })
                   }
@@ -1374,6 +1427,8 @@ function BookNode({
                           ? t('nav.presentationTitle')
                           : creatingIn.kind === 'kanban'
                             ? t('nav.kanbanTitle')
+                            : creatingIn.kind === 'project'
+                              ? t('nav.projectTitle')
                             : t('nav.diagramTitle')
                   }
                 />
@@ -1477,6 +1532,23 @@ function BookNode({
             />
           ))}
 
+          {book.projectPlans.length > 0 && <li className="tree-group-label">{t('common.projectPlans')}</li>}
+          {book.projectPlans.map((d) => (
+            <ProjectRow
+              key={d.id}
+              bookId={book.id}
+              plan={d}
+              active={
+                params.planId === d.id ||
+                (selection.kind === 'project' && selection.planId === d.id)
+              }
+              openMenu={openMenu}
+              onSelect={() =>
+                setSelection({ kind: 'project', bookId: book.id, planId: d.id })
+              }
+            />
+          ))}
+
           {book.attachments.length > 0 && <li className="tree-group-label">{t('nav.groupFiles')}</li>}
           {book.attachments.map((a) => (
             <AttachmentRow
@@ -1500,6 +1572,7 @@ function BookNode({
             book.diagrams.length === 0 &&
             book.slideDecks.length === 0 &&
             book.kanbanBoards.length === 0 &&
+            book.projectPlans.length === 0 &&
             book.attachments.length === 0 &&
             book.chapters.length === 0 &&
             creatingIn?.bookId !== book.id && (
@@ -1819,6 +1892,48 @@ function KanbanRow({
           <span className="tree-icon">📋</span>
           <span className="tree-text">{board.title}</span>
           <span className="muted sm">({board.cardCount})</span>
+        </NavLink>
+      </div>
+    </li>
+  )
+}
+
+function ProjectRow({
+  bookId,
+  plan,
+  active,
+  openMenu,
+  onSelect,
+}: {
+  bookId: string
+  plan: ProjectPlanSummary
+  active: boolean
+  openMenu: (e: React.MouseEvent, next: CtxMenu) => void
+  onSelect: () => void
+}) {
+  return (
+    <li>
+      <div
+        className={`tree-row child ${active ? 'active' : ''}`}
+        onContextMenu={(e) =>
+          openMenu(e, {
+            kind: 'project',
+            bookId,
+            planId: plan.id,
+            title: plan.title,
+            x: e.clientX,
+            y: e.clientY,
+          })
+        }
+      >
+        <NavLink
+          to={`/books/${bookId}/project/${plan.id}`}
+          className="tree-label"
+          onClick={onSelect}
+        >
+          <span className="tree-icon">📊</span>
+          <span className="tree-text">{plan.title}</span>
+          <span className="muted sm">({plan.taskCount})</span>
         </NavLink>
       </div>
     </li>

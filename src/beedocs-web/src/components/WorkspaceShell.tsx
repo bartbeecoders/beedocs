@@ -20,6 +20,7 @@ import { PageCanvas, type PageEditorState } from './PageCanvas'
 import { DiagramCanvas, type DiagramEditorState } from './DiagramCanvas'
 import { SlideCanvas, type SlideEditorState } from './SlideCanvas'
 import { KanbanCanvas, type KanbanEditorState } from './KanbanCanvas'
+import { ProjectCanvas, type ProjectEditorState } from './ProjectCanvas'
 import { AttachmentCanvas, type AttachmentEditorState } from './AttachmentCanvas'
 import { PropertiesPane } from './PropertiesPane'
 import { SettingsPanel } from './SettingsPanel'
@@ -53,6 +54,7 @@ export function WorkspaceShell() {
   const [diagramState, setDiagramState] = useState<DiagramEditorState | null>(null)
   const [slideState, setSlideState] = useState<SlideEditorState | null>(null)
   const [kanbanState, setKanbanState] = useState<KanbanEditorState | null>(null)
+  const [projectState, setProjectState] = useState<ProjectEditorState | null>(null)
   const [attachmentState, setAttachmentState] = useState<AttachmentEditorState | null>(null)
   const [version, setVersion] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -124,6 +126,7 @@ export function WorkspaceShell() {
     if (params.diagramId) return 'diagram' as const
     if (params.deckId) return 'slides' as const
     if (params.boardId) return 'kanban' as const
+    if (params.planId) return 'project' as const
     if (params.attachmentId) return 'attachment' as const
     if (params.bookId) return 'book' as const
     if (params.shelfId) return 'shelf' as const
@@ -137,6 +140,7 @@ export function WorkspaceShell() {
     params.diagramId,
     params.deckId,
     params.boardId,
+    params.planId,
     params.attachmentId,
   ])
 
@@ -150,6 +154,7 @@ export function WorkspaceShell() {
       diagramId: params.diagramId,
       deckId: params.deckId,
       boardId: params.boardId,
+      planId: params.planId,
       attachmentId: params.attachmentId,
     })
   }, [
@@ -160,6 +165,7 @@ export function WorkspaceShell() {
     params.diagramId,
     params.deckId,
     params.boardId,
+    params.planId,
     params.attachmentId,
     syncSelectionFromRoute,
   ])
@@ -215,6 +221,9 @@ export function WorkspaceShell() {
       } else if (params.boardId) {
         const board = book.kanbanBoards.find((d) => d.id === params.boardId)
         crumbs.push({ label: board?.title ?? kanbanState?.title ?? t('common.kanban') })
+      } else if (params.planId) {
+        const plan = book.projectPlans.find((d) => d.id === params.planId)
+        crumbs.push({ label: plan?.title ?? projectState?.title ?? t('common.project') })
       } else if (params.attachmentId) {
         const file = book.attachments.find((a) => a.id === params.attachmentId)
         crumbs.push({ label: file?.title ?? attachmentState?.title ?? t('shell.file') })
@@ -289,11 +298,13 @@ export function WorkspaceShell() {
         diagramId={params.diagramId}
         deckId={params.deckId}
         boardId={params.boardId}
+        planId={params.planId}
         attachmentId={params.attachmentId}
         pageState={pageState}
         diagramState={diagramState}
         slideState={slideState}
         kanbanState={kanbanState}
+        projectState={projectState}
         attachmentState={attachmentState}
       />
 
@@ -334,6 +345,7 @@ export function WorkspaceShell() {
           {view === 'diagram' && <DiagramCanvas onStateChange={setDiagramState} />}
           {view === 'slides' && <SlideCanvas onStateChange={setSlideState} />}
           {view === 'kanban' && <KanbanCanvas onStateChange={setKanbanState} />}
+          {view === 'project' && <ProjectCanvas onStateChange={setProjectState} />}
           {view === 'attachment' && <AttachmentCanvas onStateChange={setAttachmentState} />}
           {view === 'gitRepo' && <GitRepoCanvas />}
           {view === 'gitFile' && <GitFileCanvas />}
@@ -354,6 +366,7 @@ export function WorkspaceShell() {
             diagramState={diagramState}
             slideState={slideState}
             kanbanState={kanbanState}
+            projectState={projectState}
             attachmentState={attachmentState}
             view={view}
           />
@@ -634,9 +647,9 @@ function BookOverview({ bookId }: { bookId: string }) {
   const navigate = useNavigate()
   const { canWrite } = useAuth()
   const { t } = useI18n()
-  const { books, createPage, createDiagram, createSlideDeck, createKanbanBoard } = useWorkspace()
+  const { books, createPage, createDiagram, createSlideDeck, createKanbanBoard, createProjectPlan } = useWorkspace()
   const book = books.find((b) => b.id === bookId)
-  const [prompt, setPrompt] = useState<'page' | 'diagram' | 'slides' | 'kanban' | null>(null)
+  const [prompt, setPrompt] = useState<'page' | 'diagram' | 'slides' | 'kanban' | 'project' | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const { uploadingIn, error: uploadError, clearError, upload } = useAttachmentUpload()
   // The whole overview is the drop target, not a dedicated strip: this page is
@@ -687,6 +700,10 @@ function BookOverview({ bookId }: { bookId: string }) {
           <span className="stat-label">{t('common.kanbanBoards')}</span>
         </div>
         <div className="stat">
+          <span className="stat-value">{book.projectPlans.length}</span>
+          <span className="stat-label">{t('common.projectPlans')}</span>
+        </div>
+        <div className="stat">
           <span className="stat-value">{book.attachments.length}</span>
           <span className="stat-label">{t('shell.files')}</span>
         </div>
@@ -727,6 +744,9 @@ function BookOverview({ bookId }: { bookId: string }) {
           </button>
           <button type="button" className="btn sm" onClick={() => setPrompt('kanban')}>
             {t('shell.newKanban')}
+          </button>
+          <button type="button" className="btn sm" onClick={() => setPrompt('project')}>
+            {t('shell.newProject')}
           </button>
           <button
             type="button"
@@ -801,6 +821,18 @@ function BookOverview({ bookId }: { bookId: string }) {
         onSubmit={async (title) => {
           const b = await createKanbanBoard(bookId, title)
           void navigate(`/books/${bookId}/kanban/${b.id}`)
+        }}
+        onClose={() => setPrompt(null)}
+      />
+      <NamePromptDialog
+        open={prompt === 'project'}
+        title={t('shell.newProject')}
+        label={t('shell.projectTitle')}
+        placeholder={t('shell.projectPlaceholder')}
+        confirmLabel={t('shell.createProject')}
+        onSubmit={async (title) => {
+          const p = await createProjectPlan(bookId, title)
+          void navigate(`/books/${bookId}/project/${p.id}`)
         }}
         onClose={() => setPrompt(null)}
       />

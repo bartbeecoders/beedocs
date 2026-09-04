@@ -241,6 +241,33 @@ public sealed class KanbanBoard
 }
 
 /// <summary>
+/// An MS Project-style plan: tasks, milestones and a Gantt chart, stored as one
+/// JSON document. Lives in a book next to pages, diagrams, decks and boards.
+/// </summary>
+public sealed class ProjectPlan
+{
+    public string Id { get; set; } = string.Empty;
+    public string BookId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    /// <summary>
+    /// JSON document: <c>{"version":1,"tasks":[{id,title,kind,start,duration,progress,parentId,predecessors,assigneeId,assigneeName}]}</c>
+    /// — see <c>src/beedocs-web/src/project/projectModel.ts</c> for the schema.
+    /// </summary>
+    public string Source { get; set; } = string.Empty;
+    /// <summary>Same convention as <see cref="Page.ContentRef"/>.</summary>
+    public string? ContentRef { get; set; }
+    /// <summary>Same convention as <see cref="Page.ContentSize"/>.</summary>
+    public long? ContentSize { get; set; }
+    /// <summary>
+    /// Task count maintained on every save, so list projections don't have to
+    /// load <see cref="Source"/> (which may be offloaded) just to show a badge.
+    /// </summary>
+    public int? TaskCount { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
 /// A reusable slide-deck layout: the same JSON document a deck stores, saved
 /// app-wide under a name so any book can start a new deck from it.
 /// </summary>

@@ -32,6 +32,10 @@ public static class SearchText
     private static readonly HashSet<string> KanbanFences =
         new(StringComparer.OrdinalIgnoreCase) { "kanban" };
 
+    /// <summary>Fence languages whose body is a project-plan JSON document (not a plan id).</summary>
+    private static readonly HashSet<string> ProjectFences =
+        new(StringComparer.OrdinalIgnoreCase) { "project" };
+
     /// <summary>Plain text for a Markdown page body.</summary>
     public static string FromMarkdown(string? markdown)
     {
@@ -174,6 +178,40 @@ public static class SearchText
         }
     }
 
+    /// <summary>
+    /// Plain text for a stored project plan: task titles and assignee names.
+    /// Dates, ids and progress stay out of the index.
+    /// </summary>
+    public static string FromProjectSource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source) || !LooksLikeJson(source)) return "";
+        try
+        {
+            using var doc = JsonDocument.Parse(source);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return "";
+            if (!doc.RootElement.TryGetProperty("tasks", out var tasks)
+                || tasks.ValueKind != JsonValueKind.Array)
+            {
+                return "";
+            }
+
+            var sb = new StringBuilder();
+            foreach (var task in tasks.EnumerateArray())
+            {
+                if (task.ValueKind != JsonValueKind.Object) continue;
+                if (task.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
+                    Append(sb, title.GetString());
+                if (task.TryGetProperty("assigneeName", out var who) && who.ValueKind == JsonValueKind.String)
+                    Append(sb, who.GetString());
+            }
+            return Normalize(sb.ToString());
+        }
+        catch (JsonException)
+        {
+            return "";
+        }
+    }
+
     private static string FromFence(string? language, string body)
     {
         var lang = (language ?? "").Trim();
@@ -198,6 +236,9 @@ public static class SearchText
 
         if (KanbanFences.Contains(lang))
             return LooksLikeJson(body) ? FromKanbanSource(body) : "";
+
+        if (ProjectFences.Contains(lang))
+            return LooksLikeJson(body) ? FromProjectSource(body) : "";
 
         return body;
     }

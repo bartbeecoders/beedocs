@@ -20,9 +20,11 @@ import type {
   Shelf,
   SlideDeckSummary,
   KanbanBoardSummary,
+  ProjectPlanSummary,
 } from '../types'
 import { parseDeck, starterDeckSource } from '../slides/slideModel'
 import { countCards, parseBoard, starterBoardSource } from '../kanban/kanbanModel'
+import { countTasks, parsePlan, starterPlanSource } from '../project/projectModel'
 import {
   selectionEquals,
   selectionFromRoute,
@@ -37,6 +39,7 @@ export type TreeBook = Book & {
   diagrams: DiagramSummary[]
   slideDecks: SlideDeckSummary[]
   kanbanBoards: KanbanBoardSummary[]
+  projectPlans: ProjectPlanSummary[]
   attachments: AttachmentSummary[]
   chapters: Chapter[]
   expanded: boolean
@@ -83,6 +86,7 @@ type WorkspaceCtx = {
   /** Starts from a title slide carrying the deck's name. */
   createSlideDeck: (bookId: string, title: string, templateId?: string) => Promise<SlideDeckSummary>
   createKanbanBoard: (bookId: string, title: string) => Promise<KanbanBoardSummary>
+  createProjectPlan: (bookId: string, title: string) => Promise<ProjectPlanSummary>
   /** Upload a file into a book. Rejects with the server's message on a bad type or size. */
   uploadAttachment: (bookId: string, file: File) => Promise<AttachmentSummary>
   /** Replace a summary in the tree after its properties were saved elsewhere. */
@@ -100,6 +104,7 @@ type WorkspaceCtx = {
   deleteDiagram: (diagramId: string, bookId: string) => Promise<void>
   deleteSlideDeck: (deckId: string, bookId: string) => Promise<void>
   deleteKanbanBoard: (boardId: string, bookId: string) => Promise<void>
+  deleteProjectPlan: (planId: string, bookId: string) => Promise<void>
   deleteAttachment: (attachmentId: string, bookId: string) => Promise<void>
   renameFolder: (chapterId: string, bookId: string, title: string) => Promise<void>
   /** Move page into folder (or root) and/or reorder among siblings */
@@ -177,7 +182,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const syncSelectionFromRoute = useCallback((params: RouteSelectionParams) => {
-    const key = `${params.view ?? ''}|${params.bookId ?? ''}|${params.pageId ?? ''}|${params.diagramId ?? ''}|${params.deckId ?? ''}|${params.boardId ?? ''}`
+    const key = `${params.view ?? ''}|${params.bookId ?? ''}|${params.pageId ?? ''}|${params.diagramId ?? ''}|${params.deckId ?? ''}|${params.boardId ?? ''}|${params.planId ?? ''}`
     // Same route: keep tree-only selections (folders) that have no route of their own.
     if (lastRouteKeyRef.current === key) return
     lastRouteKeyRef.current = key
@@ -186,15 +191,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const loadChildren = async (bookId: string) => {
-    const [pages, diagrams, slideDecks, kanbanBoards, attachments, chapters] = await Promise.all([
+    const [pages, diagrams, slideDecks, kanbanBoards, projectPlans, attachments, chapters] = await Promise.all([
       api.listPages(bookId),
       api.listDiagrams(bookId),
       api.listSlideDecks(bookId),
       api.listKanbanBoards(bookId),
+      api.listProjectPlans(bookId),
       api.listAttachments(bookId),
       api.listChapters(bookId),
     ])
-    return { pages, diagrams, slideDecks, kanbanBoards, attachments, chapters }
+    return { pages, diagrams, slideDecks, kanbanBoards, projectPlans, attachments, chapters }
   }
 
   const refreshTree = useCallback(async () => {
@@ -219,6 +225,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               diagrams: [],
               slideDecks: [],
               kanbanBoards: [],
+              projectPlans: [],
               attachments: [],
               chapters: [],
               expanded: false,
@@ -242,6 +249,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               diagrams: [],
               slideDecks: [],
               kanbanBoards: [],
+              projectPlans: [],
               attachments: [],
               chapters: [],
               expanded: true,
@@ -376,6 +384,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           diagrams: [],
           slideDecks: [],
           kanbanBoards: [],
+          projectPlans: [],
           attachments: [],
           chapters: [],
           expanded: false,
@@ -608,6 +617,30 @@ graph LR
     return summary
   }, [])
 
+  const createProjectPlan = useCallback(async (bookId: string, title: string) => {
+    const plan = await api.createProjectPlan(bookId, { title, source: starterPlanSource() })
+    const summary: ProjectPlanSummary = {
+      id: plan.id,
+      bookId: plan.bookId,
+      title: plan.title,
+      taskCount: countTasks(parsePlan(plan.source)),
+      updatedAt: plan.updatedAt,
+    }
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.id === bookId
+          ? {
+              ...b,
+              expanded: true,
+              projectPlans: [summary, ...b.projectPlans],
+            }
+          : b,
+      ),
+    )
+    setExpandedIds((s) => new Set(s).add(bookId))
+    return summary
+  }, [])
+
   const uploadAttachment = useCallback(async (bookId: string, file: File) => {
     const created = await api.uploadAttachment(bookId, file)
     // The list is title-ordered server-side; mirror that here rather than
@@ -746,6 +779,18 @@ graph LR
       ),
     )
     setFavorites((prev) => prev.filter((f) => !(f.kind === 'kanban' && f.entityId === boardId)))
+  }, [])
+
+  const deleteProjectPlan = useCallback(async (planId: string, bookId: string) => {
+    await api.deleteProjectPlan(planId)
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.id === bookId
+          ? { ...b, projectPlans: b.projectPlans.filter((d) => d.id !== planId) }
+          : b,
+      ),
+    )
+    setFavorites((prev) => prev.filter((f) => !(f.kind === 'project' && f.entityId === planId)))
   }, [])
 
   const renameFolder = useCallback(async (chapterId: string, bookId: string, title: string) => {
@@ -992,6 +1037,7 @@ graph LR
       createDiagram,
       createSlideDeck,
       createKanbanBoard,
+      createProjectPlan,
       uploadAttachment,
       patchAttachment,
       deleteBook,
@@ -1004,6 +1050,7 @@ graph LR
       deleteDiagram,
       deleteSlideDeck,
       deleteKanbanBoard,
+      deleteProjectPlan,
       deleteAttachment,
       renameFolder,
       movePage,
@@ -1034,6 +1081,7 @@ graph LR
       createDiagram,
       createSlideDeck,
       createKanbanBoard,
+      createProjectPlan,
       uploadAttachment,
       patchAttachment,
       deleteBook,
@@ -1046,6 +1094,7 @@ graph LR
       deleteDiagram,
       deleteSlideDeck,
       deleteKanbanBoard,
+      deleteProjectPlan,
       deleteAttachment,
       renameFolder,
       movePage,
