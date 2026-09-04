@@ -36,6 +36,8 @@ import { ExcelGridView } from './ExcelGridView'
 import { FreeDrawCanvas } from './FreeDrawCanvas'
 import { FreeDrawView } from './FreeDrawView'
 import { MediaEmbed } from './media/MediaEmbed'
+import { KanbanBoard } from '../kanban/KanbanBoard'
+import { KanbanView } from '../kanban/KanbanView'
 
 // Lazy so only pages that actually embed an isometric diagram load its module.
 const IsometricView = lazy(() => import('../isometric/IsometricView'))
@@ -308,6 +310,114 @@ function InlineExcelGridEditor({
       <div className="inline-diagram-body inline-diagram-body--excelgrid">
         <ExcelGridCanvas source={live} onChange={commitSource} compact />
       </div>
+    </figure>
+  )
+}
+
+function InlineKanbanEditor({
+  source,
+  fenceLang,
+  fenceIndex,
+  contentRef,
+  onContentChange,
+  draft,
+  onDraftChange,
+}: {
+  source: string
+  fenceLang: string
+  fenceIndex: number
+  contentRef: React.MutableRefObject<string>
+  onContentChange: (next: string) => void
+  draft: string | undefined
+  onDraftChange: (next: string) => void
+}) {
+  const { t } = useI18n()
+  const live = draft ?? source
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  const commitSource = useCallback(
+    (next: string) => {
+      onDraftChange(next)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => {
+        onContentChange(replaceFenceBody(contentRef.current, fenceLang, fenceIndex, next))
+      }, 400)
+    },
+    [contentRef, fenceIndex, fenceLang, onContentChange, onDraftChange],
+  )
+
+  return (
+    <figure className="inline-diagram is-editing kanban-embed">
+      <div className="inline-diagram-head">
+        <div>
+          <span className="inline-diagram-badge">{t('editor.insert.kanban')}</span>
+          <figcaption className="inline-diagram-title">{t('editor.kanban.title')}</figcaption>
+        </div>
+        <span className="muted sm">{t('editor.kanban.hint')}</span>
+      </div>
+      <div className="inline-diagram-body">
+        <KanbanBoard source={live} onChange={commitSource} compact />
+      </div>
+    </figure>
+  )
+}
+
+function KanbanRefPreview({
+  boardId,
+  bookId,
+  editable,
+}: {
+  boardId: string
+  bookId?: string
+  editable?: boolean
+}) {
+  const { t } = useI18n()
+  const id = boardId.trim().split(/\s+/)[0] ?? ''
+  const [source, setSource] = useState<string | null>(null)
+  const [title, setTitle] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void api
+      .getKanbanBoard(id)
+      .then((b) => {
+        if (cancelled) return
+        setSource(b.source)
+        setTitle(b.title)
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  if (error) {
+    return <div className="banner error compact">{t('editor.kanbanError', { id, error })}</div>
+  }
+  if (source == null) {
+    return <p className="muted sm">{t('editor.loadingKanban')}</p>
+  }
+  return (
+    <figure className="kanban-embed">
+      <div className="inline-diagram-head">
+        <span className="inline-diagram-badge">{t('editor.kanban.linkedBadge')}</span>
+        <figcaption className="inline-diagram-title">{title}</figcaption>
+        {editable && bookId && (
+          <Link className="btn ghost sm" to={`/books/${bookId}/kanban/${id}`}>
+            {t('kanban.openBoard')}
+          </Link>
+        )}
+      </div>
+      <KanbanView source={source} title={title} compact />
     </figure>
   )
 }
@@ -921,6 +1031,42 @@ const MarkdownBody = memo(function MarkdownBody({
             <figure className="excelgrid-embed">
               <ExcelGridView source={code} />
             </figure>,
+          )
+        }
+
+        if (lang === 'kanban') {
+          const idx = nextIndex(lang)
+          if (editable && onContentChange) {
+            const key = `kanban:${idx}`
+            return wrapOutline(
+              lang,
+              idx,
+              <InlineKanbanEditor
+                source={code}
+                fenceLang={lang}
+                fenceIndex={idx}
+                contentRef={contentRef}
+                onContentChange={handleContentChange}
+                draft={beeDrafts[key]}
+                onDraftChange={(next) => setBeeDraft(key, next)}
+              />,
+            )
+          }
+          return wrapOutline(
+            lang,
+            idx,
+            <figure className="kanban-embed">
+              <KanbanView source={code} compact />
+            </figure>,
+          )
+        }
+
+        if (lang === 'kanban-ref') {
+          const idx = nextIndex('kanban-ref')
+          return wrapOutline(
+            'kanban-ref',
+            idx,
+            <KanbanRefPreview boardId={code} bookId={bookId} editable={editable} />,
           )
         }
 

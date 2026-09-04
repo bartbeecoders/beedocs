@@ -18,6 +18,7 @@ import type {
   FavoriteKind,
   PageSummary,
   SlideDeckSummary,
+  KanbanBoardSummary,
 } from '../types'
 import { ATTACHMENT_ACCEPT, attachmentIcon, dragHasFiles, formatFileSize } from '../media/attachments'
 import { useAttachmentUpload } from '../hooks/useAttachmentUpload'
@@ -74,6 +75,14 @@ type CtxMenu =
       y: number
     }
   | {
+      kind: 'kanban'
+      bookId: string
+      boardId: string
+      title: string
+      x: number
+      y: number
+    }
+  | {
       kind: 'attachment'
       bookId: string
       attachmentId: string
@@ -97,6 +106,7 @@ type Creating =
   | { bookId: string; kind: 'page'; chapterId?: string | null }
   | { bookId: string; kind: 'diagram'; diagramKind?: 'beediagram' | 'isometric' }
   | { bookId: string; kind: 'slides' }
+  | { bookId: string; kind: 'kanban' }
   | { bookId: string; kind: 'folder' }
 
 export function NavTree() {
@@ -114,6 +124,7 @@ export function NavTree() {
     createFolder,
     createDiagram,
     createSlideDeck,
+    createKanbanBoard,
     deleteBook,
     deleteShelf,
     renameShelf,
@@ -122,6 +133,7 @@ export function NavTree() {
     deleteFolder,
     deleteDiagram,
     deleteSlideDeck,
+    deleteKanbanBoard,
     deleteAttachment,
     renameFolder,
     movePage,
@@ -287,6 +299,11 @@ export function NavTree() {
       setChildTitle('')
       setCreatingIn(null)
       void navigate(`/books/${bookId}/slides/${deck.id}`)
+    } else if (kind === 'kanban') {
+      const board = await createKanbanBoard(bookId, childTitle.trim())
+      setChildTitle('')
+      setCreatingIn(null)
+      void navigate(`/books/${bookId}/kanban/${board.id}`)
     } else {
       const diagram = await createDiagram(bookId, childTitle.trim(), creatingIn.diagramKind)
       setChildTitle('')
@@ -667,6 +684,14 @@ export function NavTree() {
                 }}
               />
               <MenuItem
+                label={t('nav.newKanban')}
+                write
+                onClick={() => {
+                  setCreatingIn({ bookId: menu.bookId, kind: 'kanban' })
+                  setMenu(null)
+                }}
+              />
+              <MenuItem
                 label={t('nav.uploadFile')}
                 write
                 onClick={() => {
@@ -854,6 +879,34 @@ export function NavTree() {
                   if (confirm(t('nav.deleteSlidesConfirm', { title: menu.title }))) {
                     void deleteSlideDeck(menu.deckId, menu.bookId).then(() => {
                       if (params.deckId === menu.deckId)
+                        void navigate(`/books/${menu.bookId}`)
+                    })
+                  }
+                  setMenu(null)
+                }}
+              />
+            </>
+          )}
+          {menu.kind === 'kanban' && (
+            <>
+              <div className="tree-context-heading">📋 {menu.title}</div>
+              <MenuItem
+                label={t('common.open')}
+                onClick={() => {
+                  void navigate(`/books/${menu.bookId}/kanban/${menu.boardId}`)
+                  setMenu(null)
+                }}
+              />
+              <FavoriteMenuItem kind="kanban" entityId={menu.boardId} onDone={() => setMenu(null)} />
+              <div className="tree-context-sep" />
+              <MenuItem
+                label={t('nav.deleteKanban')}
+                write
+                danger
+                onClick={() => {
+                  if (confirm(t('nav.deleteKanbanConfirm', { title: menu.title }))) {
+                    void deleteKanbanBoard(menu.boardId, menu.bookId).then(() => {
+                      if (params.boardId === menu.boardId)
                         void navigate(`/books/${menu.bookId}`)
                     })
                   }
@@ -1319,7 +1372,9 @@ function BookNode({
                         ? t('nav.folderName')
                         : creatingIn.kind === 'slides'
                           ? t('nav.presentationTitle')
-                          : t('nav.diagramTitle')
+                          : creatingIn.kind === 'kanban'
+                            ? t('nav.kanbanTitle')
+                            : t('nav.diagramTitle')
                   }
                 />
                 <button type="submit" className="btn primary sm">
@@ -1405,6 +1460,23 @@ function BookNode({
             />
           ))}
 
+          {book.kanbanBoards.length > 0 && <li className="tree-group-label">{t('common.kanbanBoards')}</li>}
+          {book.kanbanBoards.map((d) => (
+            <KanbanRow
+              key={d.id}
+              bookId={book.id}
+              board={d}
+              active={
+                params.boardId === d.id ||
+                (selection.kind === 'kanban' && selection.boardId === d.id)
+              }
+              openMenu={openMenu}
+              onSelect={() =>
+                setSelection({ kind: 'kanban', bookId: book.id, boardId: d.id })
+              }
+            />
+          ))}
+
           {book.attachments.length > 0 && <li className="tree-group-label">{t('nav.groupFiles')}</li>}
           {book.attachments.map((a) => (
             <AttachmentRow
@@ -1427,6 +1499,7 @@ function BookNode({
             book.pages.length === 0 &&
             book.diagrams.length === 0 &&
             book.slideDecks.length === 0 &&
+            book.kanbanBoards.length === 0 &&
             book.attachments.length === 0 &&
             book.chapters.length === 0 &&
             creatingIn?.bookId !== book.id && (
@@ -1704,6 +1777,48 @@ function SlideDeckRow({
           <span className="tree-icon">🎞️</span>
           <span className="tree-text">{deck.title}</span>
           <span className="muted sm">({deck.slideCount})</span>
+        </NavLink>
+      </div>
+    </li>
+  )
+}
+
+function KanbanRow({
+  bookId,
+  board,
+  active,
+  openMenu,
+  onSelect,
+}: {
+  bookId: string
+  board: KanbanBoardSummary
+  active: boolean
+  openMenu: (e: React.MouseEvent, next: CtxMenu) => void
+  onSelect: () => void
+}) {
+  return (
+    <li>
+      <div
+        className={`tree-row child ${active ? 'active' : ''}`}
+        onContextMenu={(e) =>
+          openMenu(e, {
+            kind: 'kanban',
+            bookId,
+            boardId: board.id,
+            title: board.title,
+            x: e.clientX,
+            y: e.clientY,
+          })
+        }
+      >
+        <NavLink
+          to={`/books/${bookId}/kanban/${board.id}`}
+          className="tree-label"
+          onClick={onSelect}
+        >
+          <span className="tree-icon">📋</span>
+          <span className="tree-text">{board.title}</span>
+          <span className="muted sm">({board.cardCount})</span>
         </NavLink>
       </div>
     </li>

@@ -88,6 +88,7 @@ public sealed class ShelfContentMover(
                 "page_id IN (SELECT id FROM page WHERE book_id = $book_id)", ContentRef.RevisionKey),
             ("diagram", "source", "book_id = $book_id", ContentRef.DiagramKey),
             ("slide_deck", "source", "book_id = $book_id", ContentRef.SlideDeckKey),
+            ("kanban_board", "source", "book_id = $book_id", ContentRef.KanbanKey),
         };
 
         foreach (var (table, column, where, key) in sources)

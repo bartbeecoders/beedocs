@@ -1,7 +1,7 @@
 import { splitMarkdownSegments, type ContentSegment } from './markdownFences'
 import { parsePageLayout } from './pageLayout'
 
-export type PageOutlineKind = 'heading' | 'diagram' | 'freedraw' | 'excelgrid' | 'media' | 'code' | 'block'
+export type PageOutlineKind = 'heading' | 'diagram' | 'freedraw' | 'excelgrid' | 'kanban' | 'media' | 'code' | 'block'
 
 export type PageOutlineItem = {
   /** Stable DOM id used for scroll targets (`page-ol-N`). */
@@ -69,6 +69,9 @@ function outlineItemForSegment(seg: ContentSegment, blockIndex: number): PageOut
   }
   if (lang === 'excelgrid' || lang === 'spreadsheet' || lang === 'grid') {
     return { id, blockIndex, level: 7, label: 'Spreadsheet', kind: 'excelgrid' }
+  }
+  if (lang === 'kanban' || lang === 'kanban-ref') {
+    return { id, blockIndex, level: 7, label: lang === 'kanban-ref' ? 'Linked kanban' : 'Kanban', kind: 'kanban' }
   }
   if (lang === 'pdf' || lang === 'glb' || lang === 'gltf' || lang === 'obj' || lang === 'model') {
     return {

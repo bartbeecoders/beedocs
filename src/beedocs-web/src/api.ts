@@ -43,6 +43,8 @@ import type {
   AttachmentSummary,
   SlideDeck,
   SlideDeckSummary,
+  KanbanBoard,
+  KanbanBoardSummary,
   SlideTemplate,
   SlideTemplateSummary,
   CreateStorageProviderRequest,
@@ -520,6 +522,18 @@ export const api = {
   updateSlideDeck: (id: string, body: { title: string; source?: string }) =>
     request<SlideDeck>(`/api/slides/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteSlideDeck: (id: string) => request<void>(`/api/slides/${id}`, { method: 'DELETE' }),
+
+  /** Kanban boards. `source` is the JSON column/card document. */
+  listKanbanBoards: (bookId: string) => request<KanbanBoardSummary[]>(`/api/books/${bookId}/kanban`),
+  getKanbanBoard: (id: string) => request<KanbanBoard>(`/api/kanban/${id}`),
+  createKanbanBoard: (bookId: string, body: { title: string; source?: string }) =>
+    request<KanbanBoard>(`/api/books/${bookId}/kanban`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateKanbanBoard: (id: string, body: { title: string; source?: string }) =>
+    request<KanbanBoard>(`/api/kanban/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteKanbanBoard: (id: string) => request<void>(`/api/kanban/${id}`, { method: 'DELETE' }),
   /**
    * Server-rendered PowerPoint download. The same file imports into Google
    * Slides (Drive converts .pptx), so both export flows point here.

@@ -47,6 +47,9 @@ export const FREEDRAW_FENCE_LANGS = new Set(['freedraw', 'sketch'])
 /** Excel-style grid (JSON cell document) */
 export const EXCELGRID_FENCE_LANGS = new Set(['excelgrid', 'spreadsheet', 'grid'])
 
+/** Kanban board: inline JSON (`kanban`) or a stored board id (`kanban-ref`) */
+export const KANBAN_FENCE_LANGS = new Set(['kanban', 'kanban-ref'])
+
 /** PDF / 3D model fence languages — hybrid editor shows MediaEmbed, not source-only */
 export const MEDIA_FENCE_LANGS = new Set(['pdf', 'glb', 'gltf', 'obj', 'model'])
 
@@ -171,6 +174,10 @@ export function isFreedrawFenceLang(lang: string): boolean {
 
 export function isExcelGridFenceLang(lang: string): boolean {
   return EXCELGRID_FENCE_LANGS.has(lang.toLowerCase())
+}
+
+export function isKanbanFenceLang(lang: string): boolean {
+  return KANBAN_FENCE_LANGS.has(lang.toLowerCase())
 }
 
 export function isMediaFenceLang(lang: string): boolean {

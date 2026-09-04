@@ -110,6 +110,7 @@ builder.Services.AddSingleton<GoogleOAuthService>();
 builder.Services.AddSingleton<IDocumentService, DocumentService>();
 builder.Services.AddSingleton<IDiagramService, DiagramService>();
 builder.Services.AddSingleton<ISlideDeckService, SlideDeckService>();
+builder.Services.AddSingleton<IKanbanBoardService, KanbanBoardService>();
 builder.Services.AddSingleton<IAttachmentService, AttachmentService>();
 builder.Services.AddSingleton<ISlideTemplateService, SlideTemplateService>();
 builder.Services.AddSingleton<SlideDeckPptxExporter>();
@@ -1481,6 +1482,47 @@ api.MapGet("/slides/{id}/export/pptx", async (string id, ISlideDeckService slide
         exporter.Export(deck),
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         (string.IsNullOrEmpty(safeTitle) ? "presentation" : safeTitle) + ".pptx");
+});
+
+// --- Kanban boards ---
+api.MapGet("/books/{bookId}/kanban", async (string bookId, IKanbanBoardService boards, CancellationToken ct) =>
+    Results.Ok(await boards.ListByBookAsync(bookId, ct)));
+
+api.MapPost("/books/{bookId}/kanban", async (string bookId, CreateKanbanBoardRequest body, IKanbanBoardService boards, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    try
+    {
+        var created = await boards.CreateAsync(bookId, body, ct);
+        return Results.Created($"/api/kanban/{created.Id}", created);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+
+api.MapGet("/kanban/{id}", async (string id, IKanbanBoardService boards, CancellationToken ct) =>
+{
+    var board = await boards.GetAsync(id, ct);
+    return board is null ? Results.NotFound() : Results.Ok(board);
+});
+
+api.MapPut("/kanban/{id}", async (string id, UpdateKanbanBoardRequest body, IKanbanBoardService boards, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    var updated = await boards.UpdateAsync(id, body, ct);
+    return updated is null ? Results.NotFound() : Results.Ok(updated);
+});
+
+api.MapDelete("/kanban/{id}", async (string id, IKanbanBoardService boards, CancellationToken ct) =>
+{
+    var ok = await boards.DeleteAsync(id, ct);
+    return ok ? Results.NoContent() : Results.NotFound();
 });
 
 // --- Slide templates (app-wide reusable deck layouts) ---

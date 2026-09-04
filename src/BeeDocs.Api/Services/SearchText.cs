@@ -28,6 +28,10 @@ public static class SearchText
     private static readonly HashSet<string> GridFences =
         new(StringComparer.OrdinalIgnoreCase) { "excelgrid", "spreadsheet", "grid" };
 
+    /// <summary>Fence languages whose body is a kanban JSON document (not a board id).</summary>
+    private static readonly HashSet<string> KanbanFences =
+        new(StringComparer.OrdinalIgnoreCase) { "kanban" };
+
     /// <summary>Plain text for a Markdown page body.</summary>
     public static string FromMarkdown(string? markdown)
     {
@@ -125,7 +129,52 @@ public static class SearchText
         }
     }
 
-    private static string FromFence(string language, string body)
+    /// <summary>
+    /// Plain text for a stored kanban board: column titles plus every card's
+    /// title, body and assignee name. Ids, colours and WIP limits stay out — matching on
+    /// "accent" or a uuid would be noise, not search.
+    /// </summary>
+    public static string FromKanbanSource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source) || !LooksLikeJson(source)) return "";
+        try
+        {
+            using var doc = JsonDocument.Parse(source);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return "";
+            if (!doc.RootElement.TryGetProperty("columns", out var columns)
+                || columns.ValueKind != JsonValueKind.Array)
+            {
+                return "";
+            }
+
+            var sb = new StringBuilder();
+            foreach (var col in columns.EnumerateArray())
+            {
+                if (col.ValueKind != JsonValueKind.Object) continue;
+                if (col.TryGetProperty("title", out var colTitle) && colTitle.ValueKind == JsonValueKind.String)
+                    Append(sb, colTitle.GetString());
+                if (!col.TryGetProperty("cards", out var cards) || cards.ValueKind != JsonValueKind.Array)
+                    continue;
+                foreach (var card in cards.EnumerateArray())
+                {
+                    if (card.ValueKind != JsonValueKind.Object) continue;
+                    if (card.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
+                        Append(sb, title.GetString());
+                    if (card.TryGetProperty("body", out var body) && body.ValueKind == JsonValueKind.String)
+                        Append(sb, body.GetString());
+                    if (card.TryGetProperty("assigneeName", out var who) && who.ValueKind == JsonValueKind.String)
+                        Append(sb, who.GetString());
+                }
+            }
+            return Normalize(sb.ToString());
+        }
+        catch (JsonException)
+        {
+            return "";
+        }
+    }
+
+    private static string FromFence(string? language, string body)
     {
         var lang = (language ?? "").Trim();
 
@@ -146,6 +195,9 @@ public static class SearchText
 
         if (GridFences.Contains(lang))
             return LooksLikeJson(body) ? GridValues(body) : "";
+
+        if (KanbanFences.Contains(lang))
+            return LooksLikeJson(body) ? FromKanbanSource(body) : "";
 
         return body;
     }

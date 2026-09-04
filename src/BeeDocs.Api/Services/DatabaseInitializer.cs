@@ -121,6 +121,21 @@ public static class DatabaseInitializer
               updated_at TEXT NOT NULL
             );
 
+            -- Kanban boards. One JSON document per board, same storage shape
+            -- as slide_deck.source. card_count is maintained on every save so
+            -- list projections never need the (possibly offloaded) source.
+            CREATE TABLE IF NOT EXISTS kanban_board (
+              id TEXT PRIMARY KEY NOT NULL,
+              book_id TEXT NOT NULL,
+              title TEXT NOT NULL,
+              source TEXT NOT NULL DEFAULT '',
+              content_ref TEXT,
+              content_size INTEGER,
+              card_count INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
             -- Slide deck templates. App-wide (no book_id): a layout saved from
             -- one deck is meant to seed decks in any book. Not search-indexed —
             -- templates are scaffolding, not content someone looks for by text.
@@ -249,6 +264,7 @@ public static class DatabaseInitializer
             CREATE INDEX IF NOT EXISTS idx_diagram_book ON diagram(book_id);
             CREATE INDEX IF NOT EXISTS idx_diagram_page ON diagram(page_id);
             CREATE INDEX IF NOT EXISTS idx_slide_deck_book ON slide_deck(book_id);
+            CREATE INDEX IF NOT EXISTS idx_kanban_board_book ON kanban_board(book_id);
             CREATE INDEX IF NOT EXISTS idx_attachment_book ON attachment(book_id);
             CREATE INDEX IF NOT EXISTS idx_shape_collection_book ON shape_collection(book_id);
             CREATE INDEX IF NOT EXISTS idx_page_revision_page ON page_revision(page_id);
@@ -542,6 +558,19 @@ public static class DatabaseInitializer
           VALUES ('slides', old.id, 'delete', datetime('now'));
         END;
 
+        CREATE TRIGGER IF NOT EXISTS trg_kanban_board_search_insert AFTER INSERT ON kanban_board BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('kanban', new.id, 'upsert', datetime('now'));
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_kanban_board_search_update AFTER UPDATE ON kanban_board BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('kanban', new.id, 'upsert', datetime('now'));
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_kanban_board_search_delete AFTER DELETE ON kanban_board BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('kanban', old.id, 'delete', datetime('now'));
+        END;
+
         CREATE TRIGGER IF NOT EXISTS trg_attachment_search_insert AFTER INSERT ON attachment BEGIN
           INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
           VALUES ('attachment', new.id, 'upsert', datetime('now'));
@@ -600,8 +629,8 @@ public static class DatabaseInitializer
     /// statements in each delete method, for the same reason the search queue
     /// uses them: every writer is covered, including the one delete path someone
     /// adds later without remembering this table exists. Deleting a book fires
-    /// the child-table triggers too, because its pages, diagrams, decks and
-    /// attachments are deleted row by row in the same transaction.
+    /// the child-table triggers too, because its pages, diagrams, decks, boards
+    /// and attachments are deleted row by row in the same transaction.
     /// </summary>
     private const string FavoriteTriggerSql = """
         CREATE TRIGGER IF NOT EXISTS trg_book_favorite_delete AFTER DELETE ON book BEGIN
@@ -615,6 +644,9 @@ public static class DatabaseInitializer
         END;
         CREATE TRIGGER IF NOT EXISTS trg_slide_deck_favorite_delete AFTER DELETE ON slide_deck BEGIN
           DELETE FROM favorite WHERE kind = 'slides' AND entity_id = old.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_kanban_board_favorite_delete AFTER DELETE ON kanban_board BEGIN
+          DELETE FROM favorite WHERE kind = 'kanban' AND entity_id = old.id;
         END;
         CREATE TRIGGER IF NOT EXISTS trg_attachment_favorite_delete AFTER DELETE ON attachment BEGIN
           DELETE FROM favorite WHERE kind = 'attachment' AND entity_id = old.id;

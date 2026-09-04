@@ -160,6 +160,8 @@ function kindGlyph(kind: PageOutlineItem['kind']): string {
       return '✎'
     case 'excelgrid':
       return '#'
+    case 'kanban':
+      return '☰'
     case 'media':
       return '▣'
     case 'code':

@@ -213,6 +213,34 @@ public sealed class SlideDeck
 }
 
 /// <summary>
+/// A kanban board: ordered columns of cards, stored as one JSON document.
+/// Lives in a book next to pages, diagrams and slide decks.
+/// </summary>
+public sealed class KanbanBoard
+{
+    public string Id { get; set; } = string.Empty;
+    /// <summary>Owning book (required for library listing).</summary>
+    public string BookId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    /// <summary>
+    /// JSON document: <c>{"version":1,"columns":[{id,title,wip,cards:[{id,title,body,color,assigneeId,assigneeName}]}]}</c>
+    /// — see <c>src/beedocs-web/src/kanban/kanbanModel.ts</c> for the schema.
+    /// </summary>
+    public string Source { get; set; } = string.Empty;
+    /// <summary>Same convention as <see cref="Page.ContentRef"/>.</summary>
+    public string? ContentRef { get; set; }
+    /// <summary>Same convention as <see cref="Page.ContentSize"/>.</summary>
+    public long? ContentSize { get; set; }
+    /// <summary>
+    /// Card count maintained on every save, so list projections don't have to
+    /// load <see cref="Source"/> (which may be offloaded) just to show a badge.
+    /// </summary>
+    public int? CardCount { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
 /// A reusable slide-deck layout: the same JSON document a deck stores, saved
 /// app-wide under a name so any book can start a new deck from it.
 /// </summary>

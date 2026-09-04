@@ -9,6 +9,7 @@ import {
   isExcelGridFenceLang,
   isFreedrawFenceLang,
   isIsometricFenceLang,
+  isKanbanFenceLang,
   isMediaFenceLang,
   isVisualFenceLang,
   joinMarkdownSegments,
@@ -48,7 +49,7 @@ import {
   extensionFromPath,
   modelFormatFromExtension,
 } from '../media/mediaKinds'
-import { segmentsForInsert, segmentsForLinkedDiagram, type InsertKind } from '../pageBlocks'
+import { segmentsForInsert, segmentsForLinkedDiagram, segmentsForLinkedKanban, type InsertKind } from '../pageBlocks'
 import {
   LAYOUT_PRESETS,
   cellCount,
@@ -60,6 +61,7 @@ import {
   type PageLayout,
 } from '../pageLayout'
 import { outlineId } from '../pageOutline'
+import { useAuth } from '../auth/AuthContext'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { AiAssistBar, AiAssistField } from './AiAssist'
 import { BeeDiagramWorkbench } from './BeeDiagramWorkbench'
@@ -67,6 +69,8 @@ import { ExcelGridCanvas } from './ExcelGridCanvas'
 import { FreeDrawCanvas } from './FreeDrawCanvas'
 import { MarkdownTableEditor } from './MarkdownTableEditor'
 import { MediaEmbed, parseMediaFenceBody } from './media/MediaEmbed'
+import { KanbanBoard } from '../kanban/KanbanBoard'
+import { KanbanView } from '../kanban/KanbanView'
 
 // Lazy so pages without an isometric section don't load the iso editor module.
 const IsometricEditor = lazy(() => import('../isometric/IsometricEditor'))
@@ -410,9 +414,34 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
   )
 
   const handleInsert = useCallback(
-    async (kind: InsertKind | 'beediagram-linked', at?: InsertTarget) => {
+    async (kind: InsertKind | 'beediagram-linked' | 'kanban-linked', at?: InsertTarget) => {
       setInsertError(null)
       const target = at ?? { cell: activeCellRef.current, at: 'end' as const }
+      if (kind === 'kanban-linked') {
+        if (!bookId) {
+          setInsertError(t('editor.linkedNeedBook'))
+          return
+        }
+        const title = window
+          .prompt(t('editor.promptKanbanTitle'), t('editor.kanbanTitleDefault'))
+          ?.trim()
+        if (!title) return
+        setBusy(true)
+        try {
+          const starter = segmentsForInsert('kanban').find((s): s is FenceSegment => s.type === 'fence')
+          const board = await api.createKanbanBoard(bookId, {
+            title,
+            source: starter?.body,
+          })
+          insertAt(target, segmentsForLinkedKanban(board.id))
+          await renameInTree()
+        } catch (e) {
+          setInsertError(e instanceof Error ? e.message : String(e))
+        } finally {
+          setBusy(false)
+        }
+        return
+      }
       if (kind === 'beediagram-linked') {
         if (!bookId) {
           setInsertError(t('editor.linkedNeedBook'))
@@ -870,6 +899,13 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             onBodyChange={(body) => updateFenceBody(cellIdx, index, body)}
             onRemove={() => removeSegment(cellIdx, index)}
           />
+        ) : isKanbanFenceLang(seg.lang) ? (
+          <KanbanFenceBlock
+            segment={seg}
+            bookId={bookId}
+            onBodyChange={(body) => updateFenceBody(cellIdx, index, body)}
+            onRemove={() => removeSegment(cellIdx, index)}
+          />
         ) : isIsometricFenceLang(seg.lang) ? (
           <IsometricFenceBlock
             segment={seg}
@@ -1323,7 +1359,7 @@ function InsertToolbar({
   /** Current layout as "COLSxROWS" ("1x1" = single flow). */
   layoutSpec: string
   onLayoutChange: (spec: string) => void
-  onInsert: (kind: InsertKind | 'beediagram-linked') => void
+  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked') => void
   onPickImage?: () => void
   onPickPdf?: () => void
   onPickModel?: () => void
@@ -1359,6 +1395,15 @@ function InsertToolbar({
           title={t('editor.insert.spreadsheetTitle')}
         >
           {t('editor.insert.spreadsheet')}
+        </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
+          onClick={() => onInsert('kanban')}
+          title={t('editor.insert.kanbanTitle')}
+        >
+          {t('editor.insert.kanban')}
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('callout')}>
           {t('editor.insert.callout')}
@@ -1413,6 +1458,15 @@ function InsertToolbar({
           title={t('editor.insert.linkedTitle')}
         >
           {t('editor.insert.linkedDiagram')}
+        </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
+          onClick={() => onInsert('kanban-linked')}
+          title={t('editor.insert.linkedKanbanTitle')}
+        >
+          {t('editor.insert.linkedKanban')}
         </button>
         <button
           type="button"
@@ -1479,7 +1533,7 @@ function InsertGap({
   reorderActive,
 }: {
   busy: boolean
-  onInsert: (kind: InsertKind | 'beediagram-linked') => void
+  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked') => void
   label?: string
   dropSlot?: string
   dropLabel?: string
@@ -1526,6 +1580,8 @@ function InsertGap({
               ['isometric', t('editor.insert.isometric')],
               ['freedraw', t('editor.insert.freedraw')],
               ['excelgrid', t('editor.insert.spreadsheet')],
+              ['kanban', t('editor.insert.kanban')],
+              ['kanban-linked', t('editor.insert.linkedKanban')],
               ['mermaid-flow', t('editor.insert.flowchart')],
               ['mermaid-sequence', t('editor.insert.sequence')],
               ['table', t('editor.insert.table')],
@@ -1763,6 +1819,121 @@ function ExcelGridFenceBlock({
       <div className="hybrid-visual-body hybrid-visual-body--excelgrid">
         <ExcelGridCanvas source={segment.body} onChange={onBodyChange} compact />
       </div>
+    </div>
+  )
+}
+
+function KanbanFenceBlock({
+  segment,
+  bookId,
+  onBodyChange,
+  onRemove,
+}: {
+  segment: FenceSegment
+  bookId?: string
+  onBodyChange: (body: string) => void
+  onRemove: () => void
+}) {
+  const { t } = useI18n()
+  if (segment.lang === 'kanban-ref') {
+    return <KanbanRefFence boardId={segment.body.trim().split(/\s+/)[0] ?? ''} bookId={bookId} onRemove={onRemove} />
+  }
+
+  return (
+    <div className="hybrid-visual-diagram hybrid-kanban-block">
+      <div className="hybrid-fence-chrome">
+        <span className="inline-diagram-badge">{t('editor.insert.kanban')}</span>
+        <span className="hybrid-fence-title">{t('editor.kanban.storedTitle')}</span>
+        <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+          {t('common.remove')}
+        </button>
+      </div>
+      <div className="hybrid-visual-body">
+        <KanbanBoard source={segment.body} onChange={onBodyChange} compact />
+      </div>
+    </div>
+  )
+}
+
+function KanbanRefFence({
+  boardId,
+  bookId,
+  onRemove,
+}: {
+  boardId: string
+  bookId?: string
+  onRemove: () => void
+}) {
+  const { t } = useI18n()
+  const { canWrite } = useAuth()
+  const [source, setSource] = useState<string | null>(null)
+  const [title, setTitle] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const saving = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setError(null)
+    void api
+      .getKanbanBoard(boardId)
+      .then((b) => {
+        if (cancelled) return
+        setSource(b.source)
+        setTitle(b.title)
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [boardId])
+
+  const persist = async (next: string) => {
+    if (saving.current) return
+    saving.current = true
+    try {
+      await api.updateKanbanBoard(boardId, { title, source: next })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      saving.current = false
+    }
+  }
+
+  return (
+    <div className="hybrid-visual-diagram hybrid-kanban-block">
+      <div className="hybrid-fence-chrome">
+        <span className="inline-diagram-badge">{t('editor.kanban.linkedBadge')}</span>
+        <span className="hybrid-fence-title">{title || t('editor.insert.linkedKanban')}</span>
+        {bookId && (
+          <Link className="btn ghost sm" to={`/books/${bookId}/kanban/${boardId}`}>
+            {t('kanban.openBoard')}
+          </Link>
+        )}
+        <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+          {t('common.remove')}
+        </button>
+      </div>
+      {error && <div className="banner error compact">{t('editor.kanbanError', { id: boardId, error })}</div>}
+      {source == null && !error ? (
+        <p className="muted sm">{t('editor.loadingKanban')}</p>
+      ) : source != null ? (
+        <div className="hybrid-visual-body">
+          {canWrite ? (
+            <KanbanBoard
+              source={source}
+              compact
+              onChange={(next) => {
+                setSource(next)
+                void persist(next)
+              }}
+            />
+          ) : (
+            <KanbanView source={source} compact />
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }

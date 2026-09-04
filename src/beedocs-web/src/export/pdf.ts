@@ -3,6 +3,7 @@ import { api } from '../api'
 import { withApiBase } from '../basePath'
 import { getBrandTitle } from '../branding'
 import { excelGridToHtml } from '../excelgrid/model'
+import { kanbanToHtml } from '../kanban/kanbanModel'
 import { freeDrawToSvg } from '../freedraw/model'
 import {
   cellStyleClass,
@@ -269,6 +270,18 @@ async function renderFence(
   }
   if (lang === 'excelgrid' || lang === 'spreadsheet' || lang === 'grid') {
     return excelGridToHtml(body)
+  }
+  if (lang === 'kanban') {
+    return kanbanToHtml(body)
+  }
+  if (lang === 'kanban-ref') {
+    const id = body.trim().split(/\s+/)[0] ?? ''
+    try {
+      const board = await api.getKanbanBoard(id)
+      return kanbanToHtml(board.source, board.title)
+    } catch {
+      return `<div class="export-error">Missing kanban ${esc(id)}</div>`
+    }
   }
   if (lang === 'plantuml') {
     return `<pre class="export-code"><code>${esc(body)}</code></pre>`
@@ -618,9 +631,30 @@ const PRINT_CSS = `
   }
   .export-excelgrid-table th, .export-excelgrid-table td {
     border: 1px solid #ccc;
-    padding: 0.3em 0.55em;
-    min-width: 4em;
+    padding: 0.2em 0.5em;
   }
+  .export-kanban-board {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .export-kanban-col {
+    flex: 1;
+    min-width: 140px;
+    border: 1px solid #d0d4dc;
+    border-radius: 8px;
+    padding: 8px;
+  }
+  .export-kanban-col h4 { margin: 0 0 8px; font-size: 12px; }
+  .export-kanban-col ol { margin: 0; padding: 0; list-style: none; }
+  .export-kanban-card {
+    border: 1px solid #e2e5eb;
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    font-size: 11px;
+  }
+  .export-kanban-assignee { font-size: 10px; color: #5b6270; margin-top: 4px; }
   .export-diagram svg, .export-mermaid svg {
     max-width: 100%;
     height: auto;

@@ -486,6 +486,37 @@ public sealed record UpdateSlideDeckRequest(
     string? Source
 );
 
+public sealed record KanbanBoardDto(
+    string Id,
+    string BookId,
+    string Title,
+    /// <summary>JSON kanban document — see src/beedocs-web/src/kanban/kanbanModel.ts.</summary>
+    string Source,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="CardCount">Cards across every column, counted from the stored document.</param>
+public sealed record KanbanBoardSummaryDto(
+    string Id,
+    string BookId,
+    string Title,
+    int CardCount,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="Source">Omit to start with three empty columns (To do / In progress / Done).</param>
+public sealed record CreateKanbanBoardRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Source
+);
+
+/// <param name="Source">null leaves the stored document untouched.</param>
+public sealed record UpdateKanbanBoardRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Source
+);
+
 public sealed record SlideTemplateDto(
     string Id,
     string Name,
@@ -629,6 +660,7 @@ public sealed record SearchStatusDto(
     int Pages,
     int Diagrams,
     int SlideDecks,
+    int KanbanBoards,
     int Attachments,
     int Books,
     int Folders,
@@ -987,7 +1019,7 @@ public sealed record AuthStateDto(
     string? RbaBaseUrl = null
 );
 
-/// <summary>How many of each thing the library holds. Total counts content documents (pages + diagrams + slide decks + attachments), not the containers around them.</summary>
+/// <summary>How many of each thing the library holds. Total counts content documents (pages + diagrams + slide decks + kanban boards + attachments), not the containers around them.</summary>
 public sealed record DocumentCountsDto(
     int Shelves,
     int Books,
@@ -995,6 +1027,7 @@ public sealed record DocumentCountsDto(
     int Pages,
     int Diagrams,
     int SlideDecks,
+    int KanbanBoards,
     int Attachments,
     int Total
 );

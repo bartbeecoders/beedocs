@@ -56,6 +56,7 @@ public static class ContentRef
     public static string RevisionKey(string revisionId) => $"rev/{revisionId}";
     public static string DiagramKey(string diagramId) => $"diagram/{diagramId}";
     public static string SlideDeckKey(string deckId) => $"slides/{deckId}";
+    public static string KanbanKey(string boardId) => $"kanban/{boardId}";
 }
 
 /// <summary>

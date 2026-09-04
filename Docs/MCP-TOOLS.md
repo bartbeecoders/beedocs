@@ -60,8 +60,8 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_create_book` | `title`, `description?`, `slug?`, `shelfId?` | Create book (optionally on a shelf) |
 | `beedocs_update_book` | `bookId`, `title`, `description?`, `slug?`, `sortOrder?`, `shelfId?` | Update book (omitted fields are left alone; `shelfId: ""` unshelves) |
 | `beedocs_delete_book` | `bookId` | Delete book (+ cascade pages/chapters) |
-| `beedocs_get_book_tree` | `bookId` | Folders + root pages + diagrams + slide decks tree |
-| `beedocs_export_book` | `bookId`, `includePageContent?`, `includeDiagramSource?`, `includeSlideSource?` | Structured export of one book |
+| `beedocs_get_book_tree` | `bookId` | Folders + root pages + diagrams + slide decks + kanban boards tree |
+| `beedocs_export_book` | `bookId`, `includePageContent?`, `includeDiagramSource?`, `includeSlideSource?`, `includeKanbanSource?` | Structured export of one book |
 
 ### Chapters (folders)
 
@@ -232,6 +232,33 @@ Deck-wide `theme` sets `background`, `color`, `accent`, `fontFamily`; slide
 `notes` are speaker notes (indexed for search, never rendered). The full
 document format is documented in [SLIDES.md](./SLIDES.md).
 
+### Kanban
+
+| Tool | Args | Description |
+|------|------|-------------|
+| `beedocs_list_kanban_boards` | `bookId` | Board summaries incl. `cardCount` |
+| `beedocs_get_kanban_board` | `boardId` | Full board + JSON document |
+| `beedocs_create_kanban_board` | `bookId`, `title`, `source?` | Raw JSON create; omit source for three empty columns |
+| `beedocs_update_kanban_board` | `boardId`, `title?`, `source?` | Update title and/or document (null keeps current) |
+| `beedocs_delete_kanban_board` | `boardId` | Delete board |
+| `beedocs_create_kanban_board_with_columns` | `bookId`, `title`, `columns?` | Structured create — validated columns/cards |
+| `beedocs_update_kanban_board_columns` | `boardId`, `columns[]`, `title?` | Replace columns with the same structured model |
+
+#### Structured columns
+
+Each column is `{ id?, title?, wip?, cards[] }` left-to-right. Cards:
+
+| Card field | Notes |
+|------------|-------|
+| `title`, `body` | Title is required in practice; body is optional details |
+| `color` | `accent` \| `info` \| `ok` \| `warn` \| `danger` \| `muted` (omit for none) |
+| `assigneeId`, `assigneeName` | Account id from the user directory, plus a display-name snapshot |
+| `wip` (column) | Optional per-column card limit; omit or 0 for unlimited |
+
+Pages embed a stored board with ```` ```kanban-ref\nBOARD_ID\n``` ````, or an
+inline copy with ```` ```kanban\n{json}\n``` ````. The full document format is
+documented in [KANBAN.md](./KANBAN.md).
+
 ### Git repositories
 
 Repos an admin put on the shelf (Settings → Git repositories): server-side
@@ -289,11 +316,12 @@ Indexed repos also surface in `beedocs_search` as kind `gitfile` (id
 | `beedocs://books/{bookId}/pages` | Page summaries |
 | `beedocs://books/{bookId}/chapters` | Folder list |
 | `beedocs://books/{bookId}/attachments` | Attachment metadata (contents via `beedocs_read_attachment`) |
-| `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams + slide decks + attachments |
+| `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams + slide decks + kanban boards + attachments |
 | `beedocs://pages/{pageId}` | Full page |
 | `beedocs://diagram/catalog` | Every shape, Azure stencil, palette group, anchor, route and arrow head |
 | `beedocs://diagrams/{diagramId}` | Full diagram |
 | `beedocs://slides/{deckId}` | Full slide deck |
+| `beedocs://kanban/{boardId}` | Full kanban board |
 
 ---
 

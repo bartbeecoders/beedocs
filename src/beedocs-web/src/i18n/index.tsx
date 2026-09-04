@@ -20,6 +20,7 @@ import { isometric } from './messages/isometric'
 import { slidesEditor } from './messages/slidesEditor'
 import { helpdoc } from './messages/helpdoc'
 import { site } from './messages/site'
+import { kanban } from './messages/kanban'
 
 export { LANGUAGES, type Lang, type LangDef } from './langs'
 
@@ -58,6 +59,7 @@ const MESSAGES = {
   slidesEditor,
   helpdoc,
   site,
+  kanban,
 } as const
 
 type NsMap = typeof MESSAGES

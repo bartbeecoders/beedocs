@@ -35,7 +35,9 @@ site world-readable when sign-in is on.
 
 Besides pages, a book also holds **diagrams** (BeeDiagram/Mermaid documents),
 **slide decks** (PowerPoint-style presentations with a designer and a
-full-screen presentation mode — see [SLIDES.md](./SLIDES.md)) and
+full-screen presentation mode — see [SLIDES.md](./SLIDES.md)),
+**kanban boards** (columns of cards, as a tree item or a page embed — see
+[KANBAN.md](./KANBAN.md)) and
 **attachments** (uploaded PDFs, Word/PowerPoint/Excel documents and archives,
 searchable by the text inside them — see [ATTACHMENTS.md](./ATTACHMENTS.md)).
 

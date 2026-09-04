@@ -46,7 +46,7 @@ export type Book = {
 }
 
 /** What a favorite can point at. `slides` names a slide deck, as in search. */
-export type FavoriteKind = 'book' | 'page' | 'diagram' | 'slides' | 'attachment'
+export type FavoriteKind = 'book' | 'page' | 'diagram' | 'slides' | 'kanban' | 'attachment'
 
 /**
  * One starred item as GET /api/favorites returns it: the target, its live
@@ -154,6 +154,7 @@ export type SearchKind =
   | 'page'
   | 'diagram'
   | 'slides'
+  | 'kanban'
   | 'attachment'
   | 'book'
   | 'folder'
@@ -253,6 +254,7 @@ export type SearchStatus = {
   pages: number
   diagrams: number
   slideDecks: number
+  kanbanBoards: number
   attachments: number
   books: number
   folders: number
@@ -344,6 +346,29 @@ export type SlideDeckSummary = {
 
 /** The full deck. No `slideCount` — the client holding `source` can count for itself. */
 export type SlideDeck = {
+  id: string
+  bookId: string
+  title: string
+  source: string
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * A kanban board stored in a book next to pages and diagrams.
+ * `source` is a JSON column/card document — see kanban/kanbanModel.ts.
+ */
+export type KanbanBoardSummary = {
+  id: string
+  bookId: string
+  title: string
+  /** Cards across every column, counted server-side from the stored document. */
+  cardCount: number
+  updatedAt: string
+}
+
+/** The full board. No `cardCount` — the client holding `source` can count for itself. */
+export type KanbanBoard = {
   id: string
   bookId: string
   title: string
@@ -868,8 +893,9 @@ export type DocumentCounts = {
   pages: number
   diagrams: number
   slideDecks: number
+  kanbanBoards: number
   attachments: number
-  /** Content documents only: pages + diagrams + slide decks + attachments. */
+  /** Content documents only: pages + diagrams + slide decks + kanban boards + attachments. */
   total: number
 }
 

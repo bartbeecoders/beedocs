@@ -10,6 +10,7 @@ import { useWorkspace } from '../workspace/WorkspaceContext'
 import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
 import type { SlideEditorState } from './SlideCanvas'
+import type { KanbanEditorState } from './KanbanCanvas'
 import type { AttachmentEditorState } from './AttachmentCanvas'
 import { OwnerField } from './OwnerField'
 import { useGitRepos } from '../hooks/useGitRepos'
@@ -25,6 +26,7 @@ type Props = {
   pageState: PageEditorState | null
   diagramState: DiagramEditorState | null
   slideState: SlideEditorState | null
+  kanbanState: KanbanEditorState | null
   attachmentState: AttachmentEditorState | null
   view:
     | 'welcome'
@@ -33,6 +35,7 @@ type Props = {
     | 'page'
     | 'diagram'
     | 'slides'
+    | 'kanban'
     | 'attachment'
     | 'settings'
     | 'users'
@@ -46,6 +49,7 @@ export function PropertiesPane({
   pageState,
   diagramState,
   slideState,
+  kanbanState,
   attachmentState,
   view,
 }: Props) {
@@ -349,6 +353,63 @@ export function PropertiesPane({
     )
   }
 
+  if (view === 'kanban' && kanbanState) {
+    const b = kanbanState.board
+    return (
+      <div className="props-pane">
+        <h3>{t('props.kanban')}</h3>
+        <Field label={t('common.title')}>
+          {canWrite ? (
+            <SyncedInput value={kanbanState.title} onValueChange={kanbanState.setTitle} />
+          ) : (
+            <span>{kanbanState.title}</span>
+          )}
+        </Field>
+        <Field label={t('props.cards')}>
+          <span>{kanbanState.cardCount}</span>
+        </Field>
+        <Field label={t('props.updated')}>
+          <span className="sm">{b ? new Date(b.updatedAt).toLocaleString() : '—'}</span>
+        </Field>
+        <div className="props-actions">
+          {canWrite && (
+            <>
+              <button
+                type="button"
+                className="btn primary sm"
+                disabled={kanbanState.saving || !kanbanState.dirty}
+                onClick={() => void kanbanState.save()}
+              >
+                {kanbanState.saving ? t('common.saving') : t('props.saveKanban')}
+              </button>
+              <button
+                type="button"
+                className="btn danger ghost sm"
+                onClick={() => void kanbanState.deleteBoard()}
+              >
+                {t('common.delete')}
+              </button>
+            </>
+          )}
+        </div>
+        <div className="props-hint">
+          <h4>{t('props.markdownEmbed')}</h4>
+          <pre className="embed-snippet sm">{`\`\`\`kanban-ref\n${b?.id ?? ''}\n\`\`\``}</pre>
+          <button
+            type="button"
+            className="btn sm"
+            onClick={() =>
+              void navigator.clipboard.writeText(`\`\`\`kanban-ref\n${b?.id ?? ''}\n\`\`\``)
+            }
+          >
+            {t('props.copyEmbed')}
+          </button>
+          <p className="muted sm">{t('props.kanbanHint')}</p>
+        </div>
+      </div>
+    )
+  }
+
   if (view === 'attachment' && attachmentState) {
     const a = attachmentState.attachment
     return (
@@ -557,6 +618,9 @@ export function PropertiesPane({
         </Field>
         <Field label={t('common.slideDecks')}>
           <span>{book.slideDecks.length}</span>
+        </Field>
+        <Field label={t('common.kanbanBoards')}>
+          <span>{book.kanbanBoards.length}</span>
         </Field>
         <Field label={t('common.owner')}>
           <BookOwnerField bookId={book.id} title={book.title} ownerId={book.ownerId ?? ''} ownerName={book.ownerName} />

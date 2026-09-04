@@ -13,6 +13,7 @@ import { NamePromptDialog, type NamePromptSelect } from './NamePromptDialog'
 import type { PageEditorState } from './PageCanvas'
 import type { DiagramEditorState } from './DiagramCanvas'
 import type { SlideEditorState } from './SlideCanvas'
+import type { KanbanEditorState } from './KanbanCanvas'
 import type { AttachmentEditorState } from './AttachmentCanvas'
 import { ATTACHMENT_ACCEPT, attachmentIcon } from '../media/attachments'
 import { useAttachmentUpload } from '../hooks/useAttachmentUpload'
@@ -24,6 +25,7 @@ export type WorkspaceView =
   | 'page'
   | 'diagram'
   | 'slides'
+  | 'kanban'
   | 'attachment'
   | 'settings'
   | 'users'
@@ -39,10 +41,12 @@ type Props = {
   pageId?: string
   diagramId?: string
   deckId?: string
+  boardId?: string
   attachmentId?: string
   pageState?: PageEditorState | null
   diagramState?: DiagramEditorState | null
   slideState?: SlideEditorState | null
+  kanbanState?: KanbanEditorState | null
   attachmentState?: AttachmentEditorState | null
 }
 
@@ -143,6 +147,13 @@ const ICONS = {
       <path d="M4.6 5.4h4.5M4.6 7.4h6.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </Icon>
   ),
+  kanban: (
+    <Icon>
+      <rect x="2" y="3" width="3.4" height="10" rx="0.8" stroke="currentColor" strokeWidth="1.25" />
+      <rect x="6.3" y="3" width="3.4" height="7" rx="0.8" stroke="currentColor" strokeWidth="1.25" />
+      <rect x="10.6" y="3" width="3.4" height="8.5" rx="0.8" stroke="currentColor" strokeWidth="1.25" />
+    </Icon>
+  ),
   settings: (
     <Icon>
       <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.35" />
@@ -207,10 +218,12 @@ export function WorkspaceToolbar({
   pageId,
   diagramId,
   deckId,
+  boardId,
   attachmentId,
   pageState,
   diagramState,
   slideState,
+  kanbanState,
   attachmentState,
 }: Props) {
   const {
@@ -226,11 +239,13 @@ export function WorkspaceToolbar({
     createFolder,
     createDiagram,
     createSlideDeck,
+    createKanbanBoard,
     deleteBook,
     deletePage,
     deleteFolder,
     deleteDiagram,
     deleteSlideDeck,
+    deleteKanbanBoard,
     deleteAttachment,
     renameFolder,
     movePage,
@@ -262,9 +277,10 @@ export function WorkspaceToolbar({
         pageId,
         diagramId,
         deckId,
+        boardId,
         attachmentId,
       ),
-    [view, selection, books, shelves, t, shelfId, bookId, pageId, diagramId, deckId, attachmentId],
+    [view, selection, books, shelves, t, shelfId, bookId, pageId, diagramId, deckId, boardId, attachmentId],
   )
 
   if (view === 'settings' || view === 'users' || view === 'stats' || view === 'help') {
@@ -572,6 +588,24 @@ export function WorkspaceToolbar({
                 <button
                   type="button"
                   className="btn ghost sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: t('shell.newKanban'),
+                      label: t('shell.kanbanTitle'),
+                      placeholder: t('shell.kanbanPlaceholder'),
+                      confirmLabel: t('shell.createKanban'),
+                      run: async (title) => {
+                        const b = await createKanbanBoard(context.bookId, title)
+                        void navigate(`/books/${context.bookId}/kanban/${b.id}`)
+                      },
+                    })
+                  }
+                >
+                  {t('shell.newKanban')}
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost sm"
                   disabled={uploading}
                   onClick={() => {
                     uploadBookRef.current = context.bookId
@@ -866,6 +900,48 @@ export function WorkspaceToolbar({
         </>
       )}
 
+      {context.kind === 'kanban' && (
+        <>
+          <Group>
+            {(view !== 'kanban' || boardId !== context.boardId) && (
+              <button
+                type="button"
+                className="btn primary sm"
+                onClick={() =>
+                  void navigate(`/books/${context.bookId}/kanban/${context.boardId}`)
+                }
+              >
+                {t('common.open')}
+              </button>
+            )}
+          </Group>
+          {kanbanState?.dirty && (
+            <>
+              <Sep />
+              <span className="ws-toolbar-status muted sm">{t('shell.unsavedChanges')}</span>
+            </>
+          )}
+          <span className="ws-toolbar-spacer" />
+          {canWrite && (
+            <Group>
+              <button
+                type="button"
+                className="btn ghost danger sm"
+                onClick={() => {
+                  if (!confirm(t('shell.deleteKanbanConfirm', { name: context.title }))) return
+                  void deleteKanbanBoard(context.boardId, context.bookId).then(() => {
+                    setSelection({ kind: 'book', bookId: context.bookId })
+                    if (boardId === context.boardId) void navigate(`/books/${context.bookId}`)
+                  })
+                }}
+              >
+                {t('shell.deleteKanban')}
+              </button>
+            </Group>
+          )}
+        </>
+      )}
+
       {context.kind === 'attachment' && (
         <>
           <Group>
@@ -979,6 +1055,7 @@ type BookLike = {
   pages: { id: string; title: string; chapterId?: string | null }[]
   diagrams: { id: string; title: string }[]
   slideDecks: { id: string; title: string }[]
+  kanbanBoards: { id: string; title: string }[]
   attachments: { id: string; title: string; fileName: string; contentType: string; sizeBytes: number }[]
   chapters: { id: string; title: string }[]
 }
@@ -1035,6 +1112,14 @@ type ToolbarContext =
       dirtyHint?: string
     }
   | {
+      kind: 'kanban'
+      icon: ReactNode
+      title: string
+      bookId: string
+      boardId: string
+      dirtyHint?: string
+    }
+  | {
       kind: 'attachment'
       icon: ReactNode
       title: string
@@ -1057,6 +1142,7 @@ function resolveToolbarContext(
   pageId?: string,
   diagramId?: string,
   deckId?: string,
+  boardId?: string,
   attachmentId?: string,
 ): ToolbarContext {
   if (selection.kind === 'folder') {
@@ -1111,6 +1197,20 @@ function resolveToolbarContext(
       title: deck?.title ?? t('common.slides'),
       bookId: bId,
       deckId: dId,
+    }
+  }
+
+  if (selection.kind === 'kanban' || (view === 'kanban' && bookId && boardId)) {
+    const bId = selection.kind === 'kanban' ? selection.bookId : bookId!
+    const kId = selection.kind === 'kanban' ? selection.boardId : boardId!
+    const book = books.find((b) => b.id === bId)
+    const board = book?.kanbanBoards.find((d) => d.id === kId)
+    return {
+      kind: 'kanban',
+      icon: ICONS.kanban,
+      title: board?.title ?? t('common.kanban'),
+      bookId: bId,
+      boardId: kId,
     }
   }
 

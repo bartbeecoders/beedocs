@@ -101,7 +101,7 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
         + "google_client_secret, google_refresh_token, google_folder_id, created_at, updated_at";
 
     /// <summary>The four tables whose bodies can point at a provider.</summary>
-    private static readonly string[] ContentTables = ["page", "page_revision", "diagram", "slide_deck"];
+    private static readonly string[] ContentTables = ["page", "page_revision", "diagram", "slide_deck", "kanban_board"];
 
     public async Task<IReadOnlyList<StorageProviderDto>> ListAsync(CancellationToken ct = default)
     {

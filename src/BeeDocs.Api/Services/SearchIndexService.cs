@@ -202,6 +202,12 @@ public sealed partial class SearchIndexService(
             WHERE d.id IS NULL OR d.updated_at <> s.updated_at;
 
             INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+            SELECT 'kanban', k.id, 'upsert', datetime('now')
+            FROM kanban_board k
+            LEFT JOIN search_doc d ON d.kind = 'kanban' AND d.entity_id = k.id
+            WHERE d.id IS NULL OR d.updated_at <> k.updated_at;
+
+            INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
             SELECT 'attachment', a.id, 'upsert', datetime('now')
             FROM attachment a
             LEFT JOIN search_doc d ON d.kind = 'attachment' AND d.entity_id = a.id
@@ -231,6 +237,7 @@ public sealed partial class SearchIndexService(
             WHERE (d.kind = 'page'    AND NOT EXISTS (SELECT 1 FROM page    WHERE id = d.entity_id))
                OR (d.kind = 'diagram' AND NOT EXISTS (SELECT 1 FROM diagram WHERE id = d.entity_id))
                OR (d.kind = 'slides'  AND NOT EXISTS (SELECT 1 FROM slide_deck WHERE id = d.entity_id))
+               OR (d.kind = 'kanban'  AND NOT EXISTS (SELECT 1 FROM kanban_board WHERE id = d.entity_id))
                OR (d.kind = 'attachment' AND NOT EXISTS (SELECT 1 FROM attachment WHERE id = d.entity_id))
                OR (d.kind = 'book'    AND NOT EXISTS (SELECT 1 FROM book    WHERE id = d.entity_id))
                OR (d.kind = 'folder'  AND NOT EXISTS (SELECT 1 FROM chapter WHERE id = d.entity_id))
@@ -408,6 +415,7 @@ public sealed partial class SearchIndexService(
             "page" => "SELECT title, content, book_id, chapter_id, updated_at, content_ref FROM page WHERE id = $id",
             "diagram" => "SELECT title, source, book_id, kind, updated_at, content_ref FROM diagram WHERE id = $id",
             "slides" => "SELECT title, source, book_id, updated_at, content_ref FROM slide_deck WHERE id = $id",
+            "kanban" => "SELECT title, source, book_id, updated_at, content_ref FROM kanban_board WHERE id = $id",
             // Metadata only: the bytes are an opaque binary nobody can index, so
             // an attachment is found by what a person called it and by its
             // description and file name.
@@ -456,6 +464,12 @@ public sealed partial class SearchIndexService(
                     contentRef = SqliteHelpers.GetNullableString(reader, 5);
                     break;
                 case "slides":
+                    body = SqliteHelpers.GetNullableString(reader, 1);
+                    bookId = SqliteHelpers.GetNullableString(reader, 2);
+                    updatedAt = reader.GetString(3);
+                    contentRef = SqliteHelpers.GetNullableString(reader, 4);
+                    break;
+                case "kanban":
                     body = SqliteHelpers.GetNullableString(reader, 1);
                     bookId = SqliteHelpers.GetNullableString(reader, 2);
                     updatedAt = reader.GetString(3);
@@ -517,6 +531,7 @@ public sealed partial class SearchIndexService(
             "diagram" => new IndexDoc(
                 kind, id, bookId, null, title, SearchText.FromDiagramSource(diagramKind, body), updatedAt),
             "slides" => new IndexDoc(kind, id, bookId, null, title, SearchText.FromSlideDeckSource(body), updatedAt),
+            "kanban" => new IndexDoc(kind, id, bookId, null, title, SearchText.FromKanbanSource(body), updatedAt),
             "attachment" => new IndexDoc(kind, id, bookId, null, title, body ?? "", updatedAt),
             "book" => new IndexDoc(kind, id, bookId, null, title, body ?? "", updatedAt),
             "folder" => new IndexDoc(kind, id, bookId, chapterId, title, "", updatedAt),
@@ -722,6 +737,7 @@ public sealed partial class SearchIndexService(
         "page" when bookId is not null => $"/books/{bookId}/pages/{entityId}",
         "diagram" when bookId is not null => $"/books/{bookId}/diagrams/{entityId}",
         "slides" when bookId is not null => $"/books/{bookId}/slides/{entityId}",
+        "kanban" when bookId is not null => $"/books/{bookId}/kanban/{entityId}",
         "attachment" when bookId is not null => $"/books/{bookId}/files/{entityId}",
         "folder" when bookId is not null => $"/books/{bookId}",
         "book" => $"/books/{entityId}",
@@ -872,6 +888,7 @@ public sealed partial class SearchIndexService(
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'page'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'diagram'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'slides'),
+              (SELECT COUNT(*) FROM search_doc WHERE kind = 'kanban'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'attachment'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'book'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'folder'),
@@ -880,9 +897,9 @@ public sealed partial class SearchIndexService(
             """;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))
-            return new SearchStatusDto(_fts ? "fts5" : "like", 0, 0, 0, 0, 0, 0, 0, 0, 0, null);
+            return new SearchStatusDto(_fts ? "fts5" : "like", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null);
 
-        var lastIndexed = SqliteHelpers.GetNullableString(reader, 9) is { } raw
+        var lastIndexed = SqliteHelpers.GetNullableString(reader, 10) is { } raw
             && DateTimeOffset.TryParse(raw, out var parsed)
                 ? parsed
                 : (DateTimeOffset?)null;
@@ -894,10 +911,11 @@ public sealed partial class SearchIndexService(
             Pages: reader.GetInt32(2),
             Diagrams: reader.GetInt32(3),
             SlideDecks: reader.GetInt32(4),
-            Attachments: reader.GetInt32(5),
-            Books: reader.GetInt32(6),
-            Folders: reader.GetInt32(7),
-            Shelves: reader.GetInt32(8),
+            KanbanBoards: reader.GetInt32(5),
+            Attachments: reader.GetInt32(6),
+            Books: reader.GetInt32(7),
+            Folders: reader.GetInt32(8),
+            Shelves: reader.GetInt32(9),
             LastIndexedAt: lastIndexed);
     }
 }

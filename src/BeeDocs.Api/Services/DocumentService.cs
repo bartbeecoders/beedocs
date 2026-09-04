@@ -558,6 +558,7 @@ public sealed class DocumentService(
             // longer reachable through any book, but still in the table.
             await ExecAsync(conn, tx, "DELETE FROM diagram WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx, "DELETE FROM slide_deck WHERE book_id = $id", ("$id", id), ct);
+            await ExecAsync(conn, tx, "DELETE FROM kanban_board WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx, "DELETE FROM attachment WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx,
                 "DELETE FROM shape_collection WHERE book_id IS NOT NULL AND book_id != '' AND book_id = $id",
@@ -1653,6 +1654,8 @@ public sealed class DocumentService(
             SELECT content_ref FROM diagram WHERE book_id = $id AND content_ref IS NOT NULL
             UNION ALL
             SELECT content_ref FROM slide_deck WHERE book_id = $id AND content_ref IS NOT NULL
+            UNION ALL
+            SELECT content_ref FROM kanban_board WHERE book_id = $id AND content_ref IS NOT NULL
             """, ("$id", bookId), ct);
         return refs;
     }

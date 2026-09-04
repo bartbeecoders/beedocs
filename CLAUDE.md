@@ -95,15 +95,16 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `/api/books`,
   `/api/books/{id}/chapters`, `/api/books/{id}/pages`, `/api/pages/{id}`,
   `/api/books/{id}/diagrams`, `/api/diagrams/{id}`, `/api/books/{id}/slides`,
-  `/api/slides/{id}`, `/api/books/{id}/attachments`, `/api/attachments/{id}`,
+  `/api/slides/{id}`, `/api/books/{id}/kanban`, `/api/kanban/{id}`, `/api/books/{id}/attachments`, `/api/attachments/{id}`,
   `/api/uploads`, `/api/search`,
   `/api/auth/*`, `/api/users/*`, `/api/stats`, plus `/api/health` and `/api/version`.
   Business logic lives in `Services/`
   (`DocumentService` for shelves/books/chapters/pages, `DiagramService` for
-  diagrams, `SlideDeckService` for slide decks, `AttachmentService` for uploaded
+  diagrams, `SlideDeckService` for slide decks, `KanbanBoardService` for kanban
+  boards, `AttachmentService` for uploaded
   documents);
   entities are in `Models/Entities.cs` (`Shelf`, `Book`, `Chapter`, `Page`,
-  `PageRevision`, `Diagram`, `SlideDeck`, `Attachment` — plain POCOs with string
+  `PageRevision`, `Diagram`, `SlideDeck`, `KanbanBoard`, `Attachment` — plain POCOs with string
   ids).
 - **Shelves** are the level above books: `shelf` rows plus a nullable
   `book.shelf_id`, so a book sits on at most one shelf and a book with no shelf
@@ -126,7 +127,7 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   UI gives it a 600s timeout) and configured at `/api/storage-providers` (admin;
   the Google callback is the one anonymous route — its HMAC-signed `state` is the
   auth). **Only bodies move** (`page.content`, `page_revision.content`,
-  `diagram.source`, `slide_deck.source`); tree, metadata, `updated_at` and the
+  `diagram.source`, `slide_deck.source`, `kanban_board.source`); tree, metadata, `updated_at` and the
   search index stay local. The load-bearing invariant is the per-row
   `content_ref` column: NULL = body inline (pre-feature behavior), else
   `"{providerId}:{key}"` — readers resolve the ref via `ContentResolver`, never
@@ -150,7 +151,7 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   (diagram JSON contributes only its shape labels, and uploaded documents are run
   through `AttachmentTextExtractor` so a PDF or .docx is searchable by its
   contents). Nothing calls the indexer to
-  register a write: triggers on `page`/`diagram`/`slide_deck`/`attachment`/`book`/
+  register a write: triggers on `page`/`diagram`/`slide_deck`/`kanban_board`/`attachment`/`book`/
   `chapter`/`shelf` record changes in `search_queue`, and the queue is drained at
   startup and before each search,
   so the index stays correct whoever wrote the row — UI, MCP, import, or direct
@@ -242,7 +243,18 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   and exported as a real PowerPoint file (`SlideDeckPptxExporter`, hand-built
   OOXML at `GET /api/slides/{id}/export/pptx`) — the same .pptx is the Google
   Slides path, since Slides imports it natively. See `Docs/SLIDES.md`.
-- **Attachments** are the fourth thing a book holds (`attachment` table,
+- **Kanban boards** (`kanban_board` table, same storage shape as `diagram` /
+  `slide_deck`): ordered columns of cards in one JSON document. The schema's
+  source of truth is `src/beedocs-web/src/kanban/kanbanModel.ts` — the server
+  stores it verbatim and reads only titles/bodies (search) and the card count
+  (tree badge). A board is a book-tree item at `/books/{bookId}/kanban/{id}`
+  (`KanbanCanvas.tsx`) and/or a page embed: inline ` ```kanban ` (JSON on the
+  page) or ` ```kanban-ref ` (the board id; editing the embed updates the stored
+  item). v1: add/rename/delete columns and cards, drag cards and columns,
+  optional card colour, WIP limit, and an assignee from the user directory. Agents use
+  `beedocs_create_kanban_board_with_columns` /
+  `beedocs_update_kanban_board_columns`. See `Docs/KANBAN.md`.
+- **Attachments** are the fifth thing a book holds (`attachment` table,
   `Services/AttachmentService.cs`, `components/AttachmentCanvas.tsx`, route
   `/books/{bookId}/files/{id}`): an uploaded PDF, Word/PowerPoint/Excel or
   OpenDocument file, archive or image that BeeDocs stores rather than authors.
@@ -291,7 +303,7 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   context) and `beedocs_link_attachment_in_page`. See `Docs/ATTACHMENTS.md`.
 - **Favorites** (`favorite` table, `Services/FavoriteService.cs`, UI
   `FavoritesPanel.tsx` above the tree in the left pane) — per-user starred items
-  (kinds `book | page | diagram | slides | attachment`, the search queue's
+  (kinds `book | page | diagram | slides | kanban | attachment`, the search queue's
   names), keyed `(user_id, kind, entity_id)` with `user_id = ''` when sign-in is
   off or the caller is the API key — one shared list for an open instance, the
   same degradation ownership follows. `GET /api/favorites` returns the list
@@ -531,6 +543,7 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/MCP-TOOLS.md` — full MCP tool/resource/prompt catalog.
 - `Docs/DIAGRAM-STUDIO.md` — BeeDiagram Studio editor interactions and JSON format.
 - `Docs/SLIDES.md` — slide decks: document format, designer, presentation mode.
+- `Docs/KANBAN.md` — kanban boards: document format, page embed, book-tree item.
 - `Docs/ATTACHMENTS.md` — book attachments: storage, upload rules, and why they are not uploads.
 - `Docs/GIT-INTEGRATION.md` — git/DevOps repos browsed as books; clones, security, search.
 - `Docs/USERS-AND-ROLES.md` — accounts, roles, sessions, and the opt-in sign-in wall.

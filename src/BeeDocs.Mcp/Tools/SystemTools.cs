@@ -31,7 +31,7 @@ public sealed class SystemTools(BeeDocsApiClient client)
         apiBaseUrl = client.BaseUrl,
         entities = new[]
         {
-            "shelf", "book", "chapter (folder)", "page", "diagram", "slide deck", "attachment", "upload",
+            "shelf", "book", "chapter (folder)", "page", "diagram", "slide deck", "kanban board", "attachment", "upload",
         },
         hierarchy = "shelf → book → chapter (folder) → page. Only the book level is required: "
             + "a book sits on at most one shelf, and an unshelved book sits at the library root.",
@@ -102,6 +102,8 @@ public sealed class SystemTools(BeeDocsApiClient client)
             isometricRef = "```isometric-ref\\nDIAGRAM_ID\\n```",
             beediagramInline = "```beediagram\\n{json}\\n```",
             excelgrid = "```excelgrid\\n{\"version\":1,\"rowCount\":16,\"colCount\":8,\"cells\":[{\"r\":0,\"c\":0,\"v\":\"Item\"}]}\\n```",
+            kanbanInline = "```kanban\\n{\"version\":1,\"columns\":[{\"id\":\"col-1\",\"title\":\"To do\",\"cards\":[]}]}\\n```",
+            kanbanRef = "```kanban-ref\\nBOARD_ID\\n```",
             image = "![alt](/uploads/...)",
         },
         slides = new
@@ -111,6 +113,13 @@ public sealed class SystemTools(BeeDocsApiClient client)
             tools = "beedocs_create_slide_deck_with_slides / beedocs_update_slide_deck_slides (structured), or raw JSON via beedocs_create_slide_deck",
             templates = "beedocs_list_slide_templates → templateId on create; beedocs_save_slide_template stores a deck's layout app-wide",
             export = "beedocs_export_slide_deck_pptx returns a base64 .pptx (also the Google Slides import path)",
+        },
+        kanban = new
+        {
+            model = "A board is ordered columns of cards: {version:1, columns:[{id, title, wip?, cards:[{id, title, body?, color?, assigneeId?, assigneeName?}]}]}.",
+            colors = new[] { "accent", "info", "ok", "warn", "danger", "muted" },
+            tools = "beedocs_create_kanban_board_with_columns / beedocs_update_kanban_board_columns (structured), or raw JSON via beedocs_create_kanban_board",
+            embed = "```kanban-ref\\nBOARD_ID\\n``` on a page; the same board is a tree item at /books/{bookId}/kanban/{boardId}",
         },
         attachments = new
         {
@@ -136,6 +145,7 @@ public sealed class SystemTools(BeeDocsApiClient client)
             images = "beedocs_upload_image then embed Markdown or image nodes",
             diagrams = "beedocs_list_diagram_shapes for the shape/Azure-stencil catalog, then beedocs_create_beediagram_with_nodes / beedocs_update_beediagram_nodes; isometric views via beedocs_create_isometric_with_items",
             slides = "beedocs_create_slide_deck_with_slides for presentations; present from the UI at /books/{bookId}/slides/{deckId}",
+            kanban = "beedocs_create_kanban_board_with_columns for a board; embed with ```kanban-ref on a page or open /books/{bookId}/kanban/{boardId}",
             attachments = "beedocs_upload_attachment files a document in a book; beedocs_link_attachment_in_page references it from the docs that discuss it",
             export = "beedocs_export_book or beedocs_export_library_snapshot",
         },

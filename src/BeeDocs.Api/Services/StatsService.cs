@@ -51,6 +51,7 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
                    (SELECT COUNT(*) FROM page),
                    (SELECT COUNT(*) FROM diagram),
                    (SELECT COUNT(*) FROM slide_deck),
+                   (SELECT COUNT(*) FROM kanban_board),
                    (SELECT COUNT(*) FROM attachment)
             """;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -58,7 +59,8 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
         var pages = reader.GetInt32(3);
         var diagrams = reader.GetInt32(4);
         var decks = reader.GetInt32(5);
-        var attachments = reader.GetInt32(6);
+        var boards = reader.GetInt32(6);
+        var attachments = reader.GetInt32(7);
         return new DocumentCountsDto(
             Shelves: reader.GetInt32(0),
             Books: reader.GetInt32(1),
@@ -66,8 +68,9 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
             Pages: pages,
             Diagrams: diagrams,
             SlideDecks: decks,
+            KanbanBoards: boards,
             Attachments: attachments,
-            Total: pages + diagrams + decks + attachments);
+            Total: pages + diagrams + decks + boards + attachments);
     }
 
     private async Task<StorageStatsDto> StorageAsync(SqliteConnection conn, CancellationToken ct)
@@ -81,13 +84,15 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
         cmd.CommandText = """
             SELECT (SELECT COALESCE(SUM(LENGTH(CAST(content AS BLOB))), 0) FROM page)
                  + (SELECT COALESCE(SUM(LENGTH(CAST(source AS BLOB))), 0) FROM diagram)
-                 + (SELECT COALESCE(SUM(LENGTH(CAST(source AS BLOB))), 0) FROM slide_deck),
+                 + (SELECT COALESCE(SUM(LENGTH(CAST(source AS BLOB))), 0) FROM slide_deck)
+                 + (SELECT COALESCE(SUM(LENGTH(CAST(source AS BLOB))), 0) FROM kanban_board),
                    (SELECT COALESCE(SUM(LENGTH(CAST(content AS BLOB))), 0) FROM page_revision),
                    (SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()),
                    (SELECT COALESCE(SUM(content_size), 0) FROM page WHERE content_ref IS NOT NULL)
                  + (SELECT COALESCE(SUM(content_size), 0) FROM page_revision WHERE content_ref IS NOT NULL)
                  + (SELECT COALESCE(SUM(content_size), 0) FROM diagram WHERE content_ref IS NOT NULL)
                  + (SELECT COALESCE(SUM(content_size), 0) FROM slide_deck WHERE content_ref IS NOT NULL)
+                 + (SELECT COALESCE(SUM(content_size), 0) FROM kanban_board WHERE content_ref IS NOT NULL)
             """;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         await reader.ReadAsync(ct);
@@ -156,7 +161,8 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
                 SELECT SUBSTR(created_at, 1, 10) AS day, COUNT(*)
                 FROM (SELECT created_at FROM page
                       UNION ALL SELECT created_at FROM diagram
-                      UNION ALL SELECT created_at FROM slide_deck)
+                      UNION ALL SELECT created_at FROM slide_deck
+                      UNION ALL SELECT created_at FROM kanban_board)
                 WHERE created_at >= $cutoff
                 GROUP BY day
                 """;
@@ -182,7 +188,8 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
                   UNION ALL
                   SELECT SUBSTR(updated_at, 1, 10) AS day, COUNT(*) AS n
                   FROM (SELECT created_at, updated_at FROM diagram
-                        UNION ALL SELECT created_at, updated_at FROM slide_deck)
+                        UNION ALL SELECT created_at, updated_at FROM slide_deck
+                        UNION ALL SELECT created_at, updated_at FROM kanban_board)
                   WHERE updated_at >= $cutoff
                     AND SUBSTR(updated_at, 1, 10) != SUBSTR(created_at, 1, 10)
                   GROUP BY day)

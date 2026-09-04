@@ -322,6 +322,22 @@ export function HelpPanel() {
                 {t('helpdoc.pg.fenceExcel3')}
               </td>
             </tr>
+            <tr>
+              <td>
+                <code>```kanban</code>
+              </td>
+              <td>
+                {t('helpdoc.pg.fenceKanban1')}
+                <strong>{t('helpdoc.pg.fenceKanbanMenu')}</strong>
+                {t('helpdoc.pg.fenceKanban2')}
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>```kanban-ref</code>
+              </td>
+              <td>{t('helpdoc.pg.fenceKanbanRef')}</td>
+            </tr>
           </tbody>
         </table>
         <p className="muted sm">

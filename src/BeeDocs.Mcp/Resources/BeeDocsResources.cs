@@ -94,6 +94,14 @@ public sealed class BeeDocsResources(BeeDocsApiClient client)
         return Text($"beedocs://slides/{deckId}", deck);
     }
 
+    [McpServerResource(UriTemplate = "beedocs://kanban/{boardId}", Name = "beedocs-kanban-board", MimeType = "application/json")]
+    [Description("Full kanban board including its JSON document.")]
+    public async Task<TextResourceContents> KanbanBoard(string boardId, CancellationToken ct = default)
+    {
+        var board = await client.GetKanbanBoardAsync(boardId, ct);
+        return Text($"beedocs://kanban/{boardId}", board);
+    }
+
     private static TextResourceContents Text(string uri, System.Text.Json.JsonElement data) => new()
     {
         Uri = uri,
