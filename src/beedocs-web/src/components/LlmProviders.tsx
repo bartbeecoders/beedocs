@@ -395,8 +395,9 @@ export function LlmProviders() {
     void refresh()
   }, [refresh])
 
-  // A deployment with BeeDocs:ApiKey set locks /api/llm out of the browser
-  // entirely; api.ts has no header for it. Only the status text survives.
+  // Auth-off + a publish API key locks /api/llm out of the browser; api.ts has
+  // no header for it. Signed-in sessions pass the filter, so this is the
+  // remaining lockout. Only the status text survives.
   const unavailable = loadError !== null && /unauthorized|\b401\b/i.test(loadError)
 
   const defaultId = useMemo(() => {

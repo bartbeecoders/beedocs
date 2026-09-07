@@ -136,6 +136,17 @@ public sealed class AuthEndpointFilter(RequestAuthenticator authenticator) : IEn
 
         http.SetCurrentUser(caller);
 
+        if (caller.User?.MustChangePassword == true)
+        {
+            return Results.Json(
+                new
+                {
+                    error = "PasswordChangeRequired",
+                    message = "Change your password before continuing.",
+                },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
         var required = endpoint?.Metadata.GetMetadata<RequireRole>()?.Role
             ?? (IsRead(http.Request.Method) ? UserRoles.Viewer : UserRoles.Editor);
 

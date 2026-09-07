@@ -124,7 +124,7 @@ public sealed class AttachmentService(
 
     private const string Select = """
         SELECT a.id, a.book_id, a.title, a.description, a.file_name, a.stored_name,
-               a.content_type, a.size_bytes, a.owner_id, a.created_at, a.updated_at,
+               a.content_type, a.size_bytes, a.owner_id, a.is_private, a.created_at, a.updated_at,
                COALESCE(NULLIF(TRIM(u.display_name), ''), u.username) AS owner_name
         FROM attachment a
         LEFT JOIN app_user u ON u.id = a.owner_id
@@ -135,8 +135,10 @@ public sealed class AttachmentService(
     {
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"{Select} WHERE a.book_id = $book_id ORDER BY a.title COLLATE NOCASE";
+        var actor = currentUser.Current;
+        cmd.CommandText = $"{Select} WHERE a.book_id = $book_id{Privacy.DocumentSql("a", actor)} ORDER BY a.title COLLATE NOCASE";
         SqliteHelpers.Add(cmd, "$book_id", bookId);
+        Privacy.BindViewer(cmd, actor);
 
         var list = new List<AttachmentSummaryDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -152,6 +154,7 @@ public sealed class AttachmentService(
                 SizeBytes: row.SizeBytes,
                 OwnerId: row.OwnerId,
                 OwnerName: ownerName,
+                IsPrivate: row.IsPrivate,
                 DownloadUrl: DownloadUrl(row.Id),
                 UpdatedAt: row.UpdatedAt));
         }
@@ -162,7 +165,12 @@ public sealed class AttachmentService(
     {
         await using var conn = await db.OpenConnectionAsync(ct);
         var found = await SelectAsync(conn, id, ct);
-        return found is null ? null : ToDto(found.Value.Row, found.Value.OwnerName);
+        if (found is null) return null;
+        var row = found.Value.Row;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, row.IsPrivate, row.OwnerId, row.BookId, ct))
+            return null;
+        return ToDto(row, found.Value.OwnerName);
     }
 
     public async Task<AttachmentDto> CreateAsync(
@@ -209,9 +217,9 @@ public sealed class AttachmentService(
         {
             cmd.CommandText = """
                 INSERT INTO attachment (id, book_id, title, description, file_name, stored_name,
-                  content_type, size_bytes, owner_id, created_at, updated_at)
+                  content_type, size_bytes, owner_id, is_private, created_at, updated_at)
                 VALUES ($id, $book_id, $title, $description, $file_name, $stored_name,
-                  $content_type, $size_bytes, $owner_id, $created_at, $updated_at)
+                  $content_type, $size_bytes, $owner_id, $is_private, $created_at, $updated_at)
                 """;
             Bind(cmd, row);
             SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(row.CreatedAt));
@@ -228,14 +236,17 @@ public sealed class AttachmentService(
         var found = await SelectAsync(conn, id, ct);
         if (found is null) return null;
         var row = found.Value.Row;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, row.IsPrivate, row.OwnerId, row.BookId, ct))
+            return null;
 
         row.Title = request.Title.Trim();
         // Same convention as UpdateBookRequest: null leaves the field alone, ""
         // clears it. The properties pane sends partial updates.
         if (request.Description is not null)
             row.Description = request.Description.Trim() is { Length: > 0 } d ? d : null;
-        if (request.OwnerId is not null)
-            row.OwnerId = request.OwnerId.Trim() is { Length: > 0 } o ? o : null;
+        (row.OwnerId, row.IsPrivate) = Privacy.Apply(
+            currentUser.Current, row.OwnerId, row.IsPrivate, request.OwnerId, request.IsPrivate);
         // Renaming the download must not renegotiate the stored type: the bytes
         // did not change, so the extension on disk stays the one they were
         // validated as, and a name given without it gets it back.
@@ -248,8 +259,8 @@ public sealed class AttachmentService(
             cmd.CommandText = """
                 UPDATE attachment SET title = $title, description = $description,
                   file_name = $file_name, stored_name = $stored_name, content_type = $content_type,
-                  size_bytes = $size_bytes, owner_id = $owner_id, book_id = $book_id,
-                  updated_at = $updated_at
+                  size_bytes = $size_bytes, owner_id = $owner_id, is_private = $is_private,
+                  book_id = $book_id, updated_at = $updated_at
                 WHERE id = $id
                 """;
             Bind(cmd, row);
@@ -268,6 +279,9 @@ public sealed class AttachmentService(
         var found = await SelectAsync(conn, id, ct);
         if (found is null) return null;
         var row = found.Value.Row;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, row.IsPrivate, row.OwnerId, row.BookId, ct))
+            return null;
 
         // A new extension means a new path, so the old file is only removed once
         // the row points at the new one — a crash in between leaves a stray file,
@@ -284,8 +298,8 @@ public sealed class AttachmentService(
             cmd.CommandText = """
                 UPDATE attachment SET title = $title, description = $description,
                   file_name = $file_name, stored_name = $stored_name, content_type = $content_type,
-                  size_bytes = $size_bytes, owner_id = $owner_id, book_id = $book_id,
-                  updated_at = $updated_at
+                  size_bytes = $size_bytes, owner_id = $owner_id, is_private = $is_private,
+                  book_id = $book_id, updated_at = $updated_at
                 WHERE id = $id
                 """;
             Bind(cmd, row);
@@ -304,6 +318,9 @@ public sealed class AttachmentService(
         var found = await SelectAsync(conn, id, ct);
         if (found is null) return null;
         var row = found.Value.Row;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, row.IsPrivate, row.OwnerId, row.BookId, ct))
+            return null;
 
         var path = StoredPath(row.StoredName);
         if (!File.Exists(path)) return null;
@@ -317,6 +334,10 @@ public sealed class AttachmentService(
         await using var conn = await db.OpenConnectionAsync(ct);
         var found = await SelectAsync(conn, id, ct);
         if (found is null) return false;
+        var row = found.Value.Row;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, row.IsPrivate, row.OwnerId, row.BookId, ct))
+            return false;
 
         await using (var cmd = conn.CreateCommand())
         {
@@ -467,6 +488,7 @@ public sealed class AttachmentService(
         SqliteHelpers.Add(cmd, "$content_type", row.ContentType);
         SqliteHelpers.Add(cmd, "$size_bytes", row.SizeBytes);
         SqliteHelpers.Add(cmd, "$owner_id", row.OwnerId);
+        SqliteHelpers.Add(cmd, "$is_private", row.IsPrivate ? 1 : 0);
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(row.UpdatedAt));
     }
 
@@ -493,10 +515,11 @@ public sealed class AttachmentService(
             ContentType = reader.GetString(6),
             SizeBytes = reader.GetInt64(7),
             OwnerId = SqliteHelpers.GetNullableString(reader, 8),
-            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 9),
-            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 10),
+            IsPrivate = Privacy.ReadFlag(reader, 9),
+            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 10),
+            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 11),
         },
-        SqliteHelpers.GetNullableString(reader, 11));
+        SqliteHelpers.GetNullableString(reader, 12));
 
     /// <summary>
     /// Resolve the owner's display name after a write, so the DTO carries the
@@ -525,6 +548,7 @@ public sealed class AttachmentService(
         SizeBytes: a.SizeBytes,
         OwnerId: a.OwnerId,
         OwnerName: ownerName,
+        IsPrivate: a.IsPrivate,
         DownloadUrl: DownloadUrl(a.Id),
         CreatedAt: a.CreatedAt,
         UpdatedAt: a.UpdatedAt);

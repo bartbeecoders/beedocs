@@ -53,6 +53,7 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
                    (SELECT COUNT(*) FROM slide_deck),
                    (SELECT COUNT(*) FROM kanban_board),
                    (SELECT COUNT(*) FROM project_plan),
+                   (SELECT COUNT(*) FROM note),
                    (SELECT COUNT(*) FROM attachment)
             """;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -62,7 +63,8 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
         var decks = reader.GetInt32(5);
         var boards = reader.GetInt32(6);
         var plans = reader.GetInt32(7);
-        var attachments = reader.GetInt32(8);
+        var notes = reader.GetInt32(8);
+        var attachments = reader.GetInt32(9);
         return new DocumentCountsDto(
             Shelves: reader.GetInt32(0),
             Books: reader.GetInt32(1),
@@ -72,8 +74,9 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
             SlideDecks: decks,
             KanbanBoards: boards,
             ProjectPlans: plans,
+            Notes: notes,
             Attachments: attachments,
-            Total: pages + diagrams + decks + boards + plans + attachments);
+            Total: pages + diagrams + decks + boards + plans + notes + attachments);
     }
 
     private async Task<StorageStatsDto> StorageAsync(SqliteConnection conn, CancellationToken ct)
@@ -89,7 +92,8 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
                  + (SELECT COALESCE(SUM(LENGTH(CAST(source AS BLOB))), 0) FROM diagram)
                  + (SELECT COALESCE(SUM(LENGTH(CAST(source AS BLOB))), 0) FROM slide_deck)
                  + (SELECT COALESCE(SUM(LENGTH(CAST(source AS BLOB))), 0) FROM kanban_board)
-                 + (SELECT COALESCE(SUM(LENGTH(CAST(source AS BLOB))), 0) FROM project_plan),
+                 + (SELECT COALESCE(SUM(LENGTH(CAST(source AS BLOB))), 0) FROM project_plan)
+                 + (SELECT COALESCE(SUM(LENGTH(CAST(source AS BLOB))), 0) FROM note),
                    (SELECT COALESCE(SUM(LENGTH(CAST(content AS BLOB))), 0) FROM page_revision),
                    (SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()),
                    (SELECT COALESCE(SUM(content_size), 0) FROM page WHERE content_ref IS NOT NULL)
@@ -98,6 +102,7 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
                  + (SELECT COALESCE(SUM(content_size), 0) FROM slide_deck WHERE content_ref IS NOT NULL)
                  + (SELECT COALESCE(SUM(content_size), 0) FROM kanban_board WHERE content_ref IS NOT NULL)
                  + (SELECT COALESCE(SUM(content_size), 0) FROM project_plan WHERE content_ref IS NOT NULL)
+                 + (SELECT COALESCE(SUM(content_size), 0) FROM note WHERE content_ref IS NOT NULL)
             """;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         await reader.ReadAsync(ct);
@@ -168,7 +173,8 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
                       UNION ALL SELECT created_at FROM diagram
                       UNION ALL SELECT created_at FROM slide_deck
                       UNION ALL SELECT created_at FROM kanban_board
-                      UNION ALL SELECT created_at FROM project_plan)
+                      UNION ALL SELECT created_at FROM project_plan
+                      UNION ALL SELECT created_at FROM note)
                 WHERE created_at >= $cutoff
                 GROUP BY day
                 """;
@@ -196,7 +202,8 @@ public sealed class StatsService(SqliteConnectionFactory db, StorageOptions stor
                   FROM (SELECT created_at, updated_at FROM diagram
                         UNION ALL SELECT created_at, updated_at FROM slide_deck
                         UNION ALL SELECT created_at, updated_at FROM kanban_board
-                        UNION ALL SELECT created_at, updated_at FROM project_plan)
+                        UNION ALL SELECT created_at, updated_at FROM project_plan
+                        UNION ALL SELECT created_at, updated_at FROM note)
                   WHERE updated_at >= $cutoff
                     AND SUBSTR(updated_at, 1, 10) != SUBSTR(created_at, 1, 10)
                   GROUP BY day)

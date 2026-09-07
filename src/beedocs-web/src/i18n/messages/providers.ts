@@ -61,7 +61,7 @@ const en = {
   'providers.addTitle': 'Add a provider',
   'providers.introShort': 'Writing help — autocomplete, rewrite, grammar and summarise — runs against a model you configure here.',
   'providers.unavailableTitle': 'Not available on this deployment',
-  'providers.unavailableBody': 'This server requires an API key on /api/llm, which the web app cannot send. Configure providers from a deployment without BeeDocs:ApiKey set, or over the MCP server.',
+  'providers.unavailableBody': 'This server requires an API key on /api/llm, which the web app cannot send. With sign-in off, a publish API key locks these settings out of the browser. Configure providers over the MCP server, or enable sign-in.',
   'providers.intro': 'Writing help — autocomplete, rewrite, grammar and summarise — runs against a model you configure here. Keys are stored on the server and never sent back to the browser.',
   'providers.emptyTitle': 'No provider configured',
   'providers.emptyBody': 'Writing help stays switched off until one provider is added, enabled and reachable. Pick where the model should run below — the name and base URL are filled in for you, then you add a key, test the connection and switch it on.',
@@ -179,13 +179,22 @@ const en = {
   'providers.apiKeyIntro': 'Apps and the MCP server authenticate with this key (Authorization: Bearer or X-Api-Key). It is stored server-side and never shown again after saving — copy it to the publishing app first.',
   'providers.apiKeySetFromPage': 'A key is set from this page (ends in …{hint}).',
   'providers.apiKeyFromConfig': 'A key from the server configuration (BeeDocs__ApiKey) is active (ends in …{hint}). Saving one here overrides it — no restart needed.',
-  'providers.apiKeyNone': 'No key set — apps can publish without authentication, and with sign-in enabled they cannot publish at all.',
+  'providers.apiKeyNone': 'No key set — publishing apps and the MCP server cannot authenticate. Generate a key below, or opt in to anonymous publish.',
+  'providers.apiKeyNoneOpen': 'No key set — anonymous publish is on, so /api/v1 is open without authentication.',
   'providers.apiKeyPlaceholder': 'New API key',
   'providers.generate': 'Generate',
   'providers.copied': 'Copied',
   'providers.saveKey': 'Save key',
   'providers.clearStoredKey': 'Clear stored key',
   'providers.apiKeySavedNote': 'Saved — it takes effect immediately. Update every publishing app (and the MCP server’s BEEDOCS_API_KEY) with the new key.',
+  'providers.apiKeyAnonLabel': 'Allow anonymous publish',
+  'providers.apiKeyAnonHint':
+    'Lets anyone who can reach this server create and update books via /api/v1 without a key. Keep this off unless you trust the network.',
+  'providers.setupStorageTitle': 'Set up {kind}',
+  'providers.setupStorageLead':
+    'Nothing is stored until you create. Cancel leaves no leftover provider.',
+  'providers.setupNeedsConnString': 'Paste a connection string before creating.',
+  'providers.setupNeedsOauth': 'The OAuth client id and secret are required before creating.',
 } as const
 
 type Msgs = Record<keyof typeof en, string>
@@ -244,7 +253,7 @@ const fr: Msgs = {
   'providers.addTitle': 'Ajouter un fournisseur',
   'providers.introShort': 'L’aide à la rédaction — autocomplétion, reformulation, grammaire et résumé — s’appuie sur un modèle que vous configurez ici.',
   'providers.unavailableTitle': 'Indisponible sur ce déploiement',
-  'providers.unavailableBody': 'Ce serveur exige une clé d’API sur /api/llm, que l’application web ne peut pas envoyer. Configurez les fournisseurs depuis un déploiement sans BeeDocs:ApiKey, ou via le serveur MCP.',
+  'providers.unavailableBody': 'Ce serveur exige une clé d’API sur /api/llm, que l’application web ne peut pas envoyer. Sans connexion, une clé de publication verrouille ces réglages dans le navigateur. Configurez les fournisseurs via le serveur MCP, ou activez la connexion.',
   'providers.intro': 'L’aide à la rédaction — autocomplétion, reformulation, grammaire et résumé — s’appuie sur un modèle que vous configurez ici. Les clés sont stockées sur le serveur et jamais renvoyées au navigateur.',
   'providers.emptyTitle': 'Aucun fournisseur configuré',
   'providers.emptyBody': 'L’aide à la rédaction reste désactivée tant qu’aucun fournisseur n’est ajouté, activé et joignable. Choisissez ci-dessous où le modèle doit tourner — le nom et l’URL de base sont préremplis, puis vous ajoutez une clé, testez la connexion et l’activez.',
@@ -358,13 +367,22 @@ const fr: Msgs = {
   'providers.apiKeyIntro': 'Les applications et le serveur MCP s’authentifient avec cette clé (Authorization: Bearer ou X-Api-Key). Elle est stockée côté serveur et ne sera plus jamais affichée après enregistrement — copiez-la d’abord dans l’application de publication.',
   'providers.apiKeySetFromPage': 'Une clé est définie depuis cette page (se termine par …{hint}).',
   'providers.apiKeyFromConfig': 'Une clé issue de la configuration du serveur (BeeDocs__ApiKey) est active (se termine par …{hint}). En enregistrer une ici la remplace — sans redémarrage.',
-  'providers.apiKeyNone': 'Aucune clé définie — les applications peuvent publier sans authentification, et avec la connexion activée elles ne peuvent plus publier du tout.',
+  'providers.apiKeyNone': 'Aucune clé définie — les applications de publication et le serveur MCP ne peuvent pas s’authentifier. Générez une clé ci-dessous, ou activez la publication anonyme.',
+  'providers.apiKeyNoneOpen': 'Aucune clé définie — la publication anonyme est activée, donc /api/v1 est ouvert sans authentification.',
   'providers.apiKeyPlaceholder': 'Nouvelle clé d’API',
   'providers.generate': 'Générer',
   'providers.copied': 'Copié',
   'providers.saveKey': 'Enregistrer la clé',
   'providers.clearStoredKey': 'Effacer la clé stockée',
   'providers.apiKeySavedNote': 'Enregistré — effet immédiat. Mettez à jour chaque application de publication (et le BEEDOCS_API_KEY du serveur MCP) avec la nouvelle clé.',
+  'providers.apiKeyAnonLabel': 'Autoriser la publication anonyme',
+  'providers.apiKeyAnonHint':
+    'Permet à quiconque atteint ce serveur de créer et mettre à jour des livres via /api/v1 sans clé. Laissez cela désactivé sauf si le réseau est de confiance.',
+  'providers.setupStorageTitle': 'Configurer {kind}',
+  'providers.setupStorageLead':
+    'Rien n’est enregistré tant que vous n’avez pas créé. Annuler ne laisse aucun fournisseur orphelin.',
+  'providers.setupNeedsConnString': 'Collez une chaîne de connexion avant de créer.',
+  'providers.setupNeedsOauth': 'L’id et le secret du client OAuth sont requis avant de créer.',
 }
 
 const de: Msgs = {
@@ -421,7 +439,7 @@ const de: Msgs = {
   'providers.addTitle': 'Anbieter hinzufügen',
   'providers.introShort': 'Die Schreibhilfe — Autovervollständigung, Umformulieren, Grammatik und Zusammenfassen — nutzt ein Modell, das Sie hier konfigurieren.',
   'providers.unavailableTitle': 'In dieser Bereitstellung nicht verfügbar',
-  'providers.unavailableBody': 'Dieser Server verlangt einen API-Schlüssel auf /api/llm, den die Web-App nicht senden kann. Konfigurieren Sie Anbieter über eine Bereitstellung ohne gesetztes BeeDocs:ApiKey oder über den MCP-Server.',
+  'providers.unavailableBody': 'Dieser Server verlangt einen API-Schlüssel auf /api/llm, den die Web-App nicht senden kann. Ohne Anmeldung sperrt ein Veröffentlichungs-API-Schlüssel diese Einstellungen im Browser. Konfigurieren Sie Anbieter über den MCP-Server, oder aktivieren Sie die Anmeldung.',
   'providers.intro': 'Die Schreibhilfe — Autovervollständigung, Umformulieren, Grammatik und Zusammenfassen — nutzt ein Modell, das Sie hier konfigurieren. Schlüssel werden auf dem Server gespeichert und nie an den Browser zurückgeschickt.',
   'providers.emptyTitle': 'Kein Anbieter konfiguriert',
   'providers.emptyBody': 'Die Schreibhilfe bleibt ausgeschaltet, bis ein Anbieter hinzugefügt, aktiviert und erreichbar ist. Wählen Sie unten, wo das Modell laufen soll — Name und Basis-URL werden vorausgefüllt; danach fügen Sie einen Schlüssel hinzu, testen die Verbindung und schalten den Anbieter ein.',
@@ -535,13 +553,22 @@ const de: Msgs = {
   'providers.apiKeyIntro': 'Apps und der MCP-Server authentifizieren sich mit diesem Schlüssel (Authorization: Bearer oder X-Api-Key). Er wird serverseitig gespeichert und nach dem Speichern nie wieder angezeigt — kopieren Sie ihn zuerst in die publizierende App.',
   'providers.apiKeySetFromPage': 'Ein Schlüssel ist über diese Seite gesetzt (endet auf …{hint}).',
   'providers.apiKeyFromConfig': 'Ein Schlüssel aus der Serverkonfiguration (BeeDocs__ApiKey) ist aktiv (endet auf …{hint}). Hier einen zu speichern überschreibt ihn — ohne Neustart.',
-  'providers.apiKeyNone': 'Kein Schlüssel gesetzt — Apps können ohne Authentifizierung publizieren, und mit aktivierter Anmeldung können sie gar nicht publizieren.',
+  'providers.apiKeyNone': 'Kein Schlüssel gesetzt — publizierende Apps und der MCP-Server können sich nicht authentifizieren. Erzeugen Sie unten einen Schlüssel oder erlauben Sie anonymes Publizieren.',
+  'providers.apiKeyNoneOpen': 'Kein Schlüssel gesetzt — anonymes Publizieren ist an, /api/v1 ist ohne Authentifizierung offen.',
   'providers.apiKeyPlaceholder': 'Neuer API-Schlüssel',
   'providers.generate': 'Generieren',
   'providers.copied': 'Kopiert',
   'providers.saveKey': 'Schlüssel speichern',
   'providers.clearStoredKey': 'Gespeicherten Schlüssel löschen',
   'providers.apiKeySavedNote': 'Gespeichert — gilt sofort. Aktualisieren Sie jede publizierende App (und das BEEDOCS_API_KEY des MCP-Servers) mit dem neuen Schlüssel.',
+  'providers.apiKeyAnonLabel': 'Anonymes Publizieren erlauben',
+  'providers.apiKeyAnonHint':
+    'Jeder, der diesen Server erreichen kann, darf Bücher über /api/v1 ohne Schlüssel anlegen und aktualisieren. Lassen Sie das aus, außer Sie vertrauen dem Netz.',
+  'providers.setupStorageTitle': '{kind} einrichten',
+  'providers.setupStorageLead':
+    'Es wird nichts gespeichert, bis Sie erstellen. Abbrechen hinterlässt keinen Anbieter.',
+  'providers.setupNeedsConnString': 'Fügen Sie vor dem Erstellen eine Verbindungszeichenfolge ein.',
+  'providers.setupNeedsOauth': 'OAuth-Client-ID und Geheimnis sind vor dem Erstellen erforderlich.',
 }
 
 const es: Msgs = {
@@ -598,7 +625,7 @@ const es: Msgs = {
   'providers.addTitle': 'Añadir un proveedor',
   'providers.introShort': 'La ayuda de escritura — autocompletar, reescribir, gramática y resumir — se apoya en un modelo que configuras aquí.',
   'providers.unavailableTitle': 'No disponible en este despliegue',
-  'providers.unavailableBody': 'Este servidor exige una clave de API en /api/llm, que la aplicación web no puede enviar. Configura los proveedores desde un despliegue sin BeeDocs:ApiKey, o a través del servidor MCP.',
+  'providers.unavailableBody': 'Este servidor exige una clave de API en /api/llm, que la aplicación web no puede enviar. Sin inicio de sesión, una clave de publicación bloquea estos ajustes en el navegador. Configura los proveedores a través del servidor MCP, o activa el inicio de sesión.',
   'providers.intro': 'La ayuda de escritura — autocompletar, reescribir, gramática y resumir — se apoya en un modelo que configuras aquí. Las claves se guardan en el servidor y nunca vuelven al navegador.',
   'providers.emptyTitle': 'Ningún proveedor configurado',
   'providers.emptyBody': 'La ayuda de escritura permanece apagada hasta que haya un proveedor añadido, activado y accesible. Elige abajo dónde debe correr el modelo — el nombre y la URL base se rellenan por ti; luego añades una clave, pruebas la conexión y lo activas.',
@@ -712,13 +739,22 @@ const es: Msgs = {
   'providers.apiKeyIntro': 'Las aplicaciones y el servidor MCP se autentican con esta clave (Authorization: Bearer o X-Api-Key). Se guarda en el servidor y no vuelve a mostrarse tras guardarla — cópiala primero en la aplicación de publicación.',
   'providers.apiKeySetFromPage': 'Hay una clave definida desde esta página (termina en …{hint}).',
   'providers.apiKeyFromConfig': 'Está activa una clave de la configuración del servidor (BeeDocs__ApiKey) (termina en …{hint}). Guardar una aquí la anula — sin reiniciar.',
-  'providers.apiKeyNone': 'Sin clave — las aplicaciones pueden publicar sin autenticación, y con el inicio de sesión activado no pueden publicar en absoluto.',
+  'providers.apiKeyNone': 'Sin clave — las aplicaciones de publicación y el servidor MCP no pueden autenticarse. Genera una clave abajo, o activa la publicación anónima.',
+  'providers.apiKeyNoneOpen': 'Sin clave — la publicación anónima está activada, así que /api/v1 está abierto sin autenticación.',
   'providers.apiKeyPlaceholder': 'Nueva clave de API',
   'providers.generate': 'Generar',
   'providers.copied': 'Copiada',
   'providers.saveKey': 'Guardar clave',
   'providers.clearStoredKey': 'Borrar la clave guardada',
   'providers.apiKeySavedNote': 'Guardado — surte efecto de inmediato. Actualiza cada aplicación de publicación (y el BEEDOCS_API_KEY del servidor MCP) con la nueva clave.',
+  'providers.apiKeyAnonLabel': 'Permitir publicación anónima',
+  'providers.apiKeyAnonHint':
+    'Permite que cualquiera que alcance este servidor cree y actualice libros por /api/v1 sin clave. Déjalo apagado salvo que confíes en la red.',
+  'providers.setupStorageTitle': 'Configurar {kind}',
+  'providers.setupStorageLead':
+    'No se guarda nada hasta que crees. Cancelar no deja ningún proveedor residual.',
+  'providers.setupNeedsConnString': 'Pega una cadena de conexión antes de crear.',
+  'providers.setupNeedsOauth': 'El id y el secreto del cliente OAuth son obligatorios antes de crear.',
 }
 
 const nl: Msgs = {
@@ -775,7 +811,7 @@ const nl: Msgs = {
   'providers.addTitle': 'Een provider toevoegen',
   'providers.introShort': 'Schrijfhulp — autoaanvullen, herschrijven, grammatica en samenvatten — draait op een model dat je hier instelt.',
   'providers.unavailableTitle': 'Niet beschikbaar op deze installatie',
-  'providers.unavailableBody': 'Deze server vereist een API-sleutel op /api/llm, die de webapp niet kan meesturen. Stel providers in vanaf een installatie zonder BeeDocs:ApiKey, of via de MCP-server.',
+  'providers.unavailableBody': 'Deze server vereist een API-sleutel op /api/llm, die de webapp niet kan meesturen. Zonder aanmelden sluit een publicatiesleutel deze instellingen af in de browser. Stel providers in via de MCP-server, of schakel aanmelden in.',
   'providers.intro': 'Schrijfhulp — autoaanvullen, herschrijven, grammatica en samenvatten — draait op een model dat je hier instelt. Sleutels staan op de server en gaan nooit terug naar de browser.',
   'providers.emptyTitle': 'Geen provider ingesteld',
   'providers.emptyBody': 'Schrijfhulp blijft uit totdat er een provider is toegevoegd, ingeschakeld en bereikbaar. Kies hieronder waar het model moet draaien — de naam en basis-URL worden voor je ingevuld; daarna voeg je een sleutel toe, test je de verbinding en zet je hem aan.',
@@ -889,13 +925,22 @@ const nl: Msgs = {
   'providers.apiKeyIntro': 'Apps en de MCP-server authenticeren zich met deze sleutel (Authorization: Bearer of X-Api-Key). Hij wordt op de server bewaard en na het opslaan nooit meer getoond — kopieer hem eerst naar de publicerende app.',
   'providers.apiKeySetFromPage': 'Er is een sleutel ingesteld via deze pagina (eindigt op …{hint}).',
   'providers.apiKeyFromConfig': 'Een sleutel uit de serverconfiguratie (BeeDocs__ApiKey) is actief (eindigt op …{hint}). Hier een opslaan overschrijft hem — zonder herstart.',
-  'providers.apiKeyNone': 'Geen sleutel ingesteld — apps kunnen zonder authenticatie publiceren, en met inloggen aan kunnen ze helemaal niet publiceren.',
+  'providers.apiKeyNone': 'Geen sleutel ingesteld — publicerende apps en de MCP-server kunnen niet authenticeren. Genereer hieronder een sleutel, of sta anonieme publicatie toe.',
+  'providers.apiKeyNoneOpen': 'Geen sleutel ingesteld — anonieme publicatie staat aan, dus /api/v1 is open zonder authenticatie.',
   'providers.apiKeyPlaceholder': 'Nieuwe API-sleutel',
   'providers.generate': 'Genereren',
   'providers.copied': 'Gekopieerd',
   'providers.saveKey': 'Sleutel opslaan',
   'providers.clearStoredKey': 'Opgeslagen sleutel wissen',
   'providers.apiKeySavedNote': 'Opgeslagen — geldt onmiddellijk. Werk elke publicerende app (en de BEEDOCS_API_KEY van de MCP-server) bij met de nieuwe sleutel.',
+  'providers.apiKeyAnonLabel': 'Anonieme publicatie toestaan',
+  'providers.apiKeyAnonHint':
+    'Iedereen die deze server kan bereiken mag via /api/v1 boeken aanmaken en bijwerken zonder sleutel. Laat dit uit tenzij je het netwerk vertrouwt.',
+  'providers.setupStorageTitle': '{kind} instellen',
+  'providers.setupStorageLead':
+    'Er wordt niets opgeslagen tot je aanmaakt. Annuleren laat geen provider achter.',
+  'providers.setupNeedsConnString': 'Plak een verbindingsreeks voordat je aanmaakt.',
+  'providers.setupNeedsOauth': 'OAuth-client-id en geheim zijn vereist voordat je aanmaakt.',
 }
 
 const ja: Msgs = {
@@ -952,7 +997,7 @@ const ja: Msgs = {
   'providers.addTitle': 'プロバイダーを追加',
   'providers.introShort': 'ライティング支援（自動補完・書き換え・文法・要約）は、ここで設定したモデルで動作します。',
   'providers.unavailableTitle': 'このデプロイでは利用できません',
-  'providers.unavailableBody': 'このサーバーは /api/llm に API キーを要求しますが、Web アプリはそれを送信できません。BeeDocs:ApiKey が設定されていないデプロイから、または MCP サーバー経由でプロバイダーを設定してください。',
+  'providers.unavailableBody': 'このサーバーは /api/llm に API キーを要求しますが、Web アプリはそれを送信できません。サインインがオフの場合、公開 API キーがあるとブラウザからこれらの設定にアクセスできません。MCP サーバー経由でプロバイダーを設定するか、サインインを有効にしてください。',
   'providers.intro': 'ライティング支援（自動補完・書き換え・文法・要約）は、ここで設定したモデルで動作します。キーはサーバーに保存され、ブラウザーに返されることはありません。',
   'providers.emptyTitle': 'プロバイダーが未設定です',
   'providers.emptyBody': 'プロバイダーが追加・有効化され、接続できるようになるまでライティング支援はオフのままです。モデルをどこで動かすか下から選んでください。名前とベース URL は自動で入力されます。その後キーを追加し、接続をテストして有効にします。',
@@ -1066,13 +1111,22 @@ const ja: Msgs = {
   'providers.apiKeyIntro': 'アプリと MCP サーバーはこのキーで認証します（Authorization: Bearer または X-Api-Key）。キーはサーバー側に保存され、保存後は二度と表示されません。先に公開側アプリへコピーしてください。',
   'providers.apiKeySetFromPage': 'このページからキーが設定されています（末尾 …{hint}）。',
   'providers.apiKeyFromConfig': 'サーバー設定（BeeDocs__ApiKey）のキーが有効です（末尾 …{hint}）。ここで保存すると上書きされます。再起動は不要です。',
-  'providers.apiKeyNone': 'キー未設定 — アプリは認証なしで公開でき、サインインが有効な場合はまったく公開できません。',
+  'providers.apiKeyNone': 'キー未設定 — 公開アプリと MCP サーバーは認証できません。下でキーを生成するか、匿名公開を許可してください。',
+  'providers.apiKeyNoneOpen': 'キー未設定 — 匿名公開がオンのため、/api/v1 は認証なしで開いています。',
   'providers.apiKeyPlaceholder': '新しい API キー',
   'providers.generate': '生成',
   'providers.copied': 'コピーしました',
   'providers.saveKey': 'キーを保存',
   'providers.clearStoredKey': '保存済みキーを消去',
   'providers.apiKeySavedNote': '保存しました — すぐに有効になります。公開に使うすべてのアプリ（および MCP サーバーの BEEDOCS_API_KEY）を新しいキーに更新してください。',
+  'providers.apiKeyAnonLabel': '匿名公開を許可',
+  'providers.apiKeyAnonHint':
+    'このサーバーに届く誰でも、キーなしで /api/v1 からブックを作成・更新できます。ネットワークを信頼できる場合以外はオフのままにしてください。',
+  'providers.setupStorageTitle': '{kind} を設定',
+  'providers.setupStorageLead':
+    '作成するまで何も保存されません。キャンセルしてもプロバイダーは残りません。',
+  'providers.setupNeedsConnString': '作成前に接続文字列を貼り付けてください。',
+  'providers.setupNeedsOauth': '作成前に OAuth クライアント ID とシークレットが必要です。',
 }
 
 const zh: Msgs = {
@@ -1129,7 +1183,7 @@ const zh: Msgs = {
   'providers.addTitle': '添加提供商',
   'providers.introShort': '写作辅助 — 自动补全、改写、语法和摘要 — 依赖你在此配置的模型。',
   'providers.unavailableTitle': '此部署不可用',
-  'providers.unavailableBody': '此服务器要求在 /api/llm 上提供 API 密钥，而 Web 应用无法发送该密钥。请在未设置 BeeDocs:ApiKey 的部署上，或通过 MCP 服务器配置提供商。',
+  'providers.unavailableBody': '此服务器要求在 /api/llm 上提供 API 密钥，而 Web 应用无法发送该密钥。关闭登录时，发布 API 密钥会将这些设置锁在浏览器之外。请通过 MCP 服务器配置提供商，或启用登录。',
   'providers.intro': '写作辅助 — 自动补全、改写、语法和摘要 — 依赖你在此配置的模型。密钥保存在服务器上，绝不会发回浏览器。',
   'providers.emptyTitle': '尚未配置提供商',
   'providers.emptyBody': '在添加、启用并可连通一个提供商之前，写作辅助保持关闭。在下方选择模型的运行位置 — 名称和基础 URL 会自动填好，然后添加密钥、测试连接并启用它。',
@@ -1243,13 +1297,22 @@ const zh: Msgs = {
   'providers.apiKeyIntro': '应用和 MCP 服务器使用此密钥进行身份验证（Authorization: Bearer 或 X-Api-Key）。密钥保存在服务器端，保存后不再显示 — 请先把它复制到发布应用中。',
   'providers.apiKeySetFromPage': '已从此页面设置了一个密钥（结尾为 …{hint}）。',
   'providers.apiKeyFromConfig': '来自服务器配置（BeeDocs__ApiKey）的密钥正在生效（结尾为 …{hint}）。在此保存一个将覆盖它 — 无需重启。',
-  'providers.apiKeyNone': '未设置密钥 — 应用可以在无身份验证的情况下发布；开启登录后则完全无法发布。',
+  'providers.apiKeyNone': '未设置密钥 — 发布应用和 MCP 服务器无法认证。请在下方生成密钥，或选择允许匿名发布。',
+  'providers.apiKeyNoneOpen': '未设置密钥 — 匿名发布已开启，因此 /api/v1 无需认证即可访问。',
   'providers.apiKeyPlaceholder': '新的 API 密钥',
   'providers.generate': '生成',
   'providers.copied': '已复制',
   'providers.saveKey': '保存密钥',
   'providers.clearStoredKey': '清除已保存的密钥',
   'providers.apiKeySavedNote': '已保存 — 立即生效。请用新密钥更新所有发布应用（以及 MCP 服务器的 BEEDOCS_API_KEY）。',
+  'providers.apiKeyAnonLabel': '允许匿名发布',
+  'providers.apiKeyAnonHint':
+    '任何能访问此服务器的人都可以在无密钥的情况下通过 /api/v1 创建和更新图书。除非信任该网络，否则请保持关闭。',
+  'providers.setupStorageTitle': '设置 {kind}',
+  'providers.setupStorageLead':
+    '创建之前不会保存任何内容。取消不会留下多余的提供商。',
+  'providers.setupNeedsConnString': '创建前请粘贴连接字符串。',
+  'providers.setupNeedsOauth': '创建前需要 OAuth 客户端 ID 和密钥。',
 }
 
 export const providers = { en, fr, de, es, nl, ja, zh } satisfies Record<Lang, Msgs>

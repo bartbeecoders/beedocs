@@ -12,6 +12,7 @@ import type { DiagramEditorState } from './DiagramCanvas'
 import type { SlideEditorState } from './SlideCanvas'
 import type { KanbanEditorState } from './KanbanCanvas'
 import type { ProjectEditorState } from './ProjectCanvas'
+import type { NoteEditorState } from './NoteCanvas'
 import type { AttachmentEditorState } from './AttachmentCanvas'
 import { OwnerField } from './OwnerField'
 import { useGitRepos } from '../hooks/useGitRepos'
@@ -29,6 +30,7 @@ type Props = {
   slideState: SlideEditorState | null
   kanbanState: KanbanEditorState | null
   projectState: ProjectEditorState | null
+  noteState: NoteEditorState | null
   attachmentState: AttachmentEditorState | null
   view:
     | 'welcome'
@@ -39,6 +41,7 @@ type Props = {
     | 'slides'
     | 'kanban'
     | 'project'
+    | 'note'
     | 'attachment'
     | 'settings'
     | 'users'
@@ -54,13 +57,14 @@ export function PropertiesPane({
   slideState,
   kanbanState,
   projectState,
+  noteState,
   attachmentState,
   view,
 }: Props) {
   const { bookId, shelfId } = useParams()
   const { canWrite, authEnabled, canManageUsers, user } = useAuth()
   const { t } = useI18n()
-  const { books, shelves, setShelfPublished } = useWorkspace()
+  const { books, shelves, setShelfPublished, setShelfPrivate, setBookPrivate, renameInTree } = useWorkspace()
   const book = books.find((b) => b.id === bookId)
   const shelf = shelves.find((s) => s.id === shelfId)
 
@@ -146,6 +150,11 @@ export function PropertiesPane({
             onChange={pageState.setOwnerId}
           />
         </Field>
+        <PrivacyField
+          isPrivate={pageState.isPrivate}
+          ownerId={pageState.ownerId}
+          onChange={pageState.setIsPrivate}
+        />
         <Field label={t('props.updated')}>
           <span className="sm">{p ? new Date(p.updatedAt).toLocaleString() : '—'}</span>
         </Field>
@@ -273,6 +282,16 @@ export function PropertiesPane({
         <Field label={t('props.updated')}>
           <span className="sm">{d ? new Date(d.updatedAt).toLocaleString() : '—'}</span>
         </Field>
+        {d && (
+          <PrivacyField
+            isPrivate={!!d.isPrivate}
+            ownerId={d.ownerId}
+            onChange={async (next) => {
+              await api.updateDiagram(d.id, { title: diagramState.title, isPrivate: next })
+              await renameInTree()
+            }}
+          />
+        )}
         {canWrite && (
           <div className="props-actions">
             <button
@@ -325,6 +344,16 @@ export function PropertiesPane({
         <Field label={t('props.updated')}>
           <span className="sm">{d ? new Date(d.updatedAt).toLocaleString() : '—'}</span>
         </Field>
+        {d && (
+          <PrivacyField
+            isPrivate={!!d.isPrivate}
+            ownerId={d.ownerId}
+            onChange={async (next) => {
+              await api.updateSlideDeck(d.id, { title: slideState.title, isPrivate: next })
+              await renameInTree()
+            }}
+          />
+        )}
         <div className="props-actions">
           <button type="button" className="btn primary sm" onClick={() => slideState.present()}>
             ▶ {t('props.present')}
@@ -375,6 +404,16 @@ export function PropertiesPane({
         <Field label={t('props.updated')}>
           <span className="sm">{b ? new Date(b.updatedAt).toLocaleString() : '—'}</span>
         </Field>
+        {b && (
+          <PrivacyField
+            isPrivate={!!b.isPrivate}
+            ownerId={b.ownerId}
+            onChange={async (next) => {
+              await api.updateKanbanBoard(b.id, { title: kanbanState.title, isPrivate: next })
+              await renameInTree()
+            }}
+          />
+        )}
         <div className="props-actions">
           {canWrite && (
             <>
@@ -432,6 +471,16 @@ export function PropertiesPane({
         <Field label={t('props.updated')}>
           <span className="sm">{p ? new Date(p.updatedAt).toLocaleString() : '—'}</span>
         </Field>
+        {p && (
+          <PrivacyField
+            isPrivate={!!p.isPrivate}
+            ownerId={p.ownerId}
+            onChange={async (next) => {
+              await api.updateProjectPlan(p.id, { title: projectState.title, isPrivate: next })
+              await renameInTree()
+            }}
+          />
+        )}
         <div className="props-actions">
           {canWrite && (
             <>
@@ -471,6 +520,67 @@ export function PropertiesPane({
     )
   }
 
+  if (view === 'note' && noteState) {
+    const n = noteState.note
+    return (
+      <div className="props-pane">
+        <h3>{t('props.note')}</h3>
+        <Field label={t('common.title')}>
+          {canWrite ? (
+            <SyncedInput value={noteState.title} onValueChange={noteState.setTitle} />
+          ) : (
+            <span>{noteState.title}</span>
+          )}
+        </Field>
+        <Field label={t('props.blocks')}>
+          <span>{noteState.blockCount}</span>
+        </Field>
+        <Field label={t('props.updated')}>
+          <span className="sm">{n ? new Date(n.updatedAt).toLocaleString() : '—'}</span>
+        </Field>
+        {n && (
+          <PrivacyField
+            isPrivate={!!n.isPrivate}
+            ownerId={n.ownerId}
+            onChange={async (next) => {
+              await api.updateNote(n.id, { title: noteState.title, isPrivate: next })
+              await renameInTree()
+            }}
+          />
+        )}
+        <div className="props-actions">
+          {canWrite && (
+            <>
+              <button
+                type="button"
+                className="btn primary sm"
+                disabled={noteState.saving || !noteState.dirty}
+                onClick={() => void noteState.save()}
+              >
+                {noteState.saving ? t('common.saving') : t('props.saveNote')}
+              </button>
+              <button type="button" className="btn danger ghost sm" onClick={() => void noteState.deleteNote()}>
+                {t('common.delete')}
+              </button>
+            </>
+          )}
+        </div>
+        <div className="props-hint">
+          <h4>{t('props.markdownEmbed')}</h4>
+          <pre className="embed-snippet sm">{`\`\`\`note-ref\n${n?.id ?? ''}\n\`\`\``}</pre>
+          <button
+            type="button"
+            className="btn sm"
+            onClick={() => void navigator.clipboard.writeText(`\`\`\`note-ref\n${n?.id ?? ''}\n\`\`\``)}
+          >
+            {t('props.copyEmbed')}
+          </button>
+          <p className="muted sm">{t('props.noteHint')}</p>
+        </div>
+      </div>
+    )
+  }
+
   if (view === 'attachment' && attachmentState) {
     const a = attachmentState.attachment
     return (
@@ -503,6 +613,20 @@ export function PropertiesPane({
             onChange={attachmentState.setOwnerId}
           />
         </Field>
+        {a && (
+          <PrivacyField
+            isPrivate={!!a.isPrivate}
+            ownerId={attachmentState.ownerId}
+            onChange={async (next) => {
+              await api.updateAttachment(a.id, {
+                title: attachmentState.title,
+                ownerId: attachmentState.ownerId,
+                isPrivate: next,
+              })
+              await renameInTree()
+            }}
+          />
+        )}
         <Field label={t('props.fileName')}>
           {canWrite ? (
             <SyncedInput
@@ -614,6 +738,11 @@ export function PropertiesPane({
             ownerName={shelf.ownerName}
           />
         </Field>
+        <PrivacyField
+          isPrivate={!!shelf.isPrivate}
+          ownerId={shelf.ownerId}
+          onChange={(next) => void setShelfPrivate(shelf.id, next)}
+        />
         <Field label={t('props.storage')}>
           <ShelfStorageField shelf={shelf} />
         </Field>
@@ -623,7 +752,7 @@ export function PropertiesPane({
               <input
                 type="checkbox"
                 checked={!!shelf.published}
-                disabled={!canWrite}
+                disabled={!canWrite || !!shelf.isPrivate}
                 onChange={(e) => void setShelfPublished(shelf.id, e.target.checked)}
               />
               <span>
@@ -686,9 +815,17 @@ export function PropertiesPane({
         <Field label={t('common.projectPlans')}>
           <span>{book.projectPlans.length}</span>
         </Field>
+        <Field label={t('common.notes')}>
+          <span>{book.notes.length}</span>
+        </Field>
         <Field label={t('common.owner')}>
           <BookOwnerField bookId={book.id} title={book.title} ownerId={book.ownerId ?? ''} ownerName={book.ownerName} />
         </Field>
+        <PrivacyField
+          isPrivate={!!book.isPrivate}
+          ownerId={book.ownerId}
+          onChange={(next) => void setBookPrivate(book.id, next)}
+        />
         <p className="muted sm">
           {canWrite ? t('props.bookHintWrite') : t('props.bookHintRead')}
         </p>
@@ -953,6 +1090,69 @@ function ShelfStorageConfirm({
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * Owner-gated private toggle. Local state keeps the checkbox honest when the
+ * parent does not round-trip the new value (diagrams, decks, …).
+ */
+function PrivacyField({
+  isPrivate,
+  ownerId,
+  onChange,
+}: {
+  isPrivate: boolean
+  ownerId?: string | null
+  onChange: (next: boolean) => void | Promise<void>
+}) {
+  const { canWrite, canManageUsers, user } = useAuth()
+  const { t } = useI18n()
+  const [value, setValue] = useState(isPrivate)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => setValue(isPrivate), [isPrivate])
+
+  const canConfigure =
+    canWrite && (canManageUsers || (!!user?.id && user.id === (ownerId ?? null)))
+  const needsOwner = !ownerId
+
+  if (!canConfigure) {
+    return value ? (
+      <Field label={t('props.private')}>
+        <span className="sm">
+          {t('props.privateOn')}
+          <span className="muted sm"> {t('props.ownerOnlyChange')}</span>
+        </span>
+      </Field>
+    ) : null
+  }
+
+  return (
+    <Field label={t('props.private')}>
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={value}
+          disabled={busy || (needsOwner && !value)}
+          onChange={(e) => {
+            const next = e.target.checked
+            setValue(next)
+            setBusy(true)
+            setError(null)
+            void Promise.resolve(onChange(next))
+              .catch((err: unknown) => {
+                setValue(!next)
+                setError(err instanceof Error ? err.message : String(err))
+              })
+              .finally(() => setBusy(false))
+          }}
+        />
+        <span className="sm">{t('props.privateHint')}</span>
+      </label>
+      {needsOwner && <p className="muted sm">{t('props.privateNeedsOwner')}</p>}
+      {error && <p className="banner error compact">{error}</p>}
+    </Field>
   )
 }
 

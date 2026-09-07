@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { api } from '../api'
 import { useI18n, type MessageKey } from '../i18n'
@@ -7,6 +7,7 @@ import type {
   StorageProviderKind,
   StorageTestResult,
   UpdateStorageProviderRequest,
+  CreateStorageProviderRequest,
 } from '../types'
 
 type KindOption = {
@@ -80,6 +81,8 @@ export function StorageProviders() {
   const [loading, setLoading] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [creating, setCreating] = useState<StorageProviderKind | null>(null)
+  const [setupKind, setSetupKind] = useState<StorageProviderKind | null>(null)
+  const [setupDraft, setSetupDraft] = useState<Draft>(BLANK_DRAFT)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
   // Removing a stored secret destroys a value that cannot be read back — same
@@ -260,21 +263,77 @@ export function StorageProviders() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [openDirty])
 
-  const create = async (kind: StorageProviderKind) => {
+  const setupTitleId = useId()
+
+  const openSetup = (kind: StorageProviderKind) => {
     if (!mayLeaveDraft()) return
-    setCreating(kind)
+    setSetupKind(kind)
+    setSetupDraft({ ...BLANK_DRAFT, name: KIND_LABELS[kind] })
+    setCreateError(null)
+  }
+
+  const closeSetup = () => {
+    if (creating) return
+    setSetupKind(null)
+    setSetupDraft(BLANK_DRAFT)
+    setCreateError(null)
+  }
+
+  const submitSetup = async () => {
+    if (!setupKind) return
+    const name = setupDraft.name.trim()
+    if (name === '') {
+      setCreateError(t('providers.nameRequired'))
+      return
+    }
+    if (setupKind === 'azure-blob' && !setupDraft.connectionString.trim()) {
+      setCreateError(t('providers.setupNeedsConnString'))
+      return
+    }
+    if (
+      setupKind === 'google-drive' &&
+      (!setupDraft.clientId.trim() || !setupDraft.clientSecret.trim())
+    ) {
+      setCreateError(t('providers.setupNeedsOauth'))
+      return
+    }
+
+    setCreating(setupKind)
     setCreateError(null)
     try {
-      const made = await api.createStorageProvider({ kind })
+      const body: CreateStorageProviderRequest = { kind: setupKind, name }
+      if (setupKind === 'azure-blob') {
+        if (setupDraft.container.trim()) body.container = setupDraft.container.trim()
+        body.connectionString = setupDraft.connectionString.trim()
+      } else {
+        body.clientId = setupDraft.clientId.trim()
+        body.clientSecret = setupDraft.clientSecret.trim()
+      }
+      const made = await api.createStorageProvider(body)
       setProviders((list) => [...(list ?? []), made])
       reveal(made)
       setFocusNew(made.id)
+      setSetupKind(null)
+      setSetupDraft(BLANK_DRAFT)
     } catch (e) {
       setCreateError(errText(e))
     } finally {
       setCreating(null)
     }
   }
+
+  useEffect(() => {
+    if (!setupKind) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !creating) {
+        setSetupKind(null)
+        setSetupDraft(BLANK_DRAFT)
+        setCreateError(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [setupKind, creating])
 
   useEffect(() => {
     if (focusNew === null) return
@@ -439,7 +498,7 @@ export function StorageProviders() {
                   ? t('providers.addAnotherAria', { label: k.label })
                   : t('providers.addAria', { label: k.label })
               }
-              onClick={() => void create(k.kind)}
+              onClick={() => openSetup(k.kind)}
             >
               <span className="llm-kind-name">
                 {k.label}
@@ -456,7 +515,7 @@ export function StorageProviders() {
           )
         })}
       </div>
-      {createError ? <p className="banner error">{createError}</p> : null}
+      {createError && !setupKind ? <p className="banner error">{createError}</p> : null}
     </div>
   )
 
@@ -825,6 +884,130 @@ export function StorageProviders() {
       {/* Only once the list is known: adding to an unknown list renders a
           one-item list that hides whatever else exists on the server. */}
       {providers !== null ? addBlock : null}
+
+      {setupKind && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !creating) closeSetup()
+          }}
+        >
+          <form
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={setupTitleId}
+            onSubmit={(e) => {
+              e.preventDefault()
+              void submitSetup()
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <header className="modal-header">
+              <h2 id={setupTitleId}>
+                {t('providers.setupStorageTitle', { kind: KIND_LABELS[setupKind] })}
+              </h2>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={closeSetup}
+                disabled={creating !== null}
+                aria-label={t('common.close')}
+              >
+                ✕
+              </button>
+            </header>
+            <div className="modal-body">
+              <p className="muted sm">{t('providers.setupStorageLead')}</p>
+              <label className="field">
+                <span className="field-label">{t('common.name')}</span>
+                <input
+                  value={setupDraft.name}
+                  onChange={(e) => setSetupDraft((d) => ({ ...d, name: e.target.value }))}
+                  required
+                  disabled={creating !== null}
+                  autoComplete="off"
+                  autoFocus
+                />
+              </label>
+              {setupKind === 'azure-blob' ? (
+                <>
+                  <label className="field">
+                    <span className="field-label">{t('providers.container')}</span>
+                    <input
+                      value={setupDraft.container}
+                      onChange={(e) => setSetupDraft((d) => ({ ...d, container: e.target.value }))}
+                      disabled={creating !== null}
+                      autoComplete="off"
+                      placeholder="beedocs"
+                    />
+                    <span className="muted sm">{t('providers.containerHint')}</span>
+                  </label>
+                  <label className="field">
+                    <span className="field-label">{t('providers.connectionString')}</span>
+                    <input
+                      type="password"
+                      className="llm-mono"
+                      value={setupDraft.connectionString}
+                      onChange={(e) =>
+                        setSetupDraft((d) => ({ ...d, connectionString: e.target.value }))
+                      }
+                      disabled={creating !== null}
+                      autoComplete="off"
+                      data-1p-ignore=""
+                      spellCheck={false}
+                      required
+                      placeholder={t('providers.connStringPlaceholder')}
+                    />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label className="field">
+                    <span className="field-label">{t('providers.oauthClientId')}</span>
+                    <input
+                      className="llm-mono"
+                      value={setupDraft.clientId}
+                      onChange={(e) => setSetupDraft((d) => ({ ...d, clientId: e.target.value }))}
+                      disabled={creating !== null}
+                      autoComplete="off"
+                      spellCheck={false}
+                      required
+                      placeholder="….apps.googleusercontent.com"
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">{t('providers.clientSecret')}</span>
+                    <input
+                      type="password"
+                      className="llm-mono"
+                      value={setupDraft.clientSecret}
+                      onChange={(e) =>
+                        setSetupDraft((d) => ({ ...d, clientSecret: e.target.value }))
+                      }
+                      disabled={creating !== null}
+                      autoComplete="off"
+                      data-1p-ignore=""
+                      spellCheck={false}
+                      required
+                      placeholder={t('providers.clientSecretPlaceholder')}
+                    />
+                  </label>
+                </>
+              )}
+              {createError ? <p className="banner error compact">{createError}</p> : null}
+            </div>
+            <footer className="modal-footer">
+              <button type="button" className="btn ghost" disabled={creating !== null} onClick={closeSetup}>
+                {t('common.cancel')}
+              </button>
+              <button type="submit" className="btn primary" disabled={creating !== null}>
+                {creating ? t('providers.adding') : t('common.create')}
+              </button>
+            </footer>
+          </form>
+        </div>
+      )}
     </div>
   )
 }

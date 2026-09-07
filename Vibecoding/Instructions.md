@@ -60,3 +60,10 @@ Make it technical.
 
 
 Add as AI providers claude CLI and grok CLI. Meaning when running the app locally (within omarchy as an app or locally in a browser), let it connect to the default model that is used by the installed claude code or grok cli.
+
+
+Dragging a file in the library should look at the file extension (and data content) to determine what to do with the file
+- markdown file: ask the user if he want to have it added to the files section or create a new page for it (ask for book)
+- pdf file: add it to the files section
+- zip file: add it to the files section
+- image files: add it to the files section (when dropped in the library), embed it in the document when dropped in the document

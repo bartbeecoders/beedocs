@@ -39,7 +39,9 @@ full-screen presentation mode — see [SLIDES.md](./SLIDES.md)),
 **kanban boards** (columns of cards, as a tree item or a page embed — see
 [KANBAN.md](./KANBAN.md)),
 **project plans** (tasks, milestones and a Gantt chart, as a tree item or a
-page embed — see [PROJECT.md](./PROJECT.md)) and
+page embed — see [PROJECT.md](./PROJECT.md)),
+**notes** (OneNote-style free-form pages: click anywhere to type, checklists,
+images and pen ink, as a tree item or a page embed — see [NOTES.md](./NOTES.md)) and
 **attachments** (uploaded PDFs, Word/PowerPoint/Excel documents and archives,
 searchable by the text inside them — see [ATTACHMENTS.md](./ATTACHMENTS.md)).
 

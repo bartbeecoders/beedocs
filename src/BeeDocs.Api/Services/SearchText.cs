@@ -36,6 +36,10 @@ public static class SearchText
     private static readonly HashSet<string> ProjectFences =
         new(StringComparer.OrdinalIgnoreCase) { "project" };
 
+    /// <summary>Fence languages whose body is a note JSON document (not a note id).</summary>
+    private static readonly HashSet<string> NoteFences =
+        new(StringComparer.OrdinalIgnoreCase) { "note" };
+
     /// <summary>Plain text for a Markdown page body.</summary>
     public static string FromMarkdown(string? markdown)
     {
@@ -212,6 +216,66 @@ public static class SearchText
         }
     }
 
+    /// <summary>
+    /// Plain text for a stored note: text blocks (Markdown, reduced like a page),
+    /// checklist titles and items, and image alt text. Ink and geometry stay out.
+    /// </summary>
+    public static string FromNoteSource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source) || !LooksLikeJson(source)) return "";
+        try
+        {
+            using var doc = JsonDocument.Parse(source);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return "";
+            if (!doc.RootElement.TryGetProperty("blocks", out var blocks)
+                || blocks.ValueKind != JsonValueKind.Array)
+            {
+                return "";
+            }
+
+            var sb = new StringBuilder();
+            foreach (var block in blocks.EnumerateArray())
+            {
+                if (block.ValueKind != JsonValueKind.Object) continue;
+                var kind = block.TryGetProperty("kind", out var k) && k.ValueKind == JsonValueKind.String
+                    ? k.GetString()
+                    : null;
+                switch (kind)
+                {
+                    case "text":
+                        if (block.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String)
+                            Append(sb, FromMarkdown(text.GetString()));
+                        break;
+                    case "checklist":
+                        if (block.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
+                            Append(sb, title.GetString());
+                        if (block.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var item in items.EnumerateArray())
+                            {
+                                if (item.ValueKind == JsonValueKind.Object
+                                    && item.TryGetProperty("text", out var it)
+                                    && it.ValueKind == JsonValueKind.String)
+                                {
+                                    Append(sb, it.GetString());
+                                }
+                            }
+                        }
+                        break;
+                    case "image":
+                        if (block.TryGetProperty("alt", out var alt) && alt.ValueKind == JsonValueKind.String)
+                            Append(sb, alt.GetString());
+                        break;
+                }
+            }
+            return Normalize(sb.ToString());
+        }
+        catch (JsonException)
+        {
+            return "";
+        }
+    }
+
     private static string FromFence(string? language, string body)
     {
         var lang = (language ?? "").Trim();
@@ -239,6 +303,9 @@ public static class SearchText
 
         if (ProjectFences.Contains(lang))
             return LooksLikeJson(body) ? FromProjectSource(body) : "";
+
+        if (NoteFences.Contains(lang))
+            return LooksLikeJson(body) ? FromNoteSource(body) : "";
 
         return body;
     }

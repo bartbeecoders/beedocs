@@ -8,9 +8,11 @@ import { AuthProvider, useAuth } from './auth/AuthContext'
 import { WorkspaceShell } from './components/WorkspaceShell'
 import { LoginScreen } from './components/LoginScreen'
 import { SetupScreen } from './components/SetupScreen'
+import { ChangePasswordScreen } from './components/ChangePasswordScreen'
 import { BookshelfSite } from './site/BookshelfSite'
 import { api } from './api'
 import { getRouterBasename } from './basePath'
+import { ToastHost } from './toast'
 import './styles/users.css'
 
 /**
@@ -38,13 +40,13 @@ import './styles/users.css'
  * untouched underneath, signing in lands on the page that was asked for.
  */
 function AuthGate() {
-  const { state, needsLogin, needsSetup } = useAuth()
+  const { state, needsLogin, needsSetup, needsPasswordChange } = useAuth()
   const [version, setVersion] = useState<string | null>(null)
 
   // /api/version is anonymous, so this is the one thing worth knowing before
   // signing in: which build is asking for the password.
   useEffect(() => {
-    if (!needsLogin && !needsSetup) return
+    if (!needsLogin && !needsSetup && !needsPasswordChange) return
     let cancelled = false
     api
       .getVersion()
@@ -53,7 +55,7 @@ function AuthGate() {
     return () => {
       cancelled = true
     }
-  }, [needsLogin, needsSetup])
+  }, [needsLogin, needsSetup, needsPasswordChange])
 
   // Blank rather than a spinner: /api/auth/me is a local round trip, and a
   // flash of "loading" on every reload of an ungated instance is worse than a
@@ -65,6 +67,8 @@ function AuthGate() {
   if (needsSetup) return <SetupScreen version={version} />
 
   if (needsLogin) return <LoginScreen version={version} />
+
+  if (needsPasswordChange) return <ChangePasswordScreen version={version} />
 
   return (
     <WorkspaceProvider>
@@ -102,6 +106,7 @@ const router = createBrowserRouter(
             { path: '/books/:bookId/slides/:deckId', element: <WorkspaceShell /> },
             { path: '/books/:bookId/kanban/:boardId', element: <WorkspaceShell /> },
             { path: '/books/:bookId/project/:planId', element: <WorkspaceShell /> },
+            { path: '/books/:bookId/notes/:noteId', element: <WorkspaceShell /> },
             { path: '/books/:bookId/files/:attachmentId', element: <WorkspaceShell /> },
             // Git repos: the splat carries the file path, slashes and all.
             { path: '/git/:repoId', element: <WorkspaceShell /> },
@@ -123,6 +128,7 @@ export default function App() {
             layer), outside the router — the login screen needs branding too. */}
         <BrandingProvider>
           <RouterProvider router={router} />
+          <ToastHost />
         </BrandingProvider>
       </ThemeProvider>
     </I18nProvider>

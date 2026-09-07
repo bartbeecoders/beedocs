@@ -40,6 +40,8 @@ import { KanbanBoard } from '../kanban/KanbanBoard'
 import { KanbanView } from '../kanban/KanbanView'
 import { ProjectEditor } from '../project/ProjectEditor'
 import { ProjectView } from '../project/ProjectView'
+import { NoteEditor } from '../notes/NoteEditor'
+import { NoteView } from '../notes/NoteView'
 
 // Lazy so only pages that actually embed an isometric diagram load its module.
 const IsometricView = lazy(() => import('../isometric/IsometricView'))
@@ -420,6 +422,125 @@ function KanbanRefPreview({
         )}
       </div>
       <KanbanView source={source} title={title} compact />
+    </figure>
+  )
+}
+
+function InlineNoteEditor({
+  source,
+  fenceLang,
+  fenceIndex,
+  contentRef,
+  onContentChange,
+  draft,
+  onDraftChange,
+}: {
+  source: string
+  fenceLang: string
+  fenceIndex: number
+  contentRef: React.MutableRefObject<string>
+  onContentChange: (next: string) => void
+  draft: string | undefined
+  onDraftChange: (next: string) => void
+}) {
+  const { t } = useI18n()
+  const live = draft ?? source
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  const commitSource = useCallback(
+    (next: string) => {
+      onDraftChange(next)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => {
+        onContentChange(replaceFenceBody(contentRef.current, fenceLang, fenceIndex, next))
+      }, 400)
+    },
+    [contentRef, fenceIndex, fenceLang, onContentChange, onDraftChange],
+  )
+
+  return (
+    <figure className="inline-diagram is-editing note-embed">
+      <div className="inline-diagram-head">
+        <div>
+          <span className="inline-diagram-badge">{t('editor.insert.note')}</span>
+          <figcaption className="inline-diagram-title">{t('editor.note.title')}</figcaption>
+        </div>
+        <span className="muted sm">{t('editor.note.hint')}</span>
+      </div>
+      <div className="inline-diagram-body">
+        <NoteEditor source={live} onChange={commitSource} compact />
+      </div>
+    </figure>
+  )
+}
+
+function NoteRefPreview({
+  noteId,
+  bookId,
+  editable,
+}: {
+  noteId: string
+  bookId?: string
+  editable?: boolean
+}) {
+  const { t } = useI18n()
+  const id = noteId.trim().split(/\s+/)[0] ?? ''
+  const [source, setSource] = useState<string | null>(null)
+  const [title, setTitle] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void api
+      .getNote(id)
+      .then((n) => {
+        if (cancelled) return
+        setSource(n.source)
+        setTitle(n.title)
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  if (error) {
+    return <div className="banner error compact">{t('editor.noteError', { id, error })}</div>
+  }
+  if (source == null) {
+    return <p className="muted sm">{t('editor.loadingNote')}</p>
+  }
+  return (
+    <figure className="note-embed">
+      <div className="inline-diagram-head">
+        <span className="inline-diagram-badge">{t('editor.note.linkedBadge')}</span>
+        <figcaption className="inline-diagram-title">{title}</figcaption>
+        {editable && bookId && (
+          <Link className="btn ghost sm" to={`/books/${bookId}/notes/${id}`}>
+            {t('notes.openNote')}
+          </Link>
+        )}
+      </div>
+      {editable ? (
+        <NoteEditor
+          source={source}
+          compact
+          onChange={(next) => {
+            setSource(next)
+            void api.updateNote(id, { title, source: next }).catch(() => {})
+          }}
+        />
+      ) : (
+        <NoteView source={source} compact />
+      )}
     </figure>
   )
 }
@@ -1179,6 +1300,42 @@ const MarkdownBody = memo(function MarkdownBody({
             <figure className="kanban-embed">
               <KanbanView source={code} compact />
             </figure>,
+          )
+        }
+
+        if (lang === 'note') {
+          const idx = nextIndex(lang)
+          if (editable && onContentChange) {
+            const key = `note:${idx}`
+            return wrapOutline(
+              lang,
+              idx,
+              <InlineNoteEditor
+                source={code}
+                fenceLang={lang}
+                fenceIndex={idx}
+                contentRef={contentRef}
+                onContentChange={handleContentChange}
+                draft={beeDrafts[key]}
+                onDraftChange={(next) => setBeeDraft(key, next)}
+              />,
+            )
+          }
+          return wrapOutline(
+            lang,
+            idx,
+            <figure className="note-embed">
+              <NoteView source={code} compact />
+            </figure>,
+          )
+        }
+
+        if (lang === 'note-ref') {
+          const idx = nextIndex('note-ref')
+          return wrapOutline(
+            'note-ref',
+            idx,
+            <NoteRefPreview noteId={code} bookId={bookId} editable={editable} />,
           )
         }
 

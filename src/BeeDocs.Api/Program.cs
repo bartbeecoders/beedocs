@@ -112,6 +112,7 @@ builder.Services.AddSingleton<IDiagramService, DiagramService>();
 builder.Services.AddSingleton<ISlideDeckService, SlideDeckService>();
 builder.Services.AddSingleton<IKanbanBoardService, KanbanBoardService>();
 builder.Services.AddSingleton<IProjectPlanService, ProjectPlanService>();
+builder.Services.AddSingleton<INoteService, NoteService>();
 builder.Services.AddSingleton<IAttachmentService, AttachmentService>();
 builder.Services.AddSingleton<ISlideTemplateService, SlideTemplateService>();
 builder.Services.AddSingleton<SlideDeckPptxExporter>();
@@ -371,9 +372,18 @@ var appVersion = (Assembly.GetExecutingAssembly()
 var apiKeyStatus = await app.Services.GetRequiredService<ApiKeySettingsService>().GetStatusAsync();
 if (!apiKeyStatus.HasKey)
 {
-    app.Logger.LogWarning(
-        "No API key is configured — /api/v1 is open without authentication. " +
-        "Set one in Settings → API access, or via BeeDocs__ApiKey (or BeeDocs:ApiKey).");
+    if (apiKeyStatus.AllowAnonymousPublish)
+    {
+        app.Logger.LogWarning(
+            "No API key is configured and anonymous publish is opted in — /api/v1 is open without authentication. " +
+            "Set a key in Settings → Sign-in & API, or turn off anonymous publish.");
+    }
+    else
+    {
+        app.Logger.LogWarning(
+            "No API key is configured — /api/v1 requires a key (or an admin opt-in to anonymous publish). " +
+            "Set one in Settings → Sign-in & API, or via BeeDocs__ApiKey (or BeeDocs:ApiKey).");
+    }
 }
 else
 {
@@ -385,12 +395,13 @@ else
 // A stored provider key turns /api/llm into something that spends real money.
 // Without an API key, anyone who can reach this port can spend it.
 if (!apiKeyStatus.HasKey
+    && apiKeyStatus.AllowAnonymousPublish
     && await app.Services.GetRequiredService<ILlmProviderService>().AnyKeyStoredAsync())
 {
     app.Logger.LogWarning(
-        "An LLM provider has a stored API key but no publish API key is configured — /api/llm is " +
+        "An LLM provider has a stored API key but anonymous publish is on and no publish API key is configured — /api/llm is " +
         "unauthenticated, so anyone who can reach this port can spend that key. " +
-        "Set one in Settings → API access, or via BeeDocs__ApiKey (or BeeDocs:ApiKey).");
+        "Set one in Settings → Sign-in & API, or via BeeDocs__ApiKey (or BeeDocs:ApiKey).");
 }
 
 var authOptions = app.Services.GetRequiredService<IOptions<AuthOptions>>().Value;
@@ -813,6 +824,12 @@ var userAdmin = api.MapGroup("/users")
 static IResult UserConflict(Exception e) =>
     Results.Json(new { error = "Conflict", message = e.Message }, statusCode: StatusCodes.Status409Conflict);
 
+static IResult Forbidden(UnauthorizedAccessException e) =>
+    Results.Json(new { error = "Forbidden", message = e.Message }, statusCode: StatusCodes.Status403Forbidden);
+
+static IResult PrivacyProblem(ArgumentException e) =>
+    Results.ValidationProblem(new Dictionary<string, string[]> { ["isPrivate"] = [e.Message] });
+
 userAdmin.MapGet("/", async (IUserService users, CancellationToken ct) =>
     Results.Ok(await users.ListAsync(ct)));
 
@@ -984,8 +1001,19 @@ api.MapPost("/shelves", async (CreateShelfRequest body, IDocumentService docs, C
     if (string.IsNullOrWhiteSpace(body.Title))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
 
-    var created = await docs.CreateShelfAsync(body, ct);
-    return Results.Created($"/api/shelves/{created.Id}", created);
+    try
+    {
+        var created = await docs.CreateShelfAsync(body, ct);
+        return Results.Created($"/api/shelves/{created.Id}", created);
+    }
+    catch (UnauthorizedAccessException e)
+    {
+        return Forbidden(e);
+    }
+    catch (ArgumentException e) when (e.ParamName is "isPrivate")
+    {
+        return PrivacyProblem(e);
+    }
 });
 
 api.MapPut("/shelves/{id}", async (string id, UpdateShelfRequest body, IDocumentService docs, CancellationToken ct) =>
@@ -993,8 +1021,19 @@ api.MapPut("/shelves/{id}", async (string id, UpdateShelfRequest body, IDocument
     if (string.IsNullOrWhiteSpace(body.Title))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
 
-    var updated = await docs.UpdateShelfAsync(id, body, ct);
-    return updated is null ? Results.NotFound() : Results.Ok(updated);
+    try
+    {
+        var updated = await docs.UpdateShelfAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (UnauthorizedAccessException e)
+    {
+        return Forbidden(e);
+    }
+    catch (ArgumentException e) when (e.ParamName is "isPrivate")
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["isPrivate"] = [e.Message] });
+    }
 });
 
 api.MapDelete("/shelves/{id}", async (string id, IDocumentService docs, CancellationToken ct) =>
@@ -1103,7 +1142,7 @@ bookshelfServe.MapGet("/{name}/diagrams/{id}", async (
     if (error is not null) return error;
 
     var diagram = await diagrams.GetAsync(id, ct);
-    if (diagram is null) return Results.NotFound();
+    if (diagram is null || diagram.IsPrivate) return Results.NotFound();
 
     var book = site!.Books.FirstOrDefault(b => b.Id == diagram.BookId);
     return book is null ? Results.NotFound() : Results.Ok(diagram);
@@ -1134,7 +1173,8 @@ bookshelfServe.MapGet("/{name}/search", async (
         Offset: offset ?? 0,
         ShelfId: site!.Shelf.Id,
         Kinds: ParseKinds(kinds) ?? ["page", "book", "folder"],
-        Prefix: prefix ?? true), ct);
+        Prefix: prefix ?? true,
+        PublicOnly: true), ct);
 
     return Results.Ok(RewriteSiteSearch(site, result));
 });
@@ -1231,6 +1271,14 @@ api.MapPost("/books", async (CreateBookRequest body, IDocumentService docs, Canc
     {
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["shelfId"] = [ex.Message] });
     }
+    catch (UnauthorizedAccessException e)
+    {
+        return Forbidden(e);
+    }
+    catch (ArgumentException e) when (e.ParamName is "isPrivate")
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["isPrivate"] = [e.Message] });
+    }
 });
 
 api.MapPut("/books/{id}", async (string id, UpdateBookRequest body, IDocumentService docs, CancellationToken ct) =>
@@ -1246,6 +1294,14 @@ api.MapPut("/books/{id}", async (string id, UpdateBookRequest body, IDocumentSer
     catch (KeyNotFoundException ex)
     {
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["shelfId"] = [ex.Message] });
+    }
+    catch (UnauthorizedAccessException e)
+    {
+        return Forbidden(e);
+    }
+    catch (ArgumentException e) when (e.ParamName is "isPrivate")
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["isPrivate"] = [e.Message] });
     }
 });
 
@@ -1341,17 +1397,16 @@ api.MapPut("/pages/{id}", async (string id, UpdatePageRequest body, IDocumentSer
     {
         var field = e.ParamName is "ChapterId" or "chapterId" ? "chapterId"
             : e.ParamName is "BookId" or "bookId" ? "bookId"
+            : e.ParamName is "isPrivate" || e.Message.Contains("isPrivate", StringComparison.OrdinalIgnoreCase) ? "isPrivate"
             : e.Message.Contains("maxRevisions", StringComparison.OrdinalIgnoreCase) ? "maxRevisions"
             : "page";
         return Results.ValidationProblem(new Dictionary<string, string[]> { [field] = [e.Message] });
     }
-    // Tracking settings are owner-gated inside the service — the endpoint filter
-    // only knows roles, and "owner of this page" is not a role.
+    // Tracking settings and privacy are owner-gated inside the service — the
+    // endpoint filter only knows roles, and "owner of this page" is not a role.
     catch (UnauthorizedAccessException e)
     {
-        return Results.Json(
-            new { error = "Forbidden", message = e.Message },
-            statusCode: StatusCodes.Status403Forbidden);
+        return Forbidden(e);
     }
 });
 
@@ -1411,8 +1466,19 @@ api.MapPut("/diagrams/{id}", async (string id, UpdateDiagramRequest body, IDiagr
     if (string.IsNullOrWhiteSpace(body.Title))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
 
-    var updated = await diagrams.UpdateAsync(id, body, ct);
-    return updated is null ? Results.NotFound() : Results.Ok(updated);
+    try
+    {
+        var updated = await diagrams.UpdateAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (UnauthorizedAccessException e)
+    {
+        return Forbidden(e);
+    }
+    catch (ArgumentException e) when (e.ParamName is "isPrivate")
+    {
+        return PrivacyProblem(e);
+    }
 });
 
 api.MapDelete("/diagrams/{id}", async (string id, IDiagramService diagrams, CancellationToken ct) =>
@@ -1461,8 +1527,19 @@ api.MapPut("/slides/{id}", async (string id, UpdateSlideDeckRequest body, ISlide
     if (string.IsNullOrWhiteSpace(body.Title))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
 
-    var updated = await slides.UpdateAsync(id, body, ct);
-    return updated is null ? Results.NotFound() : Results.Ok(updated);
+    try
+    {
+        var updated = await slides.UpdateAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (UnauthorizedAccessException e)
+    {
+        return Forbidden(e);
+    }
+    catch (ArgumentException e) when (e.ParamName is "isPrivate")
+    {
+        return PrivacyProblem(e);
+    }
 });
 
 api.MapDelete("/slides/{id}", async (string id, ISlideDeckService slides, CancellationToken ct) =>
@@ -1516,8 +1593,19 @@ api.MapPut("/kanban/{id}", async (string id, UpdateKanbanBoardRequest body, IKan
     if (string.IsNullOrWhiteSpace(body.Title))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
 
-    var updated = await boards.UpdateAsync(id, body, ct);
-    return updated is null ? Results.NotFound() : Results.Ok(updated);
+    try
+    {
+        var updated = await boards.UpdateAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (UnauthorizedAccessException e)
+    {
+        return Forbidden(e);
+    }
+    catch (ArgumentException e) when (e.ParamName is "isPrivate")
+    {
+        return PrivacyProblem(e);
+    }
 });
 
 api.MapDelete("/kanban/{id}", async (string id, IKanbanBoardService boards, CancellationToken ct) =>
@@ -1557,13 +1645,76 @@ api.MapPut("/project/{id}", async (string id, UpdateProjectPlanRequest body, IPr
     if (string.IsNullOrWhiteSpace(body.Title))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
 
-    var updated = await plans.UpdateAsync(id, body, ct);
-    return updated is null ? Results.NotFound() : Results.Ok(updated);
+    try
+    {
+        var updated = await plans.UpdateAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (UnauthorizedAccessException e)
+    {
+        return Forbidden(e);
+    }
+    catch (ArgumentException e) when (e.ParamName is "isPrivate")
+    {
+        return PrivacyProblem(e);
+    }
 });
 
 api.MapDelete("/project/{id}", async (string id, IProjectPlanService plans, CancellationToken ct) =>
 {
     var ok = await plans.DeleteAsync(id, ct);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
+// --- Notes (OneNote-style free-form pages) ---
+api.MapGet("/books/{bookId}/notes", async (string bookId, INoteService notes, CancellationToken ct) =>
+    Results.Ok(await notes.ListByBookAsync(bookId, ct)));
+
+api.MapPost("/books/{bookId}/notes", async (string bookId, CreateNoteRequest body, INoteService notes, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    try
+    {
+        var created = await notes.CreateAsync(bookId, body, ct);
+        return Results.Created($"/api/notes/{created.Id}", created);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+
+api.MapGet("/notes/{id}", async (string id, INoteService notes, CancellationToken ct) =>
+{
+    var note = await notes.GetAsync(id, ct);
+    return note is null ? Results.NotFound() : Results.Ok(note);
+});
+
+api.MapPut("/notes/{id}", async (string id, UpdateNoteRequest body, INoteService notes, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    try
+    {
+        var updated = await notes.UpdateAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (UnauthorizedAccessException e)
+    {
+        return Forbidden(e);
+    }
+    catch (ArgumentException e) when (e.ParamName is "isPrivate")
+    {
+        return PrivacyProblem(e);
+    }
+});
+
+api.MapDelete("/notes/{id}", async (string id, INoteService notes, CancellationToken ct) =>
+{
+    var ok = await notes.DeleteAsync(id, ct);
     return ok ? Results.NoContent() : Results.NotFound();
 });
 
@@ -1660,8 +1811,19 @@ api.MapPut("/attachments/{id}", async (
     if (string.IsNullOrWhiteSpace(body.Title))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
 
-    var updated = await attachments.UpdateAsync(id, body, ct);
-    return updated is null ? Results.NotFound() : Results.Ok(updated);
+    try
+    {
+        var updated = await attachments.UpdateAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (UnauthorizedAccessException e)
+    {
+        return Forbidden(e);
+    }
+    catch (ArgumentException e) when (e.ParamName is "isPrivate")
+    {
+        return PrivacyProblem(e);
+    }
 });
 
 // Replace the bytes, keep the identity: the attachment's id, title, description
@@ -1791,7 +1953,13 @@ settingsAdmin.MapGet("/api-key", async (ApiKeySettingsService apiKeys, Cancellat
     Results.Ok(await apiKeys.GetStatusAsync(ct)));
 
 settingsAdmin.MapPut("/api-key", async (UpdateApiKeyRequest body, ApiKeySettingsService apiKeys, CancellationToken ct) =>
-    Results.Ok(await apiKeys.SetAsync(body.ApiKey, ct)));
+{
+    if (body.AllowAnonymousPublish is bool flag)
+        await apiKeys.SetAllowAnonymousPublishAsync(flag, ct);
+    if (body.ApiKey is not null)
+        await apiKeys.SetAsync(body.ApiKey, ct);
+    return Results.Ok(await apiKeys.GetStatusAsync(ct));
+});
 
 // The RBA login provider. Admin-only like the rest of the group; changes apply
 // to the next login, and the admin's own session survives the switch — which is
@@ -2980,6 +3148,7 @@ api.MapPost("/uploads", async (HttpRequest request, CancellationToken ct) =>
 // =============================================================================
 // External REST API (v1) — slug-based books & pages for apps that publish docs.
 // Protected by BeeDocs:ApiKey when configured (Bearer or X-Api-Key).
+// With no key, /api/v1 is closed unless an admin opts into anonymous publish.
 // The UI continues to use the id-based /api/* routes above.
 // =============================================================================
 var v1 = api.MapGroup("/v1")

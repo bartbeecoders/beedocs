@@ -24,6 +24,7 @@ export function ApiKeyPanel() {
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [savedNote, setSavedNote] = useState(false)
+  const [anonBusy, setAnonBusy] = useState(false)
 
   useEffect(() => {
     api
@@ -62,12 +63,41 @@ export function ApiKeyPanel() {
       ? t('providers.apiKeySetFromPage', { hint: status.keyHint ?? '' })
       : status.source === 'config'
         ? t('providers.apiKeyFromConfig', { hint: status.keyHint ?? '' })
-        : t('providers.apiKeyNone')
+        : status.allowAnonymousPublish
+          ? t('providers.apiKeyNoneOpen')
+          : t('providers.apiKeyNone')
+
+  const toggleAnonymous = async (allow: boolean) => {
+    setAnonBusy(true)
+    setError(null)
+    try {
+      setStatus(await api.setAllowAnonymousPublish(allow))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAnonBusy(false)
+    }
+  }
 
   return (
     <div className="api-key-panel">
       <p className="muted sm">{t('providers.apiKeyIntro')}</p>
       <p className={status && !status.hasKey ? 'sm' : 'muted sm'}>{statusLine}</p>
+
+      {!status?.hasKey && (
+        <label className="api-key-anon">
+          <input
+            type="checkbox"
+            checked={!!status?.allowAnonymousPublish}
+            disabled={!status || anonBusy}
+            onChange={(e) => void toggleAnonymous(e.target.checked)}
+          />
+          <span>
+            <strong>{t('providers.apiKeyAnonLabel')}</strong>
+            <span className="muted sm">{t('providers.apiKeyAnonHint')}</span>
+          </span>
+        </label>
+      )}
 
       <div className="field-row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <input

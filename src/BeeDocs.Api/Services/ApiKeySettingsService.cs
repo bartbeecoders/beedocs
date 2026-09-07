@@ -17,11 +17,14 @@ namespace BeeDocs.Api.Services;
 public sealed class ApiKeySettingsService(SqliteConnectionFactory db, IOptions<ApiKeyOptions> options)
 {
     private const string SettingKey = "api_key";
+    private const string AnonymousSettingKey = "api_key.allow_anonymous";
 
     // The stored key, cached after the first read: "" is "read, nothing stored",
     // null is "not read yet". Every /api request consults this, so it must not
     // cost a query each time; SetAsync is the only writer and refreshes it.
     private volatile string? _stored;
+    // -1 unread, 0 false, 1 true. bool? cannot be volatile.
+    private volatile int _allowAnonymous = -1;
 
     /// <summary>The key requests are checked against: stored if present, else configured. Null = no auth.</summary>
     public async Task<string?> GetEffectiveKeyAsync(CancellationToken ct = default)
@@ -43,13 +46,47 @@ public sealed class ApiKeySettingsService(SqliteConnectionFactory db, IOptions<A
     public async Task<ApiKeyStatusDto> GetStatusAsync(CancellationToken ct = default)
     {
         var stored = _stored ?? await LoadAsync(ct);
+        var allowAnonymous = await GetAllowAnonymousPublishAsync(ct);
         if (stored.Length > 0)
-            return new ApiKeyStatusDto(HasKey: true, Source: "settings", KeyHint: KeyHint(stored));
+            return new ApiKeyStatusDto(HasKey: true, Source: "settings", KeyHint: KeyHint(stored), AllowAnonymousPublish: allowAnonymous);
 
         var configured = options.Value.ApiKey?.Trim();
         return string.IsNullOrEmpty(configured)
-            ? new ApiKeyStatusDto(HasKey: false, Source: null, KeyHint: null)
-            : new ApiKeyStatusDto(HasKey: true, Source: "config", KeyHint: KeyHint(configured));
+            ? new ApiKeyStatusDto(HasKey: false, Source: null, KeyHint: null, AllowAnonymousPublish: allowAnonymous)
+            : new ApiKeyStatusDto(HasKey: true, Source: "config", KeyHint: KeyHint(configured), AllowAnonymousPublish: allowAnonymous);
+    }
+
+    /// <summary>
+    /// When no API key is set, anonymous callers may still hit <c>/api/v1</c>.
+    /// Default false — publishing without a key is an explicit admin opt-in.
+    /// </summary>
+    public async Task<bool> GetAllowAnonymousPublishAsync(CancellationToken ct = default)
+    {
+        if (_allowAnonymous >= 0) return _allowAnonymous == 1;
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT value FROM app_setting WHERE key = $key LIMIT 1";
+        SqliteHelpers.Add(cmd, "$key", AnonymousSettingKey);
+        var value = (await cmd.ExecuteScalarAsync(ct) as string)?.Trim();
+        var allowed = value is "1" or "true" or "yes";
+        _allowAnonymous = allowed ? 1 : 0;
+        return allowed;
+    }
+
+    public async Task SetAllowAnonymousPublishAsync(bool allow, CancellationToken ct = default)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO app_setting (key, value, updated_at)
+            VALUES ($key, $value, $updated_at)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """;
+        SqliteHelpers.Add(cmd, "$key", AnonymousSettingKey);
+        SqliteHelpers.Add(cmd, "$value", allow ? "true" : "false");
+        SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(DateTimeOffset.UtcNow));
+        await cmd.ExecuteNonQueryAsync(ct);
+        _allowAnonymous = allow ? 1 : 0;
     }
 
     /// <summary>

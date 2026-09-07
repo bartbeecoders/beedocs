@@ -11,6 +11,7 @@ import {
   isIsometricFenceLang,
   isKanbanFenceLang,
   isProjectFenceLang,
+  isNoteFenceLang,
   isMediaFenceLang,
   isVisualFenceLang,
   joinMarkdownSegments,
@@ -50,7 +51,14 @@ import {
   extensionFromPath,
   modelFormatFromExtension,
 } from '../media/mediaKinds'
-import { segmentsForInsert, segmentsForLinkedDiagram, segmentsForLinkedKanban, segmentsForLinkedProject, type InsertKind } from '../pageBlocks'
+import {
+  segmentsForInsert,
+  segmentsForLinkedDiagram,
+  segmentsForLinkedKanban,
+  segmentsForLinkedProject,
+  segmentsForLinkedNote,
+  type InsertKind,
+} from '../pageBlocks'
 import {
   LAYOUT_PRESETS,
   cellCount,
@@ -74,6 +82,8 @@ import { KanbanBoard } from '../kanban/KanbanBoard'
 import { KanbanView } from '../kanban/KanbanView'
 import { ProjectEditor } from '../project/ProjectEditor'
 import { ProjectView } from '../project/ProjectView'
+import { NoteEditor } from '../notes/NoteEditor'
+import { NoteView } from '../notes/NoteView'
 
 // Lazy so pages without an isometric section don't load the iso editor module.
 const IsometricEditor = lazy(() => import('../isometric/IsometricEditor'))
@@ -417,9 +427,32 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
   )
 
   const handleInsert = useCallback(
-    async (kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked', at?: InsertTarget) => {
+    async (
+      kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked' | 'note-linked',
+      at?: InsertTarget,
+    ) => {
       setInsertError(null)
       const target = at ?? { cell: activeCellRef.current, at: 'end' as const }
+      if (kind === 'note-linked') {
+        if (!bookId) {
+          setInsertError(t('editor.linkedNeedBook'))
+          return
+        }
+        const title = window.prompt(t('editor.promptNoteTitle'), t('editor.noteTitleDefault'))?.trim()
+        if (!title) return
+        setBusy(true)
+        try {
+          const starter = segmentsForInsert('note').find((s): s is FenceSegment => s.type === 'fence')
+          const note = await api.createNote(bookId, { title, source: starter?.body })
+          insertAt(target, segmentsForLinkedNote(note.id))
+          await renameInTree()
+        } catch (e) {
+          setInsertError(e instanceof Error ? e.message : String(e))
+        } finally {
+          setBusy(false)
+        }
+        return
+      }
       if (kind === 'project-linked') {
         if (!bookId) {
           setInsertError(t('editor.linkedNeedBook'))
@@ -941,6 +974,13 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             onBodyChange={(body) => updateFenceBody(cellIdx, index, body)}
             onRemove={() => removeSegment(cellIdx, index)}
           />
+        ) : isNoteFenceLang(seg.lang) ? (
+          <NoteFenceBlock
+            segment={seg}
+            bookId={bookId}
+            onBodyChange={(body) => updateFenceBody(cellIdx, index, body)}
+            onRemove={() => removeSegment(cellIdx, index)}
+          />
         ) : isIsometricFenceLang(seg.lang) ? (
           <IsometricFenceBlock
             segment={seg}
@@ -1394,7 +1434,7 @@ function InsertToolbar({
   /** Current layout as "COLSxROWS" ("1x1" = single flow). */
   layoutSpec: string
   onLayoutChange: (spec: string) => void
-  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked') => void
+  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked' | 'note-linked') => void
   onPickImage?: () => void
   onPickPdf?: () => void
   onPickModel?: () => void
@@ -1448,6 +1488,15 @@ function InsertToolbar({
           title={t('editor.insert.projectTitle')}
         >
           {t('editor.insert.project')}
+        </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
+          onClick={() => onInsert('note')}
+          title={t('editor.insert.noteTitle')}
+        >
+          {t('editor.insert.note')}
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('callout')}>
           {t('editor.insert.callout')}
@@ -1525,6 +1574,15 @@ function InsertToolbar({
           type="button"
           className="btn sm"
           disabled={busy}
+          onClick={() => onInsert('note-linked')}
+          title={t('editor.insert.linkedNoteTitle')}
+        >
+          {t('editor.insert.linkedNote')}
+        </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
           onClick={() => onInsert('isometric')}
           title={t('editor.insert.isometricTitle')}
         >
@@ -1586,7 +1644,7 @@ function InsertGap({
   reorderActive,
 }: {
   busy: boolean
-  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked') => void
+  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked' | 'note-linked') => void
   label?: string
   dropSlot?: string
   dropLabel?: string
@@ -1637,6 +1695,8 @@ function InsertGap({
               ['kanban-linked', t('editor.insert.linkedKanban')],
               ['project', t('editor.insert.project')],
               ['project-linked', t('editor.insert.linkedProject')],
+              ['note', t('editor.insert.note')],
+              ['note-linked', t('editor.insert.linkedNote')],
               ['mermaid-flow', t('editor.insert.flowchart')],
               ['mermaid-sequence', t('editor.insert.sequence')],
               ['table', t('editor.insert.table')],
@@ -1986,6 +2046,121 @@ function KanbanRefFence({
             />
           ) : (
             <KanbanView source={source} compact />
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function NoteFenceBlock({
+  segment,
+  bookId,
+  onBodyChange,
+  onRemove,
+}: {
+  segment: FenceSegment
+  bookId?: string
+  onBodyChange: (body: string) => void
+  onRemove: () => void
+}) {
+  const { t } = useI18n()
+  if (segment.lang === 'note-ref') {
+    return <NoteRefFence noteId={segment.body.trim().split(/\s+/)[0] ?? ''} bookId={bookId} onRemove={onRemove} />
+  }
+
+  return (
+    <div className="hybrid-visual-diagram hybrid-note-block">
+      <div className="hybrid-fence-chrome">
+        <span className="inline-diagram-badge">{t('editor.insert.note')}</span>
+        <span className="hybrid-fence-title">{t('editor.note.storedTitle')}</span>
+        <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+          {t('common.remove')}
+        </button>
+      </div>
+      <div className="hybrid-visual-body">
+        <NoteEditor source={segment.body} onChange={onBodyChange} compact />
+      </div>
+    </div>
+  )
+}
+
+function NoteRefFence({
+  noteId,
+  bookId,
+  onRemove,
+}: {
+  noteId: string
+  bookId?: string
+  onRemove: () => void
+}) {
+  const { t } = useI18n()
+  const { canWrite } = useAuth()
+  const [source, setSource] = useState<string | null>(null)
+  const [title, setTitle] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const saving = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setError(null)
+    void api
+      .getNote(noteId)
+      .then((n) => {
+        if (cancelled) return
+        setSource(n.source)
+        setTitle(n.title)
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [noteId])
+
+  const persist = async (next: string) => {
+    if (saving.current) return
+    saving.current = true
+    try {
+      await api.updateNote(noteId, { title, source: next })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      saving.current = false
+    }
+  }
+
+  return (
+    <div className="hybrid-visual-diagram hybrid-note-block">
+      <div className="hybrid-fence-chrome">
+        <span className="inline-diagram-badge">{t('editor.note.linkedBadge')}</span>
+        <span className="hybrid-fence-title">{title || t('editor.insert.linkedNote')}</span>
+        {bookId && (
+          <Link className="btn ghost sm" to={`/books/${bookId}/notes/${noteId}`}>
+            {t('notes.openNote')}
+          </Link>
+        )}
+        <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+          {t('common.remove')}
+        </button>
+      </div>
+      {error && <div className="banner error compact">{t('editor.noteError', { id: noteId, error })}</div>}
+      {source == null && !error ? (
+        <p className="muted sm">{t('editor.loadingNote')}</p>
+      ) : source != null ? (
+        <div className="hybrid-visual-body">
+          {canWrite ? (
+            <NoteEditor
+              source={source}
+              compact
+              onChange={(next) => {
+                setSource(next)
+                void persist(next)
+              }}
+            />
+          ) : (
+            <NoteView source={source} compact />
           )}
         </div>
       ) : null}

@@ -5,6 +5,7 @@ import { getBrandTitle } from '../branding'
 import { excelGridToHtml } from '../excelgrid/model'
 import { kanbanToHtml } from '../kanban/kanbanModel'
 import { projectToHtml } from '../project/projectModel'
+import { noteToHtml } from '../notes/noteModel'
 import { freeDrawToSvg } from '../freedraw/model'
 import {
   cellStyleClass,
@@ -294,6 +295,18 @@ async function renderFence(
       return projectToHtml(plan.source, plan.title)
     } catch {
       return `<div class="export-error">Missing project ${esc(id)}</div>`
+    }
+  }
+  if (lang === 'note') {
+    return noteToHtml(body)
+  }
+  if (lang === 'note-ref') {
+    const id = body.trim().split(/\s+/)[0] ?? ''
+    try {
+      const note = await api.getNote(id)
+      return noteToHtml(note.source, note.title)
+    } catch {
+      return `<div class="export-error">Missing note ${esc(id)}</div>`
     }
   }
   if (lang === 'plantuml') {
@@ -671,6 +684,14 @@ const PRINT_CSS = `
   .export-project-table { border-collapse: collapse; width: 100%; font-size: 11px; }
   .export-project-table th, .export-project-table td { border: 1px solid #d0d4dc; padding: 4px 6px; text-align: left; }
   .export-project-table th { background: #f3f4f7; }
+  .export-note-page { border: 1px solid #d0d4dc; border-radius: 6px; overflow: hidden; max-width: 100%; }
+  .export-note-block { position: absolute; font-size: 12px; line-height: 1.45; }
+  .export-note-text p, .export-note-text h1, .export-note-text h2, .export-note-text h3 { margin: 0 0 4px; }
+  .export-note-text h1 { font-size: 18px; } .export-note-text h2 { font-size: 15px; } .export-note-text h3 { font-size: 13px; }
+  .export-note-text ul, .export-note-text ol, .export-note-checklist ul { margin: 0 0 4px 18px; padding: 0; }
+  .export-note-checklist ul { list-style: none; margin-left: 0; }
+  .export-note-checklist li.is-done { text-decoration: line-through; color: #7a8190; }
+  .export-note-tag { display: inline-block; margin-right: 4px; color: #b7791f; }
   .export-diagram svg, .export-mermaid svg {
     max-width: 100%;
     height: auto;

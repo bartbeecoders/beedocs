@@ -110,6 +110,14 @@ public sealed class BeeDocsResources(BeeDocsApiClient client)
         return Text($"beedocs://project/{planId}", plan);
     }
 
+    [McpServerResource(UriTemplate = "beedocs://notes/{noteId}", Name = "beedocs-note", MimeType = "application/json")]
+    [Description("Full note including its JSON document.")]
+    public async Task<TextResourceContents> Note(string noteId, CancellationToken ct = default)
+    {
+        var note = await client.GetNoteAsync(noteId, ct);
+        return Text($"beedocs://notes/{noteId}", note);
+    }
+
     private static TextResourceContents Text(string uri, System.Text.Json.JsonElement data) => new()
     {
         Uri = uri,

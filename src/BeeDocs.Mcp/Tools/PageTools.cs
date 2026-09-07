@@ -41,6 +41,8 @@ public sealed class PageTools(BeeDocsApiClient client)
         string? slug = null,
         [Description("Chapter id, or null to clear")] string? chapterId = null,
         int? sortOrder = null,
+        [Description("When true, only the owner (and admins) can see this page. Requires an owner. Omit to leave as-is.")]
+        bool? isPrivate = null,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
         {
@@ -62,6 +64,8 @@ public sealed class PageTools(BeeDocsApiClient client)
             {
                 body.Remove("chapterId");
             }
+            if (isPrivate is bool priv)
+                body["isPrivate"] = priv;
 
             return ToolHelpers.Json(await client.UpdatePageAsync(pageId, body, ct));
         });

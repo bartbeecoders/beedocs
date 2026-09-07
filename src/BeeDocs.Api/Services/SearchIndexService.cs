@@ -28,7 +28,9 @@ public sealed record SearchQuery(
     string? BookId = null,
     string? ShelfId = null,
     IReadOnlyList<string>? Kinds = null,
-    bool Prefix = true
+    bool Prefix = true,
+    /// <summary>Hide every private item — the published website, whoever is looking.</summary>
+    bool PublicOnly = false
 );
 
 /// <summary>
@@ -47,6 +49,7 @@ public sealed partial class SearchIndexService(
     SqliteConnectionFactory db,
     ContentResolver resolver,
     StorageOptions storage,
+    ICurrentUserAccessor currentUser,
     ILogger<SearchIndexService> logger
 ) : ISearchIndexService
 {
@@ -214,6 +217,12 @@ public sealed partial class SearchIndexService(
             WHERE d.id IS NULL OR d.updated_at <> p.updated_at;
 
             INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+            SELECT 'note', n.id, 'upsert', datetime('now')
+            FROM note n
+            LEFT JOIN search_doc d ON d.kind = 'note' AND d.entity_id = n.id
+            WHERE d.id IS NULL OR d.updated_at <> n.updated_at;
+
+            INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
             SELECT 'attachment', a.id, 'upsert', datetime('now')
             FROM attachment a
             LEFT JOIN search_doc d ON d.kind = 'attachment' AND d.entity_id = a.id
@@ -245,6 +254,7 @@ public sealed partial class SearchIndexService(
                OR (d.kind = 'slides'  AND NOT EXISTS (SELECT 1 FROM slide_deck WHERE id = d.entity_id))
                OR (d.kind = 'kanban'  AND NOT EXISTS (SELECT 1 FROM kanban_board WHERE id = d.entity_id))
                OR (d.kind = 'project' AND NOT EXISTS (SELECT 1 FROM project_plan WHERE id = d.entity_id))
+               OR (d.kind = 'note'    AND NOT EXISTS (SELECT 1 FROM note WHERE id = d.entity_id))
                OR (d.kind = 'attachment' AND NOT EXISTS (SELECT 1 FROM attachment WHERE id = d.entity_id))
                OR (d.kind = 'book'    AND NOT EXISTS (SELECT 1 FROM book    WHERE id = d.entity_id))
                OR (d.kind = 'folder'  AND NOT EXISTS (SELECT 1 FROM chapter WHERE id = d.entity_id))
@@ -424,6 +434,7 @@ public sealed partial class SearchIndexService(
             "slides" => "SELECT title, source, book_id, updated_at, content_ref FROM slide_deck WHERE id = $id",
             "kanban" => "SELECT title, source, book_id, updated_at, content_ref FROM kanban_board WHERE id = $id",
             "project" => "SELECT title, source, book_id, updated_at, content_ref FROM project_plan WHERE id = $id",
+            "note" => "SELECT title, source, book_id, updated_at, content_ref FROM note WHERE id = $id",
             // Metadata only: the bytes are an opaque binary nobody can index, so
             // an attachment is found by what a person called it and by its
             // description and file name.
@@ -489,6 +500,12 @@ public sealed partial class SearchIndexService(
                     updatedAt = reader.GetString(3);
                     contentRef = SqliteHelpers.GetNullableString(reader, 4);
                     break;
+                case "note":
+                    body = SqliteHelpers.GetNullableString(reader, 1);
+                    bookId = SqliteHelpers.GetNullableString(reader, 2);
+                    updatedAt = reader.GetString(3);
+                    contentRef = SqliteHelpers.GetNullableString(reader, 4);
+                    break;
                 case "attachment":
                     body = SqliteHelpers.GetNullableString(reader, 1);
                     bookId = SqliteHelpers.GetNullableString(reader, 2);
@@ -547,6 +564,7 @@ public sealed partial class SearchIndexService(
             "slides" => new IndexDoc(kind, id, bookId, null, title, SearchText.FromSlideDeckSource(body), updatedAt),
             "kanban" => new IndexDoc(kind, id, bookId, null, title, SearchText.FromKanbanSource(body), updatedAt),
             "project" => new IndexDoc(kind, id, bookId, null, title, SearchText.FromProjectSource(body), updatedAt),
+            "note" => new IndexDoc(kind, id, bookId, null, title, SearchText.FromNoteSource(body), updatedAt),
             "attachment" => new IndexDoc(kind, id, bookId, null, title, body ?? "", updatedAt),
             "book" => new IndexDoc(kind, id, bookId, null, title, body ?? "", updatedAt),
             "folder" => new IndexDoc(kind, id, bookId, chapterId, title, "", updatedAt),
@@ -617,12 +635,14 @@ public sealed partial class SearchIndexService(
             : await SearchLikeAsync(conn, query, terms, limit, offset, ct);
     }
 
-    private static async Task<SearchResponseDto> SearchFtsAsync(
+    private async Task<SearchResponseDto> SearchFtsAsync(
         SqliteConnection conn, SearchQuery query, IReadOnlyList<string> terms,
         int limit, int offset, CancellationToken ct)
     {
         var match = BuildMatchExpression(terms, query.Prefix);
         var filter = BuildFilterSql(query, out var kinds);
+        var actor = currentUser.Current;
+        var privacy = Privacy.SearchSql(actor, query.PublicOnly);
 
         var hits = new List<SearchHitDto>();
         await using (var cmd = conn.CreateCommand())
@@ -637,12 +657,13 @@ public sealed partial class SearchIndexService(
                 FROM search_fts
                 JOIN search_doc d ON d.id = search_fts.rowid
                 LEFT JOIN book b ON b.id = d.book_id
-                WHERE search_fts MATCH $match {filter}
+                WHERE search_fts MATCH $match {filter}{privacy}
                 ORDER BY score
                 LIMIT $limit OFFSET $offset
                 """;
             SqliteHelpers.Add(cmd, "$match", match);
             AddFilterParameters(cmd, query, kinds);
+            Privacy.BindViewer(cmd, actor);
             SqliteHelpers.Add(cmd, "$limit", limit);
             SqliteHelpers.Add(cmd, "$offset", offset);
 
@@ -659,10 +680,11 @@ public sealed partial class SearchIndexService(
                 FROM search_fts
                 JOIN search_doc d ON d.id = search_fts.rowid
                 LEFT JOIN book b ON b.id = d.book_id
-                WHERE search_fts MATCH $match {filter}
+                WHERE search_fts MATCH $match {filter}{privacy}
                 """;
             SqliteHelpers.Add(count, "$match", match);
             AddFilterParameters(count, query, kinds);
+            Privacy.BindViewer(count, actor);
             total = Convert.ToInt32(await count.ExecuteScalarAsync(ct) ?? 0);
         }
 
@@ -670,11 +692,13 @@ public sealed partial class SearchIndexService(
     }
 
     /// <summary>Used only where the SQLite build lacks FTS5.</summary>
-    private static async Task<SearchResponseDto> SearchLikeAsync(
+    private async Task<SearchResponseDto> SearchLikeAsync(
         SqliteConnection conn, SearchQuery query, IReadOnlyList<string> terms,
         int limit, int offset, CancellationToken ct)
     {
         var filter = BuildFilterSql(query, out var kinds);
+        var actor = currentUser.Current;
+        var privacy = Privacy.SearchSql(actor, query.PublicOnly);
         var clauses = new List<string>();
         for (var i = 0; i < terms.Count; i++)
             clauses.Add($"(d.title LIKE $t{i} OR d.body LIKE $t{i})");
@@ -696,12 +720,13 @@ public sealed partial class SearchIndexService(
                        substr(d.body, 1, 200) AS snip
                 FROM search_doc d
                 LEFT JOIN book b ON b.id = d.book_id
-                WHERE {where} {filter}
+                WHERE {where} {filter}{privacy}
                 ORDER BY score, d.updated_at DESC
                 LIMIT $limit OFFSET $offset
                 """;
             AddTerms(cmd);
             AddFilterParameters(cmd, query, kinds);
+            Privacy.BindViewer(cmd, actor);
             SqliteHelpers.Add(cmd, "$limit", limit);
             SqliteHelpers.Add(cmd, "$offset", offset);
 
@@ -714,9 +739,10 @@ public sealed partial class SearchIndexService(
         await using (var count = conn.CreateCommand())
         {
             count.CommandText =
-                $"SELECT COUNT(*) FROM search_doc d LEFT JOIN book b ON b.id = d.book_id WHERE {where} {filter}";
+                $"SELECT COUNT(*) FROM search_doc d LEFT JOIN book b ON b.id = d.book_id WHERE {where} {filter}{privacy}";
             AddTerms(count);
             AddFilterParameters(count, query, kinds);
+            Privacy.BindViewer(count, actor);
             total = Convert.ToInt32(await count.ExecuteScalarAsync(ct) ?? 0);
         }
 
@@ -754,6 +780,7 @@ public sealed partial class SearchIndexService(
         "slides" when bookId is not null => $"/books/{bookId}/slides/{entityId}",
         "kanban" when bookId is not null => $"/books/{bookId}/kanban/{entityId}",
         "project" when bookId is not null => $"/books/{bookId}/project/{entityId}",
+        "note" when bookId is not null => $"/books/{bookId}/notes/{entityId}",
         "attachment" when bookId is not null => $"/books/{bookId}/files/{entityId}",
         "folder" when bookId is not null => $"/books/{bookId}",
         "book" => $"/books/{entityId}",
@@ -906,6 +933,7 @@ public sealed partial class SearchIndexService(
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'slides'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'kanban'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'project'),
+              (SELECT COUNT(*) FROM search_doc WHERE kind = 'note'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'attachment'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'book'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'folder'),
@@ -914,9 +942,9 @@ public sealed partial class SearchIndexService(
             """;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))
-            return new SearchStatusDto(_fts ? "fts5" : "like", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null);
+            return new SearchStatusDto(_fts ? "fts5" : "like", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null);
 
-        var lastIndexed = SqliteHelpers.GetNullableString(reader, 11) is { } raw
+        var lastIndexed = SqliteHelpers.GetNullableString(reader, 12) is { } raw
             && DateTimeOffset.TryParse(raw, out var parsed)
                 ? parsed
                 : (DateTimeOffset?)null;
@@ -930,10 +958,11 @@ public sealed partial class SearchIndexService(
             SlideDecks: reader.GetInt32(4),
             KanbanBoards: reader.GetInt32(5),
             ProjectPlans: reader.GetInt32(6),
-            Attachments: reader.GetInt32(7),
-            Books: reader.GetInt32(8),
-            Folders: reader.GetInt32(9),
-            Shelves: reader.GetInt32(10),
+            Notes: reader.GetInt32(7),
+            Attachments: reader.GetInt32(8),
+            Books: reader.GetInt32(9),
+            Folders: reader.GetInt32(10),
+            Shelves: reader.GetInt32(11),
             LastIndexedAt: lastIndexed);
     }
 }

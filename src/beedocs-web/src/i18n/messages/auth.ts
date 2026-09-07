@@ -21,6 +21,9 @@ const en = {
   'setup.creating': 'Creating…',
   'setup.hint': 'At least 8 characters. Nobody can reset this for you — there is no other account yet.',
   'setup.mismatch': 'The two passwords do not match.',
+  'auth.mustChangeLead':
+    'This account still uses a temporary password. Choose your own before opening the workspace.',
+  'auth.mustChangeHint': 'At least 8 characters. Other sessions will be signed out.',
 } as const
 
 type Msgs = Record<keyof typeof en, string>
@@ -45,6 +48,9 @@ const fr: Msgs = {
   'setup.creating': 'Création…',
   'setup.hint': 'Au moins 8 caractères. Personne ne peut le réinitialiser pour vous — il n’existe encore aucun autre compte.',
   'setup.mismatch': 'Les deux mots de passe ne correspondent pas.',
+  'auth.mustChangeLead':
+    'Ce compte utilise encore un mot de passe temporaire. Choisissez le vôtre avant d’ouvrir l’espace de travail.',
+  'auth.mustChangeHint': 'Au moins 8 caractères. Les autres sessions seront déconnectées.',
 }
 
 const de: Msgs = {
@@ -67,6 +73,9 @@ const de: Msgs = {
   'setup.creating': 'Wird erstellt…',
   'setup.hint': 'Mindestens 8 Zeichen. Niemand kann dieses Passwort für Sie zurücksetzen — es gibt noch kein anderes Konto.',
   'setup.mismatch': 'Die beiden Passwörter stimmen nicht überein.',
+  'auth.mustChangeLead':
+    'Dieses Konto verwendet noch ein temporäres Passwort. Wählen Sie Ihr eigenes, bevor der Arbeitsbereich geöffnet wird.',
+  'auth.mustChangeHint': 'Mindestens 8 Zeichen. Andere Sitzungen werden abgemeldet.',
 }
 
 const es: Msgs = {
@@ -89,6 +98,9 @@ const es: Msgs = {
   'setup.creating': 'Creando…',
   'setup.hint': 'Al menos 8 caracteres. Nadie puede restablecerla por ti — todavía no existe ninguna otra cuenta.',
   'setup.mismatch': 'Las dos contraseñas no coinciden.',
+  'auth.mustChangeLead':
+    'Esta cuenta aún usa una contraseña temporal. Elige la tuya antes de abrir el espacio de trabajo.',
+  'auth.mustChangeHint': 'Al menos 8 caracteres. Las demás sesiones se cerrarán.',
 }
 
 const nl: Msgs = {
@@ -111,6 +123,9 @@ const nl: Msgs = {
   'setup.creating': 'Aanmaken…',
   'setup.hint': 'Minimaal 8 tekens. Niemand kan dit voor je herstellen — er is nog geen ander account.',
   'setup.mismatch': 'De twee wachtwoorden komen niet overeen.',
+  'auth.mustChangeLead':
+    'Dit account gebruikt nog een tijdelijk wachtwoord. Kies je eigen wachtwoord voordat de werkruimte opent.',
+  'auth.mustChangeHint': 'Minimaal 8 tekens. Andere sessies worden afgemeld.',
 }
 
 const ja: Msgs = {
@@ -133,6 +148,9 @@ const ja: Msgs = {
   'setup.creating': '作成中…',
   'setup.hint': '8文字以上。まだ他のアカウントが存在しないため、誰もこのパスワードをリセットできません。',
   'setup.mismatch': '2つのパスワードが一致しません。',
+  'auth.mustChangeLead':
+    'このアカウントはまだ仮パスワードを使っています。ワークスペースを開く前に自分のパスワードを設定してください。',
+  'auth.mustChangeHint': '8文字以上。他のセッションはサインアウトされます。',
 }
 
 const zh: Msgs = {
@@ -155,6 +173,9 @@ const zh: Msgs = {
   'setup.creating': '创建中…',
   'setup.hint': '至少 8 个字符。没有人能为您重置此密码 — 目前还没有其他账户。',
   'setup.mismatch': '两次输入的密码不一致。',
+  'auth.mustChangeLead':
+    '此账户仍在使用临时密码。打开工作区前请先设置您自己的密码。',
+  'auth.mustChangeHint': '至少 8 个字符。其他会话将被退出。',
 }
 
 export const auth = { en, fr, de, es, nl, ja, zh } satisfies Record<Lang, Msgs>

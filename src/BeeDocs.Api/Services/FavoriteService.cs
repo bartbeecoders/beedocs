@@ -36,6 +36,7 @@ public sealed class FavoriteService(SqliteConnectionFactory db, ICurrentUserAcce
         ["slides"] = "slide_deck",
         ["kanban"] = "kanban_board",
         ["project"] = "project_plan",
+        ["note"] = "note",
         ["attachment"] = "attachment",
     };
 
@@ -49,15 +50,16 @@ public sealed class FavoriteService(SqliteConnectionFactory db, ICurrentUserAcce
     public async Task<IReadOnlyList<FavoriteDto>> ListAsync(CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
+        var actor = currentUser.Current;
         await using var cmd = conn.CreateCommand();
         // One join per kind, each guarded by f.kind so ids can never collide
         // across tables. The triggers keep targets from vanishing under a row,
         // but the NULL-title filter makes a stray row invisible rather than a
         // blank panel entry.
-        cmd.CommandText = """
+        cmd.CommandText = $"""
             SELECT f.kind, f.entity_id,
-                   COALESCE(b.title, p.title, d.title, s.title, k.title, pr.title, a.title) AS title,
-                   COALESCE(p.book_id, d.book_id, s.book_id, k.book_id, pr.book_id, a.book_id) AS book_id,
+                   COALESCE(b.title, p.title, d.title, s.title, k.title, pr.title, n.title, a.title) AS title,
+                   COALESCE(p.book_id, d.book_id, s.book_id, k.book_id, pr.book_id, n.book_id, a.book_id) AS book_id,
                    f.created_at
             FROM favorite f
             LEFT JOIN book b ON f.kind = 'book' AND b.id = f.entity_id
@@ -66,12 +68,25 @@ public sealed class FavoriteService(SqliteConnectionFactory db, ICurrentUserAcce
             LEFT JOIN slide_deck s ON f.kind = 'slides' AND s.id = f.entity_id
             LEFT JOIN kanban_board k ON f.kind = 'kanban' AND k.id = f.entity_id
             LEFT JOIN project_plan pr ON f.kind = 'project' AND pr.id = f.entity_id
+            LEFT JOIN note n ON f.kind = 'note' AND n.id = f.entity_id
             LEFT JOIN attachment a ON f.kind = 'attachment' AND a.id = f.entity_id
             WHERE f.user_id = $user
-              AND COALESCE(b.title, p.title, d.title, s.title, k.title, pr.title, a.title) IS NOT NULL
+              AND COALESCE(b.title, p.title, d.title, s.title, k.title, pr.title, n.title, a.title) IS NOT NULL
+              {Privacy.OptionalItemSql("b", actor)}
+              {Privacy.OptionalItemSql("p", actor)}
+              {Privacy.OptionalItemSql("d", actor)}
+              {Privacy.OptionalItemSql("s", actor)}
+              {Privacy.OptionalItemSql("k", actor)}
+              {Privacy.OptionalItemSql("pr", actor)}
+              {Privacy.OptionalItemSql("n", actor)}
+              {Privacy.OptionalItemSql("a", actor)}
+              {Privacy.BookSql("COALESCE(p.book_id, d.book_id, s.book_id, k.book_id, pr.book_id, n.book_id, a.book_id)", actor)}
+              {Privacy.ShelfViaBookSql("COALESCE(p.book_id, d.book_id, s.book_id, k.book_id, pr.book_id, n.book_id, a.book_id)", actor)}
+              {Privacy.ShelfSql("b.shelf_id", actor)}
             ORDER BY f.created_at DESC, f.entity_id
             """;
         SqliteHelpers.Add(cmd, "$user", UserKey);
+        Privacy.BindViewer(cmd, actor);
 
         var list = new List<FavoriteDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -96,12 +111,34 @@ public sealed class FavoriteService(SqliteConnectionFactory db, ICurrentUserAcce
 
         // Existence first, separately: INSERT OR IGNORE alone cannot tell "the
         // target is gone" (a 404) apart from "already starred" (fine).
+        var actor = currentUser.Current;
+        bool isPrivate;
+        string? ownerId;
+        string? bookId;
         await using (var probe = conn.CreateCommand())
         {
             // The table name is from KindTables, never from the caller.
-            probe.CommandText = $"SELECT 1 FROM {table} WHERE id = $id LIMIT 1";
+            // is_private / owner_id / book_id so a guessed id of someone else's
+            // private item 404s the same way a missing one does.
+            probe.CommandText = kind == "book"
+                ? "SELECT is_private, owner_id, id FROM book WHERE id = $id LIMIT 1"
+                : $"SELECT is_private, owner_id, book_id FROM {table} WHERE id = $id LIMIT 1";
             SqliteHelpers.Add(probe, "$id", entityId);
-            if (await probe.ExecuteScalarAsync(ct) is null) return false;
+            await using var reader = await probe.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct)) return false;
+            isPrivate = Privacy.ReadFlag(reader, 0);
+            ownerId = SqliteHelpers.GetNullableString(reader, 1);
+            bookId = kind == "book" ? entityId : reader.GetString(2);
+        }
+
+        if (kind == "book")
+        {
+            if (!await Privacy.IsBookVisibleAsync(conn, actor, entityId, ct))
+                return false;
+        }
+        else if (!await Privacy.IsDocumentVisibleAsync(conn, actor, isPrivate, ownerId, bookId!, ct))
+        {
+            return false;
         }
 
         await using var cmd = conn.CreateCommand();

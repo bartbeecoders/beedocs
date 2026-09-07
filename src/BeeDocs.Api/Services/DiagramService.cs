@@ -13,7 +13,8 @@ public interface IDiagramService
     Task<bool> DeleteAsync(string id, CancellationToken ct = default);
 }
 
-public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver resolver) : IDiagramService
+public sealed class DiagramService(
+    SqliteConnectionFactory db, ContentResolver resolver, ICurrentUserAccessor currentUser) : IDiagramService
 {
     public static string DefaultBeeDiagramSource { get; } =
         """{"version":1,"nodes":[],"edges":[],"viewport":{"x":0,"y":0,"zoom":1}}""";
@@ -27,12 +28,14 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
     {
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT id, book_id, page_id, title, kind, updated_at
-            FROM diagram WHERE book_id = $book_id
+        var actor = currentUser.Current;
+        cmd.CommandText = $"""
+            SELECT id, book_id, page_id, title, kind, owner_id, is_private, updated_at
+            FROM diagram WHERE book_id = $book_id{Privacy.DocumentSql("diagram", actor)}
             ORDER BY updated_at DESC, title COLLATE NOCASE
             """;
         SqliteHelpers.Add(cmd, "$book_id", bookId);
+        Privacy.BindViewer(cmd, actor);
         var list = new List<DiagramSummaryDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
@@ -44,12 +47,14 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
     {
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT id, book_id, page_id, title, kind, updated_at
-            FROM diagram WHERE page_id = $page_id
+        var actor = currentUser.Current;
+        cmd.CommandText = $"""
+            SELECT id, book_id, page_id, title, kind, owner_id, is_private, updated_at
+            FROM diagram WHERE page_id = $page_id{Privacy.DocumentSql("diagram", actor)}
             ORDER BY updated_at DESC
             """;
         SqliteHelpers.Add(cmd, "$page_id", pageId);
+        Privacy.BindViewer(cmd, actor);
         var list = new List<DiagramSummaryDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
@@ -62,21 +67,27 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
         await using var conn = await db.OpenConnectionAsync(ct);
         var row = await SelectAsync(conn, id, ct);
         if (row is null) return null;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, row.IsPrivate, row.OwnerId, row.BookId, ct))
+            return null;
         row.Source = await resolver.LoadAsync(row.Source, row.ContentRef, ct);
-        return ToDto(row);
+        return ToDto(row, await Privacy.OwnerNameAsync(conn, row.OwnerId, ct));
     }
 
     public async Task<DiagramDto> CreateAsync(string bookId, CreateDiagramRequest request, CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
+        string? bookOwnerId;
         await using (var check = conn.CreateCommand())
         {
-            check.CommandText = "SELECT 1 FROM book WHERE id = $id LIMIT 1";
+            check.CommandText = "SELECT owner_id FROM book WHERE id = $id LIMIT 1";
             SqliteHelpers.Add(check, "$id", bookId);
-            var found = await check.ExecuteScalarAsync(ct);
-            if (found is null)
+            await using var reader = await check.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct))
                 throw new KeyNotFoundException($"Book '{bookId}' not found.");
+            bookOwnerId = SqliteHelpers.GetNullableString(reader, 0);
         }
+        var actor = currentUser.Current;
 
         var kind = NormalizeKind(request.Kind);
         var now = DateTimeOffset.UtcNow;
@@ -96,9 +107,12 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
             PageId = string.IsNullOrWhiteSpace(request.PageId) ? null : request.PageId.Trim(),
             Title = request.Title.Trim(),
             Kind = kind,
+            OwnerId = string.IsNullOrWhiteSpace(request.OwnerId) ? bookOwnerId ?? actor.Id : request.OwnerId.Trim(),
+            IsPrivate = request.IsPrivate ?? false,
             CreatedAt = now,
             UpdatedAt = now,
         };
+        Privacy.EnsurePrivateHasOwner(diagram.IsPrivate, diagram.OwnerId);
 
         var target = await ContentResolver.ProviderIdForBookAsync(conn, bookId, ct);
         var cell = await resolver.SaveAsync(body, target, ContentRef.DiagramKey(diagram.Id), null, ct);
@@ -109,9 +123,9 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO diagram (id, book_id, page_id, title, kind, source, content_ref, content_size,
-              created_at, updated_at)
+              owner_id, is_private, created_at, updated_at)
             VALUES ($id, $book_id, $page_id, $title, $kind, $source, $content_ref, $content_size,
-              $created_at, $updated_at)
+              $owner_id, $is_private, $created_at, $updated_at)
             """;
         SqliteHelpers.Add(cmd, "$id", diagram.Id);
         SqliteHelpers.Add(cmd, "$book_id", diagram.BookId);
@@ -121,12 +135,14 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
         SqliteHelpers.Add(cmd, "$source", diagram.Source);
         SqliteHelpers.Add(cmd, "$content_ref", diagram.ContentRef);
         SqliteHelpers.Add(cmd, "$content_size", diagram.ContentSize);
+        SqliteHelpers.Add(cmd, "$owner_id", diagram.OwnerId);
+        SqliteHelpers.Add(cmd, "$is_private", diagram.IsPrivate ? 1 : 0);
         SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(diagram.CreatedAt));
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(diagram.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
 
         diagram.Source = body;
-        return ToDto(diagram);
+        return ToDto(diagram, await Privacy.OwnerNameAsync(conn, diagram.OwnerId, ct));
     }
 
     public async Task<DiagramDto?> UpdateAsync(string id, UpdateDiagramRequest request, CancellationToken ct = default)
@@ -134,12 +150,17 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectAsync(conn, id, ct);
         if (existing is null) return null;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, existing.IsPrivate, existing.OwnerId, existing.BookId, ct))
+            return null;
 
         existing.Title = request.Title.Trim();
         if (!string.IsNullOrWhiteSpace(request.Kind))
             existing.Kind = NormalizeKind(request.Kind);
         if (request.PageId is not null)
             existing.PageId = string.IsNullOrWhiteSpace(request.PageId) ? null : request.PageId.Trim();
+        (existing.OwnerId, existing.IsPrivate) = Privacy.Apply(
+            currentUser.Current, existing.OwnerId, existing.IsPrivate, request.OwnerId, request.IsPrivate);
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
         // Provider I/O before the write, same discipline as pages: a metadata-only
@@ -157,7 +178,7 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
             cmd.CommandText = """
                 UPDATE diagram SET title = $title, kind = $kind, source = $source,
                   content_ref = $content_ref, content_size = $content_size, page_id = $page_id,
-                  updated_at = $updated_at
+                  owner_id = $owner_id, is_private = $is_private, updated_at = $updated_at
                 WHERE id = $id
                 """;
             SqliteHelpers.Add(cmd, "$id", existing.Id);
@@ -167,13 +188,15 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
             SqliteHelpers.Add(cmd, "$content_ref", existing.ContentRef);
             SqliteHelpers.Add(cmd, "$content_size", existing.ContentSize);
             SqliteHelpers.Add(cmd, "$page_id", existing.PageId);
+            SqliteHelpers.Add(cmd, "$owner_id", existing.OwnerId);
+            SqliteHelpers.Add(cmd, "$is_private", existing.IsPrivate ? 1 : 0);
             SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
             await cmd.ExecuteNonQueryAsync(ct);
         }
 
         await resolver.CleanupReplacedAsync(oldRef, cell.ContentRef, ct);
         existing.Source = body;
-        return ToDto(existing);
+        return ToDto(existing, await Privacy.OwnerNameAsync(conn, existing.OwnerId, ct));
     }
 
     public async Task<bool> DeleteAsync(string id, CancellationToken ct = default)
@@ -181,6 +204,9 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectAsync(conn, id, ct);
         if (existing is null) return false;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, existing.IsPrivate, existing.OwnerId, existing.BookId, ct))
+            return false;
 
         await using (var cmd = conn.CreateCommand())
         {
@@ -197,7 +223,8 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, book_id, page_id, title, kind, source, created_at, updated_at, content_ref, content_size
+            SELECT id, book_id, page_id, title, kind, source, created_at, updated_at, content_ref, content_size,
+                   owner_id, is_private
             FROM diagram WHERE id = $id LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$id", id);
@@ -215,6 +242,8 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
             UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 7),
             ContentRef = SqliteHelpers.GetNullableString(reader, 8),
             ContentSize = reader.IsDBNull(9) ? null : reader.GetInt64(9),
+            OwnerId = SqliteHelpers.GetNullableString(reader, 10),
+            IsPrivate = Privacy.ReadFlag(reader, 11),
         };
     }
 
@@ -237,15 +266,20 @@ public sealed class DiagramService(SqliteConnectionFactory db, ContentResolver r
         PageId: SqliteHelpers.GetNullableString(reader, 2),
         Title: reader.GetString(3),
         Kind: reader.GetString(4),
-        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 5)));
+        OwnerId: SqliteHelpers.GetNullableString(reader, 5),
+        IsPrivate: Privacy.ReadFlag(reader, 6),
+        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 7)));
 
-    private static DiagramDto ToDto(Diagram d) => new(
+    private static DiagramDto ToDto(Diagram d, string? ownerName) => new(
         Id: d.Id,
         BookId: d.BookId,
         PageId: d.PageId,
         Title: d.Title,
         Kind: d.Kind,
         Source: d.Source,
+        OwnerId: d.OwnerId,
+        OwnerName: ownerName,
+        IsPrivate: d.IsPrivate,
         CreatedAt: Coalesce(d.CreatedAt),
         UpdatedAt: Coalesce(d.UpdatedAt));
 }

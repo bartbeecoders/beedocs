@@ -331,6 +331,21 @@ public sealed class UserService(SqliteConnectionFactory db, ILogger<UserService>
 
         await DeleteSessionsAsync(conn, id, ct);
 
+        // Private items owned by a deleted account would otherwise vanish for
+        // everyone except admins. Drop the flag; the dangling owner_id stays,
+        // same as books and pages already did.
+        foreach (var table in new[]
+                 {
+                     "shelf", "book", "page", "diagram", "slide_deck",
+                     "kanban_board", "project_plan", "note", "attachment",
+                 })
+        {
+            await using var unlock = conn.CreateCommand();
+            unlock.CommandText = $"UPDATE {table} SET is_private = 0 WHERE owner_id = $id";
+            SqliteHelpers.Add(unlock, "$id", id);
+            await unlock.ExecuteNonQueryAsync(ct);
+        }
+
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "DELETE FROM app_user WHERE id = $id";
         SqliteHelpers.Add(cmd, "$id", id);
@@ -400,9 +415,10 @@ public sealed class UserService(SqliteConnectionFactory db, ILogger<UserService>
         string? id = null;
         string? hash = null;
         var enabled = false;
+        var mustChange = false;
         await using (var read = conn.CreateCommand())
         {
-            read.CommandText = "SELECT id, password_hash, enabled FROM app_user WHERE username = $username LIMIT 1";
+            read.CommandText = "SELECT id, password_hash, enabled, must_change_password FROM app_user WHERE username = $username LIMIT 1";
             SqliteHelpers.Add(read, "$username", normalized);
             await using var reader = await read.ExecuteReaderAsync(ct);
             if (await reader.ReadAsync(ct))
@@ -410,6 +426,7 @@ public sealed class UserService(SqliteConnectionFactory db, ILogger<UserService>
                 id = reader.GetString(0);
                 hash = reader.GetString(1);
                 enabled = reader.GetInt64(2) != 0;
+                mustChange = !reader.IsDBNull(3) && reader.GetInt64(3) != 0;
             }
         }
 
@@ -422,7 +439,7 @@ public sealed class UserService(SqliteConnectionFactory db, ILogger<UserService>
         // The stored cost travels with the hash, so raising the iteration count is
         // a one-line change plus this: everyone is upgraded as they sign in.
         if (PasswordHasher.NeedsRehash(hash))
-            await WritePasswordAsync(conn, id, password, mustChange: false, ct, touchUpdatedAt: false);
+            await WritePasswordAsync(conn, id, password, mustChange, ct, touchUpdatedAt: false);
 
         await using (var touch = conn.CreateCommand())
         {

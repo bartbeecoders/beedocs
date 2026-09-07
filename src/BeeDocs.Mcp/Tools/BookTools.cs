@@ -41,10 +41,12 @@ public sealed class BookTools(BeeDocsApiClient client)
         int? sortOrder = null,
         [Description("Shelf to file the book on. Omit to leave it where it is; pass an empty string to move it to the library root.")]
         string? shelfId = null,
+        [Description("When true, only the owner (and admins) can see this book. Requires an owner. Omit to leave as-is.")]
+        bool? isPrivate = null,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
             ToolHelpers.Json(await client.UpdateBookAsync(
-                bookId, new { title, description, slug, sortOrder, shelfId }, ct)));
+                bookId, new { title, description, slug, sortOrder, shelfId, isPrivate }, ct)));
 
     [McpServerTool(Name = "beedocs_delete_book", Title = "Delete book", Destructive = true),
      Description("Delete a book and cascade its pages/chapters. Destructive.")]
@@ -56,12 +58,12 @@ public sealed class BookTools(BeeDocsApiClient client)
         });
 
     [McpServerTool(Name = "beedocs_get_book_tree", Title = "Get book tree"),
-     Description("Return folders (chapters) and pages grouped for tree navigation (root pages + per-folder pages + diagrams + slide decks + kanban boards + project plans + attachments).")]
+     Description("Return folders (chapters) and pages grouped for tree navigation (root pages + per-folder pages + diagrams + slide decks + kanban boards + project plans + notes + attachments).")]
     public Task<string> GetBookTree(string bookId, CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () => ToolHelpers.Json(await BuildTreeAsync(client, bookId, ct)));
 
     [McpServerTool(Name = "beedocs_export_book", Title = "Export book (structured)"),
-     Description("Export one book with chapters, full pages, diagrams, slide decks, kanban boards, project plans, and attachment metadata as JSON. Prefer this before generating PDF/HTML offline.")]
+     Description("Export one book with chapters, full pages, diagrams, slide decks, kanban boards, project plans, notes, and attachment metadata as JSON. Prefer this before generating PDF/HTML offline.")]
     public Task<string> ExportBook(
         string bookId,
         [Description("Default true")] bool includePageContent = true,
@@ -69,6 +71,7 @@ public sealed class BookTools(BeeDocsApiClient client)
         [Description("Default true")] bool includeSlideSource = true,
         [Description("Default true")] bool includeKanbanSource = true,
         [Description("Default true")] bool includeProjectSource = true,
+        [Description("Default true")] bool includeNoteSource = true,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
         {
@@ -124,6 +127,15 @@ public sealed class BookTools(BeeDocsApiClient client)
                     : p);
             }
 
+            var noteSummary = await client.ListNotesAsync(bookId, ct);
+            var notes = new List<JsonElement>();
+            foreach (var n in noteSummary.EnumerateArray())
+            {
+                notes.Add(includeNoteSource
+                    ? await client.GetNoteAsync(BeeDocsApiClient.Prop(n, "id"), ct)
+                    : n);
+            }
+
             // Metadata only, always: an attachment's payload is an opaque file,
             // and inlining base64 for every PDF in a book would swamp the export
             // it is meant to make readable. beedocs_read_attachment fetches one.
@@ -139,6 +151,7 @@ public sealed class BookTools(BeeDocsApiClient client)
                 slideDecks,
                 kanbanBoards,
                 projectPlans,
+                notes,
                 attachments,
                 note = "Open the book in the BeeDocs UI and use Export PDF for a browser print-to-PDF. This tool returns structured content for agents.",
             });
@@ -153,8 +166,9 @@ public sealed class BookTools(BeeDocsApiClient client)
         var slideDecksTask = client.ListSlideDecksAsync(bookId, ct);
         var kanbanTask = client.ListKanbanBoardsAsync(bookId, ct);
         var projectTask = client.ListProjectPlansAsync(bookId, ct);
+        var notesTask = client.ListNotesAsync(bookId, ct);
         var attachmentsTask = client.ListAttachmentsAsync(bookId, ct);
-        await Task.WhenAll(bookTask, chaptersTask, pagesTask, diagramsTask, slideDecksTask, kanbanTask, projectTask, attachmentsTask);
+        await Task.WhenAll(bookTask, chaptersTask, pagesTask, diagramsTask, slideDecksTask, kanbanTask, projectTask, notesTask, attachmentsTask);
 
         var book = await bookTask;
         var chapters = (await chaptersTask).EnumerateArray()
@@ -187,6 +201,7 @@ public sealed class BookTools(BeeDocsApiClient client)
             slideDecks = await slideDecksTask,
             kanbanBoards = await kanbanTask,
             projectPlans = await projectTask,
+            notes = await notesTask,
             attachments = await attachmentsTask,
         };
     }

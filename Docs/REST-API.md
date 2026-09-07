@@ -50,8 +50,12 @@ or
 X-Api-Key: <api-key>
 ```
 
-- **No key anywhere** — `/api/v1` is open (local dev). The API logs a warning at startup.
-- **Key configured** — missing or wrong key → `401 Unauthorized`.
+- **No key anywhere** — `/api/v1` requires a key, unless an admin has opted
+  into **anonymous publish** (Settings → Sign-in & API). The API logs a warning
+  at startup either way.
+- **Key configured** — missing or wrong key → `401 Unauthorized`, unless the
+  caller has a signed-in session (the key is for machines; a person already
+  authenticated does not send it).
 
 The same key is how non-browser clients (the MCP server, publishing apps)
 authenticate against `/api/*` when sign-in (`BeeDocs:Auth:Enabled`) is on — with

@@ -175,10 +175,25 @@ startup and every MCP call starts returning 401.
 
 ## Ownership
 
-Books and pages each carry an **owner**: the account answerable for the
-document. It is a responsibility field, not a permission — an owner grants no
-extra rights, and any editor can still edit any page. Roles decide what you may
-do; the owner records who it belongs to.
+Books, shelves and documents each carry an **owner**: the account answerable for
+the item. It is a responsibility field, not a permission — an owner grants no
+extra rights, and any editor can still edit any public page. Roles decide what
+you may do; the owner records who it belongs to.
+
+The exception is **privacy**. The owner (or an admin) can mark a shelf, book,
+page, diagram, slide deck, kanban board, project plan, note or attachment
+**private**. A private item is hidden from every signed-in account except its
+owner: it disappears from the library tree, from search, from favorites, and
+from exports. Direct URLs 404 rather than 403 so existence is not leaked.
+Administrators still see private items — they administer the instance — as does
+the shared API key. Sign-in off does not enforce the filter (there is no
+identity to be "the owner"). The published bookshelf website never shows
+private items, whoever is looking.
+
+Privacy inherits down: a private shelf hides its books, a private book hides
+its pages. An item cannot be private without an owner; clearing the owner
+drops the flag. A private shelf cannot be published as a website. Deleting an
+account un-privates what it owned so those items do not vanish for everyone.
 
 Related but distinct: each account may set its own **git email**
 (`app_user.git_email`, Settings → Your account, self-service via
@@ -312,7 +327,7 @@ Accounts — **admin only**, reads included:
 | `GET /api/users/{id}` | One account |
 | `PUT /api/users/{id}` | Update — every field optional, omitted means unchanged |
 | `DELETE /api/users/{id}` | Delete |
-| `POST /api/users/{id}/password` | Admin reset. Omit `password` to have one generated and returned once |
+| `POST /api/users/{id}/password` | Admin reset. Omit `password` to have one generated and returned once. Sets `mustChangePassword`; the next login is allowed but the workspace (and other API routes) stay blocked until `POST /api/auth/password` succeeds. |
 
 `GET /api/stats` (the `/stats` page: document counts, storage, per-day activity,
 per-author change totals) is admin-only for the same reason the account list is:
@@ -358,8 +373,11 @@ app_user(id, username UNIQUE, display_name, email, role, password_hash,
 
 user_session(token_hash PRIMARY KEY, user_id, created_at, expires_at, last_seen_at)
 
-book(…, owner_id)          -- app_user.id, nullable
-page(…, owner_id)          -- inherited from the book on create
+book(…, owner_id, is_private)
+page(…, owner_id, is_private)
+shelf(…, owner_id, is_private)
+-- diagram / slide_deck / kanban_board / project_plan / note / attachment
+-- also carry owner_id + is_private (owner inherited from the book on create)
 
 page_revision(id, page_id, version, title, content,
               changed_by, changed_by_name, change_kind, created_at)

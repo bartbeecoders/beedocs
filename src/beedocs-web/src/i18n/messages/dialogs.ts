@@ -45,6 +45,7 @@ const en = {
   'dialogs.documentFallback': 'document',
   'dialogs.printOpened': 'Print dialog opened — choose “Save as PDF”.',
   'dialogs.downloaded': 'Downloaded {name}',
+  'dialogs.exportDone': 'Export downloaded',
   'dialogs.exportFormat.pdf': 'PDF',
   'dialogs.exportFormat.markdown': 'Markdown',
   'dialogs.exportFormat.docx': 'Word (.docx)',
@@ -53,6 +54,20 @@ const en = {
   'dialogs.exportHint.markdown': 'Portable text, diagrams as fenced blocks',
   'dialogs.exportHint.docx': 'Formatted document with images and tables',
   'dialogs.exportHint.archive': 'Lossless — re-importable, keeps diagrams and images',
+  'dialogs.mdDropTitle': 'Add Markdown',
+  'dialogs.mdDropLead':
+    '“{name}” is a Markdown file. Add it as an editable page, or keep it as a file in the book.',
+  'dialogs.mdDropLeadMany':
+    '{count} Markdown files. Add them as editable pages, or keep them as files in the book.',
+  'dialogs.mdDropChoice': 'What should happen',
+  'dialogs.mdDropAsPage': 'Create a page',
+  'dialogs.mdDropAsPageHint': 'Opens in the editor so you can keep writing.',
+  'dialogs.mdDropAsFile': 'Add to Files',
+  'dialogs.mdDropAsFileHint': 'Stored as an attachment — downloadable, not opened as a page.',
+  'dialogs.mdDropBook': 'Book',
+  'dialogs.mdDropConfirm': 'Add',
+  'dialogs.mdDropPageCreated': 'Created page “{title}”',
+  'dialogs.mdDropPagesCreated': 'Created {count} pages',
 } as const
 
 type Msgs = Record<keyof typeof en, string>
@@ -101,6 +116,7 @@ const fr: Msgs = {
   'dialogs.documentFallback': 'le document',
   'dialogs.printOpened': 'Boîte d’impression ouverte — choisissez « Enregistrer au format PDF ».',
   'dialogs.downloaded': '{name} téléchargé',
+  'dialogs.exportDone': 'Export téléchargé',
   'dialogs.exportFormat.pdf': 'PDF',
   'dialogs.exportFormat.markdown': 'Markdown',
   'dialogs.exportFormat.docx': 'Word (.docx)',
@@ -109,6 +125,20 @@ const fr: Msgs = {
   'dialogs.exportHint.markdown': 'Texte portable, diagrammes en blocs de code',
   'dialogs.exportHint.docx': 'Document mis en forme avec images et tableaux',
   'dialogs.exportHint.archive': 'Sans perte — réimportable, conserve diagrammes et images',
+  'dialogs.mdDropTitle': 'Ajouter du Markdown',
+  'dialogs.mdDropLead':
+    '« {name} » est un fichier Markdown. Ajoutez-le comme page modifiable, ou conservez-le comme fichier dans le livre.',
+  'dialogs.mdDropLeadMany':
+    '{count} fichiers Markdown. Ajoutez-les comme pages modifiables, ou conservez-les comme fichiers dans le livre.',
+  'dialogs.mdDropChoice': 'Que faire',
+  'dialogs.mdDropAsPage': 'Créer une page',
+  'dialogs.mdDropAsPageHint': 'S’ouvre dans l’éditeur pour continuer à écrire.',
+  'dialogs.mdDropAsFile': 'Ajouter aux Fichiers',
+  'dialogs.mdDropAsFileHint': 'Enregistré comme pièce jointe — téléchargeable, pas ouvert comme page.',
+  'dialogs.mdDropBook': 'Livre',
+  'dialogs.mdDropConfirm': 'Ajouter',
+  'dialogs.mdDropPageCreated': 'Page « {title} » créée',
+  'dialogs.mdDropPagesCreated': '{count} pages créées',
 }
 
 const de: Msgs = {
@@ -155,6 +185,7 @@ const de: Msgs = {
   'dialogs.documentFallback': 'Dokument',
   'dialogs.printOpened': 'Druckdialog geöffnet — wählen Sie „Als PDF speichern“.',
   'dialogs.downloaded': '{name} heruntergeladen',
+  'dialogs.exportDone': 'Export heruntergeladen',
   'dialogs.exportFormat.pdf': 'PDF',
   'dialogs.exportFormat.markdown': 'Markdown',
   'dialogs.exportFormat.docx': 'Word (.docx)',
@@ -163,6 +194,20 @@ const de: Msgs = {
   'dialogs.exportHint.markdown': 'Portabler Text, Diagramme als Codeblöcke',
   'dialogs.exportHint.docx': 'Formatiertes Dokument mit Bildern und Tabellen',
   'dialogs.exportHint.archive': 'Verlustfrei — wieder importierbar, behält Diagramme und Bilder',
+  'dialogs.mdDropTitle': 'Markdown hinzufügen',
+  'dialogs.mdDropLead':
+    '„{name}“ ist eine Markdown-Datei. Als bearbeitbare Seite anlegen oder als Datei im Buch behalten.',
+  'dialogs.mdDropLeadMany':
+    '{count} Markdown-Dateien. Als bearbeitbare Seiten anlegen oder als Dateien im Buch behalten.',
+  'dialogs.mdDropChoice': 'Was soll geschehen',
+  'dialogs.mdDropAsPage': 'Seite erstellen',
+  'dialogs.mdDropAsPageHint': 'Öffnet sich im Editor, damit Sie weiterschreiben können.',
+  'dialogs.mdDropAsFile': 'Zu Dateien hinzufügen',
+  'dialogs.mdDropAsFileHint': 'Als Anhang gespeichert — herunterladbar, nicht als Seite geöffnet.',
+  'dialogs.mdDropBook': 'Buch',
+  'dialogs.mdDropConfirm': 'Hinzufügen',
+  'dialogs.mdDropPageCreated': 'Seite „{title}“ erstellt',
+  'dialogs.mdDropPagesCreated': '{count} Seiten erstellt',
 }
 
 const es: Msgs = {
@@ -209,6 +254,7 @@ const es: Msgs = {
   'dialogs.documentFallback': 'el documento',
   'dialogs.printOpened': 'Diálogo de impresión abierto — elige «Guardar como PDF».',
   'dialogs.downloaded': '{name} descargado',
+  'dialogs.exportDone': 'Exportación descargada',
   'dialogs.exportFormat.pdf': 'PDF',
   'dialogs.exportFormat.markdown': 'Markdown',
   'dialogs.exportFormat.docx': 'Word (.docx)',
@@ -217,6 +263,20 @@ const es: Msgs = {
   'dialogs.exportHint.markdown': 'Texto portable, diagramas como bloques de código',
   'dialogs.exportHint.docx': 'Documento con formato, imágenes y tablas',
   'dialogs.exportHint.archive': 'Sin pérdidas — reimportable, conserva diagramas e imágenes',
+  'dialogs.mdDropTitle': 'Añadir Markdown',
+  'dialogs.mdDropLead':
+    '«{name}» es un archivo Markdown. Añádelo como página editable o guárdalo como archivo en el libro.',
+  'dialogs.mdDropLeadMany':
+    '{count} archivos Markdown. Añádelos como páginas editables o guárdalos como archivos en el libro.',
+  'dialogs.mdDropChoice': 'Qué debe ocurrir',
+  'dialogs.mdDropAsPage': 'Crear una página',
+  'dialogs.mdDropAsPageHint': 'Se abre en el editor para que puedas seguir escribiendo.',
+  'dialogs.mdDropAsFile': 'Añadir a Archivos',
+  'dialogs.mdDropAsFileHint': 'Se guarda como adjunto — descargable, no se abre como página.',
+  'dialogs.mdDropBook': 'Libro',
+  'dialogs.mdDropConfirm': 'Añadir',
+  'dialogs.mdDropPageCreated': 'Página «{title}» creada',
+  'dialogs.mdDropPagesCreated': '{count} páginas creadas',
 }
 
 const nl: Msgs = {
@@ -263,6 +323,7 @@ const nl: Msgs = {
   'dialogs.documentFallback': 'document',
   'dialogs.printOpened': 'Afdrukvenster geopend — kies “Opslaan als PDF”.',
   'dialogs.downloaded': '{name} gedownload',
+  'dialogs.exportDone': 'Export gedownload',
   'dialogs.exportFormat.pdf': 'PDF',
   'dialogs.exportFormat.markdown': 'Markdown',
   'dialogs.exportFormat.docx': 'Word (.docx)',
@@ -271,6 +332,20 @@ const nl: Msgs = {
   'dialogs.exportHint.markdown': 'Portable tekst, diagrammen als codeblokken',
   'dialogs.exportHint.docx': 'Opgemaakt document met afbeeldingen en tabellen',
   'dialogs.exportHint.archive': 'Verliesvrij — opnieuw importeerbaar, behoudt diagrammen en afbeeldingen',
+  'dialogs.mdDropTitle': 'Markdown toevoegen',
+  'dialogs.mdDropLead':
+    '‘{name}’ is een Markdown-bestand. Voeg het toe als bewerkbare pagina, of bewaar het als bestand in het boek.',
+  'dialogs.mdDropLeadMany':
+    '{count} Markdown-bestanden. Voeg ze toe als bewerkbare pagina’s, of bewaar ze als bestanden in het boek.',
+  'dialogs.mdDropChoice': 'Wat moet er gebeuren',
+  'dialogs.mdDropAsPage': 'Pagina maken',
+  'dialogs.mdDropAsPageHint': 'Opent in de editor zodat je verder kunt schrijven.',
+  'dialogs.mdDropAsFile': 'Toevoegen aan Bestanden',
+  'dialogs.mdDropAsFileHint': 'Opgeslagen als bijlage — te downloaden, niet als pagina geopend.',
+  'dialogs.mdDropBook': 'Boek',
+  'dialogs.mdDropConfirm': 'Toevoegen',
+  'dialogs.mdDropPageCreated': 'Pagina ‘{title}’ gemaakt',
+  'dialogs.mdDropPagesCreated': '{count} pagina’s gemaakt',
 }
 
 const ja: Msgs = {
@@ -317,6 +392,7 @@ const ja: Msgs = {
   'dialogs.documentFallback': 'ドキュメント',
   'dialogs.printOpened': '印刷ダイアログを開きました。「PDF として保存」を選択してください。',
   'dialogs.downloaded': '{name} をダウンロードしました',
+  'dialogs.exportDone': 'エクスポートをダウンロードしました',
   'dialogs.exportFormat.pdf': 'PDF',
   'dialogs.exportFormat.markdown': 'Markdown',
   'dialogs.exportFormat.docx': 'Word (.docx)',
@@ -325,6 +401,20 @@ const ja: Msgs = {
   'dialogs.exportHint.markdown': 'ポータブルなテキスト。ダイアグラムはコードブロックとして出力',
   'dialogs.exportHint.docx': '画像と表を含む書式付きドキュメント',
   'dialogs.exportHint.archive': '無劣化 — 再インポート可能。ダイアグラムと画像を保持',
+  'dialogs.mdDropTitle': 'Markdown を追加',
+  'dialogs.mdDropLead':
+    '「{name}」は Markdown ファイルです。編集可能なページにするか、ブック内のファイルとして残すかを選べます。',
+  'dialogs.mdDropLeadMany':
+    '{count} 件の Markdown ファイルです。編集可能なページにするか、ブック内のファイルとして残すかを選べます。',
+  'dialogs.mdDropChoice': '次の操作',
+  'dialogs.mdDropAsPage': 'ページを作成',
+  'dialogs.mdDropAsPageHint': 'エディターで開き、そのまま書き続けられます。',
+  'dialogs.mdDropAsFile': 'ファイルに追加',
+  'dialogs.mdDropAsFileHint': '添付ファイルとして保存されます。ダウンロードはできますが、ページとしては開きません。',
+  'dialogs.mdDropBook': 'ブック',
+  'dialogs.mdDropConfirm': '追加',
+  'dialogs.mdDropPageCreated': 'ページ「{title}」を作成しました',
+  'dialogs.mdDropPagesCreated': '{count} 件のページを作成しました',
 }
 
 const zh: Msgs = {
@@ -371,6 +461,7 @@ const zh: Msgs = {
   'dialogs.documentFallback': '文档',
   'dialogs.printOpened': '已打开打印对话框 — 请选择「另存为 PDF」。',
   'dialogs.downloaded': '已下载 {name}',
+  'dialogs.exportDone': '已下载导出文件',
   'dialogs.exportFormat.pdf': 'PDF',
   'dialogs.exportFormat.markdown': 'Markdown',
   'dialogs.exportFormat.docx': 'Word (.docx)',
@@ -379,6 +470,18 @@ const zh: Msgs = {
   'dialogs.exportHint.markdown': '可移植的文本，图表以代码块形式导出',
   'dialogs.exportHint.docx': '带图片和表格的格式化文档',
   'dialogs.exportHint.archive': '无损 — 可重新导入，保留图表和图片',
+  'dialogs.mdDropTitle': '添加 Markdown',
+  'dialogs.mdDropLead': '「{name}」是 Markdown 文件。将其添加为可编辑页面，或作为图书中的文件保留。',
+  'dialogs.mdDropLeadMany': '{count} 个 Markdown 文件。将它们添加为可编辑页面，或作为图书中的文件保留。',
+  'dialogs.mdDropChoice': '接下来怎么做',
+  'dialogs.mdDropAsPage': '创建页面',
+  'dialogs.mdDropAsPageHint': '在编辑器中打开，以便继续编写。',
+  'dialogs.mdDropAsFile': '添加到文件',
+  'dialogs.mdDropAsFileHint': '作为附件存储 — 可下载，不会作为页面打开。',
+  'dialogs.mdDropBook': '图书',
+  'dialogs.mdDropConfirm': '添加',
+  'dialogs.mdDropPageCreated': '已创建页面「{title}」',
+  'dialogs.mdDropPagesCreated': '已创建 {count} 个页面',
 }
 
 export const dialogs = { en, fr, de, es, nl, ja, zh } satisfies Record<Lang, Msgs>

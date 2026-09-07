@@ -50,7 +50,7 @@ const en = {
   'users.yourAccount': 'Your account',
   'users.rbaPasswordNote':
     'If you sign in with your corporate (RBA) account there is no BeeDocs password to change, and roles come from the DOC groups in RBA. The form below applies only to local (integrated) accounts.',
-  'users.mustChangeNotice': 'This account still uses the password it was given. Set your own below.',
+  'users.mustChangeNotice': 'This account still uses the password it was given. Set your own below — the workspace stays locked until you do.',
   'users.currentPassword': 'Current password',
   'users.newPassword': 'New password',
   'users.repeatNewPassword': 'Repeat new password',

@@ -17,6 +17,8 @@ export type Shelf = {
   /** Account responsible for the shelf. Null when nobody was identified. */
   ownerId?: string | null
   ownerName?: string | null
+  /** When true, only the owner (and admins) can see this shelf. */
+  isPrivate: boolean
   /** Books currently on the shelf. */
   bookCount: number
   /** Where this shelf's content bodies live. Null = Local (SQLite), the default. */
@@ -41,12 +43,14 @@ export type Book = {
   ownerId?: string | null
   /** The owner's display name, resolved server-side. Null once the account is gone. */
   ownerName?: string | null
+  /** When true, only the owner (and admins) can see this book. */
+  isPrivate: boolean
   createdAt: string
   updatedAt: string
 }
 
 /** What a favorite can point at. `slides` names a slide deck, as in search. */
-export type FavoriteKind = 'book' | 'page' | 'diagram' | 'slides' | 'kanban' | 'project' | 'attachment'
+export type FavoriteKind = 'book' | 'page' | 'diagram' | 'slides' | 'kanban' | 'project' | 'note' | 'attachment'
 
 /**
  * One starred item as GET /api/favorites returns it: the target, its live
@@ -85,6 +89,8 @@ export type PageSummary = {
   /** Inherited from the book when the page is created; reassignable afterwards. */
   ownerId?: string | null
   ownerName?: string | null
+  /** When true, only the owner (and admins) can see this page. */
+  isPrivate: boolean
   updatedAt: string
 }
 
@@ -156,6 +162,7 @@ export type SearchKind =
   | 'slides'
   | 'kanban'
   | 'project'
+  | 'note'
   | 'attachment'
   | 'book'
   | 'folder'
@@ -257,6 +264,7 @@ export type SearchStatus = {
   slideDecks: number
   kanbanBoards: number
   projectPlans: number
+  notes: number
   attachments: number
   books: number
   folders: number
@@ -325,11 +333,14 @@ export type DiagramSummary = {
   pageId?: string | null
   title: string
   kind: DiagramKind | string
+  ownerId?: string | null
+  isPrivate: boolean
   updatedAt: string
 }
 
 export type Diagram = DiagramSummary & {
   source: string
+  ownerName?: string | null
   createdAt: string
 }
 
@@ -343,6 +354,8 @@ export type SlideDeckSummary = {
   title: string
   /** Slides in the deck, counted server-side from the stored document. */
   slideCount: number
+  ownerId?: string | null
+  isPrivate: boolean
   updatedAt: string
 }
 
@@ -352,6 +365,9 @@ export type SlideDeck = {
   bookId: string
   title: string
   source: string
+  ownerId?: string | null
+  ownerName?: string | null
+  isPrivate: boolean
   createdAt: string
   updatedAt: string
 }
@@ -366,6 +382,8 @@ export type KanbanBoardSummary = {
   title: string
   /** Cards across every column, counted server-side from the stored document. */
   cardCount: number
+  ownerId?: string | null
+  isPrivate: boolean
   updatedAt: string
 }
 
@@ -375,6 +393,9 @@ export type KanbanBoard = {
   bookId: string
   title: string
   source: string
+  ownerId?: string | null
+  ownerName?: string | null
+  isPrivate: boolean
   createdAt: string
   updatedAt: string
 }
@@ -389,6 +410,8 @@ export type ProjectPlanSummary = {
   title: string
   /** Tasks in the plan, counted server-side from the stored document. */
   taskCount: number
+  ownerId?: string | null
+  isPrivate: boolean
   updatedAt: string
 }
 
@@ -398,6 +421,37 @@ export type ProjectPlan = {
   bookId: string
   title: string
   source: string
+  ownerId?: string | null
+  ownerName?: string | null
+  isPrivate: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * A OneNote-style note stored in a book next to pages and diagrams.
+ * `source` is a JSON free-form-canvas document — see notes/noteModel.ts.
+ */
+export type NoteSummary = {
+  id: string
+  bookId: string
+  title: string
+  /** Blocks on the page (text, checklist, image, ink), counted server-side. */
+  blockCount: number
+  ownerId?: string | null
+  isPrivate: boolean
+  updatedAt: string
+}
+
+/** The full note. No `blockCount` — the client holding `source` can count for itself. */
+export type Note = {
+  id: string
+  bookId: string
+  title: string
+  source: string
+  ownerId?: string | null
+  ownerName?: string | null
+  isPrivate: boolean
   createdAt: string
   updatedAt: string
 }
@@ -418,6 +472,7 @@ export type AttachmentSummary = {
   ownerId?: string | null
   /** Display name the server resolved for {@link ownerId}. */
   ownerName?: string | null
+  isPrivate: boolean
   /** API route for the bytes. Pass through `withApiBase` before using it. */
   downloadUrl: string
   updatedAt: string
@@ -766,7 +821,7 @@ export type User = {
   email: string | null
   role: UserRole
   enabled: boolean
-  /** Set on the seeded admin and after an admin reset. Advisory: nothing is blocked. */
+  /** Set on the seeded admin and after an admin reset. The workspace is blocked until the owner sets their own password. */
   mustChangePassword: boolean
   lastLoginAt: string | null
   createdAt: string
@@ -875,6 +930,8 @@ export type ApiKeyStatus = {
   hasKey: boolean
   source: 'settings' | 'config' | null
   keyHint: string | null
+  /** When no key is set, anonymous callers may hit /api/v1. Default false. */
+  allowAnonymousPublish?: boolean
 }
 
 /**
@@ -920,8 +977,9 @@ export type DocumentCounts = {
   slideDecks: number
   kanbanBoards: number
   projectPlans: number
+  notes: number
   attachments: number
-  /** Content documents only: pages + diagrams + slide decks + kanban boards + project plans + attachments. */
+  /** Content documents only: pages + diagrams + slide decks + kanban boards + project plans + notes + attachments. */
   total: number
 }
 

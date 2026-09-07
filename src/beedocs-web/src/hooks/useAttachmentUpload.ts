@@ -22,8 +22,9 @@ export type AttachmentUploadApi = {
 }
 
 /**
- * One upload loop for every way a file gets into a book — the tree's context
- * menu, the toolbar button, the book overview, and drops on any of them.
+ * One upload loop for every way a file is *filed* against a book — the tree's
+ * context menu, the toolbar button, the book overview picker, and
+ * attachment-classified library drops via {@link useLibraryFileDrop}.
  *
  * Files are uploaded one at a time rather than in parallel so a rejected file
  * names itself: a `Promise.all` over a mixed selection fails anonymously, and

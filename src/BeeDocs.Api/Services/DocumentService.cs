@@ -94,7 +94,7 @@ public sealed class DocumentService(
     /// </summary>
     private const string BookSelect = """
         SELECT b.id, b.title, b.description, b.slug, b.sort_order, b.shelf_id, b.owner_id,
-               b.created_at, b.updated_at,
+               b.is_private, b.created_at, b.updated_at,
                COALESCE(NULLIF(TRIM(u.display_name), ''), u.username) AS owner_name,
                s.title AS shelf_title
         FROM book b
@@ -106,17 +106,25 @@ public sealed class DocumentService(
     /// Shelf columns, plus the owner's name and how many books sit on it. The
     /// count is the one fact a shelf has that is worth showing next to its title.
     /// </summary>
-    private const string ShelfSelect = """
-        SELECT s.id, s.title, s.description, s.slug, s.sort_order, s.published, s.owner_id,
-               s.created_at, s.updated_at,
-               COALESCE(NULLIF(TRIM(u.display_name), ''), u.username) AS owner_name,
-               (SELECT COUNT(*) FROM book b WHERE b.shelf_id = s.id) AS book_count,
-               s.storage_provider_id,
-               sp.name AS storage_provider_name
-        FROM shelf s
-        LEFT JOIN app_user u ON u.id = s.owner_id
-        LEFT JOIN storage_provider sp ON sp.id = s.storage_provider_id
-        """;
+    private string ShelfSelect
+    {
+        get
+        {
+            var actor = currentUser.Current;
+            var bookCountFilter = Privacy.ItemSql("b", actor);
+            return $"""
+                SELECT s.id, s.title, s.description, s.slug, s.sort_order, s.published, s.owner_id,
+                       s.is_private, s.created_at, s.updated_at,
+                       COALESCE(NULLIF(TRIM(u.display_name), ''), u.username) AS owner_name,
+                       (SELECT COUNT(*) FROM book b WHERE b.shelf_id = s.id{bookCountFilter}) AS book_count,
+                       s.storage_provider_id,
+                       sp.name AS storage_provider_name
+                FROM shelf s
+                LEFT JOIN app_user u ON u.id = s.owner_id
+                LEFT JOIN storage_provider sp ON sp.id = s.storage_provider_id
+                """;
+        }
+    }
 
     /// <summary>
     /// Page columns, plus the owner's name and the author of the newest change.
@@ -128,7 +136,7 @@ public sealed class DocumentService(
                p.owner_id, p.created_at, p.updated_at,
                COALESCE(NULLIF(TRIM(uo.display_name), ''), uo.username) AS owner_name,
                r.changed_by, r.changed_by_name,
-               p.track_changes, p.max_revisions, p.content_ref
+               p.track_changes, p.max_revisions, p.content_ref, p.is_private
         FROM page p
         LEFT JOIN app_user uo ON uo.id = p.owner_id
         LEFT JOIN page_revision r ON r.page_id = p.id AND r.version = p.version
@@ -137,11 +145,14 @@ public sealed class DocumentService(
     public async Task<IReadOnlyList<ShelfDto>> ListShelvesAsync(CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
+        var actor = currentUser.Current;
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             {ShelfSelect}
+            WHERE 1=1{Privacy.ItemSql("s", actor)}
             ORDER BY s.sort_order, s.title COLLATE NOCASE
             """;
+        Privacy.BindViewer(cmd, actor);
         var list = new List<ShelfDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
@@ -152,9 +163,11 @@ public sealed class DocumentService(
     public async Task<ShelfDto?> GetShelfAsync(string id, CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
+        var actor = currentUser.Current;
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"{ShelfSelect} WHERE s.id = $id LIMIT 1";
+        cmd.CommandText = $"{ShelfSelect} WHERE s.id = $id{Privacy.ItemSql("s", actor)} LIMIT 1";
         SqliteHelpers.Add(cmd, "$id", id);
+        Privacy.BindViewer(cmd, actor);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? ReadShelfDto(reader) : null;
     }
@@ -162,9 +175,11 @@ public sealed class DocumentService(
     public async Task<ShelfDto?> GetShelfBySlugAsync(string slug, CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
+        var actor = currentUser.Current;
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"{ShelfSelect} WHERE lower(s.slug) = lower($slug) LIMIT 1";
+        cmd.CommandText = $"{ShelfSelect} WHERE lower(s.slug) = lower($slug){Privacy.ItemSql("s", actor)} LIMIT 1";
         SqliteHelpers.Add(cmd, "$slug", SlugHelper.Slugify(slug));
+        Privacy.BindViewer(cmd, actor);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? ReadShelfDto(reader) : null;
     }
@@ -185,14 +200,18 @@ public sealed class DocumentService(
             SortOrder = 0,
             Published = request.Published ?? false,
             OwnerId = NormalizeOwnerId(request.OwnerId) ?? actor.Id,
+            IsPrivate = request.IsPrivate ?? false,
             CreatedAt = now,
             UpdatedAt = now,
         };
+        if (shelf.Published && shelf.IsPrivate)
+            throw new ArgumentException("A private shelf cannot be published as a website.", "isPrivate");
+        Privacy.EnsurePrivateHasOwner(shelf.IsPrivate, shelf.OwnerId);
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO shelf (id, title, description, slug, sort_order, published, owner_id, created_at, updated_at)
-            VALUES ($id, $title, $description, $slug, $sort_order, $published, $owner_id, $created_at, $updated_at)
+            INSERT INTO shelf (id, title, description, slug, sort_order, published, owner_id, is_private, created_at, updated_at)
+            VALUES ($id, $title, $description, $slug, $sort_order, $published, $owner_id, $is_private, $created_at, $updated_at)
             """;
         SqliteHelpers.Add(cmd, "$id", shelf.Id);
         SqliteHelpers.Add(cmd, "$title", shelf.Title);
@@ -201,6 +220,7 @@ public sealed class DocumentService(
         SqliteHelpers.Add(cmd, "$sort_order", shelf.SortOrder);
         SqliteHelpers.Add(cmd, "$published", shelf.Published ? 1 : 0);
         SqliteHelpers.Add(cmd, "$owner_id", shelf.OwnerId);
+        SqliteHelpers.Add(cmd, "$is_private", shelf.IsPrivate ? 1 : 0);
         SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(shelf.CreatedAt));
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(shelf.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
@@ -213,6 +233,8 @@ public sealed class DocumentService(
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectShelfAsync(conn, id, ct);
         if (existing is null) return null;
+        if (!Privacy.CanSee(currentUser.Current, existing.IsPrivate, existing.OwnerId))
+            return null;
 
         existing.Title = request.Title.Trim();
         // Same as a book: null leaves the description alone, "" clears it.
@@ -224,16 +246,17 @@ public sealed class DocumentService(
             existing.SortOrder = order;
         if (request.Published is bool published)
             existing.Published = published;
-        // null leaves the owner alone, "" clears it. Anything else replaces it.
-        if (request.OwnerId is not null)
-            existing.OwnerId = NormalizeOwnerId(request.OwnerId);
+        (existing.OwnerId, existing.IsPrivate) = Privacy.Apply(
+            currentUser.Current, existing.OwnerId, existing.IsPrivate, request.OwnerId, request.IsPrivate);
+        if (existing.Published && existing.IsPrivate)
+            throw new ArgumentException("A private shelf cannot be published as a website.", "isPrivate");
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             UPDATE shelf SET title = $title, description = $description, slug = $slug,
               sort_order = $sort_order, published = $published, owner_id = $owner_id,
-              updated_at = $updated_at
+              is_private = $is_private, updated_at = $updated_at
             WHERE id = $id
             """;
         SqliteHelpers.Add(cmd, "$id", existing.Id);
@@ -243,6 +266,7 @@ public sealed class DocumentService(
         SqliteHelpers.Add(cmd, "$sort_order", existing.SortOrder);
         SqliteHelpers.Add(cmd, "$published", existing.Published ? 1 : 0);
         SqliteHelpers.Add(cmd, "$owner_id", existing.OwnerId);
+        SqliteHelpers.Add(cmd, "$is_private", existing.IsPrivate ? 1 : 0);
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
 
@@ -258,6 +282,8 @@ public sealed class DocumentService(
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectShelfAsync(conn, id, ct);
         if (existing is null) return false;
+        if (!Privacy.CanSee(currentUser.Current, existing.IsPrivate, existing.OwnerId))
+            return false;
 
         // The books survive the shelf, so their content must be back in SQLite
         // before they return to the library root — unshelving them while their
@@ -289,12 +315,14 @@ public sealed class DocumentService(
     {
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        var actor = currentUser.Current;
         cmd.CommandText = $"""
             {BookSelect}
-            WHERE b.shelf_id = $shelf_id
+            WHERE b.shelf_id = $shelf_id{Privacy.ItemSql("b", actor)}{Privacy.ShelfSql("b.shelf_id", actor)}
             ORDER BY b.sort_order, b.title COLLATE NOCASE
             """;
         SqliteHelpers.Add(cmd, "$shelf_id", shelfId);
+        Privacy.BindViewer(cmd, actor);
         var list = new List<BookDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
@@ -312,9 +340,11 @@ public sealed class DocumentService(
     public async Task<BookshelfSiteDto?> GetBookshelfSiteAsync(string name, CancellationToken ct = default)
     {
         var shelf = await ResolveShelfForSiteAsync(name, ct);
-        if (shelf is null) return null;
+        // The public website never shows a private shelf, even to its owner —
+        // the workspace is where private items live.
+        if (shelf is null || shelf.IsPrivate) return null;
 
-        var books = await ListShelfBooksAsync(shelf.Id, ct);
+        var books = (await ListShelfBooksAsync(shelf.Id, ct)).Where(b => !b.IsPrivate).ToList();
         var bookIds = books.Select(b => b.Id).ToList();
         var chapters = await ListChaptersForBooksAsync(bookIds, ct);
         var pages = await ListPageSummariesForBooksAsync(bookIds, ct);
@@ -324,7 +354,7 @@ public sealed class DocumentService(
 
         var siteBooks = books.Select(book =>
         {
-            var bookPages = pagesByBook[book.Id].ToList();
+            var bookPages = pagesByBook[book.Id].Where(p => !p.IsPrivate).ToList();
             var bookChapters = chaptersByBook[book.Id]
                 .Select(ch => new BookshelfSiteChapterDto(
                     ch.Id,
@@ -360,14 +390,14 @@ public sealed class DocumentService(
         string name, string bookSlug, string pageSlug, CancellationToken ct = default)
     {
         var shelf = await ResolveShelfForSiteAsync(name, ct);
-        if (shelf is null) return null;
+        if (shelf is null || shelf.IsPrivate) return null;
 
         var book = await GetBookBySlugAsync(bookSlug, ct);
-        if (book is null || !string.Equals(book.ShelfId, shelf.Id, StringComparison.Ordinal))
+        if (book is null || book.IsPrivate || !string.Equals(book.ShelfId, shelf.Id, StringComparison.Ordinal))
             return null;
 
         var page = await GetPageBySlugAsync(book.Id, pageSlug, ct);
-        if (page is null) return null;
+        if (page is null || page.IsPrivate) return null;
 
         string? chapterSlug = null;
         string? chapterTitle = null;
@@ -405,11 +435,14 @@ public sealed class DocumentService(
     public async Task<IReadOnlyList<BookDto>> ListBooksAsync(CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
+        var actor = currentUser.Current;
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             {BookSelect}
+            WHERE 1=1{Privacy.ItemSql("b", actor)}{Privacy.ShelfSql("b.shelf_id", actor)}
             ORDER BY b.sort_order, b.title COLLATE NOCASE
             """;
+        Privacy.BindViewer(cmd, actor);
         var list = new List<BookDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
@@ -421,8 +454,10 @@ public sealed class DocumentService(
     {
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"{BookSelect} WHERE b.id = $id LIMIT 1";
+        var actor = currentUser.Current;
+        cmd.CommandText = $"{BookSelect} WHERE b.id = $id{Privacy.ItemSql("b", actor)}{Privacy.ShelfSql("b.shelf_id", actor)} LIMIT 1";
         SqliteHelpers.Add(cmd, "$id", id);
+        Privacy.BindViewer(cmd, actor);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? ReadBookDto(reader) : null;
     }
@@ -432,8 +467,10 @@ public sealed class DocumentService(
         var want = SlugHelper.Slugify(slug);
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"{BookSelect} WHERE lower(b.slug) = lower($slug) LIMIT 1";
+        var actor = currentUser.Current;
+        cmd.CommandText = $"{BookSelect} WHERE lower(b.slug) = lower($slug){Privacy.ItemSql("b", actor)}{Privacy.ShelfSql("b.shelf_id", actor)} LIMIT 1";
         SqliteHelpers.Add(cmd, "$slug", want);
+        Privacy.BindViewer(cmd, actor);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return null;
         return ReadBookDto(reader);
@@ -460,9 +497,11 @@ public sealed class DocumentService(
             SortOrder = 0,
             ShelfId = await ResolveShelfIdAsync(conn, request.ShelfId, ct),
             OwnerId = NormalizeOwnerId(request.OwnerId) ?? actor.Id,
+            IsPrivate = request.IsPrivate ?? false,
             CreatedAt = now,
             UpdatedAt = now,
         };
+        Privacy.EnsurePrivateHasOwner(book.IsPrivate, book.OwnerId);
 
         await InsertBookAsync(conn, book, ct);
         return ToDto(
@@ -476,6 +515,8 @@ public sealed class DocumentService(
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectBookAsync(conn, id, ct);
         if (existing is null) return null;
+        if (!await Privacy.IsBookVisibleAsync(conn, currentUser.Current, existing.Id, ct))
+            return null;
 
         existing.Title = request.Title.Trim();
         // null leaves the description alone; "" clears it. Every partial update
@@ -488,9 +529,8 @@ public sealed class DocumentService(
             existing.Slug = SlugHelper.Slugify(request.Slug);
         if (request.SortOrder is int order)
             existing.SortOrder = order;
-        // null leaves the owner alone, "" clears it. Anything else replaces it.
-        if (request.OwnerId is not null)
-            existing.OwnerId = NormalizeOwnerId(request.OwnerId);
+        (existing.OwnerId, existing.IsPrivate) = Privacy.Apply(
+            currentUser.Current, existing.OwnerId, existing.IsPrivate, request.OwnerId, request.IsPrivate);
         // Same convention for the shelf: "" is how a book is moved back to the
         // library root, and omitting it entirely leaves the book where it is.
         var previousShelfId = existing.ShelfId;
@@ -502,7 +542,7 @@ public sealed class DocumentService(
         cmd.CommandText = """
             UPDATE book SET title = $title, description = $description, slug = $slug,
               sort_order = $sort_order, shelf_id = $shelf_id, owner_id = $owner_id,
-              updated_at = $updated_at
+              is_private = $is_private, updated_at = $updated_at
             WHERE id = $id
             """;
         SqliteHelpers.Add(cmd, "$id", existing.Id);
@@ -512,6 +552,7 @@ public sealed class DocumentService(
         SqliteHelpers.Add(cmd, "$sort_order", existing.SortOrder);
         SqliteHelpers.Add(cmd, "$shelf_id", existing.ShelfId);
         SqliteHelpers.Add(cmd, "$owner_id", existing.OwnerId);
+        SqliteHelpers.Add(cmd, "$is_private", existing.IsPrivate ? 1 : 0);
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
 
@@ -536,6 +577,8 @@ public sealed class DocumentService(
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectBookAsync(conn, id, ct);
         if (existing is null) return false;
+        if (!await Privacy.IsBookVisibleAsync(conn, currentUser.Current, existing.Id, ct))
+            return false;
 
         // Refs first: the rows are gone after the cascade, and the cloud objects
         // they point at are deleted best-effort only after the commit. Attachment
@@ -560,6 +603,7 @@ public sealed class DocumentService(
             await ExecAsync(conn, tx, "DELETE FROM slide_deck WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx, "DELETE FROM kanban_board WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx, "DELETE FROM project_plan WHERE book_id = $id", ("$id", id), ct);
+            await ExecAsync(conn, tx, "DELETE FROM note WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx, "DELETE FROM attachment WHERE book_id = $id", ("$id", id), ct);
             await ExecAsync(conn, tx,
                 "DELETE FROM shape_collection WHERE book_id IS NOT NULL AND book_id != '' AND book_id = $id",
@@ -865,16 +909,18 @@ public sealed class DocumentService(
     public async Task<IReadOnlyList<PageSummaryDto>> ListPagesAsync(string bookId, CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
+        var actor = currentUser.Current;
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        cmd.CommandText = $"""
             SELECT p.id, p.book_id, p.chapter_id, p.title, p.slug, p.sort_order, p.version,
-                   p.owner_id, COALESCE(NULLIF(TRIM(u.display_name), ''), u.username), p.updated_at
+                   p.owner_id, COALESCE(NULLIF(TRIM(u.display_name), ''), u.username), p.is_private, p.updated_at
             FROM page p
             LEFT JOIN app_user u ON u.id = p.owner_id
-            WHERE p.book_id = $book_id
+            WHERE p.book_id = $book_id{Privacy.DocumentSql("p", actor)}
             ORDER BY p.sort_order, p.title COLLATE NOCASE
             """;
         SqliteHelpers.Add(cmd, "$book_id", bookId);
+        Privacy.BindViewer(cmd, actor);
         var list = new List<PageSummaryDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
@@ -889,7 +935,8 @@ public sealed class DocumentService(
                 Version: reader.GetInt32(6),
                 OwnerId: SqliteHelpers.GetNullableString(reader, 7),
                 OwnerName: SqliteHelpers.GetNullableString(reader, 8),
-                UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 9))));
+                IsPrivate: Privacy.ReadFlag(reader, 9),
+                UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 10))));
         }
 
         return list;
@@ -898,9 +945,11 @@ public sealed class DocumentService(
     public async Task<PageDto?> GetPageAsync(string id, CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
+        var actor = currentUser.Current;
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"{PageSelect} WHERE p.id = $id LIMIT 1";
+        cmd.CommandText = $"{PageSelect} WHERE p.id = $id{Privacy.DocumentSql("p", actor)} LIMIT 1";
         SqliteHelpers.Add(cmd, "$id", id);
+        Privacy.BindViewer(cmd, actor);
         return await ReadResolvedPageAsync(cmd, ct);
     }
 
@@ -909,13 +958,15 @@ public sealed class DocumentService(
         var wantSlug = SlugHelper.Slugify(pageSlug);
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        var actor = currentUser.Current;
         cmd.CommandText = $"""
             {PageSelect}
-            WHERE p.book_id = $book_id AND lower(p.slug) = lower($slug)
+            WHERE p.book_id = $book_id AND lower(p.slug) = lower($slug){Privacy.DocumentSql("p", actor)}
             LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$book_id", bookId);
         SqliteHelpers.Add(cmd, "$slug", wantSlug);
+        Privacy.BindViewer(cmd, actor);
         return await ReadResolvedPageAsync(cmd, ct);
     }
 
@@ -965,9 +1016,11 @@ public sealed class DocumentService(
             // theirs by default. Falls back to whoever is creating it when the
             // book has no owner either.
             OwnerId = NormalizeOwnerId(request.OwnerId) ?? book.OwnerId ?? actor.Id,
+            IsPrivate = request.IsPrivate ?? false,
             CreatedAt = now,
             UpdatedAt = now,
         };
+        Privacy.EnsurePrivateHasOwner(page.IsPrivate, page.OwnerId);
 
         // Content placement is decided — and any provider upload done — before
         // the transaction opens, so a slow provider never holds the write lock.
@@ -1002,6 +1055,9 @@ public sealed class DocumentService(
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectPageAsync(conn, id, ct);
         if (existing is null) return null;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, existing.IsPrivate, existing.OwnerId, existing.BookId, ct))
+            return null;
 
         var actor = currentUser.Current;
 
@@ -1034,8 +1090,8 @@ public sealed class DocumentService(
             existing.ChapterId = string.IsNullOrWhiteSpace(request.ChapterId) ? null : request.ChapterId.Trim();
         if (request.SortOrder is int order)
             existing.SortOrder = order;
-        if (request.OwnerId is not null)
-            existing.OwnerId = NormalizeOwnerId(request.OwnerId);
+        (existing.OwnerId, existing.IsPrivate) = Privacy.Apply(
+            actor, existing.OwnerId, existing.IsPrivate, request.OwnerId, request.IsPrivate);
         if (request.TrackChanges is bool trackChanges)
             existing.TrackChanges = trackChanges;
         if (request.MaxRevisions is int maxRevisions)
@@ -1107,7 +1163,8 @@ public sealed class DocumentService(
                     UPDATE page SET book_id = $book_id, title = $title, slug = $slug, content = $content,
                       content_ref = $content_ref, content_size = $content_size, chapter_id = $chapter_id,
                       sort_order = $sort_order, version = $version, owner_id = $owner_id,
-                      track_changes = $track_changes, max_revisions = $max_revisions, updated_at = $updated_at
+                      track_changes = $track_changes, max_revisions = $max_revisions,
+                      is_private = $is_private, updated_at = $updated_at
                     WHERE id = $id
                     """;
                 SqliteHelpers.Add(cmd, "$id", existing.Id);
@@ -1123,6 +1180,7 @@ public sealed class DocumentService(
                 SqliteHelpers.Add(cmd, "$owner_id", existing.OwnerId);
                 SqliteHelpers.Add(cmd, "$track_changes", existing.TrackChanges ? 1 : 0);
                 SqliteHelpers.Add(cmd, "$max_revisions", existing.MaxRevisions);
+                SqliteHelpers.Add(cmd, "$is_private", existing.IsPrivate ? 1 : 0);
                 SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
                 await cmd.ExecuteNonQueryAsync(ct);
             }
@@ -1192,6 +1250,9 @@ public sealed class DocumentService(
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectPageAsync(conn, id, ct);
         if (existing is null) return false;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, existing.IsPrivate, existing.OwnerId, existing.BookId, ct))
+            return false;
 
         var cloudRefs = new List<string>();
         if (existing.ContentRef is not null) cloudRefs.Add(existing.ContentRef);
@@ -1376,6 +1437,9 @@ public sealed class DocumentService(
         await using var conn = await db.OpenConnectionAsync(ct);
         var page = await SelectPageAsync(conn, id, ct);
         if (page is null) return null;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, page.IsPrivate, page.OwnerId, page.BookId, ct))
+            return null;
 
         var take = Math.Clamp(limit, 1, 500);
         var entries = new List<PageHistoryEntryDto>();
@@ -1440,6 +1504,9 @@ public sealed class DocumentService(
         // the rows may exist either way (they are also the change log), but
         // exposing their content is exactly what the toggle grants.
         if (page is null || !page.TrackChanges) return null;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, page.IsPrivate, page.OwnerId, page.BookId, ct))
+            return null;
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
@@ -1659,6 +1726,8 @@ public sealed class DocumentService(
             SELECT content_ref FROM kanban_board WHERE book_id = $id AND content_ref IS NOT NULL
             UNION ALL
             SELECT content_ref FROM project_plan WHERE book_id = $id AND content_ref IS NOT NULL
+            UNION ALL
+            SELECT content_ref FROM note WHERE book_id = $id AND content_ref IS NOT NULL
             """, ("$id", bookId), ct);
         return refs;
     }
@@ -1717,8 +1786,8 @@ public sealed class DocumentService(
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO book (id, title, description, slug, sort_order, shelf_id, owner_id, created_at, updated_at)
-            VALUES ($id, $title, $description, $slug, $sort_order, $shelf_id, $owner_id, $created_at, $updated_at)
+            INSERT INTO book (id, title, description, slug, sort_order, shelf_id, owner_id, is_private, created_at, updated_at)
+            VALUES ($id, $title, $description, $slug, $sort_order, $shelf_id, $owner_id, $is_private, $created_at, $updated_at)
             """;
         SqliteHelpers.Add(cmd, "$id", book.Id);
         SqliteHelpers.Add(cmd, "$title", book.Title);
@@ -1727,6 +1796,7 @@ public sealed class DocumentService(
         SqliteHelpers.Add(cmd, "$sort_order", book.SortOrder);
         SqliteHelpers.Add(cmd, "$shelf_id", book.ShelfId);
         SqliteHelpers.Add(cmd, "$owner_id", book.OwnerId);
+        SqliteHelpers.Add(cmd, "$is_private", book.IsPrivate ? 1 : 0);
         SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(book.CreatedAt));
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(book.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
@@ -1742,9 +1812,9 @@ public sealed class DocumentService(
         cmd.Transaction = tx;
         cmd.CommandText = """
             INSERT INTO page (id, book_id, chapter_id, title, slug, content, content_ref, content_size,
-              sort_order, version, owner_id, track_changes, max_revisions, created_at, updated_at)
+              sort_order, version, owner_id, track_changes, max_revisions, is_private, created_at, updated_at)
             VALUES ($id, $book_id, $chapter_id, $title, $slug, $content, $content_ref, $content_size,
-              $sort_order, $version, $owner_id, $track_changes, $max_revisions, $created_at, $updated_at)
+              $sort_order, $version, $owner_id, $track_changes, $max_revisions, $is_private, $created_at, $updated_at)
             """;
         SqliteHelpers.Add(cmd, "$id", page.Id);
         SqliteHelpers.Add(cmd, "$book_id", page.BookId);
@@ -1759,6 +1829,7 @@ public sealed class DocumentService(
         SqliteHelpers.Add(cmd, "$owner_id", page.OwnerId);
         SqliteHelpers.Add(cmd, "$track_changes", page.TrackChanges ? 1 : 0);
         SqliteHelpers.Add(cmd, "$max_revisions", page.MaxRevisions);
+        SqliteHelpers.Add(cmd, "$is_private", page.IsPrivate ? 1 : 0);
         SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(page.CreatedAt));
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(page.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
@@ -1768,7 +1839,7 @@ public sealed class DocumentService(
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, title, description, slug, sort_order, shelf_id, owner_id, created_at, updated_at
+            SELECT id, title, description, slug, sort_order, shelf_id, owner_id, is_private, created_at, updated_at
             FROM book WHERE id = $id LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$id", id);
@@ -1783,8 +1854,9 @@ public sealed class DocumentService(
             SortOrder = reader.GetInt32(4),
             ShelfId = SqliteHelpers.GetNullableString(reader, 5),
             OwnerId = SqliteHelpers.GetNullableString(reader, 6),
-            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 7),
-            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 8),
+            IsPrivate = ReadFlag(reader, 7),
+            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 8),
+            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 9),
         };
     }
 
@@ -1792,8 +1864,8 @@ public sealed class DocumentService(
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, title, description, slug, sort_order, published, owner_id, storage_provider_id,
-                   created_at, updated_at
+            SELECT id, title, description, slug, sort_order, published, owner_id, is_private,
+                   storage_provider_id, created_at, updated_at
             FROM shelf WHERE id = $id LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$id", id);
@@ -1808,9 +1880,10 @@ public sealed class DocumentService(
             SortOrder = reader.GetInt32(4),
             Published = ReadFlag(reader, 5),
             OwnerId = SqliteHelpers.GetNullableString(reader, 6),
-            StorageProviderId = SqliteHelpers.GetNullableString(reader, 7),
-            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 8),
-            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 9),
+            IsPrivate = ReadFlag(reader, 7),
+            StorageProviderId = SqliteHelpers.GetNullableString(reader, 8),
+            CreatedAt = SqliteHelpers.ReadTimestamp(reader, 9),
+            UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 10),
         };
     }
 
@@ -1841,7 +1914,7 @@ public sealed class DocumentService(
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT id, book_id, chapter_id, title, slug, content, sort_order, version, owner_id, created_at, updated_at,
-                   track_changes, max_revisions, content_ref, content_size
+                   track_changes, max_revisions, content_ref, content_size, is_private
             FROM page WHERE id = $id LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$id", id);
@@ -1867,6 +1940,7 @@ public sealed class DocumentService(
         MaxRevisions = reader.GetInt32(12),
         ContentRef = SqliteHelpers.GetNullableString(reader, 13),
         ContentSize = reader.IsDBNull(14) ? null : reader.GetInt64(14),
+        IsPrivate = ReadFlag(reader, 15),
     };
 
     private static async Task<string> UniqueShelfSlugAsync(SqliteConnection conn, string baseSlug, CancellationToken ct)
@@ -1988,7 +2062,7 @@ public sealed class DocumentService(
         var names = bookIds.Select((_, i) => $"$b{i}").ToArray();
         cmd.CommandText = $"""
             SELECT p.id, p.book_id, p.chapter_id, p.title, p.slug, p.sort_order, p.version,
-                   p.owner_id, p.updated_at,
+                   p.owner_id, p.updated_at, p.is_private,
                    COALESCE(NULLIF(TRIM(u.display_name), ''), u.username) AS owner_name
             FROM page p
             LEFT JOIN app_user u ON u.id = p.owner_id
@@ -2010,7 +2084,8 @@ public sealed class DocumentService(
                 SortOrder: reader.GetInt32(5),
                 Version: reader.GetInt32(6),
                 OwnerId: SqliteHelpers.GetNullableString(reader, 7),
-                OwnerName: SqliteHelpers.GetNullableString(reader, 9),
+                OwnerName: SqliteHelpers.GetNullableString(reader, 10),
+                IsPrivate: Privacy.ReadFlag(reader, 9),
                 UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 8))));
         }
         return list;
@@ -2025,10 +2100,11 @@ public sealed class DocumentService(
         SortOrder: reader.GetInt32(4),
         ShelfId: SqliteHelpers.GetNullableString(reader, 5),
         OwnerId: SqliteHelpers.GetNullableString(reader, 6),
-        CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 7)),
-        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 8)),
-        OwnerName: SqliteHelpers.GetNullableString(reader, 9),
-        ShelfTitle: SqliteHelpers.GetNullableString(reader, 10));
+        IsPrivate: ReadFlag(reader, 7),
+        CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 8)),
+        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 9)),
+        OwnerName: SqliteHelpers.GetNullableString(reader, 10),
+        ShelfTitle: SqliteHelpers.GetNullableString(reader, 11));
 
     /// <summary>Reads a row shaped by <see cref="ShelfSelect"/>.</summary>
     private static ShelfDto ReadShelfDto(SqliteDataReader reader) => new(
@@ -2039,12 +2115,13 @@ public sealed class DocumentService(
         SortOrder: reader.GetInt32(4),
         Published: ReadFlag(reader, 5),
         OwnerId: SqliteHelpers.GetNullableString(reader, 6),
-        CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 7)),
-        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 8)),
-        OwnerName: SqliteHelpers.GetNullableString(reader, 9),
-        BookCount: reader.GetInt32(10),
-        StorageProviderId: SqliteHelpers.GetNullableString(reader, 11),
-        StorageProviderName: SqliteHelpers.GetNullableString(reader, 12));
+        IsPrivate: ReadFlag(reader, 7),
+        CreatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 8)),
+        UpdatedAt: Coalesce(SqliteHelpers.ReadTimestamp(reader, 9)),
+        OwnerName: SqliteHelpers.GetNullableString(reader, 10),
+        BookCount: reader.GetInt32(11),
+        StorageProviderId: SqliteHelpers.GetNullableString(reader, 12),
+        StorageProviderName: SqliteHelpers.GetNullableString(reader, 13));
 
     /// <summary>Reads a row shaped by <see cref="PageSelect"/>.</summary>
     private static PageDto ReadPageDto(SqliteDataReader reader) => new(
@@ -2063,7 +2140,8 @@ public sealed class DocumentService(
         UpdatedById: SqliteHelpers.GetNullableString(reader, 12),
         UpdatedByName: SqliteHelpers.GetNullableString(reader, 13),
         TrackChanges: ReadFlag(reader, 14),
-        MaxRevisions: reader.GetInt32(15));
+        MaxRevisions: reader.GetInt32(15),
+        IsPrivate: ReadFlag(reader, 17));
 
     private static ChapterDto ReadChapterDto(SqliteDataReader reader) => new(
         Id: reader.GetString(0),
@@ -2084,6 +2162,7 @@ public sealed class DocumentService(
         ShelfTitle: shelfTitle,
         OwnerId: b.OwnerId,
         OwnerName: ownerName,
+        IsPrivate: b.IsPrivate,
         CreatedAt: Coalesce(b.CreatedAt),
         UpdatedAt: Coalesce(b.UpdatedAt));
 
@@ -2096,6 +2175,7 @@ public sealed class DocumentService(
         Published: s.Published,
         OwnerId: s.OwnerId,
         OwnerName: ownerName,
+        IsPrivate: s.IsPrivate,
         BookCount: bookCount,
         StorageProviderId: s.StorageProviderId,
         StorageProviderName: storageProviderName,
@@ -2126,6 +2206,7 @@ public sealed class DocumentService(
         UpdatedByName: updatedByName,
         TrackChanges: p.TrackChanges,
         MaxRevisions: p.MaxRevisions,
+        IsPrivate: p.IsPrivate,
         CreatedAt: Coalesce(p.CreatedAt),
         UpdatedAt: Coalesce(p.UpdatedAt));
 }

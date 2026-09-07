@@ -20,7 +20,8 @@ public interface ISlideDeckService
     Task BackfillSlideCountsAsync(CancellationToken ct = default);
 }
 
-public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver resolver) : ISlideDeckService
+public sealed class SlideDeckService(
+    SqliteConnectionFactory db, ContentResolver resolver, ICurrentUserAccessor currentUser) : ISlideDeckService
 {
     /// <summary>One blank 16:9 slide. The web editor owns the richer starter decks.</summary>
     public static string DefaultSource { get; } =
@@ -32,12 +33,14 @@ public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver
         await using var cmd = conn.CreateCommand();
         // slide_count is NULL only on pre-column rows the backfill has not seen,
         // where the source is guaranteed inline — so the fallback stays local.
-        cmd.CommandText = """
-            SELECT id, book_id, title, source, updated_at, slide_count
-            FROM slide_deck WHERE book_id = $book_id
+        var actor = currentUser.Current;
+        cmd.CommandText = $"""
+            SELECT id, book_id, title, source, updated_at, slide_count, owner_id, is_private
+            FROM slide_deck WHERE book_id = $book_id{Privacy.DocumentSql("slide_deck", actor)}
             ORDER BY updated_at DESC, title COLLATE NOCASE
             """;
         SqliteHelpers.Add(cmd, "$book_id", bookId);
+        Privacy.BindViewer(cmd, actor);
         var list = new List<SlideDeckSummaryDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
@@ -49,6 +52,8 @@ public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver
                 SlideCount: reader.IsDBNull(5)
                     ? CountSlides(SqliteHelpers.GetNullableString(reader, 3))
                     : (int)reader.GetInt64(5),
+                OwnerId: SqliteHelpers.GetNullableString(reader, 6),
+                IsPrivate: Privacy.ReadFlag(reader, 7),
                 UpdatedAt: SqliteHelpers.ReadTimestamp(reader, 4)));
         }
         return list;
@@ -59,23 +64,29 @@ public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver
         await using var conn = await db.OpenConnectionAsync(ct);
         var row = await SelectAsync(conn, id, ct);
         if (row is null) return null;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, row.IsPrivate, row.OwnerId, row.BookId, ct))
+            return null;
         row.Source = await resolver.LoadAsync(row.Source, row.ContentRef, ct);
-        return ToDto(row);
+        return ToDto(row, await Privacy.OwnerNameAsync(conn, row.OwnerId, ct));
     }
 
     public async Task<SlideDeckDto> CreateAsync(string bookId, CreateSlideDeckRequest request, CancellationToken ct = default)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
+        string? bookOwnerId;
         await using (var check = conn.CreateCommand())
         {
-            check.CommandText = "SELECT 1 FROM book WHERE id = $id LIMIT 1";
+            check.CommandText = "SELECT owner_id FROM book WHERE id = $id LIMIT 1";
             SqliteHelpers.Add(check, "$id", bookId);
-            var found = await check.ExecuteScalarAsync(ct);
-            if (found is null)
+            await using var reader = await check.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct))
                 throw new KeyNotFoundException($"Book '{bookId}' not found.");
+            bookOwnerId = SqliteHelpers.GetNullableString(reader, 0);
         }
 
         var now = DateTimeOffset.UtcNow;
+        var actor = currentUser.Current;
         var body = string.IsNullOrWhiteSpace(request.Source) ? DefaultSource : request.Source;
         var deck = new SlideDeck
         {
@@ -83,9 +94,12 @@ public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver
             BookId = bookId,
             Title = request.Title.Trim(),
             SlideCount = CountSlides(body),
+            OwnerId = string.IsNullOrWhiteSpace(request.OwnerId) ? bookOwnerId ?? actor.Id : request.OwnerId.Trim(),
+            IsPrivate = request.IsPrivate ?? false,
             CreatedAt = now,
             UpdatedAt = now,
         };
+        Privacy.EnsurePrivateHasOwner(deck.IsPrivate, deck.OwnerId);
 
         var target = await ContentResolver.ProviderIdForBookAsync(conn, bookId, ct);
         var cell = await resolver.SaveAsync(body, target, ContentRef.SlideDeckKey(deck.Id), null, ct);
@@ -96,9 +110,9 @@ public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO slide_deck (id, book_id, title, source, content_ref, content_size, slide_count,
-              created_at, updated_at)
+              owner_id, is_private, created_at, updated_at)
             VALUES ($id, $book_id, $title, $source, $content_ref, $content_size, $slide_count,
-              $created_at, $updated_at)
+              $owner_id, $is_private, $created_at, $updated_at)
             """;
         SqliteHelpers.Add(cmd, "$id", deck.Id);
         SqliteHelpers.Add(cmd, "$book_id", deck.BookId);
@@ -107,12 +121,14 @@ public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver
         SqliteHelpers.Add(cmd, "$content_ref", deck.ContentRef);
         SqliteHelpers.Add(cmd, "$content_size", deck.ContentSize);
         SqliteHelpers.Add(cmd, "$slide_count", deck.SlideCount);
+        SqliteHelpers.Add(cmd, "$owner_id", deck.OwnerId);
+        SqliteHelpers.Add(cmd, "$is_private", deck.IsPrivate ? 1 : 0);
         SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(deck.CreatedAt));
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(deck.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
 
         deck.Source = body;
-        return ToDto(deck);
+        return ToDto(deck, await Privacy.OwnerNameAsync(conn, deck.OwnerId, ct));
     }
 
     public async Task<SlideDeckDto?> UpdateAsync(string id, UpdateSlideDeckRequest request, CancellationToken ct = default)
@@ -120,8 +136,13 @@ public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectAsync(conn, id, ct);
         if (existing is null) return null;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, existing.IsPrivate, existing.OwnerId, existing.BookId, ct))
+            return null;
 
         existing.Title = request.Title.Trim();
+        (existing.OwnerId, existing.IsPrivate) = Privacy.Apply(
+            currentUser.Current, existing.OwnerId, existing.IsPrivate, request.OwnerId, request.IsPrivate);
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
         // Provider I/O before the write, same discipline as pages: a rename of an
@@ -139,7 +160,8 @@ public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver
         {
             cmd.CommandText = """
                 UPDATE slide_deck SET title = $title, source = $source, content_ref = $content_ref,
-                  content_size = $content_size, slide_count = $slide_count, updated_at = $updated_at
+                  content_size = $content_size, slide_count = $slide_count,
+                  owner_id = $owner_id, is_private = $is_private, updated_at = $updated_at
                 WHERE id = $id
                 """;
             SqliteHelpers.Add(cmd, "$id", existing.Id);
@@ -148,13 +170,15 @@ public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver
             SqliteHelpers.Add(cmd, "$content_ref", existing.ContentRef);
             SqliteHelpers.Add(cmd, "$content_size", existing.ContentSize);
             SqliteHelpers.Add(cmd, "$slide_count", existing.SlideCount);
+            SqliteHelpers.Add(cmd, "$owner_id", existing.OwnerId);
+            SqliteHelpers.Add(cmd, "$is_private", existing.IsPrivate ? 1 : 0);
             SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
             await cmd.ExecuteNonQueryAsync(ct);
         }
 
         await resolver.CleanupReplacedAsync(oldRef, cell.ContentRef, ct);
         existing.Source = body;
-        return ToDto(existing);
+        return ToDto(existing, await Privacy.OwnerNameAsync(conn, existing.OwnerId, ct));
     }
 
     public async Task<bool> DeleteAsync(string id, CancellationToken ct = default)
@@ -162,6 +186,9 @@ public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver
         await using var conn = await db.OpenConnectionAsync(ct);
         var existing = await SelectAsync(conn, id, ct);
         if (existing is null) return false;
+        if (!await Privacy.IsDocumentVisibleAsync(
+                conn, currentUser.Current, existing.IsPrivate, existing.OwnerId, existing.BookId, ct))
+            return false;
 
         await using (var cmd = conn.CreateCommand())
         {
@@ -223,7 +250,8 @@ public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, book_id, title, source, created_at, updated_at, content_ref, content_size, slide_count
+            SELECT id, book_id, title, source, created_at, updated_at, content_ref, content_size, slide_count,
+                   owner_id, is_private
             FROM slide_deck WHERE id = $id LIMIT 1
             """;
         SqliteHelpers.Add(cmd, "$id", id);
@@ -240,14 +268,19 @@ public sealed class SlideDeckService(SqliteConnectionFactory db, ContentResolver
             ContentRef = SqliteHelpers.GetNullableString(reader, 6),
             ContentSize = reader.IsDBNull(7) ? null : reader.GetInt64(7),
             SlideCount = reader.IsDBNull(8) ? null : (int)reader.GetInt64(8),
+            OwnerId = SqliteHelpers.GetNullableString(reader, 9),
+            IsPrivate = Privacy.ReadFlag(reader, 10),
         };
     }
 
-    private static SlideDeckDto ToDto(SlideDeck d) => new(
+    private static SlideDeckDto ToDto(SlideDeck d, string? ownerName) => new(
         Id: d.Id,
         BookId: d.BookId,
         Title: d.Title,
         Source: d.Source,
+        OwnerId: d.OwnerId,
+        OwnerName: ownerName,
+        IsPrivate: d.IsPrivate,
         CreatedAt: d.CreatedAt,
         UpdatedAt: d.UpdatedAt);
 }

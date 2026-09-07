@@ -45,6 +45,8 @@ type AuthCtx = {
   authEnabled: boolean
   /** Sign-in goes through RBA: corporate credentials, no local passwords to manage. */
   rbaEnabled: boolean
+  /** Signed in, but the account still has a temporary password — workspace is blocked. */
+  needsPasswordChange: boolean
   /**
    * Sign in. With RBA on, credentials go from the browser straight to RBA —
    * unless `useLocalAccount`, which signs in against BeeDocs' own accounts
@@ -138,6 +140,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Setup outranks login: with no accounts there is nothing to sign in to.
       needsLogin: resolved.authEnabled && !resolved.authenticated && !needsSetup,
       needsSetup,
+      needsPasswordChange:
+        resolved.authEnabled &&
+        resolved.authenticated &&
+        !!resolved.user?.mustChangePassword,
       canWrite: resolved.permissions.canWrite,
       canManageUsers: resolved.permissions.canManageUsers,
       authEnabled: resolved.authEnabled,

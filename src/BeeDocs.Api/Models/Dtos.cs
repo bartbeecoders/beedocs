@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations;
 namespace BeeDocs.Api.Models;
 
 /// <param name="OwnerId">Account responsible for the shelf, or null when nobody was identified.</param>
+/// <param name="IsPrivate">When true, only the owner (and admins) can see this shelf.</param>
 /// <param name="BookCount">Books currently on the shelf.</param>
 /// <param name="Published">True when <c>/bookshelf-serve/{slug}</c> is a public website.</param>
 /// <param name="StorageProviderId">Where content bodies live, or null for local SQLite.</param>
@@ -16,6 +17,7 @@ public sealed record ShelfDto(
     bool Published,
     string? OwnerId,
     string? OwnerName,
+    bool IsPrivate,
     int BookCount,
     string? StorageProviderId,
     string? StorageProviderName,
@@ -25,30 +27,35 @@ public sealed record ShelfDto(
 
 /// <param name="OwnerId">Omit to take the caller as owner.</param>
 /// <param name="Published">Serve this shelf as a public website. Default false.</param>
+/// <param name="IsPrivate">Only the owner can see it. Requires an owner. Default false.</param>
 public sealed record CreateShelfRequest(
     [property: Required, MinLength(1)] string Title,
     string? Description,
     string? Slug,
     string? OwnerId = null,
-    bool? Published = null
+    bool? Published = null,
+    bool? IsPrivate = null
 );
 
 /// <param name="Description">null leaves it untouched; "" clears it.</param>
 /// <param name="OwnerId">null leaves the owner untouched; "" clears it; anything else replaces it.</param>
 /// <param name="Published">null leaves it untouched.</param>
+/// <param name="IsPrivate">null leaves it untouched. Changing it needs the owner or an admin.</param>
 public sealed record UpdateShelfRequest(
     [property: Required, MinLength(1)] string Title,
     string? Description,
     string? Slug,
     int? SortOrder,
     string? OwnerId = null,
-    bool? Published = null
+    bool? Published = null,
+    bool? IsPrivate = null
 );
 
 /// <param name="ShelfId">The shelf this book sits on, or null when it sits at the library root.</param>
 /// <param name="ShelfTitle">That shelf's title, resolved for the client.</param>
 /// <param name="OwnerId">Account responsible for the book, or null when nobody was identified.</param>
 /// <param name="OwnerName">That account's display name, resolved for the client. Null when the account is gone.</param>
+/// <param name="IsPrivate">When true, only the owner (and admins) can see this book.</param>
 public sealed record BookDto(
     string Id,
     string Title,
@@ -59,30 +66,35 @@ public sealed record BookDto(
     string? ShelfTitle,
     string? OwnerId,
     string? OwnerName,
+    bool IsPrivate,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
 );
 
 /// <param name="ShelfId">Omit or leave blank to create the book at the library root.</param>
 /// <param name="OwnerId">Omit to take the caller as owner.</param>
+/// <param name="IsPrivate">Only the owner can see it. Requires an owner. Default false.</param>
 public sealed record CreateBookRequest(
     [property: Required, MinLength(1)] string Title,
     string? Description,
     string? Slug,
     string? OwnerId = null,
-    string? ShelfId = null
+    string? ShelfId = null,
+    bool? IsPrivate = null
 );
 
 /// <param name="Description">null leaves it untouched; "" clears it. A partial update must not delete text it never mentioned.</param>
 /// <param name="ShelfId">null leaves the shelf untouched; "" moves the book to the library root; anything else shelves it there.</param>
 /// <param name="OwnerId">null leaves the owner untouched; "" clears it; anything else replaces it.</param>
+/// <param name="IsPrivate">null leaves it untouched. Changing it needs the owner or an admin.</param>
 public sealed record UpdateBookRequest(
     [property: Required, MinLength(1)] string Title,
     string? Description,
     string? Slug,
     int? SortOrder,
     string? OwnerId = null,
-    string? ShelfId = null
+    string? ShelfId = null,
+    bool? IsPrivate = null
 );
 
 public sealed record ChapterDto(
@@ -123,6 +135,7 @@ public sealed record PageSummaryDto(
     int Version,
     string? OwnerId,
     string? OwnerName,
+    bool IsPrivate,
     DateTimeOffset UpdatedAt
 );
 
@@ -145,18 +158,21 @@ public sealed record PageDto(
     string? UpdatedByName,
     bool TrackChanges,
     int MaxRevisions,
+    bool IsPrivate,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
 );
 
 /// <param name="OwnerId">Omit to inherit the book's owner, falling back to the caller.</param>
+/// <param name="IsPrivate">Only the owner can see it. Requires an owner. Default false.</param>
 public sealed record CreatePageRequest(
     [property: Required, MinLength(1)] string Title,
     string? Slug,
     string? Content,
     string? ChapterId,
     int? SortOrder,
-    string? OwnerId = null
+    string? OwnerId = null,
+    bool? IsPrivate = null
 );
 
 /// <param name="OwnerId">null leaves the owner untouched; "" clears it; anything else replaces it.</param>
@@ -175,7 +191,8 @@ public sealed record UpdatePageRequest(
     string? OwnerId = null,
     bool? TrackChanges = null,
     int? MaxRevisions = null,
-    string? BookId = null
+    string? BookId = null,
+    bool? IsPrivate = null
 );
 
 /// <summary>
@@ -235,10 +252,14 @@ public sealed record PageRevisionDto(
 /// </summary>
 /// <param name="Source"><c>settings</c> (stored, editable at runtime), <c>config</c>
 /// (BeeDocs:ApiKey fallback), or null when no key is configured.</param>
-public sealed record ApiKeyStatusDto(bool HasKey, string? Source, string? KeyHint);
+public sealed record ApiKeyStatusDto(bool HasKey, string? Source, string? KeyHint, bool AllowAnonymousPublish = false);
 
-/// <summary>Null or empty clears the stored key (a configured fallback then applies again).</summary>
-public sealed record UpdateApiKeyRequest(string? ApiKey);
+/// <summary>
+/// Null or empty <paramref name="ApiKey"/> leaves the stored key alone;
+/// send <c>""</c> to clear it (a configured fallback then applies again).
+/// <paramref name="AllowAnonymousPublish"/> is independent of the key.
+/// </summary>
+public sealed record UpdateApiKeyRequest(string? ApiKey, bool? AllowAnonymousPublish = null);
 
 /// <summary>
 /// The RBA login-provider settings as the admin UI sees them. Nothing here is a
@@ -426,6 +447,9 @@ public sealed record DiagramDto(
     string Title,
     string Kind,
     string Source,
+    string? OwnerId,
+    string? OwnerName,
+    bool IsPrivate,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
 );
@@ -436,6 +460,8 @@ public sealed record DiagramSummaryDto(
     string? PageId,
     string Title,
     string Kind,
+    string? OwnerId,
+    bool IsPrivate,
     DateTimeOffset UpdatedAt
 );
 
@@ -443,14 +469,18 @@ public sealed record CreateDiagramRequest(
     [property: Required, MinLength(1)] string Title,
     string? Kind,
     string? Source,
-    string? PageId
+    string? PageId,
+    string? OwnerId = null,
+    bool? IsPrivate = null
 );
 
 public sealed record UpdateDiagramRequest(
     [property: Required, MinLength(1)] string Title,
     string? Kind,
     string? Source,
-    string? PageId
+    string? PageId,
+    string? OwnerId = null,
+    bool? IsPrivate = null
 );
 
 public sealed record SlideDeckDto(
@@ -459,6 +489,9 @@ public sealed record SlideDeckDto(
     string Title,
     /// <summary>JSON slide document — see src/beedocs-web/src/slides/slideModel.ts.</summary>
     string Source,
+    string? OwnerId,
+    string? OwnerName,
+    bool IsPrivate,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
 );
@@ -469,6 +502,8 @@ public sealed record SlideDeckSummaryDto(
     string BookId,
     string Title,
     int SlideCount,
+    string? OwnerId,
+    bool IsPrivate,
     DateTimeOffset UpdatedAt
 );
 
@@ -477,13 +512,17 @@ public sealed record SlideDeckSummaryDto(
 public sealed record CreateSlideDeckRequest(
     [property: Required, MinLength(1)] string Title,
     string? Source,
-    string? TemplateId = null
+    string? TemplateId = null,
+    string? OwnerId = null,
+    bool? IsPrivate = null
 );
 
 /// <param name="Source">null leaves the stored document untouched.</param>
 public sealed record UpdateSlideDeckRequest(
     [property: Required, MinLength(1)] string Title,
-    string? Source
+    string? Source,
+    string? OwnerId = null,
+    bool? IsPrivate = null
 );
 
 public sealed record KanbanBoardDto(
@@ -492,6 +531,9 @@ public sealed record KanbanBoardDto(
     string Title,
     /// <summary>JSON kanban document — see src/beedocs-web/src/kanban/kanbanModel.ts.</summary>
     string Source,
+    string? OwnerId,
+    string? OwnerName,
+    bool IsPrivate,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
 );
@@ -502,19 +544,25 @@ public sealed record KanbanBoardSummaryDto(
     string BookId,
     string Title,
     int CardCount,
+    string? OwnerId,
+    bool IsPrivate,
     DateTimeOffset UpdatedAt
 );
 
 /// <param name="Source">Omit to start with three empty columns (To do / In progress / Done).</param>
 public sealed record CreateKanbanBoardRequest(
     [property: Required, MinLength(1)] string Title,
-    string? Source
+    string? Source,
+    string? OwnerId = null,
+    bool? IsPrivate = null
 );
 
 /// <param name="Source">null leaves the stored document untouched.</param>
 public sealed record UpdateKanbanBoardRequest(
     [property: Required, MinLength(1)] string Title,
-    string? Source
+    string? Source,
+    string? OwnerId = null,
+    bool? IsPrivate = null
 );
 
 public sealed record ProjectPlanDto(
@@ -523,6 +571,9 @@ public sealed record ProjectPlanDto(
     string Title,
     /// <summary>JSON project document — see src/beedocs-web/src/project/projectModel.ts.</summary>
     string Source,
+    string? OwnerId,
+    string? OwnerName,
+    bool IsPrivate,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
 );
@@ -533,19 +584,65 @@ public sealed record ProjectPlanSummaryDto(
     string BookId,
     string Title,
     int TaskCount,
+    string? OwnerId,
+    bool IsPrivate,
     DateTimeOffset UpdatedAt
 );
 
 /// <param name="Source">Omit to start with a small sample plan (tasks + a milestone).</param>
 public sealed record CreateProjectPlanRequest(
     [property: Required, MinLength(1)] string Title,
-    string? Source
+    string? Source,
+    string? OwnerId = null,
+    bool? IsPrivate = null
 );
 
 /// <param name="Source">null leaves the stored document untouched.</param>
 public sealed record UpdateProjectPlanRequest(
     [property: Required, MinLength(1)] string Title,
-    string? Source
+    string? Source,
+    string? OwnerId = null,
+    bool? IsPrivate = null
+);
+
+public sealed record NoteDto(
+    string Id,
+    string BookId,
+    string Title,
+    /// <summary>JSON note document — see src/beedocs-web/src/notes/noteModel.ts.</summary>
+    string Source,
+    string? OwnerId,
+    string? OwnerName,
+    bool IsPrivate,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="BlockCount">Blocks (text, checklist, image, ink) on the note, counted from the stored document.</param>
+public sealed record NoteSummaryDto(
+    string Id,
+    string BookId,
+    string Title,
+    int BlockCount,
+    string? OwnerId,
+    bool IsPrivate,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="Source">Omit for an empty page.</param>
+public sealed record CreateNoteRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Source,
+    string? OwnerId = null,
+    bool? IsPrivate = null
+);
+
+/// <param name="Source">null leaves the stored document untouched.</param>
+public sealed record UpdateNoteRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Source,
+    string? OwnerId = null,
+    bool? IsPrivate = null
 );
 
 public sealed record SlideTemplateDto(
@@ -591,6 +688,7 @@ public sealed record AttachmentDto(
     long SizeBytes,
     string? OwnerId,
     string? OwnerName,
+    bool IsPrivate,
     string DownloadUrl,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
@@ -606,6 +704,7 @@ public sealed record AttachmentSummaryDto(
     long SizeBytes,
     string? OwnerId,
     string? OwnerName,
+    bool IsPrivate,
     string DownloadUrl,
     DateTimeOffset UpdatedAt
 );
@@ -617,11 +716,13 @@ public sealed record AttachmentSummaryDto(
 /// <param name="Description">null leaves it alone, "" clears it — same convention as <see cref="UpdateBookRequest"/>.</param>
 /// <param name="OwnerId">null leaves it alone, "" unassigns.</param>
 /// <param name="FileName">null keeps the stored name; otherwise renames the downloaded file.</param>
+/// <param name="IsPrivate">null leaves it untouched. Changing it needs the owner or an admin.</param>
 public sealed record UpdateAttachmentRequest(
     [property: Required, MinLength(1)] string Title,
     string? Description,
     string? OwnerId,
-    string? FileName
+    string? FileName,
+    bool? IsPrivate = null
 );
 
 public sealed record ShapeCollectionDto(
@@ -693,6 +794,7 @@ public sealed record SearchStatusDto(
     int SlideDecks,
     int KanbanBoards,
     int ProjectPlans,
+    int Notes,
     int Attachments,
     int Books,
     int Folders,
@@ -923,7 +1025,7 @@ public sealed record AssignShelfStorageRequest(string? ProviderId);
 /// (<see cref="Services.UserService"/>'s login path) and never reaches a DTO.
 /// </summary>
 /// <param name="Role">admin | editor | viewer.</param>
-/// <param name="MustChangePassword">Set for the seeded admin and after an admin reset.</param>
+/// <param name="MustChangePassword">Set after an admin creates or resets the account. Login succeeds, but other API routes are blocked until the owner sets their own password.</param>
 /// <summary>
 /// The minimum needed to name an account: what an owner picker shows. Available
 /// to every signed-in role, unlike <see cref="UserDto"/> — you cannot assign an
@@ -1051,7 +1153,7 @@ public sealed record AuthStateDto(
     string? RbaBaseUrl = null
 );
 
-/// <summary>How many of each thing the library holds. Total counts content documents (pages + diagrams + slide decks + kanban boards + project plans + attachments), not the containers around them.</summary>
+/// <summary>How many of each thing the library holds. Total counts content documents (pages + diagrams + slide decks + kanban boards + project plans + notes + attachments), not the containers around them.</summary>
 public sealed record DocumentCountsDto(
     int Shelves,
     int Books,
@@ -1061,6 +1163,7 @@ public sealed record DocumentCountsDto(
     int SlideDecks,
     int KanbanBoards,
     int ProjectPlans,
+    int Notes,
     int Attachments,
     int Total
 );

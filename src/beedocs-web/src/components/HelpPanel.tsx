@@ -354,6 +354,22 @@ export function HelpPanel() {
               </td>
               <td>{t('helpdoc.pg.fenceProjectRef')}</td>
             </tr>
+            <tr>
+              <td>
+                <code>```note</code>
+              </td>
+              <td>
+                {t('helpdoc.pg.fenceNotes1')}
+                <strong>{t('helpdoc.pg.fenceNotesMenu')}</strong>
+                {t('helpdoc.pg.fenceNotes2')}
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>```note-ref</code>
+              </td>
+              <td>{t('helpdoc.pg.fenceNotesRef')}</td>
+            </tr>
           </tbody>
         </table>
         <p className="muted sm">

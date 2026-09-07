@@ -20,10 +20,12 @@ import type {
   SlideDeckSummary,
   KanbanBoardSummary,
   ProjectPlanSummary,
+  NoteSummary,
 } from '../types'
 import { ATTACHMENT_ACCEPT, attachmentIcon, dragHasFiles, formatFileSize } from '../media/attachments'
-import { useAttachmentUpload } from '../hooks/useAttachmentUpload'
+import { useLibraryFileDrop } from '../hooks/useLibraryFileDrop'
 import { useFileDropZone } from '../hooks/useFileDropZone'
+import { showToast } from '../toast'
 
 type CtxMenu =
   | {
@@ -92,6 +94,14 @@ type CtxMenu =
       y: number
     }
   | {
+      kind: 'note'
+      bookId: string
+      noteId: string
+      title: string
+      x: number
+      y: number
+    }
+  | {
       kind: 'attachment'
       bookId: string
       attachmentId: string
@@ -117,7 +127,18 @@ type Creating =
   | { bookId: string; kind: 'slides' }
   | { bookId: string; kind: 'kanban' }
   | { bookId: string; kind: 'project' }
+  | { bookId: string; kind: 'note' }
   | { bookId: string; kind: 'folder' }
+
+function PrivateBadge({ on }: { on?: boolean }) {
+  const { t } = useI18n()
+  if (!on) return null
+  return (
+    <span className="tree-private-badge" title={t('nav.privateTitle')}>
+      {t('nav.privateBadge')}
+    </span>
+  )
+}
 
 export function NavTree() {
   const {
@@ -128,6 +149,7 @@ export function NavTree() {
     selection,
     setSelection,
     toggleBook,
+    expandBook,
     createBook,
     createShelf,
     createPage,
@@ -136,6 +158,7 @@ export function NavTree() {
     createSlideDeck,
     createKanbanBoard,
     createProjectPlan,
+    createNote,
     deleteBook,
     deleteShelf,
     renameShelf,
@@ -146,6 +169,7 @@ export function NavTree() {
     deleteSlideDeck,
     deleteKanbanBoard,
     deleteProjectPlan,
+    deleteNote,
     deleteAttachment,
     renameFolder,
     movePage,
@@ -178,7 +202,8 @@ export function NavTree() {
    */
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const uploadBookRef = useRef<string | null>(null)
-  const { uploadingIn, error: uploadError, clearError, upload } = useAttachmentUpload()
+  const { uploadingIn, error: uploadError, clearError, upload, handleFiles, dialog: mdDropDialog } =
+    useLibraryFileDrop()
 
   const openUploadPicker = (bookId: string) => {
     uploadBookRef.current = bookId
@@ -189,8 +214,10 @@ export function NavTree() {
    * Files dragged in from outside are handled once per book, by the drop zone
    * wrapping the whole book node (see BookNode) — so a document can be dropped
    * on the book row, a folder, a page, or the gap between them and still land
-   * in the same place. An attachment is filed against a book; being fussy about
-   * which row was under the pointer would only shrink the target for no gain.
+   * in the same place. PDF, zip and images become Files; Markdown asks whether
+   * to attach or become a page. Being fussy about which row was under the
+   * pointer would only shrink the target for no gain. The picker below still
+   * files everything as an attachment.
    *
    * The row-level handlers below therefore *decline* file drags rather than
    * handling them: they return before `stopPropagation`, letting the event
@@ -217,7 +244,14 @@ export function NavTree() {
         : api.downloadExport(scope === 'book' ? 'books' : 'pages', id, format).then(() => undefined)
 
     void job
-      .catch((err: unknown) => alert(err instanceof Error ? err.message : String(err)))
+      .then(() => {
+        showToast(t('dialogs.exportDone'), 'ok')
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err)
+        showToast(message, 'error')
+        alert(message)
+      })
       .finally(() => {
         setBusyExport(false)
         setMenu(null)
@@ -235,9 +269,12 @@ export function NavTree() {
     }
     window.addEventListener('keydown', onKey)
     window.addEventListener('mousedown', onDown, true)
+    const onDragEnd = () => setMenu(null)
+    window.addEventListener('dragend', onDragEnd)
     return () => {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('mousedown', onDown, true)
+      window.removeEventListener('dragend', onDragEnd)
     }
   }, [menu])
 
@@ -284,6 +321,7 @@ export function NavTree() {
     e.preventDefault()
     e.stopPropagation()
     setDragOver(null)
+    setMenu(null)
     // A shelf holds no content of its own, so there is no book to file a
     // dropped document against. Swallow it rather than letting the browser
     // navigate to the file and take the workspace down with it.
@@ -321,6 +359,11 @@ export function NavTree() {
       setChildTitle('')
       setCreatingIn(null)
       void navigate(`/books/${bookId}/project/${plan.id}`)
+    } else if (kind === 'note') {
+      const note = await createNote(bookId, childTitle.trim())
+      setChildTitle('')
+      setCreatingIn(null)
+      void navigate(`/books/${bookId}/notes/${note.id}`)
     } else {
       const diagram = await createDiagram(bookId, childTitle.trim(), creatingIn.diagramKind)
       setChildTitle('')
@@ -339,7 +382,14 @@ export function NavTree() {
     }
   }
 
+  const beginCreateInBook = (next: Creating) => {
+    void expandBook(next.bookId)
+    setCreatingIn(next)
+    setMenu(null)
+  }
+
   const onDragStart = (e: React.DragEvent, payload: DragPayload) => {
+    setMenu(null)
     e.dataTransfer.setData(TREE_DRAG_MIME, JSON.stringify(payload))
     e.dataTransfer.setData('text/plain', JSON.stringify(payload))
     e.dataTransfer.effectAllowed = 'move'
@@ -350,6 +400,7 @@ export function NavTree() {
     e.preventDefault()
     e.stopPropagation()
     setDragOver(null)
+    setMenu(null)
     const payload = parseDrag(e)
     if (!payload) return
     if (payload.type === 'folder') {
@@ -401,6 +452,7 @@ export function NavTree() {
     e.preventDefault()
     e.stopPropagation()
     setDragOver(null)
+    setMenu(null)
     if (!payload || payload.type !== 'page') return
     if (payload.pageId === target.id) return
     const chapterId = target.chapterId ?? null
@@ -487,7 +539,7 @@ export function NavTree() {
             </button>
           </>
         )}
-        <button type="button" className="icon-btn" onClick={() => void refreshTree()} title={t('common.refresh')}>
+        <button type="button" className="icon-btn" onClick={() => void refreshTree()} title={t('common.refresh')} aria-label={t('common.refresh')}>
           ↻
         </button>
       </div>
@@ -547,7 +599,7 @@ export function NavTree() {
             dropOnFolder={dropOnFolder}
             dropReorderPage={dropReorderPage}
             uploadingIn={uploadingIn}
-            uploadToBook={upload}
+            uploadToBook={handleFiles}
           />
         ))}
 
@@ -589,7 +641,7 @@ export function NavTree() {
             dropOnFolder={dropOnFolder}
             dropReorderPage={dropReorderPage}
             uploadingIn={uploadingIn}
-            uploadToBook={upload}
+            uploadToBook={handleFiles}
           />
         ))}
       </ul>
@@ -663,58 +715,44 @@ export function NavTree() {
               <MenuItem
                 label={t('nav.newPage')}
                 write
-                onClick={() => {
-                  setCreatingIn({ bookId: menu.bookId, kind: 'page' })
-                  setMenu(null)
-                }}
+                onClick={() => beginCreateInBook({ bookId: menu.bookId, kind: 'page' })}
               />
               <MenuItem
                 label={t('nav.newFolder')}
                 write
-                onClick={() => {
-                  setCreatingIn({ bookId: menu.bookId, kind: 'folder' })
-                  setMenu(null)
-                }}
+                onClick={() => beginCreateInBook({ bookId: menu.bookId, kind: 'folder' })}
               />
               <MenuItem
                 label={t('nav.newDiagram')}
                 write
-                onClick={() => {
-                  setCreatingIn({ bookId: menu.bookId, kind: 'diagram' })
-                  setMenu(null)
-                }}
+                onClick={() => beginCreateInBook({ bookId: menu.bookId, kind: 'diagram' })}
               />
               <MenuItem
                 label={t('nav.newIsometricDiagram')}
                 write
-                onClick={() => {
-                  setCreatingIn({ bookId: menu.bookId, kind: 'diagram', diagramKind: 'isometric' })
-                  setMenu(null)
-                }}
+                onClick={() =>
+                  beginCreateInBook({ bookId: menu.bookId, kind: 'diagram', diagramKind: 'isometric' })
+                }
               />
               <MenuItem
                 label={t('nav.newSlides')}
                 write
-                onClick={() => {
-                  setCreatingIn({ bookId: menu.bookId, kind: 'slides' })
-                  setMenu(null)
-                }}
+                onClick={() => beginCreateInBook({ bookId: menu.bookId, kind: 'slides' })}
               />
               <MenuItem
                 label={t('nav.newKanban')}
                 write
-                onClick={() => {
-                  setCreatingIn({ bookId: menu.bookId, kind: 'kanban' })
-                  setMenu(null)
-                }}
+                onClick={() => beginCreateInBook({ bookId: menu.bookId, kind: 'kanban' })}
               />
               <MenuItem
                 label={t('nav.newProject')}
                 write
-                onClick={() => {
-                  setCreatingIn({ bookId: menu.bookId, kind: 'project' })
-                  setMenu(null)
-                }}
+                onClick={() => beginCreateInBook({ bookId: menu.bookId, kind: 'project' })}
+              />
+              <MenuItem
+                label={t('nav.newNote')}
+                write
+                onClick={() => beginCreateInBook({ bookId: menu.bookId, kind: 'note' })}
               />
               <MenuItem
                 label={t('nav.uploadFile')}
@@ -779,10 +817,9 @@ export function NavTree() {
               <MenuItem
                 label={t('nav.newPageInFolder')}
                 write
-                onClick={() => {
-                  setCreatingIn({ bookId: menu.bookId, kind: 'page', chapterId: menu.chapterId })
-                  setMenu(null)
-                }}
+                onClick={() =>
+                  beginCreateInBook({ bookId: menu.bookId, kind: 'page', chapterId: menu.chapterId })
+                }
               />
               <MenuItem
                 label={t('nav.renameFolder')}
@@ -968,6 +1005,34 @@ export function NavTree() {
               />
             </>
           )}
+          {menu.kind === 'note' && (
+            <>
+              <div className="tree-context-heading">📝 {menu.title}</div>
+              <MenuItem
+                label={t('common.open')}
+                onClick={() => {
+                  void navigate(`/books/${menu.bookId}/notes/${menu.noteId}`)
+                  setMenu(null)
+                }}
+              />
+              <FavoriteMenuItem kind="note" entityId={menu.noteId} onDone={() => setMenu(null)} />
+              <div className="tree-context-sep" />
+              <MenuItem
+                label={t('nav.deleteNote')}
+                write
+                danger
+                onClick={() => {
+                  if (confirm(t('nav.deleteNoteConfirm', { title: menu.title }))) {
+                    void deleteNote(menu.noteId, menu.bookId).then(() => {
+                      if (params.noteId === menu.noteId)
+                        void navigate(`/books/${menu.bookId}`)
+                    })
+                  }
+                  setMenu(null)
+                }}
+              />
+            </>
+          )}
           {menu.kind === 'attachment' && (
             <>
               <div className="tree-context-heading">
@@ -1033,6 +1098,8 @@ export function NavTree() {
           {uploadError}
         </div>
       )}
+
+      {mdDropDialog}
 
       {importOpen && (
         <ImportDialog
@@ -1226,6 +1293,7 @@ function ShelfNode({
           type="button"
           className="tree-twist"
           aria-expanded={shelf.expanded}
+          aria-label={shelf.expanded ? t('nav.collapseNamed', { title: shelf.title }) : t('nav.expandNamed', { title: shelf.title })}
           onClick={() => toggleShelf(shelf.id)}
         >
           {shelf.expanded ? '▾' : '▸'}
@@ -1240,6 +1308,11 @@ function ShelfNode({
           {shelf.published && (
             <span className="tree-site-badge" title={t('nav.servedAsWebsite')}>
               {t('nav.webBadge')}
+            </span>
+          )}
+          {shelf.isPrivate && (
+            <span className="tree-private-badge" title={t('nav.privateTitle')}>
+              {t('nav.privateBadge')}
             </span>
           )}
           <span className="muted sm">({books.length})</span>
@@ -1335,7 +1408,7 @@ function BookNode({
   // drags so the event reaches here.
   const fileDrop = useFileDropZone({
     enabled: canWrite,
-    onFiles: (files) => uploadToBook(book.id, files),
+    onFiles: (files) => void uploadToBook(book.id, files),
   })
   const bookActive =
     (params.bookId === book.id && !params.pageId && !params.diagramId) ||
@@ -1391,6 +1464,7 @@ function BookNode({
           type="button"
           className="tree-twist"
           aria-expanded={book.expanded}
+          aria-label={book.expanded ? t('nav.collapseNamed', { title: book.title }) : t('nav.expandNamed', { title: book.title })}
           onClick={() => void toggleBook(book.id)}
         >
           {book.expanded ? '▾' : '▸'}
@@ -1402,6 +1476,11 @@ function BookNode({
         >
           <span className="tree-icon">📘</span>
           <span className="tree-text">{book.title}</span>
+          {book.isPrivate && (
+            <span className="tree-private-badge" title={t('nav.privateTitle')}>
+              {t('nav.privateBadge')}
+            </span>
+          )}
         </NavLink>
       </div>
 
@@ -1429,6 +1508,8 @@ function BookNode({
                             ? t('nav.kanbanTitle')
                             : creatingIn.kind === 'project'
                               ? t('nav.projectTitle')
+                              : creatingIn.kind === 'note'
+                                ? t('nav.noteTitle')
                             : t('nav.diagramTitle')
                   }
                 />
@@ -1549,6 +1630,23 @@ function BookNode({
             />
           ))}
 
+          {book.notes.length > 0 && <li className="tree-group-label">{t('common.notes')}</li>}
+          {book.notes.map((n) => (
+            <NoteRow
+              key={n.id}
+              bookId={book.id}
+              note={n}
+              active={
+                params.noteId === n.id ||
+                (selection.kind === 'note' && selection.noteId === n.id)
+              }
+              openMenu={openMenu}
+              onSelect={() =>
+                setSelection({ kind: 'note', bookId: book.id, noteId: n.id })
+              }
+            />
+          ))}
+
           {book.attachments.length > 0 && <li className="tree-group-label">{t('nav.groupFiles')}</li>}
           {book.attachments.map((a) => (
             <AttachmentRow
@@ -1573,6 +1671,7 @@ function BookNode({
             book.slideDecks.length === 0 &&
             book.kanbanBoards.length === 0 &&
             book.projectPlans.length === 0 &&
+            book.notes.length === 0 &&
             book.attachments.length === 0 &&
             book.chapters.length === 0 &&
             creatingIn?.bookId !== book.id && (
@@ -1668,6 +1767,7 @@ function FolderNode({
           type="button"
           className="tree-twist"
           aria-expanded={expanded}
+          aria-label={expanded ? t('nav.collapseNamed', { title: folder.title }) : t('nav.expandNamed', { title: folder.title })}
           onClick={() => toggleFolder(book.id, folder.id)}
         >
           {expanded ? '▾' : '▸'}
@@ -1749,6 +1849,7 @@ function PageRow({
   onSelect: () => void
 }) {
   const { canWrite } = useAuth()
+  const { t } = useI18n()
   const beforeId = `page-before:${page.id}`
   const afterId = `page-after:${page.id}`
   return (
@@ -1796,6 +1897,11 @@ function PageRow({
         >
           <span className="tree-icon">📄</span>
           <span className="tree-text">{page.title}</span>
+          {page.isPrivate && (
+            <span className="tree-private-badge" title={t('nav.privateTitle')}>
+              {t('nav.privateBadge')}
+            </span>
+          )}
         </NavLink>
       </div>
       <div
@@ -1849,6 +1955,7 @@ function SlideDeckRow({
         >
           <span className="tree-icon">🎞️</span>
           <span className="tree-text">{deck.title}</span>
+          <PrivateBadge on={deck.isPrivate} />
           <span className="muted sm">({deck.slideCount})</span>
         </NavLink>
       </div>
@@ -1891,6 +1998,7 @@ function KanbanRow({
         >
           <span className="tree-icon">📋</span>
           <span className="tree-text">{board.title}</span>
+          <PrivateBadge on={board.isPrivate} />
           <span className="muted sm">({board.cardCount})</span>
         </NavLink>
       </div>
@@ -1933,7 +2041,51 @@ function ProjectRow({
         >
           <span className="tree-icon">📊</span>
           <span className="tree-text">{plan.title}</span>
+          <PrivateBadge on={plan.isPrivate} />
           <span className="muted sm">({plan.taskCount})</span>
+        </NavLink>
+      </div>
+    </li>
+  )
+}
+
+function NoteRow({
+  bookId,
+  note,
+  active,
+  openMenu,
+  onSelect,
+}: {
+  bookId: string
+  note: NoteSummary
+  active: boolean
+  openMenu: (e: React.MouseEvent, next: CtxMenu) => void
+  onSelect: () => void
+}) {
+  return (
+    <li>
+      <div
+        className={`tree-row child ${active ? 'active' : ''}`}
+        onContextMenu={(e) =>
+          openMenu(e, {
+            kind: 'note',
+            bookId,
+            noteId: note.id,
+            title: note.title,
+            x: e.clientX,
+            y: e.clientY,
+          })
+        }
+      >
+        <NavLink
+          to={`/books/${bookId}/notes/${note.id}`}
+          className="tree-label"
+          onClick={onSelect}
+        >
+          <span className="tree-icon">📝</span>
+          <span className="tree-text">{note.title}</span>
+          <PrivateBadge on={note.isPrivate} />
+          <span className="muted sm">({note.blockCount})</span>
         </NavLink>
       </div>
     </li>
@@ -1979,6 +2131,7 @@ function AttachmentRow({
             {attachmentIcon(attachment.fileName, attachment.contentType)}
           </span>
           <span className="tree-text">{attachment.title}</span>
+          <PrivateBadge on={attachment.isPrivate} />
         </NavLink>
       </div>
     </li>
@@ -1998,6 +2151,7 @@ function DiagramRow({
   openMenu: (e: React.MouseEvent, next: CtxMenu) => void
   onSelect: () => void
 }) {
+  const { t } = useI18n()
   return (
     <li>
       <div
@@ -2020,6 +2174,11 @@ function DiagramRow({
         >
           <span className="tree-icon">{diagram.kind === 'isometric' ? '⬢' : '⬡'}</span>
           <span className="tree-text">{diagram.title}</span>
+          {diagram.isPrivate && (
+            <span className="tree-private-badge" title={t('nav.privateTitle')}>
+              {t('nav.privateBadge')}
+            </span>
+          )}
         </NavLink>
       </div>
     </li>

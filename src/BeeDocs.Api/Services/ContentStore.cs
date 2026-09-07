@@ -58,6 +58,7 @@ public static class ContentRef
     public static string SlideDeckKey(string deckId) => $"slides/{deckId}";
     public static string KanbanKey(string boardId) => $"kanban/{boardId}";
     public static string ProjectKey(string planId) => $"project/{planId}";
+    public static string NoteKey(string noteId) => $"notes/{noteId}";
 }
 
 /// <summary>

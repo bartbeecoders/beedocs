@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { exportBookToPdf } from '../export/pdf'
 import { useI18n } from '../i18n'
+import { showToast } from '../toast'
 
 type Props = {
   bookId: string
@@ -23,10 +24,13 @@ export function ExportBookButton({ bookId, bookTitle, className = '', variant = 
     try {
       await exportBookToPdf(bookId, (msg) => setStatus(msg))
       setStatus(t('dialogs.printOpened'))
+      showToast(t('dialogs.printOpened'), 'ok')
       setTimeout(() => setStatus(null), 5000)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
+      setError(message)
       setStatus(null)
+      showToast(message, 'error')
     } finally {
       setBusy(false)
     }
@@ -39,6 +43,11 @@ export function ExportBookButton({ bookId, bookTitle, className = '', variant = 
           type="button"
           className="icon-btn sm"
           title={
+            busy
+              ? status || t('dialogs.exporting')
+              : t('dialogs.exportAsPdf', { title: bookTitle ?? t('dialogs.bookFallback') })
+          }
+          aria-label={
             busy
               ? status || t('dialogs.exporting')
               : t('dialogs.exportAsPdf', { title: bookTitle ?? t('dialogs.bookFallback') })

@@ -28,6 +28,9 @@ public static class DatabaseInitializer
               -- flipping Auth:Enabled does not suddenly publish every shelf.
               published INTEGER NOT NULL DEFAULT 0,
               owner_id TEXT,
+              -- 1 = only the owner (and admins) can see this shelf. Default off
+              -- so existing shelves stay shared. Mutually exclusive with published.
+              is_private INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -46,6 +49,7 @@ public static class DatabaseInitializer
               -- an API-key caller). Not a foreign key: deleting an account must
               -- not cascade into deleting its books.
               owner_id TEXT,
+              is_private INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -76,6 +80,7 @@ public static class DatabaseInitializer
               -- max_revisions copies (0 = unlimited).
               track_changes INTEGER NOT NULL DEFAULT 0,
               max_revisions INTEGER NOT NULL DEFAULT 0,
+              is_private INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -106,6 +111,8 @@ public static class DatabaseInitializer
               title TEXT NOT NULL,
               kind TEXT NOT NULL,
               source TEXT NOT NULL DEFAULT '',
+              owner_id TEXT,
+              is_private INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -117,6 +124,8 @@ public static class DatabaseInitializer
               book_id TEXT NOT NULL,
               title TEXT NOT NULL,
               source TEXT NOT NULL DEFAULT '',
+              owner_id TEXT,
+              is_private INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -132,6 +141,8 @@ public static class DatabaseInitializer
               content_ref TEXT,
               content_size INTEGER,
               card_count INTEGER NOT NULL DEFAULT 0,
+              owner_id TEXT,
+              is_private INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -145,6 +156,23 @@ public static class DatabaseInitializer
               content_ref TEXT,
               content_size INTEGER,
               task_count INTEGER NOT NULL DEFAULT 0,
+              owner_id TEXT,
+              is_private INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            -- Notes (OneNote-style free-form pages). One JSON document per note.
+            CREATE TABLE IF NOT EXISTS note (
+              id TEXT PRIMARY KEY NOT NULL,
+              book_id TEXT NOT NULL,
+              title TEXT NOT NULL,
+              source TEXT NOT NULL DEFAULT '',
+              content_ref TEXT,
+              content_size INTEGER,
+              block_count INTEGER NOT NULL DEFAULT 0,
+              owner_id TEXT,
+              is_private INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -177,6 +205,7 @@ public static class DatabaseInitializer
               -- Defaults from the owning book, then from the uploader. Not a
               -- foreign key, for the same reason book.owner_id is not.
               owner_id TEXT,
+              is_private INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -279,6 +308,7 @@ public static class DatabaseInitializer
             CREATE INDEX IF NOT EXISTS idx_slide_deck_book ON slide_deck(book_id);
             CREATE INDEX IF NOT EXISTS idx_kanban_board_book ON kanban_board(book_id);
             CREATE INDEX IF NOT EXISTS idx_project_plan_book ON project_plan(book_id);
+            CREATE INDEX IF NOT EXISTS idx_note_book ON note(book_id);
             CREATE INDEX IF NOT EXISTS idx_attachment_book ON attachment(book_id);
             CREATE INDEX IF NOT EXISTS idx_shape_collection_book ON shape_collection(book_id);
             CREATE INDEX IF NOT EXISTS idx_page_revision_page ON page_revision(page_id);
@@ -461,6 +491,33 @@ public static class DatabaseInitializer
         // and each user chooses it themselves (Settings → Your account). NULL
         // means "not set" — commits are refused with guidance, never guessed.
         await AddColumnIfMissingAsync(connection, "app_user", "git_email", "TEXT", ct);
+        // Owner-only visibility. 0 is "shared", which is how every existing row
+        // behaved, so the migration needs no backfill. owner_id on diagram-like
+        // rows is filled from the book on create going forward; existing rows
+        // stay unowned (and therefore cannot be made private until assigned).
+        await AddColumnIfMissingAsync(
+            connection, "shelf", "is_private", "INTEGER NOT NULL DEFAULT 0", ct);
+        await AddColumnIfMissingAsync(
+            connection, "book", "is_private", "INTEGER NOT NULL DEFAULT 0", ct);
+        await AddColumnIfMissingAsync(
+            connection, "page", "is_private", "INTEGER NOT NULL DEFAULT 0", ct);
+        await AddColumnIfMissingAsync(connection, "diagram", "owner_id", "TEXT", ct);
+        await AddColumnIfMissingAsync(
+            connection, "diagram", "is_private", "INTEGER NOT NULL DEFAULT 0", ct);
+        await AddColumnIfMissingAsync(connection, "slide_deck", "owner_id", "TEXT", ct);
+        await AddColumnIfMissingAsync(
+            connection, "slide_deck", "is_private", "INTEGER NOT NULL DEFAULT 0", ct);
+        await AddColumnIfMissingAsync(connection, "kanban_board", "owner_id", "TEXT", ct);
+        await AddColumnIfMissingAsync(
+            connection, "kanban_board", "is_private", "INTEGER NOT NULL DEFAULT 0", ct);
+        await AddColumnIfMissingAsync(connection, "project_plan", "owner_id", "TEXT", ct);
+        await AddColumnIfMissingAsync(
+            connection, "project_plan", "is_private", "INTEGER NOT NULL DEFAULT 0", ct);
+        await AddColumnIfMissingAsync(
+            connection, "attachment", "is_private", "INTEGER NOT NULL DEFAULT 0", ct);
+        await AddColumnIfMissingAsync(connection, "note", "owner_id", "TEXT", ct);
+        await AddColumnIfMissingAsync(
+            connection, "note", "is_private", "INTEGER NOT NULL DEFAULT 0", ct);
 
         await using (var indexes = connection.CreateCommand())
         {
@@ -598,6 +655,19 @@ public static class DatabaseInitializer
           VALUES ('project', old.id, 'delete', datetime('now'));
         END;
 
+        CREATE TRIGGER IF NOT EXISTS trg_note_search_insert AFTER INSERT ON note BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('note', new.id, 'upsert', datetime('now'));
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_note_search_update AFTER UPDATE ON note BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('note', new.id, 'upsert', datetime('now'));
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_note_search_delete AFTER DELETE ON note BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('note', old.id, 'delete', datetime('now'));
+        END;
+
         CREATE TRIGGER IF NOT EXISTS trg_attachment_search_insert AFTER INSERT ON attachment BEGIN
           INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
           VALUES ('attachment', new.id, 'upsert', datetime('now'));
@@ -677,6 +747,9 @@ public static class DatabaseInitializer
         END;
         CREATE TRIGGER IF NOT EXISTS trg_project_plan_favorite_delete AFTER DELETE ON project_plan BEGIN
           DELETE FROM favorite WHERE kind = 'project' AND entity_id = old.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_note_favorite_delete AFTER DELETE ON note BEGIN
+          DELETE FROM favorite WHERE kind = 'note' AND entity_id = old.id;
         END;
         CREATE TRIGGER IF NOT EXISTS trg_attachment_favorite_delete AFTER DELETE ON attachment BEGIN
           DELETE FROM favorite WHERE kind = 'attachment' AND entity_id = old.id;

@@ -95,16 +95,17 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `/api/books`,
   `/api/books/{id}/chapters`, `/api/books/{id}/pages`, `/api/pages/{id}`,
   `/api/books/{id}/diagrams`, `/api/diagrams/{id}`, `/api/books/{id}/slides`,
-  `/api/slides/{id}`, `/api/books/{id}/kanban`, `/api/kanban/{id}`, `/api/books/{id}/project`, `/api/project/{id}`, `/api/books/{id}/attachments`, `/api/attachments/{id}`,
+  `/api/slides/{id}`, `/api/books/{id}/kanban`, `/api/kanban/{id}`, `/api/books/{id}/project`, `/api/project/{id}`, `/api/books/{id}/notes`, `/api/notes/{id}`, `/api/books/{id}/attachments`, `/api/attachments/{id}`,
   `/api/uploads`, `/api/search`,
   `/api/auth/*`, `/api/users/*`, `/api/stats`, plus `/api/health` and `/api/version`.
   Business logic lives in `Services/`
   (`DocumentService` for shelves/books/chapters/pages, `DiagramService` for
   diagrams, `SlideDeckService` for slide decks, `KanbanBoardService` for kanban
-  boards, `ProjectPlanService` for Gantt plans, `AttachmentService` for uploaded
+  boards, `ProjectPlanService` for Gantt plans, `NoteService` for OneNote-style
+  notes, `AttachmentService` for uploaded
   documents);
   entities are in `Models/Entities.cs` (`Shelf`, `Book`, `Chapter`, `Page`,
-  `PageRevision`, `Diagram`, `SlideDeck`, `KanbanBoard`, `ProjectPlan`, `Attachment` — plain POCOs with string
+  `PageRevision`, `Diagram`, `SlideDeck`, `KanbanBoard`, `ProjectPlan`, `Note`, `Attachment` — plain POCOs with string
   ids).
 - **Shelves** are the level above books: `shelf` rows plus a nullable
   `book.shelf_id`, so a book sits on at most one shelf and a book with no shelf
@@ -127,7 +128,7 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   UI gives it a 600s timeout) and configured at `/api/storage-providers` (admin;
   the Google callback is the one anonymous route — its HMAC-signed `state` is the
   auth). **Only bodies move** (`page.content`, `page_revision.content`,
-  `diagram.source`, `slide_deck.source`, `kanban_board.source`, `project_plan.source`); tree, metadata, `updated_at` and the
+  `diagram.source`, `slide_deck.source`, `kanban_board.source`, `project_plan.source`, `note.source`); tree, metadata, `updated_at` and the
   search index stay local. The load-bearing invariant is the per-row
   `content_ref` column: NULL = body inline (pre-feature behavior), else
   `"{providerId}:{key}"` — readers resolve the ref via `ContentResolver`, never
@@ -151,7 +152,7 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   (diagram JSON contributes only its shape labels, and uploaded documents are run
   through `AttachmentTextExtractor` so a PDF or .docx is searchable by its
   contents). Nothing calls the indexer to
-  register a write: triggers on `page`/`diagram`/`slide_deck`/`kanban_board`/`project_plan`/`attachment`/`book`/
+  register a write: triggers on `page`/`diagram`/`slide_deck`/`kanban_board`/`project_plan`/`note`/`attachment`/`book`/
   `chapter`/`shelf` record changes in `search_queue`, and the queue is drained at
   startup and before each search,
   so the index stays correct whoever wrote the row — UI, MCP, import, or direct
@@ -266,6 +267,28 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   edges to resize, FS predecessors, optional assignee. Agents use
   `beedocs_create_project_plan_with_tasks` /
   `beedocs_update_project_plan_tasks`. See `Docs/PROJECT.md`.
+- **Notes** (`note` table, same storage shape as `diagram` / `slide_deck` /
+  `kanban_board` / `project_plan`) are OneNote-style pages: a free-form canvas
+  of absolutely positioned blocks — Markdown text (with OneNote-like tags),
+  checklists, images, and pen/highlighter **ink** — in one JSON document whose
+  source of truth is `src/beedocs-web/src/notes/noteModel.ts`; the server
+  stores it verbatim and reads only block texts (search) and the block count
+  (tree badge). The OneNote hierarchy maps onto what exists: book = notebook,
+  chapter = section, note = page. The signature gesture is *click anywhere on
+  empty page → a text block appears there and takes focus*; an empty text block
+  disappears on blur. Ink strokes carry **page** coordinates (an ink block's
+  `x/y/w/h` is the derived bounding box), so drawing never re-bases points and
+  moving ink is a translation; strokes drawn while one tool stays selected join
+  one ink block, and the eraser removes whole strokes. The editor
+  (`notes/NoteEditor.tsx`) keeps its own undo history over serialized sources
+  and renders text blocks with `react-markdown` directly — not `MarkdownView`,
+  which would be an import cycle since `MarkdownView` embeds notes. A note is a
+  book-tree item at `/books/{bookId}/notes/{id}` (`NoteCanvas.tsx`) and/or a
+  page embed: inline ` ```note ` or ` ```note-ref `. PDF export goes through
+  `noteToHtml` (positioned HTML + SVG ink). Agents use
+  `beedocs_create_note_with_blocks` / `beedocs_update_note_blocks` (text,
+  checklist and image blocks, auto-stacked when no coordinates are given).
+  See `Docs/NOTES.md`.
 - **Attachments** are another thing a book holds (`attachment` table,
   `Services/AttachmentService.cs`, `components/AttachmentCanvas.tsx`, route
   `/books/{bookId}/files/{id}`): an uploaded PDF, Word/PowerPoint/Excel or
@@ -301,9 +324,13 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   filter and a too-large file is refused before upload; the server list is the
   one that decides. Deleting a book cascades rows in the transaction and files
   after the commit. **Drag-and-drop** (`hooks/useFileDropZone.ts`,
-  `hooks/useAttachmentUpload.ts`): dropping files anywhere under a book — tree
-  node or overview — files them there, and dropping on an attachment's canvas
-  replaces that file. Every target checks `dragHasFiles` first, because the
+  `hooks/useLibraryFileDrop.ts`, `hooks/useAttachmentUpload.ts`): dropping files
+  anywhere under a book — tree node or overview — classifies them
+  (`media/fileDropIntent.ts`): PDF, zip and images go to Files; Markdown asks
+  whether to attach or become a page (and in which book). The toolbar/picker
+  “Upload file” path still always files as an attachment. Dropping an image on
+  a page embeds it (`useImageIntake` / `/api/uploads`). Dropping on an
+  attachment's canvas replaces that file. Every target checks `dragHasFiles` first, because the
   tree's own drags carry JSON on `text/plain` and would otherwise read a dropped
   PDF as a page move; the tree's rows *decline* file drags (returning before
   `stopPropagation`) so the book-wide zone around them gets the event.
@@ -315,7 +342,7 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   context) and `beedocs_link_attachment_in_page`. See `Docs/ATTACHMENTS.md`.
 - **Favorites** (`favorite` table, `Services/FavoriteService.cs`, UI
   `FavoritesPanel.tsx` above the tree in the left pane) — per-user starred items
-  (kinds `book | page | diagram | slides | kanban | project | attachment`, the search queue's
+  (kinds `book | page | diagram | slides | kanban | project | note | attachment`, the search queue's
   names), keyed `(user_id, kind, entity_id)` with `user_id = ''` when sign-in is
   off or the caller is the API key — one shared list for an open instance, the
   same degradation ownership follows. `GET /api/favorites` returns the list
@@ -328,6 +355,16 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   UI entry points: "Add/Remove from favorites" in the tree context menus;
   the panel (which renders nothing while empty, and collapses via
   `beedocs-favorites-collapsed` in localStorage) opens and unstars.
+- **Privacy** — `is_private` on shelf, book, page, diagram, slide_deck,
+  kanban_board, project_plan, note and attachment. The owner (or an admin) flips
+  it via the ordinary update (`isPrivate`, null leaves it). A private item is
+  hidden from every signed-in account except its owner; admins and the API key
+  still see it; sign-in off does not filter. Direct URLs 404. Privacy inherits
+  down (private shelf hides its books, private book hides its pages). Requires
+  an owner; clearing the owner drops the flag. A private shelf cannot be
+  published. The public bookshelf never includes private items. Search, favorites
+  and export go through the same filter. Deleting an account un-privates what it
+  owned.
 - **Ownership & page history** — `book.owner_id` / `page.owner_id` name the
   account answerable for a document (a page inherits its book's owner at
   creation, falling back to its creator); neither grants any permission, which
@@ -425,10 +462,12 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   key, no base URL, and a blank model means the CLI's own default — for local
   installs where Claude Code or Grok CLI is already signed in; the command must
   be on the API process's PATH, so they don't work in a hosted container.
-  `/api/llm` is behind the same `ApiKeyEndpointFilter` as `/api/v1`, which is
-  inert unless `BeeDocs:ApiKey` is set — an open port with a stored key is a
-  bill waiting to happen, and setting the key also switches the feature off in
-  the UI (the browser has nowhere to keep the secret). See
+  `/api/llm` is behind the same `ApiKeyEndpointFilter` as `/api/v1`. With no
+  key, `/api/v1` is closed unless an admin opts into anonymous publish; signed-in
+  sessions still reach `/api/llm`. Setting a key does not lock the UI — a session
+  is accepted in place of the machine header, so Settings → AI providers and
+  writing help keep working. Auth-off instances with a key set are the remaining
+  lockout (the browser has nowhere to keep the secret). See
   `Docs/LLM-PROVIDERS.md`.
 - **Branding & themes** (`Services/BrandingService.cs`; UI `branding.tsx` +
   `components/BrandingPanel.tsx`, theme layer `theme.tsx` + `omarchyTheme.ts`)
@@ -564,6 +603,7 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/SLIDES.md` — slide decks: document format, designer, presentation mode.
 - `Docs/KANBAN.md` — kanban boards: document format, page embed, book-tree item.
 - `Docs/PROJECT.md` — project plans: WBS + Gantt, page embed, book-tree item.
+- `Docs/NOTES.md` — notes: OneNote-style free-form pages (text, checklists, images, ink), page embed, book-tree item.
 - `Docs/ATTACHMENTS.md` — book attachments: storage, upload rules, and why they are not uploads.
 - `Docs/GIT-INTEGRATION.md` — git/DevOps repos browsed as books; clones, security, search.
 - `Docs/USERS-AND-ROLES.md` — accounts, roles, sessions, and the opt-in sign-in wall.

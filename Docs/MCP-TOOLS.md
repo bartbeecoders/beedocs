@@ -47,7 +47,7 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_get_shelf` | `shelfId` | Get shelf |
 | `beedocs_list_shelf_books` | `shelfId` | Books filed on one shelf |
 | `beedocs_create_shelf` | `title`, `description?`, `slug?`, `published?` | Create shelf (optionally as a public website) |
-| `beedocs_update_shelf` | `shelfId`, `title`, `description?`, `slug?`, `sortOrder?`, `published?` | Rename / reorder shelf, or publish it as `/bookshelf-serve/{slug}` |
+| `beedocs_update_shelf` | `shelfId`, `title`, `description?`, `slug?`, `sortOrder?`, `published?`, `isPrivate?` | Rename / reorder shelf, publish it as `/bookshelf-serve/{slug}`, or make it owner-only |
 | `beedocs_delete_shelf` | `shelfId` | Delete shelf (books kept, moved to library root) |
 | `beedocs_move_book_to_shelf` | `bookId`, `shelfId?` | File a book on a shelf; omit `shelfId` to move it to the root |
 
@@ -58,10 +58,10 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_list_books` | — | List all books (each with `shelfId`/`shelfTitle` when shelved) |
 | `beedocs_get_book` | `bookId` | Get book |
 | `beedocs_create_book` | `title`, `description?`, `slug?`, `shelfId?` | Create book (optionally on a shelf) |
-| `beedocs_update_book` | `bookId`, `title`, `description?`, `slug?`, `sortOrder?`, `shelfId?` | Update book (omitted fields are left alone; `shelfId: ""` unshelves) |
+| `beedocs_update_book` | `bookId`, `title`, `description?`, `slug?`, `sortOrder?`, `shelfId?`, `isPrivate?` | Update book (omitted fields are left alone; `shelfId: ""` unshelves; `isPrivate` is owner-only visibility) |
 | `beedocs_delete_book` | `bookId` | Delete book (+ cascade pages/chapters) |
-| `beedocs_get_book_tree` | `bookId` | Folders + root pages + diagrams + slide decks + kanban boards + project plans tree |
-| `beedocs_export_book` | `bookId`, `includePageContent?`, `includeDiagramSource?`, `includeSlideSource?`, `includeKanbanSource?`, `includeProjectSource?` | Structured export of one book |
+| `beedocs_get_book_tree` | `bookId` | Folders + root pages + diagrams + slide decks + kanban boards + project plans + notes tree |
+| `beedocs_export_book` | `bookId`, `includePageContent?`, `includeDiagramSource?`, `includeSlideSource?`, `includeKanbanSource?`, `includeProjectSource?`, `includeNoteSource?` | Structured export of one book |
 
 ### Chapters (folders)
 
@@ -80,7 +80,7 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_list_pages` | `bookId` | List page summaries |
 | `beedocs_get_page` | `pageId` | Full page + content |
 | `beedocs_create_page` | `bookId`, `title`, `content?`, `slug?`, `chapterId?`, `sortOrder?` | Create page (optionally in folder) |
-| `beedocs_update_page` | `pageId`, `title`, `content?`, `slug?`, `chapterId?`, `sortOrder?` | Update (revision saved) |
+| `beedocs_update_page` | `pageId`, `title`, `content?`, `slug?`, `chapterId?`, `sortOrder?`, `isPrivate?` | Update (revision saved; `isPrivate` is owner-only visibility) |
 | `beedocs_delete_page` | `pageId` | Delete page |
 | `beedocs_append_page_content` | `pageId`, `markdown`, `separator?` | Append Markdown and save |
 | `beedocs_move_page` | `pageId`, `chapterId?`, `clearFolder?`, `sortOrder?`, `bookId?` | Move into/out of folder, into another book, or reorder |
@@ -289,6 +289,44 @@ Pages embed a stored plan with ```` ```project-ref\nPLAN_ID\n``` ````, or an
 inline copy with ```` ```project\n{json}\n``` ````. The full document format is
 documented in [PROJECT.md](./PROJECT.md).
 
+### Notes
+
+OneNote-style free-form pages: blocks at absolute positions on a page, ink
+drawn over everything. Agents generally create text and checklist blocks and
+leave ink and images to the UI.
+
+| Tool | Args | Description |
+|------|------|-------------|
+| `beedocs_list_notes` | `bookId` | Note summaries incl. `blockCount` |
+| `beedocs_get_note` | `noteId` | Full note + JSON document |
+| `beedocs_create_note` | `bookId`, `title`, `source?` | Raw JSON create; omit source for an empty page |
+| `beedocs_update_note` | `noteId`, `title?`, `source?` | Update title and/or document (null keeps current) |
+| `beedocs_delete_note` | `noteId` | Delete note |
+| `beedocs_create_note_with_blocks` | `bookId`, `title`, `blocks?` | Structured create — auto-laid-out blocks; returns `workspaceUrl` + `embedFence` |
+| `beedocs_update_note_blocks` | `noteId`, `blocks[]`, `title?` | Replace blocks with the same structured model (keeps background/paper, drops UI ink) |
+
+#### Structured blocks
+
+Each block is `{ id?, kind?, x?, y?, w?, h?, text?, tag?, title?, items?, src?, alt? }` in z-order.
+When `x`/`y` are omitted the block is stacked below the previous one at `x=48`,
+starting at `y=40`, with a 24 px gap (height estimated as text `24 + 22·lines`,
+checklist `40 + 26·items`, image `h` or 200).
+
+| Block field | Notes |
+|-------------|-------|
+| `kind` | `text` \| `checklist` \| `image` (default `text`) |
+| `x`, `y` | Position in CSS px, origin top-left; omit for auto-stacking |
+| `w`, `h` | Width defaults: text 460, checklist 280, image 320; `h` omitted = auto height (image defaults to 200) |
+| `text` | Markdown (GFM) — text blocks |
+| `tag` | `important` \| `question` \| `idea` \| `remember` \| `critical` \| `definition` \| `contact` — text blocks |
+| `title`, `items` | Checklist heading and item texts; prefix an item with `[x] ` to mark it done |
+| `src`, `alt` | Image URL (`/uploads/…` from `beedocs_upload_image`, or any URL) and alt text |
+
+Pages embed a stored note with ```` ```note-ref\nNOTE_ID\n``` ````, or an
+inline copy with ```` ```note\n{json}\n``` ````. The document format's source
+of truth is `src/beedocs-web/src/notes/noteModel.ts` (`background`:
+`plain|ruled|grid|dots`; `paper`: `white|cream|mint|sky|lavender|rose|graphite`).
+
 ### Git repositories
 
 Repos an admin put on the shelf (Settings → Git repositories): server-side
@@ -346,13 +384,14 @@ Indexed repos also surface in `beedocs_search` as kind `gitfile` (id
 | `beedocs://books/{bookId}/pages` | Page summaries |
 | `beedocs://books/{bookId}/chapters` | Folder list |
 | `beedocs://books/{bookId}/attachments` | Attachment metadata (contents via `beedocs_read_attachment`) |
-| `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams + slide decks + kanban boards + project plans + attachments |
+| `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams + slide decks + kanban boards + project plans + notes + attachments |
 | `beedocs://pages/{pageId}` | Full page |
 | `beedocs://diagram/catalog` | Every shape, Azure stencil, palette group, anchor, route and arrow head |
 | `beedocs://diagrams/{diagramId}` | Full diagram |
 | `beedocs://slides/{deckId}` | Full slide deck |
 | `beedocs://kanban/{boardId}` | Full kanban board |
 | `beedocs://project/{planId}` | Full project plan |
+| `beedocs://notes/{noteId}` | Full note |
 
 ---
 

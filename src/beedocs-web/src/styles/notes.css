@@ -1,0 +1,521 @@
+/* OneNote-style notes: book canvas, page embed, read-only view. */
+
+.note-canvas {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.note-canvas-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.note-canvas-body > .note {
+  flex: 1;
+  min-height: 0;
+}
+
+.note {
+  display: flex;
+  flex-direction: column;
+  min-height: 16rem;
+  position: relative;
+}
+
+.note.is-compact {
+  height: 24rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  overflow: hidden;
+}
+
+.note-view .note.is-readonly.is-compact {
+  height: 22rem;
+}
+
+.note-view-title {
+  margin-bottom: 0.4rem;
+}
+
+/* ---- toolbar ---- */
+
+.note-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-pane);
+  font-size: 0.85rem;
+}
+
+.note.is-compact .note-toolbar {
+  padding: 0.25rem 0.4rem;
+  gap: 0.25rem 0.4rem;
+}
+
+.note-tool-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.note-tool-group + .note-tool-group::before {
+  content: '';
+  width: 1px;
+  height: 1.2rem;
+  background: var(--border);
+  margin: 0 0.25rem;
+}
+
+.note-toolbar-spacer {
+  flex: 1;
+}
+
+.note-tool-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.note-tool-glyph {
+  display: inline-block;
+  width: 1.1em;
+  text-align: center;
+  margin-right: 0.25em;
+}
+
+.note.is-compact .note-tool-text {
+  display: none;
+}
+
+.note.is-compact .note-tool-glyph {
+  margin-right: 0;
+}
+
+.note-select {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.note-swatch {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+  padding: 0;
+}
+
+.note-swatch.is-active {
+  border-color: var(--bg-elevated);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* ---- page ---- */
+
+.note-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-soft);
+}
+
+.note-page {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+  /* Paper is always light, whatever the app theme — like the Studio canvas —
+     so ink colours read the same everywhere. Graphite is the dark option. */
+  --note-paper: #ffffff;
+  --note-ink-text: #1f2933;
+  --note-rule: rgba(80, 120, 200, 0.3);
+  --note-grid: rgba(120, 130, 150, 0.28);
+  background-color: var(--note-paper);
+  color: var(--note-ink-text);
+  cursor: text;
+}
+
+.note.is-readonly .note-page {
+  cursor: default;
+}
+
+.note-page[data-paper='cream'] {
+  --note-paper: #fdf6e3;
+  --note-ink-text: #1f2933;
+}
+.note-page[data-paper='mint'] {
+  --note-paper: #edf8f0;
+  --note-ink-text: #1f2933;
+}
+.note-page[data-paper='sky'] {
+  --note-paper: #eaf3fc;
+  --note-ink-text: #1f2933;
+}
+.note-page[data-paper='lavender'] {
+  --note-paper: #f1ecfa;
+  --note-ink-text: #1f2933;
+}
+.note-page[data-paper='rose'] {
+  --note-paper: #fbeef1;
+  --note-ink-text: #1f2933;
+}
+.note-page[data-paper='graphite'] {
+  --note-paper: #2b2f36;
+  --note-ink-text: #e6e8ec;
+  --note-rule: rgba(140, 170, 230, 0.35);
+  --note-grid: rgba(255, 255, 255, 0.12);
+}
+
+.note-page[data-bg='ruled'] {
+  background-image: linear-gradient(transparent 23px, var(--note-rule) 23px, var(--note-rule) 24px);
+  background-size: 100% 24px;
+}
+
+.note-page[data-bg='grid'] {
+  background-image: linear-gradient(var(--note-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--note-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.note-page[data-bg='dots'] {
+  background-image: radial-gradient(var(--note-grid) 1.2px, transparent 1.6px);
+  background-size: 24px 24px;
+}
+
+.note-hint {
+  position: absolute;
+  left: 48px;
+  top: 40px;
+  pointer-events: none;
+  font-style: italic;
+}
+
+/* ---- blocks ---- */
+
+.note-block {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: default;
+  outline: none;
+}
+
+.note-block:hover,
+.note-block:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.note-block.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.note-block.is-dragging {
+  opacity: 0.85;
+  transition: none;
+}
+
+.note.is-readonly .note-block:hover {
+  border-color: transparent;
+}
+
+.note-block-grip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -8px;
+  height: 10px;
+  border-radius: 6px 6px 0 0;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  cursor: grab;
+  opacity: 0;
+  touch-action: none;
+  transition: opacity 0.12s;
+}
+
+.note-block:hover > .note-block-grip,
+.note-block.is-selected > .note-block-grip,
+.note-block:focus-within > .note-block-grip {
+  opacity: 1;
+}
+
+.note-block.is-dragging > .note-block-grip {
+  cursor: grabbing;
+}
+
+.note-block-resize {
+  position: absolute;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.note-block-resize.is-corner {
+  top: auto;
+  bottom: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  opacity: 0;
+}
+
+.note-block.is-selected > .note-block-resize.is-corner {
+  opacity: 1;
+}
+
+.note-block-body {
+  min-height: 1.4rem;
+}
+
+.note-block-tag {
+  position: absolute;
+  left: -1.35rem;
+  top: 0.15rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: #b7791f;
+  pointer-events: none;
+}
+
+/* text */
+
+.note-text-view {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  cursor: text;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.note.is-readonly .note-text-view {
+  cursor: default;
+}
+
+.note-text-view > :first-child {
+  margin-top: 0;
+}
+
+.note-text-view > :last-child {
+  margin-bottom: 0;
+}
+
+.note-text-view h1 {
+  font-size: 1.35rem;
+  margin: 0 0 0.35rem;
+}
+
+.note-text-view h2 {
+  font-size: 1.15rem;
+  margin: 0.2rem 0 0.3rem;
+}
+
+.note-text-view h3 {
+  font-size: 1rem;
+  margin: 0.2rem 0 0.25rem;
+}
+
+.note-text-view p,
+.note-text-view ul,
+.note-text-view ol {
+  margin: 0 0 0.35rem;
+}
+
+.note-text-view ul,
+.note-text-view ol {
+  padding-left: 1.2rem;
+}
+
+.note-text-view code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+}
+
+.note-text-view a {
+  color: #2f6fdb;
+}
+
+.note-text-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  padding: 0.35rem 0.55rem;
+  overflow: hidden;
+  min-height: 1.9rem;
+}
+
+/* checklist */
+
+.note-checklist {
+  padding: 0.35rem 0.55rem;
+}
+
+.note-checklist-title {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0 0 0.25rem;
+}
+
+.note-checklist ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.note-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.1rem 0;
+}
+
+.note-checklist li input[type='checkbox'] {
+  /* The global `input { width: 100% }` would make the box eat the row. */
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.note-checklist-item {
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 0.1rem 0;
+  min-width: 0;
+}
+
+.note-checklist li.is-done .note-checklist-item {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.note-text-input::placeholder,
+.note-checklist-title::placeholder,
+.note-checklist-item::placeholder {
+  color: inherit;
+  opacity: 0.45;
+}
+
+.note-text-view.is-empty .muted,
+.note-hint {
+  color: inherit;
+  opacity: 0.5;
+}
+
+.note-checklist-add {
+  margin-top: 0.15rem;
+  padding-left: 0.2rem;
+}
+
+/* image */
+
+.note-block.kind-image {
+  overflow: hidden;
+}
+
+.note-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ---- ink ---- */
+
+.note-ink-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.note-ink-layer path {
+  pointer-events: none;
+}
+
+.note-ink-layer .note-ink-hit {
+  pointer-events: stroke;
+  cursor: grab;
+}
+
+.note-ink-bounds {
+  fill: none;
+  stroke: var(--accent);
+  stroke-dasharray: 4 3;
+  stroke-width: 1;
+}
+
+.note-draw-layer {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.note.tool-eraser .note-draw-layer {
+  cursor: cell;
+}
+
+.note.is-drawing .note-block {
+  pointer-events: none;
+}
+
+/* ---- page embeds ---- */
+
+.note-embed {
+  margin: 0.75rem 0;
+}
+
+.note-embed .inline-diagram-head {
+  margin-bottom: 0.35rem;
+}
+
+.hybrid-note-block .note {
+  border: 0;
+  border-radius: 0;
+}

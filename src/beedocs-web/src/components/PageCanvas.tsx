@@ -35,6 +35,8 @@ export type PageEditorState = {
   trackChanges: boolean
   /** Stored copies to keep while tracking. 0 = unlimited. */
   maxRevisions: number
+  /** Owner-gated: hide the page from everyone except its owner (and admins). */
+  isPrivate: boolean
   dirty: boolean
   saving: boolean
   error: string | null
@@ -44,6 +46,7 @@ export type PageEditorState = {
   setOwnerId: (v: string) => void
   setTrackChanges: (v: boolean) => void
   setMaxRevisions: (v: number) => void
+  setIsPrivate: (v: boolean) => void
   setMode: (m: PageViewMode) => void
   save: () => Promise<void>
   deletePage: () => Promise<void>
@@ -67,6 +70,7 @@ export function PageCanvas({ onStateChange }: Props) {
   const [ownerId, setOwnerId] = useState('')
   const [trackChanges, setTrackChanges] = useState(false)
   const [maxRevisions, setMaxRevisions] = useState(0)
+  const [isPrivate, setIsPrivate] = useState(false)
   const [chosenMode, setModeState] = useState<PageViewMode>(() =>
     loadPageViewMode(pageId) ?? (showPreviewDefault ? 'split' : 'edit'),
   )
@@ -85,11 +89,13 @@ export function PageCanvas({ onStateChange }: Props) {
   const ownerRef = useRef(ownerId)
   const trackChangesRef = useRef(trackChanges)
   const maxRevisionsRef = useRef(maxRevisions)
+  const isPrivateRef = useRef(isPrivate)
   const dirtyRef = useRef(dirty)
   const pageIdRef = useRef(pageId)
   const savingRef = useRef(false)
   /** Title the library tree is currently showing, so a save only refreshes it when it moved. */
   const treeTitleRef = useRef('')
+  const treePrivateRef = useRef(false)
   /** Root of the page canvas — used by the outline pane for scroll targeting. */
   const pageRootRef = useRef<HTMLDivElement>(null)
 
@@ -98,6 +104,7 @@ export function PageCanvas({ onStateChange }: Props) {
   ownerRef.current = ownerId
   trackChangesRef.current = trackChanges
   maxRevisionsRef.current = maxRevisions
+  isPrivateRef.current = isPrivate
   dirtyRef.current = dirty
   pageIdRef.current = pageId
 
@@ -125,6 +132,7 @@ export function PageCanvas({ onStateChange }: Props) {
         ownerId: ownerRef.current,
         trackChanges: trackChangesRef.current,
         maxRevisions: maxRevisionsRef.current,
+        isPrivate: isPrivateRef.current,
       }
       void api.updatePage(id, payload).catch(() => {
         /* best-effort flush */
@@ -148,7 +156,9 @@ export function PageCanvas({ onStateChange }: Props) {
         setOwnerId(p.ownerId ?? '')
         setTrackChanges(p.trackChanges)
         setMaxRevisions(p.maxRevisions)
+        setIsPrivate(!!p.isPrivate)
         treeTitleRef.current = p.title
+        treePrivateRef.current = !!p.isPrivate
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       }
@@ -170,6 +180,7 @@ export function PageCanvas({ onStateChange }: Props) {
       // actual change, and only the owner/admin controls can produce one.
       trackChanges: trackChangesRef.current,
       maxRevisions: maxRevisionsRef.current,
+      isPrivate: isPrivateRef.current,
     }
     savingRef.current = true
     setSaving(true)
@@ -186,8 +197,9 @@ export function PageCanvas({ onStateChange }: Props) {
       // The tree only shows the title, so refetching the whole library after every
       // autosave just churned state — and every workspace re-render it caused was
       // one more rebuild of the preview's diagrams.
-      if (updated.title !== treeTitleRef.current) {
+      if (updated.title !== treeTitleRef.current || updated.isPrivate !== treePrivateRef.current) {
         treeTitleRef.current = updated.title
+        treePrivateRef.current = updated.isPrivate
         await renameInTree()
       }
     } catch (err) {
@@ -238,6 +250,7 @@ export function PageCanvas({ onStateChange }: Props) {
       ownerId,
       trackChanges,
       maxRevisions,
+      isPrivate,
       dirty,
       saving,
       error,
@@ -262,12 +275,16 @@ export function PageCanvas({ onStateChange }: Props) {
         setMaxRevisions(v)
         setDirty(true)
       },
+      setIsPrivate: (v) => {
+        setIsPrivate(v)
+        setDirty(true)
+      },
       setMode,
       save,
       deletePage: remove,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, title, content, ownerId, trackChanges, maxRevisions, dirty, saving, error, mode, save])
+  }, [page, title, content, ownerId, trackChanges, maxRevisions, isPrivate, dirty, saving, error, mode, save])
 
   useEffect(() => {
     return () => onStateChange?.(null)

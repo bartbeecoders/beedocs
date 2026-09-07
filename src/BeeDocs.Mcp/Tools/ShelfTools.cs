@@ -52,9 +52,11 @@ public sealed class ShelfTools(BeeDocsApiClient client)
         int? sortOrder = null,
         [Description("When true, /bookshelf-serve/{slug} is a public website even if sign-in is on. Omit to leave as-is.")]
         bool? published = null,
+        [Description("When true, only the owner (and admins) can see this shelf. Requires an owner. Omit to leave as-is.")]
+        bool? isPrivate = null,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
-            ToolHelpers.Json(await client.UpdateShelfAsync(shelfId, new { title, description, slug, sortOrder, published }, ct)));
+            ToolHelpers.Json(await client.UpdateShelfAsync(shelfId, new { title, description, slug, sortOrder, published, isPrivate }, ct)));
 
     [McpServerTool(Name = "beedocs_delete_shelf", Title = "Delete shelf"),
      Description("Delete a shelf. Its books are kept and return to the library root — no content is lost.")]

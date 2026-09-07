@@ -89,6 +89,10 @@ const en = {
   'shell.projectTitle': 'Plan title',
   'shell.projectPlaceholder': 'e.g. Delivery plan',
   'shell.createProject': 'Create plan',
+  'shell.newNote': 'New note',
+  'shell.noteTitle': 'Note title',
+  'shell.notePlaceholder': 'e.g. Meeting notes',
+  'shell.createNote': 'Create note',
   'shell.template': 'Template',
   'shell.blankDeck': 'Blank deck',
   'shell.slideCount.one': '{count} slide',
@@ -109,6 +113,8 @@ const en = {
   'shell.deleteKanbanConfirm': 'Delete kanban board “{name}”?',
   'shell.deleteProject': 'Delete project',
   'shell.deleteProjectConfirm': 'Delete project plan “{name}”?',
+  'shell.deleteNote': 'Delete note',
+  'shell.deleteNoteConfirm': 'Delete note “{name}”?',
   'shell.deleteFile': 'Delete file',
   'shell.deleteFileConfirm': 'Delete “{name}”? The file is removed from the server.',
   'shell.replaceFile': 'Replace file',
@@ -120,10 +126,17 @@ const en = {
   'shell.presentTooltip': 'Start the presentation',
   'shell.backToLibrary': 'Back to library',
   'shell.dropToAdd': 'Drop to add to “{name}”',
-  'shell.dropTypes': 'PDF, Word, PowerPoint, Excel, archives and images',
+  'shell.dropTypes': 'PDF, Word, Markdown, archives and images',
   'shell.bookHint':
     'Choose a page or diagram from the tree to open it in the editor. Properties appear on the right.',
-  'shell.bookHintDrop': 'Drop a PDF or Office document anywhere on this page to file it here.',
+  'shell.bookHintDrop':
+    'Drop a PDF, zip or image to file it here. Markdown asks whether to become a page.',
+  'shell.securityOpen': 'Anonymous publish is on',
+  'shell.securityOpenHint':
+    'Apps can publish to /api/v1 without a key. Open Sign-in & API settings.',
+  'shell.securityNoKey': 'API key needed',
+  'shell.securityNoKeyHint':
+    'Sign-in is on but no API key is set — MCP and publishing apps cannot authenticate. Open Sign-in & API settings.',
 } as const
 
 type Msgs = Record<keyof typeof en, string>
@@ -213,6 +226,10 @@ const fr: Msgs = {
   'shell.projectTitle': 'Titre du plan',
   'shell.projectPlaceholder': 'p. ex. Plan de livraison',
   'shell.createProject': 'Créer le plan',
+  'shell.newNote': 'Nouvelle note',
+  'shell.noteTitle': 'Titre de la note',
+  'shell.notePlaceholder': 'p. ex. Notes de réunion',
+  'shell.createNote': 'Créer la note',
   'shell.template': 'Modèle',
   'shell.blankDeck': 'Présentation vierge',
   'shell.slideCount.one': '{count} diapositive',
@@ -233,6 +250,8 @@ const fr: Msgs = {
   'shell.deleteKanbanConfirm': 'Supprimer le tableau kanban « {name} » ?',
   'shell.deleteProject': 'Supprimer le projet',
   'shell.deleteProjectConfirm': 'Supprimer le plan de projet « {name} » ?',
+  'shell.deleteNote': 'Supprimer la note',
+  'shell.deleteNoteConfirm': 'Supprimer la note « {name} » ?',
   'shell.deleteFile': 'Supprimer le fichier',
   'shell.deleteFileConfirm': 'Supprimer « {name} » ? Le fichier est retiré du serveur.',
   'shell.replaceFile': 'Remplacer le fichier',
@@ -244,11 +263,17 @@ const fr: Msgs = {
   'shell.presentTooltip': 'Démarrer la présentation',
   'shell.backToLibrary': 'Retour à la bibliothèque',
   'shell.dropToAdd': 'Déposez pour ajouter à « {name} »',
-  'shell.dropTypes': 'PDF, Word, PowerPoint, Excel, archives et images',
+  'shell.dropTypes': 'PDF, Word, Markdown, archives et images',
   'shell.bookHint':
     'Choisissez une page ou un diagramme dans l’arborescence pour l’ouvrir dans l’éditeur. Les propriétés apparaissent à droite.',
   'shell.bookHintDrop':
-    'Déposez un document PDF ou Office n’importe où sur cette page pour le classer ici.',
+    'Déposez un PDF, un zip ou une image pour le classer ici. Un fichier Markdown demande s’il doit devenir une page.',
+  'shell.securityOpen': 'Publication anonyme activée',
+  'shell.securityOpenHint':
+    'Les applications peuvent publier sur /api/v1 sans clé. Ouvrez Paramètres → Connexion et API.',
+  'shell.securityNoKey': 'Clé API requise',
+  'shell.securityNoKeyHint':
+    'La connexion est activée mais aucune clé API n’est définie — MCP et les applications de publication ne peuvent pas s’authentifier. Ouvrez Paramètres → Connexion et API.',
 }
 
 const de: Msgs = {
@@ -336,6 +361,10 @@ const de: Msgs = {
   'shell.projectTitle': 'Plan-Titel',
   'shell.projectPlaceholder': 'z. B. Lieferplan',
   'shell.createProject': 'Plan erstellen',
+  'shell.newNote': 'Neue Notiz',
+  'shell.noteTitle': 'Notiz-Titel',
+  'shell.notePlaceholder': 'z. B. Besprechungsnotizen',
+  'shell.createNote': 'Notiz erstellen',
   'shell.template': 'Vorlage',
   'shell.blankDeck': 'Leere Präsentation',
   'shell.slideCount.one': '{count} Folie',
@@ -356,6 +385,8 @@ const de: Msgs = {
   'shell.deleteKanbanConfirm': 'Kanban-Board „{name}“ löschen?',
   'shell.deleteProject': 'Projekt löschen',
   'shell.deleteProjectConfirm': 'Projektplan „{name}“ löschen?',
+  'shell.deleteNote': 'Notiz löschen',
+  'shell.deleteNoteConfirm': 'Notiz „{name}“ löschen?',
   'shell.deleteFile': 'Datei löschen',
   'shell.deleteFileConfirm': '„{name}“ löschen? Die Datei wird vom Server entfernt.',
   'shell.replaceFile': 'Datei ersetzen',
@@ -367,11 +398,17 @@ const de: Msgs = {
   'shell.presentTooltip': 'Präsentation starten',
   'shell.backToLibrary': 'Zurück zur Bibliothek',
   'shell.dropToAdd': 'Ablegen, um zu „{name}“ hinzuzufügen',
-  'shell.dropTypes': 'PDF, Word, PowerPoint, Excel, Archive und Bilder',
+  'shell.dropTypes': 'PDF, Word, Markdown, Archive und Bilder',
   'shell.bookHint':
     'Wählen Sie eine Seite oder ein Diagramm im Baum, um es im Editor zu öffnen. Die Eigenschaften erscheinen rechts.',
   'shell.bookHintDrop':
-    'Legen Sie ein PDF- oder Office-Dokument irgendwo auf dieser Seite ab, um es hier abzulegen.',
+    'Legen Sie ein PDF, Zip oder Bild ab, um es hier abzulegen. Markdown fragt, ob daraus eine Seite werden soll.',
+  'shell.securityOpen': 'Anonymes Publizieren ist an',
+  'shell.securityOpenHint':
+    'Apps können ohne Schlüssel auf /api/v1 publizieren. Öffnen Sie Einstellungen → Anmeldung & API.',
+  'shell.securityNoKey': 'API-Schlüssel nötig',
+  'shell.securityNoKeyHint':
+    'Anmeldung ist an, aber kein API-Schlüssel gesetzt — MCP und publizierende Apps können sich nicht authentifizieren. Öffnen Sie Einstellungen → Anmeldung & API.',
 }
 
 const es: Msgs = {
@@ -459,6 +496,10 @@ const es: Msgs = {
   'shell.projectTitle': 'Título del plan',
   'shell.projectPlaceholder': 'p. ej. Plan de entrega',
   'shell.createProject': 'Crear plan',
+  'shell.newNote': 'Nueva nota',
+  'shell.noteTitle': 'Título de la nota',
+  'shell.notePlaceholder': 'p. ej. Notas de reunión',
+  'shell.createNote': 'Crear nota',
   'shell.template': 'Plantilla',
   'shell.blankDeck': 'Presentación en blanco',
   'shell.slideCount.one': '{count} diapositiva',
@@ -479,6 +520,8 @@ const es: Msgs = {
   'shell.deleteKanbanConfirm': '¿Eliminar el tablero kanban «{name}»?',
   'shell.deleteProject': 'Eliminar proyecto',
   'shell.deleteProjectConfirm': '¿Eliminar el plan de proyecto «{name}»?',
+  'shell.deleteNote': 'Eliminar nota',
+  'shell.deleteNoteConfirm': '¿Eliminar la nota «{name}»?',
   'shell.deleteFile': 'Eliminar archivo',
   'shell.deleteFileConfirm': '¿Eliminar «{name}»? El archivo se elimina del servidor.',
   'shell.replaceFile': 'Reemplazar archivo',
@@ -490,11 +533,17 @@ const es: Msgs = {
   'shell.presentTooltip': 'Iniciar la presentación',
   'shell.backToLibrary': 'Volver a la biblioteca',
   'shell.dropToAdd': 'Suelta para añadir a «{name}»',
-  'shell.dropTypes': 'PDF, Word, PowerPoint, Excel, archivos comprimidos e imágenes',
+  'shell.dropTypes': 'PDF, Word, Markdown, archivos comprimidos e imágenes',
   'shell.bookHint':
     'Elige una página o un diagrama del árbol para abrirlo en el editor. Las propiedades aparecen a la derecha.',
   'shell.bookHintDrop':
-    'Suelta un documento PDF u Office en cualquier parte de esta página para archivarlo aquí.',
+    'Suelta un PDF, zip o imagen para archivarlo aquí. Markdown pregunta si debe convertirse en página.',
+  'shell.securityOpen': 'Publicación anónima activada',
+  'shell.securityOpenHint':
+    'Las aplicaciones pueden publicar en /api/v1 sin clave. Abre Configuración → Inicio de sesión y API.',
+  'shell.securityNoKey': 'Se necesita clave API',
+  'shell.securityNoKeyHint':
+    'El inicio de sesión está activado pero no hay clave API — MCP y las aplicaciones de publicación no pueden autenticarse. Abre Configuración → Inicio de sesión y API.',
 }
 
 const nl: Msgs = {
@@ -582,6 +631,10 @@ const nl: Msgs = {
   'shell.projectTitle': 'Plantitel',
   'shell.projectPlaceholder': 'bijv. Opleverplan',
   'shell.createProject': 'Plan aanmaken',
+  'shell.newNote': 'Nieuwe notitie',
+  'shell.noteTitle': 'Notitietitel',
+  'shell.notePlaceholder': 'bijv. Vergadernotities',
+  'shell.createNote': 'Notitie aanmaken',
   'shell.template': 'Sjabloon',
   'shell.blankDeck': 'Lege presentatie',
   'shell.slideCount.one': '{count} dia',
@@ -602,6 +655,8 @@ const nl: Msgs = {
   'shell.deleteKanbanConfirm': 'Kanbanbord ‘{name}’ verwijderen?',
   'shell.deleteProject': 'Project verwijderen',
   'shell.deleteProjectConfirm': 'Projectplan ‘{name}’ verwijderen?',
+  'shell.deleteNote': 'Notitie verwijderen',
+  'shell.deleteNoteConfirm': 'Notitie ‘{name}’ verwijderen?',
   'shell.deleteFile': 'Bestand verwijderen',
   'shell.deleteFileConfirm': '‘{name}’ verwijderen? Het bestand wordt van de server verwijderd.',
   'shell.replaceFile': 'Bestand vervangen',
@@ -613,11 +668,17 @@ const nl: Msgs = {
   'shell.presentTooltip': 'De presentatie starten',
   'shell.backToLibrary': 'Terug naar de bibliotheek',
   'shell.dropToAdd': 'Laat los om toe te voegen aan ‘{name}’',
-  'shell.dropTypes': 'PDF, Word, PowerPoint, Excel, archieven en afbeeldingen',
+  'shell.dropTypes': 'PDF, Word, Markdown, archieven en afbeeldingen',
   'shell.bookHint':
     'Kies een pagina of diagram in de boom om deze in de editor te openen. De eigenschappen verschijnen rechts.',
   'shell.bookHintDrop':
-    'Sleep een PDF- of Office-document ergens op deze pagina om het hier op te bergen.',
+    'Sleep een PDF, zip of afbeelding hierheen om het te archiveren. Bij Markdown wordt gevraagd of het een pagina moet worden.',
+  'shell.securityOpen': 'Anonieme publicatie staat aan',
+  'shell.securityOpenHint':
+    'Apps kunnen zonder sleutel publiceren naar /api/v1. Open Instellingen → Aanmelden & API.',
+  'shell.securityNoKey': 'API-sleutel nodig',
+  'shell.securityNoKeyHint':
+    'Aanmelden staat aan maar er is geen API-sleutel — MCP en publicerende apps kunnen niet authenticeren. Open Instellingen → Aanmelden & API.',
 }
 
 const ja: Msgs = {
@@ -705,6 +766,10 @@ const ja: Msgs = {
   'shell.projectTitle': '計画のタイトル',
   'shell.projectPlaceholder': '例：デリバリー計画',
   'shell.createProject': '計画を作成',
+  'shell.newNote': '新しいノート',
+  'shell.noteTitle': 'ノートのタイトル',
+  'shell.notePlaceholder': '例：会議メモ',
+  'shell.createNote': 'ノートを作成',
   'shell.template': 'テンプレート',
   'shell.blankDeck': '空のスライド',
   'shell.slideCount.one': '{count} 枚のスライド',
@@ -725,6 +790,8 @@ const ja: Msgs = {
   'shell.deleteKanbanConfirm': 'カンバンボード「{name}」を削除しますか？',
   'shell.deleteProject': 'プロジェクトを削除',
   'shell.deleteProjectConfirm': 'プロジェクト計画「{name}」を削除しますか？',
+  'shell.deleteNote': 'ノートを削除',
+  'shell.deleteNoteConfirm': 'ノート「{name}」を削除しますか？',
   'shell.deleteFile': 'ファイルを削除',
   'shell.deleteFileConfirm': '「{name}」を削除しますか？ファイルはサーバーから削除されます。',
   'shell.replaceFile': 'ファイルを置き換え',
@@ -736,11 +803,17 @@ const ja: Msgs = {
   'shell.presentTooltip': 'プレゼンテーションを開始',
   'shell.backToLibrary': 'ライブラリに戻る',
   'shell.dropToAdd': 'ドロップして「{name}」に追加',
-  'shell.dropTypes': 'PDF、Word、PowerPoint、Excel、アーカイブ、画像',
+  'shell.dropTypes': 'PDF、Word、Markdown、アーカイブ、画像',
   'shell.bookHint':
     'ツリーからページまたはダイアグラムを選ぶとエディターで開きます。プロパティは右側に表示されます。',
   'shell.bookHintDrop':
-    'PDF や Office ドキュメントをこのページの任意の場所にドロップすると、ここに保管されます。',
+    'PDF、zip、画像をドロップするとここに保管されます。Markdown はページにするか確認します。',
+  'shell.securityOpen': '匿名公開がオンです',
+  'shell.securityOpenHint':
+    'アプリはキーなしで /api/v1 に公開できます。設定 → サインインと API を開いてください。',
+  'shell.securityNoKey': 'API キーが必要です',
+  'shell.securityNoKeyHint':
+    'サインインは有効ですが API キーがありません — MCP と公開アプリは認証できません。設定 → サインインと API を開いてください。',
 }
 
 const zh: Msgs = {
@@ -826,6 +899,10 @@ const zh: Msgs = {
   'shell.projectTitle': '计划标题',
   'shell.projectPlaceholder': '例如：交付计划',
   'shell.createProject': '创建计划',
+  'shell.newNote': '新建笔记',
+  'shell.noteTitle': '笔记标题',
+  'shell.notePlaceholder': '例如：会议记录',
+  'shell.createNote': '创建笔记',
   'shell.template': '模板',
   'shell.blankDeck': '空白幻灯片',
   'shell.slideCount.one': '{count} 张幻灯片',
@@ -846,6 +923,8 @@ const zh: Msgs = {
   'shell.deleteKanbanConfirm': '删除看板「{name}」？',
   'shell.deleteProject': '删除项目',
   'shell.deleteProjectConfirm': '删除项目计划「{name}」？',
+  'shell.deleteNote': '删除笔记',
+  'shell.deleteNoteConfirm': '删除笔记「{name}」？',
   'shell.deleteFile': '删除文件',
   'shell.deleteFileConfirm': '删除「{name}」？文件将从服务器中移除。',
   'shell.replaceFile': '替换文件',
@@ -857,9 +936,14 @@ const zh: Msgs = {
   'shell.presentTooltip': '开始放映演示文稿',
   'shell.backToLibrary': '返回文库',
   'shell.dropToAdd': '松开以添加到「{name}」',
-  'shell.dropTypes': 'PDF、Word、PowerPoint、Excel、压缩包和图片',
+  'shell.dropTypes': 'PDF、Word、Markdown、压缩包和图片',
   'shell.bookHint': '在树中选择页面或图表即可在编辑器中打开。属性显示在右侧。',
-  'shell.bookHintDrop': '将 PDF 或 Office 文档拖放到此页面的任意位置即可归档到这里。',
+  'shell.bookHintDrop': '将 PDF、zip 或图片拖放到此处即可归档。Markdown 会询问是否创建为页面。',
+  'shell.securityOpen': '匿名发布已开启',
+  'shell.securityOpenHint': '应用可以在无密钥的情况下向 /api/v1 发布。打开设置 → 登录与 API。',
+  'shell.securityNoKey': '需要 API 密钥',
+  'shell.securityNoKeyHint':
+    '已开启登录但未设置 API 密钥 — MCP 和发布应用无法认证。打开设置 → 登录与 API。',
 }
 
 export const shell = { en, fr, de, es, nl, ja, zh } satisfies Record<Lang, Msgs>

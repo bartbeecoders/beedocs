@@ -22,6 +22,7 @@ import { DiagramCanvas, type DiagramEditorState } from './DiagramCanvas'
 import { SlideCanvas, type SlideEditorState } from './SlideCanvas'
 import { KanbanCanvas, type KanbanEditorState } from './KanbanCanvas'
 import { ProjectCanvas, type ProjectEditorState } from './ProjectCanvas'
+import { NoteCanvas, type NoteEditorState } from './NoteCanvas'
 import { AttachmentCanvas, type AttachmentEditorState } from './AttachmentCanvas'
 import { PropertiesPane } from './PropertiesPane'
 import { SettingsPanel } from './SettingsPanel'
@@ -39,7 +40,7 @@ import {
   dragHasFiles,
   formatFileSize,
 } from '../media/attachments'
-import { useAttachmentUpload } from '../hooks/useAttachmentUpload'
+import { useLibraryFileDrop } from '../hooks/useLibraryFileDrop'
 import { useFileDropZone } from '../hooks/useFileDropZone'
 
 export function WorkspaceShell() {
@@ -56,6 +57,7 @@ export function WorkspaceShell() {
   const [slideState, setSlideState] = useState<SlideEditorState | null>(null)
   const [kanbanState, setKanbanState] = useState<KanbanEditorState | null>(null)
   const [projectState, setProjectState] = useState<ProjectEditorState | null>(null)
+  const [noteState, setNoteState] = useState<NoteEditorState | null>(null)
   const [attachmentState, setAttachmentState] = useState<AttachmentEditorState | null>(null)
   const [version, setVersion] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -128,6 +130,7 @@ export function WorkspaceShell() {
     if (params.deckId) return 'slides' as const
     if (params.boardId) return 'kanban' as const
     if (params.planId) return 'project' as const
+    if (params.noteId) return 'note' as const
     if (params.attachmentId) return 'attachment' as const
     if (params.bookId) return 'book' as const
     if (params.shelfId) return 'shelf' as const
@@ -142,6 +145,7 @@ export function WorkspaceShell() {
     params.deckId,
     params.boardId,
     params.planId,
+    params.noteId,
     params.attachmentId,
   ])
 
@@ -156,6 +160,7 @@ export function WorkspaceShell() {
       deckId: params.deckId,
       boardId: params.boardId,
       planId: params.planId,
+      noteId: params.noteId,
       attachmentId: params.attachmentId,
     })
   }, [
@@ -167,6 +172,7 @@ export function WorkspaceShell() {
     params.deckId,
     params.boardId,
     params.planId,
+    params.noteId,
     params.attachmentId,
     syncSelectionFromRoute,
   ])
@@ -225,6 +231,9 @@ export function WorkspaceShell() {
       } else if (params.planId) {
         const plan = book.projectPlans.find((d) => d.id === params.planId)
         crumbs.push({ label: plan?.title ?? projectState?.title ?? t('common.project') })
+      } else if (params.noteId) {
+        const note = book.notes.find((d) => d.id === params.noteId)
+        crumbs.push({ label: note?.title ?? noteState?.title ?? t('common.note') })
       } else if (params.attachmentId) {
         const file = book.attachments.find((a) => a.id === params.attachmentId)
         crumbs.push({ label: file?.title ?? attachmentState?.title ?? t('shell.file') })
@@ -273,6 +282,7 @@ export function WorkspaceShell() {
           </nav>
         </div>
         <div className="ws-header-right">
+          <SecurityBanner />
           <GitAssistJobsMenu />
           <button
             type="button"
@@ -301,12 +311,14 @@ export function WorkspaceShell() {
         deckId={params.deckId}
         boardId={params.boardId}
         planId={params.planId}
+        noteId={params.noteId}
         attachmentId={params.attachmentId}
         pageState={pageState}
         diagramState={diagramState}
         slideState={slideState}
         kanbanState={kanbanState}
         projectState={projectState}
+        noteState={noteState}
         attachmentState={attachmentState}
       />
 
@@ -348,6 +360,7 @@ export function WorkspaceShell() {
           {view === 'slides' && <SlideCanvas onStateChange={setSlideState} />}
           {view === 'kanban' && <KanbanCanvas onStateChange={setKanbanState} />}
           {view === 'project' && <ProjectCanvas onStateChange={setProjectState} />}
+          {view === 'note' && <NoteCanvas onStateChange={setNoteState} />}
           {view === 'attachment' && <AttachmentCanvas onStateChange={setAttachmentState} />}
           {view === 'gitRepo' && <GitRepoCanvas />}
           {view === 'gitFile' && <GitFileCanvas />}
@@ -369,6 +382,7 @@ export function WorkspaceShell() {
             slideState={slideState}
             kanbanState={kanbanState}
             projectState={projectState}
+            noteState={noteState}
             attachmentState={attachmentState}
             view={view}
           />
@@ -377,6 +391,49 @@ export function WorkspaceShell() {
 
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
+  )
+}
+
+/**
+ * Admin-only chip in the header when publish is open or MCP cannot authenticate.
+ * Links to Settings → Sign-in & API.
+ */
+function SecurityBanner() {
+  const { canManageUsers, authEnabled } = useAuth()
+  const { t } = useI18n()
+  const [status, setStatus] = useState<{
+    hasKey: boolean
+    allowAnonymousPublish?: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    if (!canManageUsers) return
+    let cancelled = false
+    api
+      .getApiKeyStatus()
+      .then((s) => {
+        if (!cancelled) setStatus(s)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [canManageUsers])
+
+  if (!canManageUsers || !status) return null
+
+  const publishOpen = !status.hasKey && !!status.allowAnonymousPublish
+  const needsKey = !status.hasKey && authEnabled && !status.allowAnonymousPublish
+  if (!publishOpen && !needsKey) return null
+
+  return (
+    <Link
+      to="/settings/access"
+      className={`ws-security-chip${publishOpen ? ' danger' : ''}`}
+      title={publishOpen ? t('shell.securityOpenHint') : t('shell.securityNoKeyHint')}
+    >
+      {publishOpen ? t('shell.securityOpen') : t('shell.securityNoKey')}
+    </Link>
   )
 }
 
@@ -649,17 +706,20 @@ function BookOverview({ bookId }: { bookId: string }) {
   const navigate = useNavigate()
   const { canWrite } = useAuth()
   const { t } = useI18n()
-  const { books, createPage, createDiagram, createSlideDeck, createKanbanBoard, createProjectPlan } = useWorkspace()
+  const { books, createPage, createDiagram, createSlideDeck, createKanbanBoard, createProjectPlan, createNote } =
+    useWorkspace()
   const book = books.find((b) => b.id === bookId)
-  const [prompt, setPrompt] = useState<'page' | 'diagram' | 'slides' | 'kanban' | 'project' | null>(null)
+  const [prompt, setPrompt] = useState<'page' | 'diagram' | 'slides' | 'kanban' | 'project' | 'note' | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const { uploadingIn, error: uploadError, clearError, upload } = useAttachmentUpload()
+  const { uploadingIn, error: uploadError, clearError, upload, handleFiles, dialog: mdDropDialog } =
+    useLibraryFileDrop()
   // The whole overview is the drop target, not a dedicated strip: this page is
   // where someone goes to see what a book holds, so it is where they arrive
-  // holding a document.
+  // holding a document. Drops are classified (Markdown may become a page);
+  // the Upload file picker below still files everything as an attachment.
   const fileDrop = useFileDropZone({
     enabled: canWrite,
-    onFiles: (files) => void upload(bookId, files),
+    onFiles: (files) => void handleFiles(bookId, files),
   })
   const uploading = uploadingIn === bookId
 
@@ -706,6 +766,10 @@ function BookOverview({ bookId }: { bookId: string }) {
           <span className="stat-label">{t('common.projectPlans')}</span>
         </div>
         <div className="stat">
+          <span className="stat-value">{book.notes.length}</span>
+          <span className="stat-label">{t('common.notes')}</span>
+        </div>
+        <div className="stat">
           <span className="stat-value">{book.attachments.length}</span>
           <span className="stat-label">{t('shell.files')}</span>
         </div>
@@ -750,6 +814,9 @@ function BookOverview({ bookId }: { bookId: string }) {
           <button type="button" className="btn sm" onClick={() => setPrompt('project')}>
             {t('shell.newProject')}
           </button>
+          <button type="button" className="btn sm" onClick={() => setPrompt('note')}>
+            {t('shell.newNote')}
+          </button>
           <button
             type="button"
             className="btn sm"
@@ -777,6 +844,7 @@ function BookOverview({ bookId }: { bookId: string }) {
           {uploadError}
         </div>
       )}
+      {mdDropDialog}
 
       <NamePromptDialog
         open={prompt === 'page'}
@@ -835,6 +903,18 @@ function BookOverview({ bookId }: { bookId: string }) {
         onSubmit={async (title) => {
           const p = await createProjectPlan(bookId, title)
           void navigate(`/books/${bookId}/project/${p.id}`)
+        }}
+        onClose={() => setPrompt(null)}
+      />
+      <NamePromptDialog
+        open={prompt === 'note'}
+        title={t('shell.newNote')}
+        label={t('shell.noteTitle')}
+        placeholder={t('shell.notePlaceholder')}
+        confirmLabel={t('shell.createNote')}
+        onSubmit={async (title) => {
+          const n = await createNote(bookId, title)
+          void navigate(`/books/${bookId}/notes/${n.id}`)
         }}
         onClose={() => setPrompt(null)}
       />

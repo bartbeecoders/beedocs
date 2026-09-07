@@ -166,13 +166,19 @@ editors use: there is no stream of keystrokes to coalesce.
 
 ### Drag and drop
 
-Three drop targets, all built on `useFileDropZone`:
+Drop targets, all built on `useFileDropZone` (library/overview) or the page
+editor's own intake:
 
 | Drop on | Result |
 |---|---|
-| Anywhere under a book in the library tree | files that book |
-| The book overview | files that book |
+| Anywhere under a book in the library tree | classified by extension and a short content sniff: **PDF, zip and images** become Files; **Markdown** (`.md` / `.markdown`, or a `.txt` that looks like Markdown) asks whether to attach it or create a page, and in which book |
+| The book overview | the same classification |
 | An attachment's canvas | **replaces** that file, keeping its id and title |
+| A page in the editor | **images** (and other page-embed types) insert into the document via `/api/uploads` — they do not become Files |
+
+The tree/overview picker labelled “Upload file” still always files as an
+attachment — the prompt is only for *drops*. A zip dropped on the library is
+filed, not treated as Import; Import remains the zip-of-Markdown path.
 
 Two things make this coexist with the tree's existing drags. First, every drop
 target asks `dragHasFiles` before doing anything: the tree's own drags (pages,

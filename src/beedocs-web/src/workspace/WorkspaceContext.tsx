@@ -21,10 +21,12 @@ import type {
   SlideDeckSummary,
   KanbanBoardSummary,
   ProjectPlanSummary,
+  NoteSummary,
 } from '../types'
 import { parseDeck, starterDeckSource } from '../slides/slideModel'
 import { countCards, parseBoard, starterBoardSource } from '../kanban/kanbanModel'
 import { countTasks, parsePlan, starterPlanSource } from '../project/projectModel'
+import { countBlocks, parseNote, starterNoteSource } from '../notes/noteModel'
 import {
   selectionEquals,
   selectionFromRoute,
@@ -40,6 +42,7 @@ export type TreeBook = Book & {
   slideDecks: SlideDeckSummary[]
   kanbanBoards: KanbanBoardSummary[]
   projectPlans: ProjectPlanSummary[]
+  notes: NoteSummary[]
   attachments: AttachmentSummary[]
   chapters: Chapter[]
   expanded: boolean
@@ -80,13 +83,20 @@ type WorkspaceCtx = {
   /** Omit `shelfId` to create the book at the library root. */
   createBook: (title: string, description?: string, shelfId?: string | null) => Promise<Book>
   createShelf: (title: string, description?: string) => Promise<Shelf>
-  createPage: (bookId: string, title: string, chapterId?: string | null) => Promise<PageSummary>
+  createPage: (
+    bookId: string,
+    title: string,
+    chapterId?: string | null,
+    /** When set, used as the page body instead of the sample Markdown stub. */
+    content?: string,
+  ) => Promise<PageSummary>
   createFolder: (bookId: string, title: string) => Promise<Chapter>
   createDiagram: (bookId: string, title: string, kind?: string) => Promise<DiagramSummary>
   /** Starts from a title slide carrying the deck's name. */
   createSlideDeck: (bookId: string, title: string, templateId?: string) => Promise<SlideDeckSummary>
   createKanbanBoard: (bookId: string, title: string) => Promise<KanbanBoardSummary>
   createProjectPlan: (bookId: string, title: string) => Promise<ProjectPlanSummary>
+  createNote: (bookId: string, title: string) => Promise<NoteSummary>
   /** Upload a file into a book. Rejects with the server's message on a bad type or size. */
   uploadAttachment: (bookId: string, file: File) => Promise<AttachmentSummary>
   /** Replace a summary in the tree after its properties were saved elsewhere. */
@@ -97,6 +107,10 @@ type WorkspaceCtx = {
   renameShelf: (shelfId: string, title: string) => Promise<void>
   /** Publish (or unpublish) the shelf as a website at /bookshelf-serve/{slug}. */
   setShelfPublished: (shelfId: string, published: boolean) => Promise<void>
+  /** Owner-gated: hide the shelf from everyone except its owner (and admins). */
+  setShelfPrivate: (shelfId: string, isPrivate: boolean) => Promise<void>
+  /** Owner-gated: hide the book from everyone except its owner (and admins). */
+  setBookPrivate: (bookId: string, isPrivate: boolean) => Promise<void>
   /** Move a book onto a shelf, or to the library root when `shelfId` is null. */
   moveBookToShelf: (bookId: string, shelfId: string | null) => Promise<void>
   deletePage: (pageId: string, bookId: string) => Promise<void>
@@ -105,6 +119,7 @@ type WorkspaceCtx = {
   deleteSlideDeck: (deckId: string, bookId: string) => Promise<void>
   deleteKanbanBoard: (boardId: string, bookId: string) => Promise<void>
   deleteProjectPlan: (planId: string, bookId: string) => Promise<void>
+  deleteNote: (noteId: string, bookId: string) => Promise<void>
   deleteAttachment: (attachmentId: string, bookId: string) => Promise<void>
   renameFolder: (chapterId: string, bookId: string, title: string) => Promise<void>
   /** Move page into folder (or root) and/or reorder among siblings */
@@ -182,7 +197,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const syncSelectionFromRoute = useCallback((params: RouteSelectionParams) => {
-    const key = `${params.view ?? ''}|${params.bookId ?? ''}|${params.pageId ?? ''}|${params.diagramId ?? ''}|${params.deckId ?? ''}|${params.boardId ?? ''}|${params.planId ?? ''}`
+    const key = `${params.view ?? ''}|${params.bookId ?? ''}|${params.pageId ?? ''}|${params.diagramId ?? ''}|${params.deckId ?? ''}|${params.boardId ?? ''}|${params.planId ?? ''}|${params.noteId ?? ''}`
     // Same route: keep tree-only selections (folders) that have no route of their own.
     if (lastRouteKeyRef.current === key) return
     lastRouteKeyRef.current = key
@@ -191,16 +206,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const loadChildren = async (bookId: string) => {
-    const [pages, diagrams, slideDecks, kanbanBoards, projectPlans, attachments, chapters] = await Promise.all([
+    const [pages, diagrams, slideDecks, kanbanBoards, projectPlans, notes, attachments, chapters] = await Promise.all([
       api.listPages(bookId),
       api.listDiagrams(bookId),
       api.listSlideDecks(bookId),
       api.listKanbanBoards(bookId),
       api.listProjectPlans(bookId),
+      api.listNotes(bookId),
       api.listAttachments(bookId),
       api.listChapters(bookId),
     ])
-    return { pages, diagrams, slideDecks, kanbanBoards, projectPlans, attachments, chapters }
+    return { pages, diagrams, slideDecks, kanbanBoards, projectPlans, notes, attachments, chapters }
   }
 
   const refreshTree = useCallback(async () => {
@@ -226,6 +242,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               slideDecks: [],
               kanbanBoards: [],
               projectPlans: [],
+              notes: [],
               attachments: [],
               chapters: [],
               expanded: false,
@@ -250,6 +267,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               slideDecks: [],
               kanbanBoards: [],
               projectPlans: [],
+              notes: [],
               attachments: [],
               chapters: [],
               expanded: true,
@@ -385,6 +403,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           slideDecks: [],
           kanbanBoards: [],
           projectPlans: [],
+          notes: [],
           attachments: [],
           chapters: [],
           expanded: false,
@@ -435,6 +454,22 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     )
   }, [shelves])
 
+  const setShelfPrivate = useCallback(async (shelfId: string, isPrivate: boolean) => {
+    const current = shelves.find((s) => s.id === shelfId)
+    if (!current) return
+    const updated = await api.updateShelf(shelfId, { title: current.title, isPrivate })
+    setShelves((prev) =>
+      prev.map((s) => (s.id === shelfId ? { ...updated, expanded: s.expanded } : s)),
+    )
+  }, [shelves])
+
+  const setBookPrivate = useCallback(async (bookId: string, isPrivate: boolean) => {
+    const current = books.find((b) => b.id === bookId)
+    if (!current) return
+    const updated = await api.updateBook(bookId, { title: current.title, isPrivate })
+    setBooks((prev) => prev.map((b) => (b.id === bookId ? { ...b, ...updated } : b)))
+  }, [books])
+
   const deleteShelf = useCallback(async (shelfId: string) => {
     await api.deleteShelf(shelfId)
     setShelves((prev) => prev.filter((s) => s.id !== shelfId))
@@ -480,8 +515,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const createPage = useCallback(async (bookId: string, title: string, chapterId?: string | null) => {
-    const sample = `# ${title}
+  const createPage = useCallback(
+    async (bookId: string, title: string, chapterId?: string | null, content?: string) => {
+      const sample = `# ${title}
 
 Write architecture notes in **Markdown**.
 
@@ -490,37 +526,39 @@ graph LR
   A[Author] --> B[BeeDocs]
 \`\`\`
 `
-    const siblings = (await api.listPages(bookId)).filter(
-      (p) => (p.chapterId ?? null) === (chapterId ?? null),
-    )
-    const sortOrder = siblings.length
-    const page = await api.createPage(bookId, {
-      title,
-      content: sample,
-      chapterId: chapterId || undefined,
-      sortOrder,
-    })
-    setBooks((prev) =>
-      prev.map((b) =>
-        b.id === bookId
-          ? {
-              ...b,
-              expanded: true,
-              pages: [...b.pages, page].sort(
-                (a, c) => a.sortOrder - c.sortOrder || a.title.localeCompare(c.title),
-              ),
-              expandedFolders:
-                chapterId != null
-                  ? new Set(b.expandedFolders).add(chapterId)
-                  : b.expandedFolders,
-            }
-          : b,
-      ),
-    )
-    setExpandedIds((s) => new Set(s).add(bookId))
-    if (chapterId) setExpandedFolders((s) => new Set(s).add(chapterId))
-    return page
-  }, [])
+      const siblings = (await api.listPages(bookId)).filter(
+        (p) => (p.chapterId ?? null) === (chapterId ?? null),
+      )
+      const sortOrder = siblings.length
+      const page = await api.createPage(bookId, {
+        title,
+        content: content ?? sample,
+        chapterId: chapterId || undefined,
+        sortOrder,
+      })
+      setBooks((prev) =>
+        prev.map((b) =>
+          b.id === bookId
+            ? {
+                ...b,
+                expanded: true,
+                pages: [...b.pages, page].sort(
+                  (a, c) => a.sortOrder - c.sortOrder || a.title.localeCompare(c.title),
+                ),
+                expandedFolders:
+                  chapterId != null
+                    ? new Set(b.expandedFolders).add(chapterId)
+                    : b.expandedFolders,
+              }
+            : b,
+        ),
+      )
+      setExpandedIds((s) => new Set(s).add(bookId))
+      if (chapterId) setExpandedFolders((s) => new Set(s).add(chapterId))
+      return page
+    },
+    [],
+  )
 
   const createFolder = useCallback(async (bookId: string, title: string) => {
     const chapters = await api.listChapters(bookId)
@@ -576,6 +614,8 @@ graph LR
       bookId: deck.bookId,
       title: deck.title,
       slideCount: parseDeck(deck.source).slides.length,
+      ownerId: deck.ownerId,
+      isPrivate: deck.isPrivate,
       updatedAt: deck.updatedAt,
     }
     setBooks((prev) =>
@@ -600,6 +640,8 @@ graph LR
       bookId: board.bookId,
       title: board.title,
       cardCount: countCards(parseBoard(board.source)),
+      ownerId: board.ownerId,
+      isPrivate: board.isPrivate,
       updatedAt: board.updatedAt,
     }
     setBooks((prev) =>
@@ -624,6 +666,8 @@ graph LR
       bookId: plan.bookId,
       title: plan.title,
       taskCount: countTasks(parsePlan(plan.source)),
+      ownerId: plan.ownerId,
+      isPrivate: plan.isPrivate,
       updatedAt: plan.updatedAt,
     }
     setBooks((prev) =>
@@ -781,6 +825,40 @@ graph LR
     setFavorites((prev) => prev.filter((f) => !(f.kind === 'kanban' && f.entityId === boardId)))
   }, [])
 
+  const createNote = useCallback(async (bookId: string, title: string) => {
+    const note = await api.createNote(bookId, { title, source: starterNoteSource() })
+    const summary: NoteSummary = {
+      id: note.id,
+      bookId: note.bookId,
+      title: note.title,
+      blockCount: countBlocks(parseNote(note.source)),
+      ownerId: note.ownerId,
+      isPrivate: note.isPrivate,
+      updatedAt: note.updatedAt,
+    }
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.id === bookId
+          ? {
+              ...b,
+              expanded: true,
+              notes: [summary, ...b.notes],
+            }
+          : b,
+      ),
+    )
+    setExpandedIds((s) => new Set(s).add(bookId))
+    return summary
+  }, [])
+
+  const deleteNote = useCallback(async (noteId: string, bookId: string) => {
+    await api.deleteNote(noteId)
+    setBooks((prev) =>
+      prev.map((b) => (b.id === bookId ? { ...b, notes: b.notes.filter((d) => d.id !== noteId) } : b)),
+    )
+    setFavorites((prev) => prev.filter((f) => !(f.kind === 'note' && f.entityId === noteId)))
+  }, [])
+
   const deleteProjectPlan = useCallback(async (planId: string, bookId: string) => {
     await api.deleteProjectPlan(planId)
     setBooks((prev) =>
@@ -872,6 +950,7 @@ graph LR
               version: updated.version,
               ownerId: updated.ownerId,
               ownerName: updated.ownerName,
+              isPrivate: updated.isPrivate,
               updatedAt: updated.updatedAt,
             }
             return {
@@ -1038,12 +1117,15 @@ graph LR
       createSlideDeck,
       createKanbanBoard,
       createProjectPlan,
+      createNote,
       uploadAttachment,
       patchAttachment,
       deleteBook,
       deleteShelf,
       renameShelf,
       setShelfPublished,
+      setShelfPrivate,
+      setBookPrivate,
       moveBookToShelf,
       deletePage,
       deleteFolder,
@@ -1051,6 +1133,7 @@ graph LR
       deleteSlideDeck,
       deleteKanbanBoard,
       deleteProjectPlan,
+      deleteNote,
       deleteAttachment,
       renameFolder,
       movePage,
@@ -1082,12 +1165,15 @@ graph LR
       createSlideDeck,
       createKanbanBoard,
       createProjectPlan,
+      createNote,
       uploadAttachment,
       patchAttachment,
       deleteBook,
       deleteShelf,
       renameShelf,
       setShelfPublished,
+      setShelfPrivate,
+      setBookPrivate,
       moveBookToShelf,
       deletePage,
       deleteFolder,
@@ -1095,6 +1181,7 @@ graph LR
       deleteSlideDeck,
       deleteKanbanBoard,
       deleteProjectPlan,
+      deleteNote,
       deleteAttachment,
       renameFolder,
       movePage,

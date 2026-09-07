@@ -47,6 +47,8 @@ import type {
   KanbanBoardSummary,
   ProjectPlan,
   ProjectPlanSummary,
+  Note,
+  NoteSummary,
   SlideTemplate,
   SlideTemplateSummary,
   CreateStorageProviderRequest,
@@ -356,6 +358,7 @@ export const api = {
     slug?: string
     ownerId?: string
     published?: boolean
+    isPrivate?: boolean
   }) => request<Shelf>('/api/shelves', { method: 'POST', body: JSON.stringify(body) }),
   updateShelf: (
     id: string,
@@ -368,6 +371,8 @@ export const api = {
       ownerId?: string | null
       /** Omit to leave publish state alone. */
       published?: boolean
+      /** Omit to leave privacy alone. Changing it needs the owner or an admin. */
+      isPrivate?: boolean
     },
   ) => request<Shelf>(`/api/shelves/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteShelf: (id: string) => request<void>(`/api/shelves/${id}`, { method: 'DELETE' }),
@@ -416,6 +421,7 @@ export const api = {
     ownerId?: string
     /** Omit to create the book at the library root. */
     shelfId?: string
+    isPrivate?: boolean
   }) => request<Book>('/api/books', { method: 'POST', body: JSON.stringify(body) }),
   /**
    * `ownerId`: omit to leave the owner alone, "" to clear it.
@@ -429,6 +435,7 @@ export const api = {
       slug?: string
       ownerId?: string | null
       shelfId?: string | null
+      isPrivate?: boolean
     },
   ) => request<Book>(`/api/books/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteBook: (id: string) => request<void>(`/api/books/${id}`, { method: 'DELETE' }),
@@ -478,6 +485,8 @@ export const api = {
       trackChanges?: boolean
       /** Omit to leave the cap alone; 0 = unlimited. Same owner/admin gate. */
       maxRevisions?: number
+      /** Omit to leave privacy alone. Changing it needs the owner or an admin. */
+      isPrivate?: boolean
     },
   ) => request<Page>(`/api/pages/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deletePage: (id: string) => request<void>(`/api/pages/${id}`, { method: 'DELETE' }),
@@ -510,7 +519,7 @@ export const api = {
     }),
   updateDiagram: (
     id: string,
-    body: { title: string; kind?: string; source?: string; pageId?: string | null },
+    body: { title: string; kind?: string; source?: string; pageId?: string | null; isPrivate?: boolean },
   ) => request<Diagram>(`/api/diagrams/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteDiagram: (id: string) => request<void>(`/api/diagrams/${id}`, { method: 'DELETE' }),
 
@@ -522,7 +531,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  updateSlideDeck: (id: string, body: { title: string; source?: string }) =>
+  updateSlideDeck: (id: string, body: { title: string; source?: string; isPrivate?: boolean }) =>
     request<SlideDeck>(`/api/slides/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteSlideDeck: (id: string) => request<void>(`/api/slides/${id}`, { method: 'DELETE' }),
 
@@ -534,7 +543,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  updateKanbanBoard: (id: string, body: { title: string; source?: string }) =>
+  updateKanbanBoard: (id: string, body: { title: string; source?: string; isPrivate?: boolean }) =>
     request<KanbanBoard>(`/api/kanban/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteKanbanBoard: (id: string) => request<void>(`/api/kanban/${id}`, { method: 'DELETE' }),
 
@@ -546,9 +555,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  updateProjectPlan: (id: string, body: { title: string; source?: string }) =>
+  updateProjectPlan: (id: string, body: { title: string; source?: string; isPrivate?: boolean }) =>
     request<ProjectPlan>(`/api/project/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteProjectPlan: (id: string) => request<void>(`/api/project/${id}`, { method: 'DELETE' }),
+
+  /** Notes (OneNote-style pages). `source` is the JSON canvas document. */
+  listNotes: (bookId: string) => request<NoteSummary[]>(`/api/books/${bookId}/notes`),
+  getNote: (id: string) => request<Note>(`/api/notes/${id}`),
+  createNote: (bookId: string, body: { title: string; source?: string }) =>
+    request<Note>(`/api/books/${bookId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateNote: (id: string, body: { title: string; source?: string; isPrivate?: boolean }) =>
+    request<Note>(`/api/notes/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteNote: (id: string) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
   /**
    * Server-rendered PowerPoint download. The same file imports into Google
    * Slides (Drive converts .pptx), so both export flows point here.
@@ -568,7 +589,7 @@ export const api = {
   /** Properties only. `description`/`ownerId`: omit to leave alone, "" to clear. */
   updateAttachment: (
     id: string,
-    body: { title: string; description?: string; ownerId?: string; fileName?: string },
+    body: { title: string; description?: string; ownerId?: string; fileName?: string; isPrivate?: boolean },
   ) => request<Attachment>(`/api/attachments/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   /** Swap the bytes, keeping the id — links to the attachment stay valid. */
   replaceAttachmentFile: (id: string, file: File) =>
@@ -706,6 +727,11 @@ export const api = {
     request<ApiKeyStatus>('/api/settings/api-key', {
       method: 'PUT',
       body: JSON.stringify({ apiKey }),
+    }),
+  setAllowAnonymousPublish: (allowAnonymousPublish: boolean) =>
+    request<ApiKeyStatus>('/api/settings/api-key', {
+      method: 'PUT',
+      body: JSON.stringify({ allowAnonymousPublish }),
     }),
 
   /**

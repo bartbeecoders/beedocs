@@ -35,3 +35,8 @@ https://beboappt3/alpharbaservice/.well-known/jwks.json
 
 I switched the RBA endpoiunt to https://bebomesservice/alpharbaservice 
 But I think what the problem is, remember that the beedocs site and api are actually running in azure, RBA is running on prem. On the beedocs site we connect to rba client side, but from the api you cannot connect to rba. I also wander why this is needed ?
+
+
+
+### Shelf/book/documents private
+Add to abiity for a user (owner of the item), to set the item private. When an item is private, only the owner can see it.

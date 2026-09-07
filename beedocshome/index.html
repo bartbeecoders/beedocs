@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BeeDocs — self-hosted systems documentation with a diagram studio inside</title>
-  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks, kanban boards, Gantt project plans, searchable file attachments — and an MCP server so AI agents write docs alongside you." />
+  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks, OneNote-style notes, kanban boards, Gantt project plans, searchable file attachments — and an MCP server so AI agents write docs alongside you." />
   <meta property="og:title" content="BeeDocs — documentation that draws its own architecture" />
-  <meta property="og:description" content="Self-hosted docs for systems teams: Markdown books, BeeDiagram Studio, isometric views, slides, kanban boards, Gantt plans, searchable file attachments, full-text search, and an MCP server for AI agents. One container, SQLite inside. MIT-licensed and free forever." />
+  <meta property="og:description" content="Self-hosted docs for systems teams: Markdown books, BeeDiagram Studio, isometric views, slides, OneNote-style notes, kanban boards, Gantt plans, searchable file attachments, full-text search, and an MCP server for AI agents. One container, SQLite inside. MIT-licensed and free forever." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://beedocshome.hideterms.com/" />
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
@@ -73,16 +73,16 @@
         <p class="eyebrow"><span class="dot" aria-hidden="true"></span>self-hosted · single container · SQLite inside</p>
         <a class="release-flag" href="releases.html">
           <span class="flag-badge">v0.8</span>
-          <span>New: kanban boards &amp; Gantt project plans</span>
+          <span>New: OneNote-style notes &amp; owner-only privacy</span>
           <span class="flag-arrow" aria-hidden="true">→</span>
         </a>
         <h1>Documentation that draws its own architecture.</h1>
         <p class="lede">
           BeeDocs is a self-hosted platform for documenting software and hardware
           systems: a library of books and Markdown pages with a draw.io-class
-          diagram studio, isometric architecture views, slide decks, kanban boards
-          and Gantt plans built in. It ships an MCP server too, so your AI agents
-          write docs right next to you.
+          diagram studio, isometric architecture views, slide decks, OneNote-style
+          notes, kanban boards and Gantt plans built in. It ships an MCP server
+          too, so your AI agents write docs right next to you.
         </p>
         <div class="cta-row">
           <a class="btn btn-honey btn-lg" href="https://beedocs.hideterms.com" rel="noopener">Open the live demo</a>
@@ -255,6 +255,13 @@
              two embed paths as boards.</p>
         </article>
         <article class="card">
+          <h3>Notes you click into</h3>
+          <p>A free-form page in the book tree: click empty canvas and type,
+             then move Markdown, checklists, pictures and ink. Embed with
+             <span class="mono">note</span> or
+             <span class="mono">note-ref</span>, the same shape as boards.</p>
+        </article>
+        <article class="card">
           <h3>Attachments a book keeps</h3>
           <p>Drop PDFs, Office and OpenDocument files onto a book and they file
              themselves there — versioned, behind the API gate, links surviving
@@ -269,8 +276,8 @@
         </article>
         <article class="card">
           <h3>Favorites at hand</h3>
-          <p>Star any book, page, diagram, deck, board, plan or attachment and
-             it waits in a panel above the tree. Personal, per-account, and
+          <p>Star any book, page, diagram, deck, board, plan, note or attachment
+             and it waits in a panel above the tree. Personal, per-account, and
              open to read-only viewers too.</p>
         </article>
         <article class="card">
@@ -289,7 +296,8 @@
         <article class="card">
           <h3>Owners and page history</h3>
           <p>Every page keeps a change log of who left it in what state. Owners
-             can turn on full revision copies, with pruning they control.</p>
+             can turn on full revision copies, with pruning they control, and
+             mark a shelf, book or document private so only they can see it.</p>
         </article>
         <article class="card">
           <h3>Git repos on the shelf</h3>
@@ -390,7 +398,7 @@
         <h2>Your agents write here too.</h2>
         <p>BeeDocs ships an MCP server that wraps the whole API: create books,
            write pages, build BeeDiagrams and isometric views, assemble slide
-           decks, stand up a kanban board or a Gantt plan, search the library
+           decks, jot a note, stand up a kanban board or a Gantt plan, search the library
            — and work the git shelf, from reading a file at any ref to
            branching, committing and pushing. Add a shape to the palette and a
            generated catalog carries it to your agents — no second edit.</p>
@@ -399,6 +407,7 @@
         <ul class="chip-row" aria-label="Example MCP tools">
           <li class="mono">beedocs_create_page</li>
           <li class="mono">beedocs_create_beediagram_with_nodes</li>
+          <li class="mono">beedocs_create_note_with_blocks</li>
           <li class="mono">beedocs_create_kanban_board_with_columns</li>
           <li class="mono">beedocs_create_project_plan_with_tasks</li>
           <li class="mono">beedocs_search</li>

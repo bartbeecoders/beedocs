@@ -106,16 +106,22 @@ the API for the same reason.
 
 ## Security: these routes spend money
 
-`/api/llm` sits behind the same `ApiKeyEndpointFilter` as `/api/v1` — and that
-filter does nothing until `BeeDocs:ApiKey` is set.
+`/api/llm` sits behind the same `ApiKeyEndpointFilter` as `/api/v1`. The publish
+API key is a **machine** credential (MCP, publishing apps). A signed-in browser
+session is a **person** credential and is accepted in its place, so Settings →
+AI providers and in-editor writing help keep working after an admin sets a key.
+Anonymous callers still need the header (or the anonymous-publish opt-in, when
+no key is configured). Auth-off instances can still use writing help from the UI
+while no key is set.
 
-**A default install has no API key.** With a provider key stored, anyone who can
-reach the API port can POST `/api/llm/complete` and bill it to you. The API logs
-a warning at startup when it finds a stored provider key and no `BeeDocs:ApiKey`.
+**A default install has no API key.** Anonymous `/api/v1` is off until an admin
+opts in. `/api/llm` remains usable from a signed-in browser (or an ungated
+instance). The API logs a warning at startup when anonymous publish is on and a
+provider key is stored.
 
 | Config | Env var | Effect |
 |---|---|---|
-| `BeeDocs:ApiKey` | `BeeDocs__ApiKey` | When set, `/api/llm` and `/api/v1` require `Authorization: Bearer <key>` or `X-Api-Key: <key>` |
+| `BeeDocs:ApiKey` | `BeeDocs__ApiKey` | When set, anonymous `/api/llm` and `/api/v1` require `Authorization: Bearer <key>` or `X-Api-Key: <key>`. Signed-in sessions still pass. |
 | `BeeDocs:Llm:ApiKey` | `BeeDocs__Llm__ApiKey` | When set at startup, upsert an enabled provider of `BeeDocs:Llm:Kind` with this key |
 | `BeeDocs:Llm:Kind` | `BeeDocs__Llm__Kind` | `openrouter` (default), `xai`, `openai`, or `cerebras` |
 | `BeeDocs:Llm:Model` | `BeeDocs__Llm__Model` | Optional. Empty keeps the stored model (or the kind's default on create) |
@@ -124,17 +130,16 @@ The Azure zip-deploy script writes those `BeeDocs:Llm:*` values as App Service
 settings (`.\azure-deploy\deploy.ps1 -LlmApiKey …`, or `BEEDOCS_LLM_API_KEY` so
 the secret stays off the command line). Terraform `ignore_changes` keeps them
 out of state, same as `BeeDocs__ApiKey`. A non-empty key upserts one enabled
-provider of that kind at the next app start — which is how a hosted instance
-gets a key at all when Settings cannot save one (`BeeDocs:ApiKey` set).
+provider of that kind at the next app start — useful for auth-off hosted
+instances, where Settings cannot save a provider key once `BeeDocs:ApiKey` is
+set (the browser has nowhere to keep the machine secret).
 
-There is a trade-off, and it is worth knowing before you set the key: **the web
-UI cannot send it.** The browser client has no place to hold a shared secret, so
-on a deployment with `BeeDocs:ApiKey` set, the AI providers section reports
-"Not available on this deployment" and the editor's writing help stays off.
-`/api/llm` is then reachable only from something that can send the header
-(`curl`, a script).
+The remaining trade-off is **auth off + a publish key**: the web UI cannot send
+it, so the AI providers section reports "Not available on this deployment" and
+writing help stays off. `/api/llm` is then reachable only from something that
+can send the header (`curl`, MCP). With sign-in on, that lockout does not apply.
 
-Pick one:
+Pick one for an ungated instance:
 
 - **Localhost only** — bind the API to loopback and leave `BeeDocs:ApiKey`
   unset. The UI works, and nothing off the machine can reach the routes.
@@ -142,8 +147,10 @@ Pick one:
   the port firewalled so the proxy cannot be bypassed (see
   [MCP-HOSTING.md](./MCP-HOSTING.md), which has the same shape of problem). The
   UI works, and the proxy is what keeps strangers out.
-- **`BeeDocs:ApiKey` set** — safe on an open port, but the in-editor writing help
-  is off for everyone.
+- **`BeeDocs:ApiKey` set, sign-in off** — safe on an open port, but the
+  in-editor writing help is off for everyone.
+- **Sign-in on** — the session is enough for the UI; set a publish key for MCP
+  and publishing apps without locking Settings.
 
 Do not expose an unauthenticated BeeDocs port to the internet with a provider key
 stored. LM Studio is the exception worth remembering: no key, no bill, so the
@@ -248,7 +255,7 @@ loopback only.
 | Symptom | Cause |
 |---|---|
 | No AI controls in the editor | No provider is enabled, or the list call failed. The bar is hidden rather than shown broken |
-| "Not available on this deployment" | `BeeDocs:ApiKey` is set — see the trade-off above |
+| "Not available on this deployment" | Sign-in is off and a publish API key is set — see the trade-off above |
 | Ghost text never appears | Inline suggestions toggled off in the editor bar (off until you enable them under **AI help**), the field is empty, a text selection is active (that is for rewrite/grammar instead), or the provider is in backoff after a failure (the AI help pill says **Paused** — use **Resume now**, or wait) |
 | Continuations are very slow / empty | A reasoning model is thinking for hundreds of tokens before answering. BeeDocs sends `reasoning.effort: none` for `continue` on OpenRouter/xAI/OpenAI, and `reasoning_effort: none` on Cerebras except gpt-oss-120b (`low`, because that model rejects `none`). qwen-3.8-27b defaults to **high** and otherwise spends `max_tokens` on thinking with an empty `content`; pick a non-reasoning or "flash" instruct model if it is still slow |
 | Git AI draft is empty | Same Cerebras/Qwen default: reasoning fills the DocDraft budget and the document never starts. BeeDocs sends `reasoning_effort`. If it still happens, try again or another model |

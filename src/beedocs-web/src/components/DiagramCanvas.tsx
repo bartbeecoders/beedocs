@@ -1,6 +1,7 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
+import { emptySourceForKind, sourceFitsKind } from '../diagram/kindCompatibility'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { useTheme } from '../theme'
 import { useAuth } from '../auth/AuthContext'
@@ -16,10 +17,9 @@ const IsometricEditor = lazy(() => import('../isometric/IsometricEditor'))
 const IsometricView = lazy(() => import('../isometric/IsometricView'))
 
 /**
- * Kinds offered by the toolbar switcher. Switching only changes how the
- * source is interpreted — nothing is converted, so flipping back is free
- * until the document is edited under the new kind. Labels and tooltips come
- * from the i18n layer (`canvas.kind.*` / `canvas.kindHint.*`).
+ * Kinds offered by the toolbar switcher. Compatible sources (empty, mermaid↔c4)
+ * switch in place. Anything else opens a confirm that replaces the document
+ * with an empty starter for the new kind — there is no conversion.
  */
 const KIND_OPTIONS = ['beediagram', 'isometric', 'mermaid', 'c4'] as const
 
@@ -58,6 +58,9 @@ export function DiagramCanvas({ onStateChange }: Props) {
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
+  /** Target kind waiting on the "replace with a blank document" confirm. */
+  const [pendingKind, setPendingKind] = useState<string | null>(null)
+  const kindDialogTitleId = useId()
 
   const titleRef = useRef(title)
   const sourceRef = useRef(source)
@@ -156,16 +159,36 @@ export function DiagramCanvas({ onStateChange }: Props) {
 
   useAutoSave({ enabled: autoSaveEnabled, dirty, save })
 
+  const applyKind = useCallback((next: string, nextSource?: string) => {
+    setKind(next)
+    if (nextSource !== undefined) setSource(nextSource)
+    setDirty(true)
+    setPendingKind(null)
+  }, [])
+
+  const requestKindChange = useCallback(
+    (next: string) => {
+      if (kind === next) return
+      if (sourceFitsKind(source, next)) {
+        applyKind(next)
+        return
+      }
+      setPendingKind(next)
+    },
+    [kind, source, applyKind],
+  )
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
         void save()
       }
+      if (e.key === 'Escape' && pendingKind) setPendingKind(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [save])
+  }, [save, pendingKind])
 
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -202,10 +225,7 @@ export function DiagramCanvas({ onStateChange }: Props) {
         setTitle(v)
         setDirty(true)
       },
-      setKind: (v) => {
-        setKind(v)
-        setDirty(true)
-      },
+      setKind: requestKindChange,
       setSource: (v) => {
         setSource(v)
         setDirty(true)
@@ -215,7 +235,7 @@ export function DiagramCanvas({ onStateChange }: Props) {
       embedSnippet,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [diagram, title, kind, source, dirty, saving, error, embedSnippet, save])
+  }, [diagram, title, kind, source, dirty, saving, error, embedSnippet, save, requestKindChange])
 
   useEffect(() => {
     return () => onStateChange?.(null)
@@ -281,11 +301,7 @@ export function DiagramCanvas({ onStateChange }: Props) {
                     aria-selected={kind === opt}
                     className={kind === opt ? 'active' : ''}
                     title={t(`canvas.kindHint.${opt}` as MessageKey)}
-                    onClick={() => {
-                      if (kind === opt) return
-                      setKind(opt)
-                      setDirty(true)
-                    }}
+                    onClick={() => requestKindChange(opt)}
                   >
                     {t(`canvas.kind.${opt}` as MessageKey)}
                   </button>
@@ -356,7 +372,59 @@ export function DiagramCanvas({ onStateChange }: Props) {
             spellCheck={false}
           />
           <div className="editor-preview">
-            <MarkdownView content={'```mermaid\n' + source + '\n```'} />
+            {source.trim() ? (
+              <MarkdownView content={'```mermaid\n' + source + '\n```'} />
+            ) : (
+              <div className="canvas-message muted">{t('canvas.kindEmptyPreview')}</div>
+            )}
+          </div>
+        </div>
+      )}
+      {pendingKind && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setPendingKind(null)
+          }}
+        >
+          <div
+            className="modal modal--compact"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={kindDialogTitleId}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <header className="modal-header">
+              <h2 id={kindDialogTitleId}>{t('canvas.kindSwitchTitle')}</h2>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setPendingKind(null)}
+                aria-label={t('common.close')}
+              >
+                ✕
+              </button>
+            </header>
+            <div className="modal-body">
+              <p>
+                {t('canvas.kindSwitchBody', {
+                  from: t(`canvas.kind.${kind}` as MessageKey),
+                  to: t(`canvas.kind.${pendingKind}` as MessageKey),
+                })}
+              </p>
+            </div>
+            <footer className="modal-footer">
+              <button type="button" className="btn ghost" onClick={() => setPendingKind(null)}>
+                {t('canvas.kindSwitchKeep')}
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                onClick={() => applyKind(pendingKind, emptySourceForKind(pendingKind))}
+              >
+                {t('canvas.kindSwitchReplace')}
+              </button>
+            </footer>
           </div>
         </div>
       )}

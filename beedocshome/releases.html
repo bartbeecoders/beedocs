@@ -82,12 +82,26 @@
           <div class="release-head">
             <span class="release-badge release-badge--latest mono">v0.8</span>
             <h2>Kanban boards, Gantt plans, and a workspace that wears your name</h2>
-            <p class="release-date mono">4 Sep 2026 · latest</p>
+            <p class="release-date mono">7 Sep 2026 · latest</p>
           </div>
           <p>The library learned to track work — and to look like yours. Boards
-             and project plans sit next to pages and diagrams; the instance can
-             carry your title, mark and language.</p>
+             and project plans sit next to pages and diagrams; notes click
+             anywhere like OneNote; the instance can carry your title, mark and
+             language.</p>
           <ul class="release-list">
+            <li><strong>Notes</strong>: OneNote-style free-form pages — click
+                empty canvas and type, then move Markdown, checklists, pictures
+                and ink. A note is a book-tree item or a page embed
+                (<span class="mono">note</span> /
+                <span class="mono">note-ref</span>). Agents use
+                <span class="mono">beedocs_create_note_with_blocks</span>.</li>
+            <li><strong>Owner-only privacy</strong>: the owner (or an admin) can
+                hide a shelf, book or document from everyone else. Private items
+                vanish from the tree, search and the published reader site;
+                direct URLs 404 so existence is not leaked.</li>
+            <li><strong>Drop files on the library</strong>: PDF, zip and images
+                file as attachments; Markdown asks whether to attach or become
+                a page. An image dropped on a page still embeds.</li>
             <li><strong>Kanban boards</strong>: ordered columns of cards in one
                 JSON document, as a book-tree item or a page embed
                 (<span class="mono">kanban</span> inline /
@@ -126,6 +140,10 @@
                 job asks for a JSON outline, then writes 5–8 pages one at a
                 time, and publishes them as a multi-page book. Same titles
                 update in place on re-run.</li>
+            <li><strong>Sign-in and the publish key can coexist</strong>: set a
+                machine API key from Settings without locking AI providers out
+                of the browser. Temporary accounts must change their password
+                before they reach the workspace.</li>
           </ul>
           <div class="release-shot-row">
             <figure class="release-shot">

@@ -4,6 +4,7 @@ import { api } from '../api'
 import { exportBookToPdf, exportPageToPdf } from '../export/pdf'
 import { useI18n, type MessageKey } from '../i18n'
 import type { ExportFormat } from '../types'
+import { showToast } from '../toast'
 
 type Scope = 'book' | 'page'
 
@@ -95,11 +96,13 @@ export function ExportMenu({ scope, id, title, className = '', variant = 'button
     setBusy(choice)
     setError(null)
     setStatus(t('dialogs.preparing'))
+    showToast(t('dialogs.preparing'), 'info', 2500)
     try {
       if (choice === 'pdf') {
         if (scope === 'book') await exportBookToPdf(id, setStatus)
         else await exportPageToPdf(id, setStatus)
         setStatus(t('dialogs.printOpened'))
+        showToast(t('dialogs.printOpened'), 'ok')
       } else {
         const fileName = await api.downloadExport(
           scope === 'book' ? 'books' : 'pages',
@@ -107,11 +110,14 @@ export function ExportMenu({ scope, id, title, className = '', variant = 'button
           choice,
         )
         setStatus(t('dialogs.downloaded', { name: fileName }))
+        showToast(t('dialogs.downloaded', { name: fileName }), 'ok')
       }
       setTimeout(() => setStatus(null), 5000)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
+      setError(message)
       setStatus(null)
+      showToast(message, 'error')
     } finally {
       setBusy(null)
     }
@@ -162,6 +168,7 @@ export function ExportMenu({ scope, id, title, className = '', variant = 'button
           type="button"
           className="icon-btn sm"
           title={busy ? (status ?? t('dialogs.exporting')) : label}
+          aria-label={busy ? (status ?? t('dialogs.exporting')) : label}
           disabled={busy !== null}
           aria-haspopup="menu"
           aria-expanded={open}

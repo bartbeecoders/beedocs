@@ -15,6 +15,7 @@ import type { DiagramEditorState } from './DiagramCanvas'
 import type { SlideEditorState } from './SlideCanvas'
 import type { KanbanEditorState } from './KanbanCanvas'
 import type { ProjectEditorState } from './ProjectCanvas'
+import type { NoteEditorState } from './NoteCanvas'
 import type { AttachmentEditorState } from './AttachmentCanvas'
 import { ATTACHMENT_ACCEPT, attachmentIcon } from '../media/attachments'
 import { useAttachmentUpload } from '../hooks/useAttachmentUpload'
@@ -28,6 +29,7 @@ export type WorkspaceView =
   | 'slides'
   | 'kanban'
   | 'project'
+  | 'note'
   | 'attachment'
   | 'settings'
   | 'users'
@@ -45,12 +47,14 @@ type Props = {
   deckId?: string
   boardId?: string
   planId?: string
+  noteId?: string
   attachmentId?: string
   pageState?: PageEditorState | null
   diagramState?: DiagramEditorState | null
   slideState?: SlideEditorState | null
   kanbanState?: KanbanEditorState | null
   projectState?: ProjectEditorState | null
+  noteState?: NoteEditorState | null
   attachmentState?: AttachmentEditorState | null
 }
 
@@ -164,6 +168,12 @@ const ICONS = {
       <path d="M4.2 10.2 6.6 7.4 8.4 8.8 11.6 5.6" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
     </Icon>
   ),
+  note: (
+    <Icon>
+      <rect x="2.5" y="2.5" width="11" height="11" rx="1.4" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M5 6h6M5 8.5h6M5 11h3.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    </Icon>
+  ),
   settings: (
     <Icon>
       <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.35" />
@@ -230,12 +240,14 @@ export function WorkspaceToolbar({
   deckId,
   boardId,
   planId,
+  noteId,
   attachmentId,
   pageState,
   diagramState,
   slideState,
   kanbanState,
   projectState,
+  noteState,
   attachmentState,
 }: Props) {
   const {
@@ -253,6 +265,7 @@ export function WorkspaceToolbar({
     createSlideDeck,
     createKanbanBoard,
     createProjectPlan,
+    createNote,
     deleteBook,
     deletePage,
     deleteFolder,
@@ -260,6 +273,7 @@ export function WorkspaceToolbar({
     deleteSlideDeck,
     deleteKanbanBoard,
     deleteProjectPlan,
+    deleteNote,
     deleteAttachment,
     renameFolder,
     movePage,
@@ -293,9 +307,10 @@ export function WorkspaceToolbar({
         deckId,
         boardId,
         planId,
+        noteId,
         attachmentId,
       ),
-    [view, selection, books, shelves, t, shelfId, bookId, pageId, diagramId, deckId, boardId, planId, attachmentId],
+    [view, selection, books, shelves, t, shelfId, bookId, pageId, diagramId, deckId, boardId, planId, noteId, attachmentId],
   )
 
   if (view === 'settings' || view === 'users' || view === 'stats' || view === 'help') {
@@ -635,6 +650,24 @@ export function WorkspaceToolbar({
                   }
                 >
                   {t('shell.newProject')}
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: t('shell.newNote'),
+                      label: t('shell.noteTitle'),
+                      placeholder: t('shell.notePlaceholder'),
+                      confirmLabel: t('shell.createNote'),
+                      run: async (title) => {
+                        const n = await createNote(context.bookId, title)
+                        void navigate(`/books/${context.bookId}/notes/${n.id}`)
+                      },
+                    })
+                  }
+                >
+                  {t('shell.newNote')}
                 </button>
                 <button
                   type="button"
@@ -1017,6 +1050,46 @@ export function WorkspaceToolbar({
         </>
       )}
 
+      {context.kind === 'note' && (
+        <>
+          <Group>
+            {(view !== 'note' || noteId !== context.noteId) && (
+              <button
+                type="button"
+                className="btn primary sm"
+                onClick={() => void navigate(`/books/${context.bookId}/notes/${context.noteId}`)}
+              >
+                {t('common.open')}
+              </button>
+            )}
+          </Group>
+          {noteState?.dirty && (
+            <>
+              <Sep />
+              <span className="ws-toolbar-status muted sm">{t('shell.unsavedChanges')}</span>
+            </>
+          )}
+          <span className="ws-toolbar-spacer" />
+          {canWrite && (
+            <Group>
+              <button
+                type="button"
+                className="btn ghost danger sm"
+                onClick={() => {
+                  if (!confirm(t('shell.deleteNoteConfirm', { name: context.title }))) return
+                  void deleteNote(context.noteId, context.bookId).then(() => {
+                    setSelection({ kind: 'book', bookId: context.bookId })
+                    if (noteId === context.noteId) void navigate(`/books/${context.bookId}`)
+                  })
+                }}
+              >
+                {t('shell.deleteNote')}
+              </button>
+            </Group>
+          )}
+        </>
+      )}
+
       {context.kind === 'attachment' && (
         <>
           <Group>
@@ -1132,6 +1205,7 @@ type BookLike = {
   slideDecks: { id: string; title: string }[]
   kanbanBoards: { id: string; title: string }[]
   projectPlans: { id: string; title: string }[]
+  notes: { id: string; title: string }[]
   attachments: { id: string; title: string; fileName: string; contentType: string; sizeBytes: number }[]
   chapters: { id: string; title: string }[]
 }
@@ -1204,6 +1278,14 @@ type ToolbarContext =
       dirtyHint?: string
     }
   | {
+      kind: 'note'
+      icon: ReactNode
+      title: string
+      bookId: string
+      noteId: string
+      dirtyHint?: string
+    }
+  | {
       kind: 'attachment'
       icon: ReactNode
       title: string
@@ -1228,6 +1310,7 @@ function resolveToolbarContext(
   deckId?: string,
   boardId?: string,
   planId?: string,
+  noteId?: string,
   attachmentId?: string,
 ): ToolbarContext {
   if (selection.kind === 'folder') {
@@ -1310,6 +1393,20 @@ function resolveToolbarContext(
       title: plan?.title ?? t('common.project'),
       bookId: bId,
       planId: pId,
+    }
+  }
+
+  if (selection.kind === 'note' || (view === 'note' && bookId && noteId)) {
+    const bId = selection.kind === 'note' ? selection.bookId : bookId!
+    const nId = selection.kind === 'note' ? selection.noteId : noteId!
+    const book = books.find((b) => b.id === bId)
+    const note = book?.notes.find((d) => d.id === nId)
+    return {
+      kind: 'note',
+      icon: ICONS.note,
+      title: note?.title ?? t('common.note'),
+      bookId: bId,
+      noteId: nId,
     }
   }
 

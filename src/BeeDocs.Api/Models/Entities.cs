@@ -22,9 +22,16 @@ public sealed class Shelf
     /// <summary>
     /// <see cref="User.Id"/> of the account responsible for this shelf, or null
     /// when nobody was identified. Like every other owner, it grants nothing —
-    /// permissions stay role-based.
+    /// permissions stay role-based. The exception is <see cref="IsPrivate"/>,
+    /// which only the owner (or an admin) may flip, and which hides the shelf
+    /// from everyone else.
     /// </summary>
     public string? OwnerId { get; set; }
+    /// <summary>
+    /// When true, only the owner (and admins) can see this shelf. Its books
+    /// inherit that invisibility. Cannot be combined with <see cref="Published"/>.
+    /// </summary>
+    public bool IsPrivate { get; set; }
     /// <summary>
     /// <see cref="StorageProvider.Id"/> that new content saved under this shelf
     /// is offloaded to, or null for local SQLite. Directs writes only — where an
@@ -55,6 +62,11 @@ public sealed class Book
     /// when nobody was identified. Pages created in the book inherit it.
     /// </summary>
     public string? OwnerId { get; set; }
+    /// <summary>
+    /// When true, only the owner (and admins) can see this book. Its pages,
+    /// diagrams and other documents inherit that invisibility.
+    /// </summary>
+    public bool IsPrivate { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -111,6 +123,10 @@ public sealed class Page
     /// 0 means unlimited. Older revision rows beyond the limit are pruned on save.
     /// </summary>
     public int MaxRevisions { get; set; }
+    /// <summary>
+    /// When true, only the owner (and admins) can see this page.
+    /// </summary>
+    public bool IsPrivate { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -179,6 +195,13 @@ public sealed class Diagram
     public string? ContentRef { get; set; }
     /// <summary>Same convention as <see cref="Page.ContentSize"/>.</summary>
     public long? ContentSize { get; set; }
+    /// <summary>
+    /// <see cref="User.Id"/> responsible for this diagram. Inherited from the
+    /// book on create, same as a page.
+    /// </summary>
+    public string? OwnerId { get; set; }
+    /// <summary>When true, only the owner (and admins) can see this diagram.</summary>
+    public bool IsPrivate { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -208,6 +231,13 @@ public sealed class SlideDeck
     /// Null on rows written before the column existed — derive from Source then.
     /// </summary>
     public int? SlideCount { get; set; }
+    /// <summary>
+    /// <see cref="User.Id"/> responsible for this deck. Inherited from the book
+    /// on create, same as a page.
+    /// </summary>
+    public string? OwnerId { get; set; }
+    /// <summary>When true, only the owner (and admins) can see this deck.</summary>
+    public bool IsPrivate { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -236,6 +266,13 @@ public sealed class KanbanBoard
     /// load <see cref="Source"/> (which may be offloaded) just to show a badge.
     /// </summary>
     public int? CardCount { get; set; }
+    /// <summary>
+    /// <see cref="User.Id"/> responsible for this board. Inherited from the book
+    /// on create, same as a page.
+    /// </summary>
+    public string? OwnerId { get; set; }
+    /// <summary>When true, only the owner (and admins) can see this board.</summary>
+    public bool IsPrivate { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -263,6 +300,48 @@ public sealed class ProjectPlan
     /// load <see cref="Source"/> (which may be offloaded) just to show a badge.
     /// </summary>
     public int? TaskCount { get; set; }
+    /// <summary>
+    /// <see cref="User.Id"/> responsible for this plan. Inherited from the book
+    /// on create, same as a page.
+    /// </summary>
+    public string? OwnerId { get; set; }
+    /// <summary>When true, only the owner (and admins) can see this plan.</summary>
+    public bool IsPrivate { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
+/// A OneNote-style note: a free-form canvas of positioned text, checklist,
+/// image and ink blocks, stored as one JSON document. Lives in a book next to
+/// pages, diagrams, decks, boards and plans.
+/// </summary>
+public sealed class Note
+{
+    public string Id { get; set; } = string.Empty;
+    public string BookId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    /// <summary>
+    /// JSON document: <c>{"version":1,"background","paper","blocks":[{id,kind,x,y,w,h,…}]}</c>
+    /// — see <c>src/beedocs-web/src/notes/noteModel.ts</c> for the schema.
+    /// </summary>
+    public string Source { get; set; } = string.Empty;
+    /// <summary>Same convention as <see cref="Page.ContentRef"/>.</summary>
+    public string? ContentRef { get; set; }
+    /// <summary>Same convention as <see cref="Page.ContentSize"/>.</summary>
+    public long? ContentSize { get; set; }
+    /// <summary>
+    /// Block count maintained on every save, so list projections don't have to
+    /// load <see cref="Source"/> (which may be offloaded) just to show a badge.
+    /// </summary>
+    public int? BlockCount { get; set; }
+    /// <summary>
+    /// <see cref="User.Id"/> responsible for this note. Inherited from the book
+    /// on create, same as a page.
+    /// </summary>
+    public string? OwnerId { get; set; }
+    /// <summary>When true, only the owner (and admins) can see this note.</summary>
+    public bool IsPrivate { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -353,7 +432,7 @@ public sealed class User
     /// </summary>
     public string PasswordHash { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
-    /// <summary>Set on the seeded admin and after an admin reset. Advisory — the UI nags, the API does not block.</summary>
+    /// <summary>Set on the seeded admin and after an admin reset. Login is allowed, but the workspace is blocked until the owner sets their own password.</summary>
     public bool MustChangePassword { get; set; }
     public DateTimeOffset? LastLoginAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -420,9 +499,11 @@ public sealed class Attachment
     /// <summary>
     /// <see cref="User.Id"/> of the account responsible for this file. Defaults
     /// to the owning book's owner, falling back to whoever uploaded it. Like
-    /// every other owner, it grants nothing.
+    /// every other owner, it grants nothing — except <see cref="IsPrivate"/>.
     /// </summary>
     public string? OwnerId { get; set; }
+    /// <summary>When true, only the owner (and admins) can see this file.</summary>
+    public bool IsPrivate { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

@@ -37,7 +37,7 @@ const en = {
   'helpdoc.about.factInstance': 'This instance',
   'helpdoc.ws.leftTitle': 'Left pane',
   'helpdoc.ws.left1':
-    ' — the library tree: shelves, books, folders, pages and diagrams. Right-click (or use the ⋯ menu) to create, rename, move and delete. Drag pages between folders. A shelf can be served as its own website at ',
+    ' — the library tree: shelves, books, folders, pages and diagrams. Right-click (or use the ⋯ menu) to create, rename, move and delete. Drag pages between folders. Drop a PDF, zip or image onto a book to file it; Markdown asks whether to become a page. A shelf can be served as its own website at ',
   'helpdoc.ws.left2': ' — toggle ',
   'helpdoc.ws.leftToggle': 'Serve as a public website',
   'helpdoc.ws.left3': ' in the shelf properties, then open it from the toolbar or the tree menu.',
@@ -113,6 +113,10 @@ const en = {
   'helpdoc.pg.fenceProjectMenu': 'Add → Project',
   'helpdoc.pg.fenceProject2': ', or as its own item in the book tree',
   'helpdoc.pg.fenceProjectRef': 'Embed of a stored plan — the body is the plan id; editing it updates the book item',
+  'helpdoc.pg.fenceNotes1': 'OneNote-style note (free-form text, checklists, ink) — insert via ',
+  'helpdoc.pg.fenceNotesMenu': 'Add → Note',
+  'helpdoc.pg.fenceNotes2': ', or as its own item in the book tree',
+  'helpdoc.pg.fenceNotesRef': 'Embed of a stored note — the body is the note id; editing it updates the book item',
   'helpdoc.pg.fenceNote1': "A diagram's own editor shows the exact ",
   'helpdoc.pg.fenceNote2':
     ' snippet to paste, with a copy button. Export a whole book to PDF from the book view.',
@@ -352,7 +356,7 @@ const fr: Msgs = {
   'helpdoc.about.factInstance': 'Cette instance',
   'helpdoc.ws.leftTitle': 'Volet gauche',
   'helpdoc.ws.left1':
-    ' — l’arborescence de la bibliothèque : étagères, livres, dossiers, pages et diagrammes. Clic droit (ou menu ⋯) pour créer, renommer, déplacer et supprimer. Glissez les pages entre dossiers. Une étagère peut être servie comme site web à part entière sur ',
+    ' — l’arborescence de la bibliothèque : étagères, livres, dossiers, pages et diagrammes. Clic droit (ou menu ⋯) pour créer, renommer, déplacer et supprimer. Glissez les pages entre dossiers. Déposez un PDF, un zip ou une image sur un livre pour le classer ; un fichier Markdown demande s’il doit devenir une page. Une étagère peut être servie comme site web à part entière sur ',
   'helpdoc.ws.left2': ' — activez ',
   'helpdoc.ws.leftToggle': 'Servir comme site web public',
   'helpdoc.ws.left3': ' dans les propriétés de l’étagère, puis ouvrez-le depuis la barre d’outils ou le menu de l’arborescence.',
@@ -428,6 +432,10 @@ const fr: Msgs = {
   'helpdoc.pg.fenceProjectMenu': 'Ajouter → Projet',
   'helpdoc.pg.fenceProject2': ', ou comme élément propre dans l’arbre du livre',
   'helpdoc.pg.fenceProjectRef': 'Intégration d’un plan enregistré — le corps est l’id du plan ; le modifier met à jour l’élément du livre',
+  'helpdoc.pg.fenceNotes1': 'Note façon OneNote (texte libre, listes de tâches, encre) — insérez via ',
+  'helpdoc.pg.fenceNotesMenu': 'Ajouter → Note',
+  'helpdoc.pg.fenceNotes2': ', ou comme élément propre dans l’arbre du livre',
+  'helpdoc.pg.fenceNotesRef': 'Intégration d’une note enregistrée — le corps est l’id de la note ; la modifier met à jour l’élément du livre',
   'helpdoc.pg.fenceNote1': 'L’éditeur d’un diagramme affiche l’extrait ',
   'helpdoc.pg.fenceNote2':
     ' exact à coller, avec un bouton de copie. Exportez un livre entier en PDF depuis la vue du livre.',
@@ -665,7 +673,7 @@ const de: Msgs = {
   'helpdoc.about.factInstance': 'Diese Instanz',
   'helpdoc.ws.leftTitle': 'Linker Bereich',
   'helpdoc.ws.left1':
-    ' — der Bibliotheksbaum: Regale, Bücher, Ordner, Seiten und Diagramme. Rechtsklick (oder das ⋯-Menü) zum Erstellen, Umbenennen, Verschieben und Löschen. Seiten lassen sich zwischen Ordnern ziehen. Ein Regal kann als eigene Website unter ',
+    ' — der Bibliotheksbaum: Regale, Bücher, Ordner, Seiten und Diagramme. Rechtsklick (oder das ⋯-Menü) zum Erstellen, Umbenennen, Verschieben und Löschen. Seiten lassen sich zwischen Ordnern ziehen. Ein PDF, Zip oder Bild auf ein Buch legen, um es abzulegen; Markdown fragt, ob daraus eine Seite werden soll. Ein Regal kann als eigene Website unter ',
   'helpdoc.ws.left2': ' bereitgestellt werden — aktivieren Sie ',
   'helpdoc.ws.leftToggle': 'Als öffentliche Website bereitstellen',
   'helpdoc.ws.left3': ' in den Regaleigenschaften und öffnen Sie sie dann über die Symbolleiste oder das Baummenü.',
@@ -741,6 +749,10 @@ const de: Msgs = {
   'helpdoc.pg.fenceProjectMenu': 'Hinzufügen → Projekt',
   'helpdoc.pg.fenceProject2': ', oder als eigener Eintrag im Buchbaum',
   'helpdoc.pg.fenceProjectRef': 'Einbettung eines gespeicherten Plans — der Inhalt ist die Plan-Id; Bearbeiten aktualisiert den Bucheintrag',
+  'helpdoc.pg.fenceNotes1': 'Notiz im OneNote-Stil (Freitext, Checklisten, Tinte) — einfügen über ',
+  'helpdoc.pg.fenceNotesMenu': 'Hinzufügen → Notiz',
+  'helpdoc.pg.fenceNotes2': ', oder als eigener Eintrag im Buchbaum',
+  'helpdoc.pg.fenceNotesRef': 'Einbettung einer gespeicherten Notiz — der Inhalt ist die Notiz-Id; Bearbeiten aktualisiert den Bucheintrag',
   'helpdoc.pg.fenceNote1': 'Der Editor eines Diagramms zeigt den genauen ',
   'helpdoc.pg.fenceNote2':
     '-Schnipsel zum Einfügen, mit Kopierschaltfläche. Ein ganzes Buch exportieren Sie aus der Buchansicht als PDF.',
@@ -978,7 +990,7 @@ const es: Msgs = {
   'helpdoc.about.factInstance': 'Esta instancia',
   'helpdoc.ws.leftTitle': 'Panel izquierdo',
   'helpdoc.ws.left1':
-    ' — el árbol de la biblioteca: estanterías, libros, carpetas, páginas y diagramas. Clic derecho (o el menú ⋯) para crear, renombrar, mover y eliminar. Arrastra páginas entre carpetas. Una estantería puede servirse como sitio web propio en ',
+    ' — el árbol de la biblioteca: estanterías, libros, carpetas, páginas y diagramas. Clic derecho (o el menú ⋯) para crear, renombrar, mover y eliminar. Arrastra páginas entre carpetas. Suelta un PDF, zip o imagen sobre un libro para archivarlo; Markdown pregunta si debe convertirse en página. Una estantería puede servirse como sitio web propio en ',
   'helpdoc.ws.left2': ' — activa ',
   'helpdoc.ws.leftToggle': 'Servir como sitio web público',
   'helpdoc.ws.left3': ' en las propiedades de la estantería y ábrelo después desde la barra de herramientas o el menú del árbol.',
@@ -1054,6 +1066,10 @@ const es: Msgs = {
   'helpdoc.pg.fenceProjectMenu': 'Añadir → Proyecto',
   'helpdoc.pg.fenceProject2': ', o como elemento propio en el árbol del libro',
   'helpdoc.pg.fenceProjectRef': 'Incrustación de un plan guardado — el cuerpo es el id del plan; editarlo actualiza el elemento del libro',
+  'helpdoc.pg.fenceNotes1': 'Nota estilo OneNote (texto libre, listas de verificación, tinta) — insértala con ',
+  'helpdoc.pg.fenceNotesMenu': 'Añadir → Nota',
+  'helpdoc.pg.fenceNotes2': ', o como elemento propio en el árbol del libro',
+  'helpdoc.pg.fenceNotesRef': 'Incrustación de una nota guardada — el cuerpo es el id de la nota; editarla actualiza el elemento del libro',
   'helpdoc.pg.fenceNote1': 'El editor propio de un diagrama muestra el fragmento ',
   'helpdoc.pg.fenceNote2':
     ' exacto para pegar, con botón de copiar. Exporta un libro completo a PDF desde la vista del libro.',
@@ -1291,7 +1307,7 @@ const nl: Msgs = {
   'helpdoc.about.factInstance': 'Deze instantie',
   'helpdoc.ws.leftTitle': 'Linkerpaneel',
   'helpdoc.ws.left1':
-    ' — de bibliotheekboom: boekenplanken, boeken, mappen, pagina’s en diagrammen. Rechtsklik (of het ⋯-menu) om te maken, hernoemen, verplaatsen en verwijderen. Sleep pagina’s tussen mappen. Een boekenplank kan als eigen website worden geserveerd op ',
+    ' — de bibliotheekboom: boekenplanken, boeken, mappen, pagina’s en diagrammen. Rechtsklik (of het ⋯-menu) om te maken, hernoemen, verplaatsen en verwijderen. Sleep pagina’s tussen mappen. Sleep een PDF, zip of afbeelding op een boek om het te archiveren; bij Markdown wordt gevraagd of het een pagina moet worden. Een boekenplank kan als eigen website worden geserveerd op ',
   'helpdoc.ws.left2': ' — zet ',
   'helpdoc.ws.leftToggle': 'Serveren als openbare website',
   'helpdoc.ws.left3': ' aan in de eigenschappen van de boekenplank en open hem daarna via de werkbalk of het boommenu.',
@@ -1367,6 +1383,10 @@ const nl: Msgs = {
   'helpdoc.pg.fenceProjectMenu': 'Toevoegen → Project',
   'helpdoc.pg.fenceProject2': ', of als eigen item in de boomstructuur van het boek',
   'helpdoc.pg.fenceProjectRef': 'Insluiting van een opgeslagen plan — de inhoud is het plan-id; bewerken werkt het boekitem bij',
+  'helpdoc.pg.fenceNotes1': 'Notitie in OneNote-stijl (vrije tekst, checklists, inkt) — invoegen via ',
+  'helpdoc.pg.fenceNotesMenu': 'Toevoegen → Notitie',
+  'helpdoc.pg.fenceNotes2': ', of als eigen item in de boomstructuur van het boek',
+  'helpdoc.pg.fenceNotesRef': 'Insluiting van een opgeslagen notitie — de inhoud is het notitie-id; bewerken werkt het boekitem bij',
   'helpdoc.pg.fenceNote1': 'De eigen editor van een diagram toont het exacte ',
   'helpdoc.pg.fenceNote2':
     '-snippet om te plakken, met kopieerknop. Exporteer een heel boek naar PDF vanuit de boekweergave.',
@@ -1604,7 +1624,7 @@ const ja: Msgs = {
   'helpdoc.about.factInstance': 'このインスタンス',
   'helpdoc.ws.leftTitle': '左ペイン',
   'helpdoc.ws.left1':
-    '：ライブラリツリーです。シェルフ、ブック、フォルダー、ページ、ダイアグラムが並びます。右クリック（または ⋯ メニュー）で作成・名前変更・移動・削除ができ、ページはフォルダー間でドラッグできます。シェルフは ',
+    '：ライブラリツリーです。シェルフ、ブック、フォルダー、ページ、ダイアグラムが並びます。右クリック（または ⋯ メニュー）で作成・名前変更・移動・削除ができ、ページはフォルダー間でドラッグできます。PDF・zip・画像をブックにドロップするとファイルとして保管され、Markdown はページにするか確認します。シェルフは ',
   'helpdoc.ws.left2': ' で独立したウェブサイトとして公開できます。シェルフのプロパティで ',
   'helpdoc.ws.leftToggle': '公開ウェブサイトとして提供',
   'helpdoc.ws.left3': ' を有効にし、ツールバーまたはツリーメニューから開いてください。',
@@ -1680,6 +1700,10 @@ const ja: Msgs = {
   'helpdoc.pg.fenceProjectMenu': '追加 → プロジェクト',
   'helpdoc.pg.fenceProject2': '。またはブックのツリー項目として',
   'helpdoc.pg.fenceProjectRef': '保存済み計画の埋め込み — 本文は計画 id。編集するとブックの項目も更新されます',
+  'helpdoc.pg.fenceNotes1': 'OneNote 風のノート（自由なテキスト、チェックリスト、手書き）— 挿入方法：',
+  'helpdoc.pg.fenceNotesMenu': '追加 → ノート',
+  'helpdoc.pg.fenceNotes2': '。またはブックのツリー項目として',
+  'helpdoc.pg.fenceNotesRef': '保存済みノートの埋め込み — 本文はノート id。編集するとブックの項目も更新されます',
   'helpdoc.pg.fenceNote1': 'ダイアグラム自身のエディターには、貼り付け用の正確な ',
   'helpdoc.pg.fenceNote2':
     ' スニペットがコピーボタン付きで表示されます。ブック全体の PDF エクスポートはブックビューから行えます。',
@@ -1917,7 +1941,7 @@ const zh: Msgs = {
   'helpdoc.about.factInstance': '此实例',
   'helpdoc.ws.leftTitle': '左侧面板',
   'helpdoc.ws.left1':
-    '：资料库树，包含书架、图书、文件夹、页面和图表。右键单击（或使用 ⋯ 菜单）可创建、重命名、移动和删除。页面可在文件夹之间拖动。书架可以在 ',
+    '：资料库树，包含书架、图书、文件夹、页面和图表。右键单击（或使用 ⋯ 菜单）可创建、重命名、移动和删除。页面可在文件夹之间拖动。将 PDF、zip 或图片拖到图书上即可归档；Markdown 会询问是否创建为页面。书架可以在 ',
   'helpdoc.ws.left2': ' 作为独立网站对外提供 — 在书架属性中开启 ',
   'helpdoc.ws.leftToggle': '作为公开网站提供',
   'helpdoc.ws.left3': '，然后从工具栏或树菜单中打开。',
@@ -1993,6 +2017,10 @@ const zh: Msgs = {
   'helpdoc.pg.fenceProjectMenu': '添加 → 项目',
   'helpdoc.pg.fenceProject2': '，或作为图书树中的独立条目',
   'helpdoc.pg.fenceProjectRef': '嵌入已保存的计划 — 内容为计划 id；编辑会更新图书中的条目',
+  'helpdoc.pg.fenceNotes1': 'OneNote 风格笔记（自由文本、清单、手写墨迹）— 插入入口：',
+  'helpdoc.pg.fenceNotesMenu': '添加 → 笔记',
+  'helpdoc.pg.fenceNotes2': '，或作为图书树中的独立条目',
+  'helpdoc.pg.fenceNotesRef': '嵌入已保存的笔记 — 内容为笔记 id；编辑会更新图书中的条目',
   'helpdoc.pg.fenceNote1': '图表自身的编辑器会显示可直接粘贴的 ',
   'helpdoc.pg.fenceNote2':
     ' 代码段，并带复制按钮。整本图书可从图书视图导出为 PDF。',

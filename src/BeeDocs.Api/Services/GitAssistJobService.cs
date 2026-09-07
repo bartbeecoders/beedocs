@@ -358,7 +358,7 @@ public sealed class GitAssistJobService(
             existing.Add(new PageSummaryDto(
                 created.Id, created.BookId, created.ChapterId, created.Title, created.Slug,
                 created.SortOrder, created.Version, created.OwnerId, created.OwnerName,
-                created.UpdatedAt));
+                created.IsPrivate, created.UpdatedAt));
             firstPageId ??= created.Id;
         }
 
