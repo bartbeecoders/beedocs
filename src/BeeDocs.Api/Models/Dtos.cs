@@ -971,6 +971,9 @@ public sealed record LlmTestResultDto(
 /// <param name="GoogleClientId">Echoed — an OAuth client id is public by design.</param>
 /// <param name="GoogleConnected">google-drive: the consent flow has stored a refresh token.</param>
 /// <param name="ShelfCount">Shelves currently assigned to this provider.</param>
+/// <param name="S3Endpoint">s3: the service URL, or null for AWS (derived from the region).</param>
+/// <param name="S3AccessKey">Echoed — an access key id identifies, the secret key authenticates.</param>
+/// <param name="S3SecretKeyHint">Last four characters of the stored secret key, or null.</param>
 public sealed record StorageProviderDto(
     string Id,
     string Kind,
@@ -981,6 +984,14 @@ public sealed record StorageProviderDto(
     string? GoogleClientId,
     bool HasGoogleClientSecret,
     bool GoogleConnected,
+    string? S3Endpoint,
+    string? S3Region,
+    string? S3Bucket,
+    string? S3AccessKey,
+    bool HasS3SecretKey,
+    string? S3SecretKeyHint,
+    bool S3PathStyle,
+    string? S3Prefix,
     int ShelfCount,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
@@ -988,24 +999,43 @@ public sealed record StorageProviderDto(
 
 /// <param name="Name">Omit to take the default for <paramref name="Kind"/>.</param>
 /// <param name="Container">azure-blob: omit for "beedocs".</param>
+/// <param name="Endpoint">s3: omit for AWS.</param>
+/// <param name="Region">s3: omit for "us-east-1".</param>
+/// <param name="PathStyle">s3: omit to path-style whenever an endpoint is given (self-hosted services), virtual-hosted otherwise (AWS).</param>
 public sealed record CreateStorageProviderRequest(
     [property: Required, MinLength(1)] string Kind,
     string? Name,
     string? Container,
     string? ConnectionString,
     string? ClientId,
-    string? ClientSecret
+    string? ClientSecret,
+    string? Endpoint = null,
+    string? Region = null,
+    string? Bucket = null,
+    string? AccessKey = null,
+    string? SecretKey = null,
+    bool? PathStyle = null,
+    string? Prefix = null
 );
 
 /// <param name="ConnectionString">null = leave the stored value untouched; "" = delete it; anything else = replace it.</param>
 /// <param name="ClientId">Same convention. Changing or clearing it also drops the refresh token — a token minted for one client is useless under another.</param>
 /// <param name="ClientSecret">Same convention as <paramref name="ConnectionString"/>, and same token-drop rule as <paramref name="ClientId"/>.</param>
+/// <param name="SecretKey">s3: same convention as <paramref name="ConnectionString"/>.</param>
+/// <param name="Endpoint">s3: null leaves it, "" means AWS.</param>
 public sealed record UpdateStorageProviderRequest(
     string? Name,
     string? Container,
     string? ConnectionString,
     string? ClientId,
-    string? ClientSecret
+    string? ClientSecret,
+    string? Endpoint = null,
+    string? Region = null,
+    string? Bucket = null,
+    string? AccessKey = null,
+    string? SecretKey = null,
+    bool? PathStyle = null,
+    string? Prefix = null
 );
 
 /// <param name="Message">Human-readable either way — show it verbatim.</param>
@@ -1016,6 +1046,80 @@ public sealed record StorageConnectResponseDto(string Url);
 
 /// <param name="ProviderId">Target provider, or null to move content back to local SQLite.</param>
 public sealed record AssignShelfStorageRequest(string? ProviderId);
+
+// --- Backup & restore ---
+
+/// <param name="ScheduleHours">0 = manual only; otherwise a backup runs whenever the last one is older than this.</param>
+/// <param name="ProviderIds">Every archive is uploaded to each of these storage providers.</param>
+/// <param name="KeepLast">Per provider, archives beyond the newest N are deleted after a successful upload. 0 = keep everything.</param>
+/// <param name="IncludeOffloaded">Fetch bodies that live at storage providers into the archive, so a restore never depends on them.</param>
+public sealed record BackupSettingsDto(
+    int ScheduleHours,
+    IReadOnlyList<string> ProviderIds,
+    int KeepLast,
+    bool IncludeUploads,
+    bool IncludeAttachments,
+    bool IncludeBranding,
+    bool IncludeOffloaded
+);
+
+/// <summary>Full replace — the settings form always submits every field. Nulls take the defaults.</summary>
+public sealed record UpdateBackupSettingsRequest(
+    int? ScheduleHours,
+    IReadOnlyList<string>? ProviderIds,
+    int? KeepLast,
+    bool? IncludeUploads,
+    bool? IncludeAttachments,
+    bool? IncludeBranding,
+    bool? IncludeOffloaded
+);
+
+/// <param name="Ready">Whether the provider can currently answer — a not-ready target fails its upload.</param>
+public sealed record BackupProviderDto(string Id, string Name, string Kind, bool Ready);
+
+/// <param name="Message">Human-readable either way — show it verbatim.</param>
+public sealed record BackupTargetResultDto(string ProviderId, string ProviderName, bool Ok, string Message);
+
+/// <param name="Kind">backup | restore.</param>
+/// <param name="Trigger">manual | scheduled.</param>
+/// <param name="Status">running | completed | failed.</param>
+/// <param name="ArchiveKey">The object name at every target (backups), or the archive restored from.</param>
+public sealed record BackupRunDto(
+    string Id,
+    string Kind,
+    string Trigger,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? FinishedAt,
+    string? StartedBy,
+    string? ArchiveKey,
+    long? SizeBytes,
+    IReadOnlyList<BackupTargetResultDto> Targets,
+    string? Message
+);
+
+/// <param name="Current">The run in progress, if any — poll while this is non-null.</param>
+/// <param name="NextScheduledAt">When the scheduler will next start a backup, or null when scheduling is off.</param>
+/// <param name="Restoring">The maintenance gate is up: every other API call answers 503 until it drops.</param>
+public sealed record BackupStatusDto(
+    BackupSettingsDto Settings,
+    IReadOnlyList<BackupProviderDto> Providers,
+    BackupRunDto? Current,
+    DateTimeOffset? NextScheduledAt,
+    IReadOnlyList<BackupRunDto> Runs,
+    bool Restoring
+);
+
+/// <param name="Key">The object name to pass back to restore/download/delete.</param>
+public sealed record BackupArchiveDto(string Key, long Size, DateTimeOffset? LastModified);
+
+public sealed record RestoreBackupRequest(
+    [property: Required, MinLength(1)] string ProviderId,
+    [property: Required, MinLength(1)] string Key
+);
+
+/// <param name="RunId">Poll <c>GET /api/settings/backup</c> until this run leaves <c>running</c>.</param>
+public sealed record BackupStartedDto(string RunId);
 
 // --- Users, roles & sign-in ---
 

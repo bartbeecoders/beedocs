@@ -11,10 +11,12 @@ import { BrandingPanel } from './BrandingPanel'
 import { RbaPanel } from './RbaPanel'
 import { LlmProviders } from './LlmProviders'
 import { StorageProviders } from './StorageProviders'
+import { BackupPanel } from './BackupPanel'
 import { GitConnections } from './GitConnections'
 import { UsersPanel } from './UsersPanel'
 import '../styles/llm-providers.css'
 import '../styles/storage-providers.css'
+import '../styles/backup.css'
 import '../styles/users.css'
 
 type Props = {
@@ -36,6 +38,7 @@ const TABS = [
   { id: 'access', adminOnly: true },
   { id: 'ai', adminOnly: true },
   { id: 'storage', adminOnly: true },
+  { id: 'backup', adminOnly: true },
   { id: 'git', adminOnly: true },
   { id: 'about', adminOnly: false },
 ] as const
@@ -275,6 +278,15 @@ export function SettingsPanel({ onResetPanes }: Props) {
           <section className="settings-section">
             <h2>{t('settings.sectionStorage')}</h2>
             <StorageProviders />
+          </section>
+        )}
+
+        {/* Restore replaces the whole instance and the archive holds every
+            credential the database does — admin-only for both reasons. */}
+        {active === 'backup' && canManageUsers && (
+          <section className="settings-section">
+            <h2>{t('settings.sectionBackup')}</h2>
+            <BackupPanel />
           </section>
         )}
 

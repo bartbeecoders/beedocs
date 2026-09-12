@@ -60,6 +60,19 @@ var brandingRoot = string.IsNullOrWhiteSpace(configuredBranding)
 Directory.CreateDirectory(brandingRoot);
 builder.Services.AddSingleton(new BrandingOptions(brandingRoot));
 builder.Services.AddSingleton<BrandingService>();
+
+// Backup & restore: archives are built and unpacked here. On the data volume
+// rather than /tmp, because a container's /tmp is rarely sized for a copy of
+// the whole instance.
+var configuredBackupWork = builder.Configuration["BeeDocs:BackupWorkPath"];
+var backupWorkRoot = string.IsNullOrWhiteSpace(configuredBackupWork)
+    ? Path.Combine(builder.Environment.ContentRootPath, "data", "backup-work")
+    : Path.GetFullPath(configuredBackupWork, builder.Environment.ContentRootPath);
+Directory.CreateDirectory(backupWorkRoot);
+builder.Services.AddSingleton(new BackupOptions(backupWorkRoot));
+builder.Services.AddSingleton<MaintenanceGate>();
+builder.Services.AddSingleton<BackupService>();
+builder.Services.AddHostedService<BackupSchedulerService>();
 builder.Services.Configure<ApiKeyOptions>(builder.Configuration.GetSection(ApiKeyOptions.SectionName));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.Configure<RbaOptions>(builder.Configuration.GetSection(RbaOptions.SectionName));
@@ -279,6 +292,16 @@ using (var scope = app.Services.CreateScope())
         app.Logger.LogError(ex, "Search index could not be initialized — search may return nothing until POST /api/search/reindex.");
     }
 
+    // Runs a crash left "running" become failed, and scratch archives are removed.
+    try
+    {
+        await scope.ServiceProvider.GetRequiredService<BackupService>().SweepOrphanedRunsAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Could not sweep interrupted backup runs.");
+    }
+
     // One-time fill of slide_deck.slide_count for rows that predate the column;
     // every save maintains it afterwards. Purely local, but a failure should
     // cost a badge, not the process.
@@ -341,6 +364,22 @@ api.AddEndpointFilter<AuthEndpointFilter>();
 // read — page get, revision get, diagram, slides, export, the bookshelf sites —
 // so the translation to "503, and here is which provider to fix" lives on the
 // group rather than on each handler.
+// While a backup is being restored the database is being replaced underneath
+// every handler, so nothing but the restore's own status (and health) answers.
+api.AddEndpointFilter(async (ctx, next) =>
+{
+    var gate = ctx.HttpContext.RequestServices.GetRequiredService<MaintenanceGate>();
+    if (gate.Active && ctx.HttpContext.GetEndpoint()?.Metadata.GetMetadata<AllowDuringMaintenance>() is null)
+    {
+        ctx.HttpContext.Response.Headers.RetryAfter = "5";
+        return Results.Problem(
+            statusCode: StatusCodes.Status503ServiceUnavailable,
+            title: "BeeDocs is restoring a backup",
+            detail: gate.Reason);
+    }
+    return await next(ctx);
+});
+
 api.AddEndpointFilter(async (ctx, next) =>
 {
     try
@@ -466,7 +505,8 @@ if (authOptions.Enabled)
 // Health and version answer before any credential check: a readiness probe that
 // needs a session is a readiness probe that reports the wrong thing.
 api.MapGet("/health", () => Results.Ok(new { status = "ok", service = "BeeDocs.Api", version = appVersion }))
-    .WithMetadata(new AllowAnonymousEndpoint());
+    .WithMetadata(new AllowAnonymousEndpoint())
+    .WithMetadata(new AllowDuringMaintenance());
 
 api.MapGet("/version", () => Results.Ok(new { version = appVersion }))
     .WithMetadata(new AllowAnonymousEndpoint());
@@ -1073,9 +1113,12 @@ api.MapPost("/shelves/{id}/storage", async (
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>
             {
-                ["providerId"] = [secret.Kind == StorageProviderKinds.GoogleDrive
-                    ? $"Connect '{secret.Name}' to Google Drive before assigning it to a shelf."
-                    : $"Add a connection string to '{secret.Name}' before assigning it to a shelf."],
+                ["providerId"] = [secret.Kind switch
+                {
+                    StorageProviderKinds.GoogleDrive => $"Connect '{secret.Name}' to Google Drive before assigning it to a shelf.",
+                    StorageProviderKinds.S3 => $"Complete the bucket, access key and secret key of '{secret.Name}' before assigning it to a shelf.",
+                    _ => $"Add a connection string to '{secret.Name}' before assigning it to a shelf.",
+                }],
             });
         }
     }
@@ -2056,6 +2099,122 @@ settingsAdmin.MapPost("/branding/logo/generate", async (GenerateLogoRequest body
     }
 });
 
+// --- Backup & restore ---
+// Everything an instance holds, zipped and shipped to one or more storage
+// providers (Settings → Backup). Status stays readable during a restore — it is
+// how the page learns the restore finished — and so does health; every other
+// route answers 503 until the gate drops (see the /api group filter).
+static string? StartedBy(HttpContext http)
+{
+    var user = http.GetCurrentUser();
+    return user.User?.DisplayName ?? user.User?.Username ?? (user.Via == "apiKey" ? "API key" : null);
+}
+
+settingsAdmin.MapGet("/backup", async (BackupService backups, CancellationToken ct) =>
+    Results.Ok(await backups.GetStatusAsync(ct)))
+    .WithMetadata(new AllowDuringMaintenance());
+
+settingsAdmin.MapPut("/backup", async (UpdateBackupSettingsRequest body, BackupService backups, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await backups.SetSettingsAsync(body, ct));
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["backup"] = [e.Message] });
+    }
+});
+
+settingsAdmin.MapPost("/backup/run", (HttpContext http, BackupService backups) =>
+    backups.StartBackup("manual", StartedBy(http)) is { } runId
+        ? Results.Accepted($"/api/settings/backup", new BackupStartedDto(runId))
+        : Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "A backup or restore is already running."));
+
+// A fresh archive straight to the browser — for admins without a provider, and
+// for moving an instance elsewhere.
+settingsAdmin.MapGet("/backup/export", (BackupService backups, CancellationToken ct) =>
+    Results.Stream(
+        stream => backups.ExportAsync(stream, ct),
+        "application/zip",
+        BackupService.ArchiveFileName(DateTimeOffset.UtcNow)));
+
+settingsAdmin.MapGet("/backup/providers/{id}/archives", async (string id, BackupService backups, CancellationToken ct) =>
+    Results.Ok(await backups.ListArchivesAsync(id, ct)));
+
+settingsAdmin.MapGet("/backup/providers/{id}/archives/{**key}", (string id, string key, BackupService backups, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Stream(
+            stream => backups.DownloadArchiveAsync(id, key, stream, ct),
+            "application/zip",
+            Path.GetFileName(key));
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["key"] = [e.Message] });
+    }
+});
+
+settingsAdmin.MapDelete("/backup/providers/{id}/archives/{**key}", async (string id, string key, BackupService backups, CancellationToken ct) =>
+{
+    try
+    {
+        await backups.DeleteArchiveAsync(id, key, ct);
+        return Results.NoContent();
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["key"] = [e.Message] });
+    }
+});
+
+settingsAdmin.MapPost("/backup/restore", (RestoreBackupRequest body, HttpContext http, BackupService backups) =>
+{
+    try
+    {
+        return backups.StartRestore(body.ProviderId, body.Key, StartedBy(http)) is { } runId
+            ? Results.Accepted("/api/settings/backup", new BackupStartedDto(runId))
+            : Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "A backup or restore is already running.");
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["key"] = [e.Message] });
+    }
+});
+
+// Restore from a file on the admin's machine. Archives can be far larger than
+// the request cap Kestrel applies to everything else, so this route lifts it.
+settingsAdmin.MapPost("/backup/restore/upload", async (HttpContext http, BackupService backups, CancellationToken ct) =>
+{
+    var request = http.Request;
+    if (!request.HasFormContentType)
+        return Results.BadRequest(new { error = "Expected multipart form data with a file field." });
+    if (backups.IsBusy)
+        return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "A backup or restore is already running.");
+
+    var sizeFeature = http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+    if (sizeFeature is { IsReadOnly: false }) sizeFeature.MaxRequestBodySize = null;
+
+    var form = await request.ReadFormAsync(ct);
+    var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
+    if (file is null || file.Length == 0)
+        return Results.BadRequest(new { error = "No file uploaded." });
+    if (!file.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { error = "A BeeDocs backup is a .zip file." });
+
+    var path = backups.NewUploadPath();
+    await using (var target = File.Create(path))
+    await using (var source = file.OpenReadStream())
+        await source.CopyToAsync(target, ct);
+
+    if (backups.StartRestoreFromFile(path, file.FileName, StartedBy(http)) is { } runId)
+        return Results.Accepted("/api/settings/backup", new BackupStartedDto(runId));
+    File.Delete(path);
+    return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "A backup or restore is already running.");
+}).DisableAntiforgery();
+
 // --- LLM providers & completion ---
 // Behind the same key as /api/v1, and not optional: a completion spends the user's
 // money, so an unauthenticated /api/llm on a reachable port is a bill waiting to
@@ -2244,15 +2403,39 @@ storageProviders.MapPost("/{id}/test", async (string id, IStorageProviderService
     if (secret is null) return Results.NotFound();
     if (!secret.IsReady)
     {
-        return Results.Ok(new StorageTestResultDto(false,
-            secret.Kind == StorageProviderKinds.GoogleDrive
-                ? "Not connected yet — save the OAuth client and click Connect."
-                : "No connection string stored yet."));
+        return Results.Ok(new StorageTestResultDto(false, secret.Kind switch
+        {
+            StorageProviderKinds.GoogleDrive => "Not connected yet — save the OAuth client and click Connect.",
+            StorageProviderKinds.S3 => "Bucket, access key and secret key are all needed before testing.",
+            _ => "No connection string stored yet.",
+        }));
     }
 
     // Built directly rather than through the router so a test never seeds the
     // cache with a client that was only ever probed.
     return Results.Ok(await ContentStoreRouter.Create(secret).TestAsync(ct));
+}).WithMetadata(storageAdmin);
+
+// Creates the S3 bucket the provider points at (S3 kind only). Same payload
+// shape as /test — outcome in the body, not the status — since the same panel
+// shows both. Admin-only for the same reason as /test: stored credentials.
+storageProviders.MapPost("/{id}/s3/create-bucket", async (string id, IStorageProviderService providers, CancellationToken ct) =>
+{
+    var secret = await providers.ResolveAsync(id, ct);
+    if (secret is null) return Results.NotFound();
+    if (secret.Kind != StorageProviderKinds.S3)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["kind"] = ["Only S3-compatible providers have buckets to create."],
+        });
+    }
+    if (!secret.IsReady)
+    {
+        return Results.Ok(new StorageTestResultDto(false, "Bucket, access key and secret key are all needed before creating the bucket."));
+    }
+
+    return Results.Ok(await new S3ContentStore(secret).CreateBucketAsync(ct));
 }).WithMetadata(storageAdmin);
 
 storageProviders.MapPost("/{id}/google/connect", async (

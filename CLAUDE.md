@@ -122,7 +122,14 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   one identity and one loaded set of children wherever it is drawn.
 - **Storage providers** let a shelf's content bodies live in the cloud instead of
   SQLite: rows in `storage_provider` (kinds `azure-blob` via connection string,
-  `google-drive` via OAuth consent — secrets write-only, llm_provider-style,
+  `google-drive` via OAuth consent, `s3` via access/secret key for AWS S3 and
+  anything speaking its API — MinIO, R2, B2, Ceph; `S3ContentStore` is a
+  hand-rolled SigV4 client, no AWS SDK, path-style by default when an endpoint
+  is given; `POST /api/storage-providers/{id}/s3/create-bucket` PUTs the
+  bucket itself — `LocationConstraint` only outside us-east-1, as AWS
+  requires — treats `BucketAlreadyOwnedByYou` as success and ends with the
+  `/test` probe, so the "Create bucket" button in the settings card reports
+  writability, not just existence — secrets write-only, llm_provider-style,
   leaving `StorageProviderService` only through `ResolveAsync`), assigned per
   shelf with `POST /api/shelves/{id}/storage` (admin, synchronous, minutes-scale;
   UI gives it a 600s timeout) and configured at `/api/storage-providers` (admin;
@@ -143,7 +150,28 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   first; moving a book between shelves relocates its bodies. Settings UI:
   `StorageProviders.tsx` (reuses the `llm-*` card chrome); shelf assignment:
   `ShelfStorageField` in `PropertiesPane.tsx` with a confirm modal. Uploads stay
-  local (v1).
+  local (v1). Every store also implements `IBackupStore` (binary,
+  name-addressed upload/download/list/delete) — the side backups use.
+- **Backup & restore** (`Services/BackupService.cs` + `BackupSchedulerService`,
+  `MaintenanceGate.cs`; UI `BackupPanel.tsx`, Settings → Backup; endpoints
+  under `/api/settings/backup`, admin) — one zip per run (`VACUUM INTO`
+  database snapshot, uploads, attachments, branding, and *offloaded bodies
+  fetched back from providers* so the archive stands alone; git clones never)
+  uploaded to one or more storage providers with per-target outcomes recorded
+  in `backup_run`, pruned to `keepLast` per provider, scheduled by deriving
+  "due" from the newest row rather than timer state. Restore copies the
+  archive's database into the live connection with SQLite's online backup API
+  (no file swap, no stale WAL) behind the maintenance gate (every `/api` call
+  except status/health answers 503 until done), re-runs migrations, keeps
+  sessions for accounts that still exist, inlines the captured offloaded
+  bodies (`content_ref` cleared — re-assign shelf storage to offload again),
+  replaces the included directories, marks repos whose clone is missing, and
+  invalidates every settings cache (`Invalidate()` on RBA/API-key/branding,
+  `ContentStoreRouter.Clear()`). The backup's own run row is written only once
+  its archive exists, so a snapshot never carries a phantom "running" row.
+  Scratch space: `BeeDocs:BackupWorkPath` (default `data/backup-work`); the
+  newest `pre-restore-*.db` safety copy is kept there. See
+  `Docs/BACKUP-RESTORE.md`.
 - **SQLite** is file-backed by default (`data/sqlite/beedocs.db` under the API
   content root, directory configurable via `BeeDocs:DataPath`, or a full
   `ConnectionStrings:Sqlite`). There is no separate DB server.
@@ -609,6 +637,7 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/USERS-AND-ROLES.md` — accounts, roles, sessions, and the opt-in sign-in wall.
 - `Docs/RBA-INTEGRATION.md` — delegating sign-in to the central RBA service (application DOC).
 - `Docs/LLM-PROVIDERS.md` — LLM providers, key storage, and the `/api/llm` security trade-off.
+- `Docs/BACKUP-RESTORE.md` — whole-instance backups to storage providers (incl. S3-compatible), scheduling, and the restore sequence.
 - `Docs/BRANDING.md` — instance title/logo, AI logo generation, themes, the Omarchy desktop theme.
 - `Docs/I18N.md` — the seven UI languages, the typed message-dictionary layer, glossary rules.
 - `Vibecoding/Instructions.md` — product goals/vision behind the MVP.

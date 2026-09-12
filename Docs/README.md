@@ -8,6 +8,7 @@
 | [MCP Tools reference](./MCP-TOOLS.md) | Full list of tools, resources, and prompts |
 | [Diagram Studio](./DIAGRAM-STUDIO.md) | The draw.io-style BeeDiagram editor — shapes, connections, shortcuts, JSON format |
 | [Users & roles](./USERS-AND-ROLES.md) | Accounts, the admin/editor/viewer roles, and the opt-in sign-in wall |
+| [Backup & restore](./BACKUP-RESTORE.md) | Whole-instance archives to storage providers (incl. S3-compatible), the scheduler, and how a restore replaces the database safely |
 | [LLM providers](./LLM-PROVIDERS.md) | Writing help in the editor — providers, where keys are stored, and why `/api/llm` needs protecting |
 | [Export & import](./EXPORT-IMPORT.md) | Export books and documents to PDF, Markdown, Word or a re-importable archive — and import them back |
 | [Architecture](./ARCHITECTURE.md) | High-level product architecture |

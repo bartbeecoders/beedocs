@@ -19,11 +19,13 @@ type KindOption = {
 const KINDS: KindOption[] = [
   { kind: 'azure-blob', label: 'Azure Blob Storage' },
   { kind: 'google-drive', label: 'Google Drive' },
+  { kind: 's3', label: 'S3-compatible storage' },
 ]
 
 const KIND_LABELS: Record<StorageProviderKind, string> = {
   'azure-blob': 'Azure Blob Storage',
   'google-drive': 'Google Drive',
+  s3: 'S3-compatible storage',
 }
 
 type Draft = {
@@ -32,6 +34,13 @@ type Draft = {
   connectionString: string
   clientId: string
   clientSecret: string
+  endpoint: string
+  region: string
+  bucket: string
+  accessKey: string
+  secretKey: string
+  pathStyle: boolean
+  prefix: string
 }
 
 const BLANK_DRAFT: Draft = {
@@ -40,6 +49,25 @@ const BLANK_DRAFT: Draft = {
   connectionString: '',
   clientId: '',
   clientSecret: '',
+  endpoint: '',
+  region: '',
+  bucket: '',
+  accessKey: '',
+  secretKey: '',
+  pathStyle: true,
+  prefix: '',
+}
+
+/** The editable, non-secret S3 fields of a stored provider, as draft values. */
+function s3Draft(p: StorageProvider): Pick<Draft, 'endpoint' | 'region' | 'bucket' | 'accessKey' | 'pathStyle' | 'prefix'> {
+  return {
+    endpoint: p.s3Endpoint ?? '',
+    region: p.s3Region ?? '',
+    bucket: p.s3Bucket ?? '',
+    accessKey: p.s3AccessKey ?? '',
+    pathStyle: p.s3PathStyle,
+    prefix: p.s3Prefix ?? '',
+  }
 }
 
 /** `request` already unwraps the API's message, so this is only Error → string. */
@@ -48,13 +76,25 @@ function errText(e: unknown): string {
 }
 
 function isDirty(d: Draft, p: StorageProvider): boolean {
-  return (
-    d.connectionString !== '' ||
-    d.clientSecret !== '' ||
-    d.name.trim() !== p.name ||
-    (p.kind === 'azure-blob' && d.container.trim() !== (p.container ?? '')) ||
-    (p.kind === 'google-drive' && d.clientId.trim() !== (p.googleClientId ?? ''))
-  )
+  if (d.connectionString !== '' || d.clientSecret !== '' || d.secretKey !== '' || d.name.trim() !== p.name)
+    return true
+  switch (p.kind) {
+    case 'azure-blob':
+      return d.container.trim() !== (p.container ?? '')
+    case 'google-drive':
+      return d.clientId.trim() !== (p.googleClientId ?? '')
+    case 's3': {
+      const stored = s3Draft(p)
+      return (
+        d.endpoint.trim().replace(/\/+$/, '') !== stored.endpoint ||
+        d.region.trim().toLowerCase() !== stored.region ||
+        d.bucket.trim() !== stored.bucket ||
+        d.accessKey.trim() !== stored.accessKey ||
+        d.pathStyle !== stored.pathStyle ||
+        d.prefix.trim().replace(/^\/+|\/+$/g, '') !== stored.prefix
+      )
+    }
+  }
 }
 
 /**
@@ -62,7 +102,14 @@ function isDirty(d: Draft, p: StorageProvider): boolean {
  * "configured or not" is the only state a storage backend has.
  */
 function isReady(p: StorageProvider): boolean {
-  return p.kind === 'azure-blob' ? p.hasConnectionString : p.googleConnected
+  switch (p.kind) {
+    case 'azure-blob':
+      return p.hasConnectionString
+    case 'google-drive':
+      return p.googleConnected
+    case 's3':
+      return !!p.s3Bucket && !!p.s3AccessKey && p.hasS3SecretKey
+  }
 }
 
 /**
@@ -95,6 +142,9 @@ export function StorageProviders() {
   const [draft, setDraft] = useState<Draft>(BLANK_DRAFT)
   const [test, setTest] = useState<{ id: string; result: StorageTestResult } | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
+  // Create bucket shares the test's abort + result slot: both are remote
+  // probes whose one message lands under the same buttons.
+  const [creatingBucketId, setCreatingBucketId] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [savedFlash, setSavedFlash] = useState(false)
@@ -161,6 +211,13 @@ export function StorageProviders() {
           ? t('providers.subSecretStored', { hint: p.connectionStringHint ?? '' })
           : t('providers.subNoConnString'),
       )
+    } else if (p.kind === 's3') {
+      parts.push(t('providers.subBucket', { name: p.s3Bucket ?? '—' }))
+      parts.push(
+        p.hasS3SecretKey
+          ? t('providers.subSecretStored', { hint: p.s3SecretKeyHint ?? '' })
+          : t('providers.subNoS3Key'),
+      )
     } else {
       parts.push(p.googleConnected ? t('providers.subConnected') : t('providers.subNotConnected'))
     }
@@ -198,6 +255,7 @@ export function StorageProviders() {
     testAbort.current?.abort()
     testAbort.current = null
     setTestingId(null)
+    setCreatingBucketId(null)
     setTest(null)
     connectToken.current += 1
     setConnectingId(null)
@@ -208,11 +266,11 @@ export function StorageProviders() {
     openIdRef.current = p.id
     setOpenId(p.id)
     setDraft({
+      ...BLANK_DRAFT,
+      ...s3Draft(p),
       name: p.name,
       container: p.container ?? '',
       clientId: p.googleClientId ?? '',
-      connectionString: '',
-      clientSecret: '',
     })
     setSaveError(null)
     setSavedFlash(false)
@@ -297,6 +355,13 @@ export function StorageProviders() {
       setCreateError(t('providers.setupNeedsOauth'))
       return
     }
+    if (
+      setupKind === 's3' &&
+      (!setupDraft.bucket.trim() || !setupDraft.accessKey.trim() || !setupDraft.secretKey.trim())
+    ) {
+      setCreateError(t('providers.setupNeedsS3'))
+      return
+    }
 
     setCreating(setupKind)
     setCreateError(null)
@@ -305,6 +370,14 @@ export function StorageProviders() {
       if (setupKind === 'azure-blob') {
         if (setupDraft.container.trim()) body.container = setupDraft.container.trim()
         body.connectionString = setupDraft.connectionString.trim()
+      } else if (setupKind === 's3') {
+        if (setupDraft.endpoint.trim()) body.endpoint = setupDraft.endpoint.trim()
+        if (setupDraft.region.trim()) body.region = setupDraft.region.trim()
+        body.bucket = setupDraft.bucket.trim()
+        body.accessKey = setupDraft.accessKey.trim()
+        body.secretKey = setupDraft.secretKey.trim()
+        body.pathStyle = setupDraft.pathStyle
+        if (setupDraft.prefix.trim()) body.prefix = setupDraft.prefix.trim()
       } else {
         body.clientId = setupDraft.clientId.trim()
         body.clientSecret = setupDraft.clientSecret.trim()
@@ -357,6 +430,16 @@ export function StorageProviders() {
         body.container = draft.container.trim()
         // An empty box means "keep the stored value" — "" would wipe it.
         if (draft.connectionString) body.connectionString = draft.connectionString
+      } else if (p.kind === 's3') {
+        // Endpoint "" is meaningful (back to AWS), so every non-secret field is
+        // sent as-is; only the secret follows the keep-when-blank rule.
+        body.endpoint = draft.endpoint.trim()
+        body.region = draft.region.trim()
+        body.bucket = draft.bucket.trim()
+        body.accessKey = draft.accessKey.trim()
+        body.pathStyle = draft.pathStyle
+        body.prefix = draft.prefix.trim()
+        if (draft.secretKey) body.secretKey = draft.secretKey
       } else {
         // The client id round-trips, so it is sent only when actually changed —
         // any change (including clearing it) drops the refresh token server-side.
@@ -369,11 +452,11 @@ export function StorageProviders() {
       replace(next)
       if (openIdRef.current !== target) return
       setDraft({
+        ...BLANK_DRAFT,
+        ...s3Draft(next),
         name: next.name,
         container: next.container ?? '',
         clientId: next.googleClientId ?? '',
-        connectionString: '',
-        clientSecret: '',
       })
       clearRowError(target)
       flashSaved()
@@ -391,12 +474,16 @@ export function StorageProviders() {
     try {
       const next = await api.updateStorageProvider(
         target,
-        p.kind === 'azure-blob' ? { connectionString: '' } : { clientSecret: '' },
+        p.kind === 'azure-blob'
+          ? { connectionString: '' }
+          : p.kind === 's3'
+            ? { secretKey: '' }
+            : { clientSecret: '' },
       )
       replace(next)
       setConfirmSecretId((id) => (id === target ? null : id))
       if (openIdRef.current !== target) return
-      setDraft((d) => ({ ...d, connectionString: '', clientSecret: '' }))
+      setDraft((d) => ({ ...d, connectionString: '', clientSecret: '', secretKey: '' }))
       setTest(null)
     } catch (e) {
       if (openIdRef.current === target) setSaveError(errText(e))
@@ -423,15 +510,24 @@ export function StorageProviders() {
     }
   }
 
-  const runTest = async (p: StorageProvider) => {
+  /**
+   * One remote probe at a time per provider — Test connection and Create
+   * bucket both go through here, differing only in the call and which button
+   * shows the spinner.
+   */
+  const runProbe = async (
+    p: StorageProvider,
+    call: (id: string, signal: AbortSignal) => Promise<StorageTestResult>,
+    setBusy: (update: (id: string | null) => string | null) => void,
+  ) => {
     const target = p.id
     testAbort.current?.abort()
     const ctrl = new AbortController()
     testAbort.current = ctrl
-    setTestingId(target)
+    setBusy(() => target)
     setTest(null)
     try {
-      const result = await api.testStorageProvider(target, ctrl.signal)
+      const result = await call(target, ctrl.signal)
       if (!ctrl.signal.aborted && openIdRef.current === target) setTest({ id: target, result })
     } catch (e) {
       // A cancel is not a failure — say nothing rather than paint a red row.
@@ -440,9 +536,13 @@ export function StorageProviders() {
       }
     } finally {
       if (testAbort.current === ctrl) testAbort.current = null
-      setTestingId((id) => (id === target ? null : id))
+      setBusy((id) => (id === target ? null : id))
     }
   }
+
+  const runTest = (p: StorageProvider) => runProbe(p, api.testStorageProvider, setTestingId)
+  const runCreateBucket = (p: StorageProvider) =>
+    runProbe(p, api.createStorageProviderBucket, setCreatingBucketId)
 
   /**
    * The consent finishes in another window the app cannot see into, so the
@@ -544,6 +644,8 @@ export function StorageProviders() {
             const open = openId === p.id
             const isSaving = savingId === p.id
             const isTesting = testingId === p.id
+            const isCreatingBucket = creatingBucketId === p.id
+            const isProbing = isTesting || isCreatingBucket
             const formBusy = busyId === p.id || isSaving
             const dirty = open && isDirty(draft, p)
             const nameMissing = open && draft.name.trim() === ''
@@ -678,6 +780,125 @@ export function StorageProviders() {
                           ) : null}
                         </div>
                       </>
+                    ) : p.kind === 's3' ? (
+                      <>
+                        <div className="llm-grid">
+                          <div className="llm-field">
+                            <label htmlFor={`sp-endpoint-${p.id}`}>{t('providers.s3Endpoint')}</label>
+                            <input
+                              id={`sp-endpoint-${p.id}`}
+                              className="llm-mono"
+                              spellCheck={false}
+                              autoComplete="off"
+                              placeholder="https://s3.amazonaws.com"
+                              value={draft.endpoint}
+                              readOnly={formBusy}
+                              onChange={(e) => editDraft({ endpoint: e.target.value })}
+                            />
+                            <p className="llm-hint">{t('providers.s3EndpointHint')}</p>
+                          </div>
+                          <div className="llm-field">
+                            <label htmlFor={`sp-region-${p.id}`}>{t('providers.s3Region')}</label>
+                            <input
+                              id={`sp-region-${p.id}`}
+                              className="llm-mono"
+                              spellCheck={false}
+                              autoComplete="off"
+                              placeholder="us-east-1"
+                              value={draft.region}
+                              readOnly={formBusy}
+                              onChange={(e) => editDraft({ region: e.target.value })}
+                            />
+                            <p className="llm-hint">{t('providers.s3RegionHint')}</p>
+                          </div>
+                        </div>
+                        <div className="llm-grid">
+                          <div className="llm-field">
+                            <label htmlFor={`sp-bucket-${p.id}`}>{t('providers.s3Bucket')}</label>
+                            <input
+                              id={`sp-bucket-${p.id}`}
+                              className="llm-mono"
+                              spellCheck={false}
+                              autoComplete="off"
+                              value={draft.bucket}
+                              readOnly={formBusy}
+                              onChange={(e) => editDraft({ bucket: e.target.value })}
+                            />
+                            <p className="llm-hint">{t('providers.s3BucketHint')}</p>
+                          </div>
+                          <div className="llm-field">
+                            <label htmlFor={`sp-prefix-${p.id}`}>{t('providers.s3Prefix')}</label>
+                            <input
+                              id={`sp-prefix-${p.id}`}
+                              className="llm-mono"
+                              spellCheck={false}
+                              autoComplete="off"
+                              placeholder="beedocs"
+                              value={draft.prefix}
+                              readOnly={formBusy}
+                              onChange={(e) => editDraft({ prefix: e.target.value })}
+                            />
+                            <p className="llm-hint">{t('providers.s3PrefixHint')}</p>
+                          </div>
+                        </div>
+                        <div className="llm-field">
+                          <label htmlFor={`sp-access-${p.id}`}>{t('providers.s3AccessKey')}</label>
+                          <input
+                            id={`sp-access-${p.id}`}
+                            className="llm-mono"
+                            spellCheck={false}
+                            autoComplete="off"
+                            value={draft.accessKey}
+                            readOnly={formBusy}
+                            onChange={(e) => editDraft({ accessKey: e.target.value })}
+                          />
+                        </div>
+                        <div className="llm-field">
+                          <label htmlFor={`sp-secret-${p.id}`}>{t('providers.s3SecretKey')}</label>
+                          <div className="llm-inline">
+                            <input
+                              id={`sp-secret-${p.id}`}
+                              type="password"
+                              className="llm-mono llm-key"
+                              autoComplete="off"
+                              data-1p-ignore=""
+                              data-lpignore="true"
+                              spellCheck={false}
+                              readOnly={formBusy}
+                              placeholder={
+                                p.hasS3SecretKey
+                                  ? `•••••••• ${p.s3SecretKeyHint ?? ''}`.trim()
+                                  : t('providers.s3SecretPlaceholder')
+                              }
+                              value={draft.secretKey}
+                              onChange={(e) => editDraft({ secretKey: e.target.value })}
+                            />
+                            {p.hasS3SecretKey ? (
+                              <button
+                                type="button"
+                                className="btn ghost danger"
+                                disabled={formBusy || confirmSecretId === p.id}
+                                onClick={() => setConfirmSecretId(p.id)}
+                              >
+                                {t('common.remove')}
+                              </button>
+                            ) : null}
+                          </div>
+                          {p.hasS3SecretKey ? (
+                            <p className="llm-hint">{t('providers.s3SecretStoredHint')}</p>
+                          ) : null}
+                        </div>
+                        <label className="check-row">
+                          <input
+                            type="checkbox"
+                            checked={draft.pathStyle}
+                            disabled={formBusy}
+                            onChange={(e) => editDraft({ pathStyle: e.target.checked })}
+                          />
+                          <span>{t('providers.s3PathStyle')}</span>
+                        </label>
+                        <p className="llm-hint">{t('providers.s3PathStyleHint')}</p>
+                      </>
                     ) : (
                       <>
                         <div className="llm-field">
@@ -769,7 +990,9 @@ export function StorageProviders() {
                           {t(
                             p.kind === 'azure-blob'
                               ? 'providers.removeSecretConfirmAzure'
-                              : 'providers.removeSecretConfirmGoogle',
+                              : p.kind === 's3'
+                                ? 'providers.removeSecretConfirmS3'
+                                : 'providers.removeSecretConfirmGoogle',
                             { name: p.name },
                           )}
                         </span>
@@ -843,13 +1066,25 @@ export function StorageProviders() {
                         <button
                           type="button"
                           className="btn"
-                          disabled={isTesting || formBusy || dirty}
+                          disabled={isProbing || formBusy || dirty}
                           aria-describedby={dirty ? testHintId : undefined}
                           onClick={() => void runTest(p)}
                         >
                           {isTesting ? t('providers.testing') : t('providers.testConnection')}
                         </button>
-                        {isTesting ? (
+                        {p.kind === 's3' ? (
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={isProbing || formBusy || dirty || !ready}
+                            aria-describedby={dirty ? testHintId : undefined}
+                            title={t('providers.createBucketTitle')}
+                            onClick={() => void runCreateBucket(p)}
+                          >
+                            {isCreatingBucket ? t('providers.creatingBucket') : t('providers.createBucket')}
+                          </button>
+                        ) : null}
+                        {isProbing ? (
                           <button
                             type="button"
                             className="btn ghost"
@@ -959,6 +1194,103 @@ export function StorageProviders() {
                       required
                       placeholder={t('providers.connStringPlaceholder')}
                     />
+                  </label>
+                </>
+              ) : setupKind === 's3' ? (
+                <>
+                  <label className="field">
+                    <span className="field-label">{t('providers.s3Endpoint')}</span>
+                    <input
+                      className="llm-mono"
+                      value={setupDraft.endpoint}
+                      onChange={(e) =>
+                        setSetupDraft((d) => ({
+                          ...d,
+                          endpoint: e.target.value,
+                          // Self-hosted services want path-style; AWS does not.
+                          pathStyle: e.target.value.trim() !== '',
+                        }))
+                      }
+                      disabled={creating !== null}
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="https://minio.example.com:9000"
+                    />
+                    <span className="muted sm">{t('providers.s3EndpointHint')}</span>
+                  </label>
+                  <label className="field">
+                    <span className="field-label">{t('providers.s3Region')}</span>
+                    <input
+                      className="llm-mono"
+                      value={setupDraft.region}
+                      onChange={(e) => setSetupDraft((d) => ({ ...d, region: e.target.value }))}
+                      disabled={creating !== null}
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="us-east-1"
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">{t('providers.s3Bucket')}</span>
+                    <input
+                      className="llm-mono"
+                      value={setupDraft.bucket}
+                      onChange={(e) => setSetupDraft((d) => ({ ...d, bucket: e.target.value }))}
+                      disabled={creating !== null}
+                      autoComplete="off"
+                      spellCheck={false}
+                      required
+                    />
+                    <span className="muted sm">{t('providers.s3BucketHint')}</span>
+                  </label>
+                  <label className="field">
+                    <span className="field-label">{t('providers.s3AccessKey')}</span>
+                    <input
+                      className="llm-mono"
+                      value={setupDraft.accessKey}
+                      onChange={(e) => setSetupDraft((d) => ({ ...d, accessKey: e.target.value }))}
+                      disabled={creating !== null}
+                      autoComplete="off"
+                      spellCheck={false}
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">{t('providers.s3SecretKey')}</span>
+                    <input
+                      type="password"
+                      className="llm-mono"
+                      value={setupDraft.secretKey}
+                      onChange={(e) => setSetupDraft((d) => ({ ...d, secretKey: e.target.value }))}
+                      disabled={creating !== null}
+                      autoComplete="off"
+                      data-1p-ignore=""
+                      spellCheck={false}
+                      required
+                      placeholder={t('providers.s3SecretPlaceholder')}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">{t('providers.s3Prefix')}</span>
+                    <input
+                      className="llm-mono"
+                      value={setupDraft.prefix}
+                      onChange={(e) => setSetupDraft((d) => ({ ...d, prefix: e.target.value }))}
+                      disabled={creating !== null}
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="beedocs"
+                    />
+                    <span className="muted sm">{t('providers.s3PrefixHint')}</span>
+                  </label>
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={setupDraft.pathStyle}
+                      onChange={(e) => setSetupDraft((d) => ({ ...d, pathStyle: e.target.checked }))}
+                      disabled={creating !== null}
+                    />
+                    <span>{t('providers.s3PathStyle')}</span>
                   </label>
                 </>
               ) : (

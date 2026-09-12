@@ -36,6 +36,22 @@ public sealed class SqliteConnectionFactory
 
     public string ConnectionString => _connectionString;
 
+    /// <summary>
+    /// Absolute path of the database file, or null for an in-memory database.
+    /// Backup snapshots (VACUUM INTO) and the pre-restore safety copy need the
+    /// file's directory; nothing else should — every other reader goes through
+    /// a connection.
+    /// </summary>
+    public string? DatabasePath
+    {
+        get
+        {
+            var path = new SqliteConnectionStringBuilder(_connectionString).DataSource;
+            if (string.IsNullOrWhiteSpace(path) || path is ":memory:" or "file::memory:") return null;
+            return Path.GetFullPath(path);
+        }
+    }
+
     /// <summary>Open a connection ready for commands. Caller must dispose.</summary>
     public SqliteConnection OpenConnection()
     {

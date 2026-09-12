@@ -38,6 +38,9 @@ public sealed class RbaSettingsService(SqliteConnectionFactory db, IOptions<RbaO
 
     private sealed record StoredHolder(RbaSettings? Value);
 
+    /// <summary>Forget the cached row — after a restore replaced app_setting underneath us.</summary>
+    public void Invalidate() => _stored = null;
+
     public async Task<bool> IsEnabledAsync(CancellationToken ct = default) =>
         (await GetEffectiveAsync(ct)).Enabled;
 

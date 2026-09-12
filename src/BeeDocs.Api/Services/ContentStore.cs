@@ -30,6 +30,31 @@ public interface IContentStore
     Task<StorageTestResultDto> TestAsync(CancellationToken ct);
 }
 
+/// <summary>One object at a backup target, as listed under the backup prefix.</summary>
+public sealed record StoredObject(string Key, long Size, DateTimeOffset? LastModified);
+
+/// <summary>
+/// The binary, name-addressed side of a storage provider, used by backups. Kept
+/// apart from <see cref="IContentStore"/> because the two have different
+/// contracts: content bodies are text under provider-assigned keys (Drive file
+/// ids), a backup archive is bytes under a name the caller chose and can list
+/// again later. Every provider kind implements both.
+/// </summary>
+public interface IBackupStore
+{
+    /// <summary>Store bytes under <paramref name="key"/>, replacing any object of that name.</summary>
+    Task UploadAsync(string key, Stream content, long length, CancellationToken ct);
+
+    /// <summary>Copy the object into <paramref name="destination"/>. Throws <see cref="ContentUnavailableException"/> when missing.</summary>
+    Task DownloadAsync(string key, Stream destination, CancellationToken ct);
+
+    /// <summary>Every object whose key starts with <paramref name="prefix"/>, in no particular order.</summary>
+    Task<IReadOnlyList<StoredObject>> ListAsync(string prefix, CancellationToken ct);
+
+    /// <summary>Idempotent — a missing object counts as deleted.</summary>
+    Task DeleteAsync(string key, CancellationToken ct);
+}
+
 /// <summary>
 /// The <c>"{providerId}:{key}"</c> format of a <c>content_ref</c> column, and the
 /// deterministic keys content is filed under. Keys are provider- and
@@ -73,7 +98,7 @@ public sealed class ContentUnavailableException(string providerName, string mess
 }
 
 /// <summary>Azure Blob Storage backend: one blob per body, addressed by the suggested key.</summary>
-public sealed class AzureBlobContentStore : IContentStore
+public sealed class AzureBlobContentStore : IContentStore, IBackupStore
 {
     private readonly BlobContainerClient _container;
     private readonly string _providerName;
@@ -126,6 +151,41 @@ public sealed class AzureBlobContentStore : IContentStore
         }
     }
 
+    public async Task UploadAsync(string key, Stream content, long length, CancellationToken ct)
+    {
+        await EnsureContainerAsync(ct);
+        await _container.GetBlobClient(key).UploadAsync(content, overwrite: true, ct);
+    }
+
+    public async Task DownloadAsync(string key, Stream destination, CancellationToken ct)
+    {
+        try
+        {
+            await _container.GetBlobClient(key).DownloadToAsync(destination, ct);
+        }
+        catch (RequestFailedException ex)
+        {
+            throw new ContentUnavailableException(
+                _providerName, $"Azure Blob Storage returned {ex.Status} for '{key}'.", ex);
+        }
+    }
+
+    public async Task<IReadOnlyList<StoredObject>> ListAsync(string prefix, CancellationToken ct)
+    {
+        try
+        {
+            var list = new List<StoredObject>();
+            await foreach (var blob in _container.GetBlobsAsync(Azure.Storage.Blobs.Models.BlobTraits.None, Azure.Storage.Blobs.Models.BlobStates.None, prefix, ct))
+                list.Add(new StoredObject(blob.Name, blob.Properties.ContentLength ?? 0, blob.Properties.LastModified));
+            return list;
+        }
+        catch (RequestFailedException ex)
+        {
+            throw new ContentUnavailableException(
+                _providerName, $"Azure Blob Storage returned {ex.Status} listing '{prefix}'.", ex);
+        }
+    }
+
     private async Task EnsureContainerAsync(CancellationToken ct)
     {
         if (_containerEnsured) return;
@@ -153,13 +213,7 @@ public sealed class ContentStoreRouter(IStorageProviderService providers)
                 "unknown provider", $"Storage provider '{providerId}' no longer exists.");
 
         if (!secret.IsReady)
-        {
-            throw new ContentUnavailableException(
-                secret.Name,
-                secret.Kind == StorageProviderKinds.GoogleDrive
-                    ? $"Storage provider '{secret.Name}' is not connected — reconnect Google Drive in Settings."
-                    : $"Storage provider '{secret.Name}' has no connection string — add one in Settings.");
-        }
+            throw new ContentUnavailableException(secret.Name, NotReadyMessage(secret));
 
         if (_cache.TryGetValue(providerId, out var cached) && cached.UpdatedAt == secret.UpdatedAt)
             return cached.Store;
@@ -169,12 +223,33 @@ public sealed class ContentStoreRouter(IStorageProviderService providers)
         return store;
     }
 
+    /// <summary>
+    /// The backup side of a provider. Same cache as <see cref="ResolveAsync"/>:
+    /// every store implements both interfaces, so one instance serves both.
+    /// </summary>
+    public async Task<IBackupStore> ResolveBackupAsync(string providerId, CancellationToken ct = default) =>
+        (IBackupStore)await ResolveAsync(providerId, ct);
+
+    /// <summary>Drop every cached client — after a restore replaced the provider rows underneath them.</summary>
+    public void Clear() => _cache.Clear();
+
+    /// <summary>Why a provider cannot answer, phrased for the admin who has to fix it.</summary>
+    public static string NotReadyMessage(StorageProviderSecret secret) => secret.Kind switch
+    {
+        StorageProviderKinds.GoogleDrive =>
+            $"Storage provider '{secret.Name}' is not connected — reconnect Google Drive in Settings.",
+        StorageProviderKinds.S3 =>
+            $"Storage provider '{secret.Name}' is missing its bucket, access key or secret key — complete it in Settings.",
+        _ => $"Storage provider '{secret.Name}' has no connection string — add one in Settings.",
+    };
+
     /// <summary>Builds a store for a secret already in hand (the test endpoint, which must not cache).</summary>
     public static IContentStore Create(StorageProviderSecret secret) => secret.Kind switch
     {
         StorageProviderKinds.AzureBlob => new AzureBlobContentStore(
             secret.AzureConnectionString!, secret.AzureContainer, secret.Name),
         StorageProviderKinds.GoogleDrive => new GoogleDriveContentStore(secret),
+        StorageProviderKinds.S3 => new S3ContentStore(secret),
         _ => throw new ContentUnavailableException(
             secret.Name, $"Unknown storage provider kind '{secret.Kind}'."),
     };

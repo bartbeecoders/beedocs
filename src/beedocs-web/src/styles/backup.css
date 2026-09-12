@@ -1,0 +1,168 @@
+/*
+ * Settings → Backup. Reuses the users-form / check-row field chrome and the
+ * llm-* badges, banners and confirm rows; only the layout that neither sheet
+ * has lives here.
+ */
+
+.backup-panel .backup-h {
+  margin: 20px 0 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.backup-panel .backup-sub {
+  margin: 10px 0 2px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted, #6b7280);
+}
+
+.backup-panel .backup-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.backup-panel .backup-badge {
+  margin-left: 8px;
+}
+
+.backup-panel .llm-badge.is-ok {
+  background: color-mix(in srgb, var(--ok, #16a34a) 16%, transparent);
+  color: var(--ok, #16a34a);
+  border: 1px solid color-mix(in srgb, var(--ok, #16a34a) 40%, transparent);
+}
+
+.backup-panel .backup-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.backup-panel .backup-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.backup-panel .backup-actions-side {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.backup-panel .btn.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.backup-panel .backup-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.backup-panel .backup-running {
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+.backup-panel .backup-restore {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.backup-panel .backup-restore-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.backup-panel .backup-restore-row .users-field {
+  flex: 1 1 260px;
+  margin: 0;
+}
+
+.backup-panel .backup-archives,
+.backup-panel .backup-runs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.backup-panel .backup-archive,
+.backup-panel .backup-run {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  background: var(--surface, transparent);
+}
+
+.backup-panel .backup-archive-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.backup-panel .backup-archive-actions {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.backup-panel .backup-confirm {
+  flex-basis: 100%;
+}
+
+.backup-panel .backup-run-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex-basis: 100%;
+}
+
+.backup-panel .backup-run-label {
+  font-weight: 500;
+}
+
+.backup-panel .backup-run-key,
+.backup-panel .backup-run-msg {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+
+.backup-panel .backup-run-targets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.backup-panel .backup-run-targets .is-ok > span {
+  color: var(--ok, #16a34a);
+}
+
+.backup-panel .backup-run-targets .is-fail > span {
+  color: var(--danger, #b42318);
+}

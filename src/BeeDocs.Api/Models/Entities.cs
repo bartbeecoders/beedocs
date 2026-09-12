@@ -394,7 +394,7 @@ public sealed class LlmProvider
 public sealed class StorageProvider
 {
     public string Id { get; set; } = string.Empty;
-    /// <summary>azure-blob | google-drive — see <see cref="Services.StorageProviderKinds"/>.</summary>
+    /// <summary>azure-blob | google-drive | s3 — see <see cref="Services.StorageProviderKinds"/>.</summary>
     public string Kind { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     /// <summary>Never serialized to a client; the DTO exposes only has/hint.</summary>
@@ -408,6 +408,19 @@ public sealed class StorageProvider
     public string? GoogleRefreshToken { get; set; }
     /// <summary>Drive folder the callback ensured; objects are created inside it.</summary>
     public string? GoogleFolderId { get; set; }
+    /// <summary>s3: service endpoint (blank = AWS, derived from the region). MinIO, Ceph, R2, Backblaze… set theirs.</summary>
+    public string? S3Endpoint { get; set; }
+    /// <summary>s3: SigV4 signing region. Non-AWS services usually accept anything; "us-east-1" is the convention.</summary>
+    public string? S3Region { get; set; }
+    public string? S3Bucket { get; set; }
+    /// <summary>s3: access key id. A username in all but name, so the DTO echoes it.</summary>
+    public string? S3AccessKey { get; set; }
+    /// <summary>Never serialized to a client.</summary>
+    public string? S3SecretKey { get; set; }
+    /// <summary>s3: bucket in the path ("host/bucket/key") rather than the host ("bucket.host/key"). What MinIO and most self-hosted services need.</summary>
+    public bool S3PathStyle { get; set; }
+    /// <summary>s3: optional key prefix, so one bucket can be shared. Stored without a trailing slash.</summary>
+    public string? S3Prefix { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

@@ -750,7 +750,7 @@ export type LlmCompleteRequest = {
   temperature?: number
 }
 
-export type StorageProviderKind = 'azure-blob' | 'google-drive'
+export type StorageProviderKind = 'azure-blob' | 'google-drive' | 's3'
 
 /**
  * A configured backend that shelf content bodies can be offloaded to. Secrets
@@ -773,6 +773,19 @@ export type StorageProvider = {
   hasGoogleClientSecret: boolean
   /** google-drive: the consent flow has stored a refresh token. */
   googleConnected: boolean
+  /** s3: the service URL; null means AWS (derived from the region). */
+  s3Endpoint: string | null
+  s3Region: string | null
+  s3Bucket: string | null
+  /** s3: the access key id round-trips — it identifies, the secret key authenticates. */
+  s3AccessKey: string | null
+  hasS3SecretKey: boolean
+  /** Last 4 characters of the stored secret key; null when there is none. */
+  s3SecretKeyHint: string | null
+  /** s3: bucket in the path (MinIO & co.) rather than the host (AWS). */
+  s3PathStyle: boolean
+  /** s3: optional key prefix so a bucket can be shared. */
+  s3Prefix: string | null
   /** Shelves currently assigned to this provider. */
   shelfCount: number
   createdAt: string
@@ -787,6 +800,15 @@ export type CreateStorageProviderRequest = {
   connectionString?: string
   clientId?: string
   clientSecret?: string
+  /** s3: omit for AWS. */
+  endpoint?: string
+  region?: string
+  bucket?: string
+  accessKey?: string
+  secretKey?: string
+  /** s3: omit to path-style whenever an endpoint is given. */
+  pathStyle?: boolean
+  prefix?: string
 }
 
 export type UpdateStorageProviderRequest = {
@@ -797,6 +819,74 @@ export type UpdateStorageProviderRequest = {
   /** Changing or clearing either OAuth credential also drops the refresh token. */
   clientId?: string
   clientSecret?: string
+  /** s3: "" means AWS. */
+  endpoint?: string
+  region?: string
+  bucket?: string
+  accessKey?: string
+  /** Same convention as connectionString. */
+  secretKey?: string
+  pathStyle?: boolean
+  prefix?: string
+}
+
+// --- Backup & restore ---
+
+export type BackupSettings = {
+  /** 0 = manual only. */
+  scheduleHours: number
+  providerIds: string[]
+  /** Archives kept per provider; 0 = all. */
+  keepLast: number
+  includeUploads: boolean
+  includeAttachments: boolean
+  includeBranding: boolean
+  includeOffloaded: boolean
+}
+
+export type BackupProvider = {
+  id: string
+  name: string
+  kind: StorageProviderKind
+  ready: boolean
+}
+
+export type BackupTargetResult = {
+  providerId: string
+  providerName: string
+  ok: boolean
+  message: string
+}
+
+export type BackupRun = {
+  id: string
+  kind: 'backup' | 'restore'
+  trigger: 'manual' | 'scheduled'
+  status: 'running' | 'completed' | 'failed'
+  startedAt: string
+  finishedAt: string | null
+  startedBy: string | null
+  archiveKey: string | null
+  sizeBytes: number | null
+  targets: BackupTargetResult[]
+  message: string | null
+}
+
+export type BackupStatus = {
+  settings: BackupSettings
+  providers: BackupProvider[]
+  /** The run in progress — poll while non-null. */
+  current: BackupRun | null
+  nextScheduledAt: string | null
+  runs: BackupRun[]
+  /** Every other API call answers 503 while this is true. */
+  restoring: boolean
+}
+
+export type BackupArchive = {
+  key: string
+  size: number
+  lastModified: string | null
 }
 
 /** Never fails with an error status — a broken provider comes back as ok:false. */

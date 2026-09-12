@@ -266,6 +266,29 @@ public static class DatabaseInitializer
               updated_at TEXT NOT NULL
             );
 
+            -- Backup and restore history (Settings → Backup). One row per run;
+            -- targets is a JSON list of per-provider outcomes, so a backup
+            -- that reached two of three providers is recorded as exactly that.
+            -- Not search-indexed. A restore replaces this table along with the
+            -- rest of the database, so the row for the restore itself is
+            -- re-inserted after the copy — see BackupService.
+            CREATE TABLE IF NOT EXISTS backup_run (
+              id TEXT PRIMARY KEY NOT NULL,
+              -- backup | restore
+              kind TEXT NOT NULL,
+              -- manual | scheduled
+              trigger TEXT NOT NULL,
+              -- running | completed | failed
+              status TEXT NOT NULL,
+              started_at TEXT NOT NULL,
+              finished_at TEXT,
+              started_by TEXT,
+              archive_key TEXT,
+              size_bytes INTEGER,
+              targets TEXT,
+              message TEXT
+            );
+
             -- Accounts. password_hash is write-only in the same sense as
             -- llm_provider.api_key: UserService selects it to verify one login and
             -- no DTO carries it. The table exists whether or not sign-in is
@@ -475,6 +498,15 @@ public static class DatabaseInitializer
         // migration needs no backfill. NULL shelf.storage_provider_id is local
         // SQLite for the same reason.
         await AddColumnIfMissingAsync(connection, "shelf", "storage_provider_id", "TEXT", ct);
+        // S3-compatible providers: sparse per-kind columns like the Azure/Google
+        // ones, so the write-only rule for s3_secret_key stays greppable.
+        await AddColumnIfMissingAsync(connection, "storage_provider", "s3_endpoint", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "storage_provider", "s3_region", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "storage_provider", "s3_bucket", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "storage_provider", "s3_access_key", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "storage_provider", "s3_secret_key", "TEXT", ct);
+        await AddColumnIfMissingAsync(connection, "storage_provider", "s3_path_style", "INTEGER NOT NULL DEFAULT 1", ct);
+        await AddColumnIfMissingAsync(connection, "storage_provider", "s3_prefix", "TEXT", ct);
         await AddColumnIfMissingAsync(connection, "page", "content_ref", "TEXT", ct);
         await AddColumnIfMissingAsync(connection, "page", "content_size", "INTEGER", ct);
         await AddColumnIfMissingAsync(connection, "page_revision", "content_ref", "TEXT", ct);

@@ -250,6 +250,9 @@ public sealed class BrandingService(SqliteConnectionFactory db, BrandingOptions 
         _stored = new StoredHolder(settings);
     }
 
+    /// <summary>Forget the cached row — after a restore replaced app_setting (and the logo file) underneath us.</summary>
+    public void Invalidate() => _stored = null;
+
     private async Task<BrandingSettings?> GetStoredAsync(CancellationToken ct)
     {
         if (_stored is { } cached) return cached.Value;

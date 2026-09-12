@@ -52,6 +52,9 @@ import type {
   SlideTemplate,
   SlideTemplateSummary,
   CreateStorageProviderRequest,
+  BackupArchive,
+  BackupSettings,
+  BackupStatus,
   StorageProvider,
   StorageTestResult,
   UpdateStorageProviderRequest,
@@ -860,6 +863,9 @@ export const api = {
   /** Reachability + credential check. Failures come back as ok:false, not a thrown error. */
   testStorageProvider: (id: string, signal?: AbortSignal) =>
     request<StorageTestResult>(`/api/storage-providers/${id}/test`, { method: 'POST', signal }),
+  /** S3 only: creates the bucket the provider points at (no-op if it is already ours), then probes it. */
+  createStorageProviderBucket: (id: string, signal?: AbortSignal) =>
+    request<StorageTestResult>(`/api/storage-providers/${id}/s3/create-bucket`, { method: 'POST', signal }),
 
   /**
    * Begin the Google Drive consent flow — open the returned URL in a new
@@ -875,6 +881,37 @@ export const api = {
    * minutes, not the shared 30s default. On a timeout the move may still finish
    * server-side; re-running resumes and skips completed items.
    */
+  /**
+   * Backup & restore (admin-only). Status is the one call that keeps answering
+   * during a restore; everything else 503s until the gate drops.
+   */
+  getBackupStatus: () => request<BackupStatus>('/api/settings/backup'),
+  updateBackupSettings: (body: Partial<BackupSettings>) =>
+    request<BackupSettings>('/api/settings/backup', { method: 'PUT', body: JSON.stringify(body) }),
+  runBackup: () => request<{ runId: string }>('/api/settings/backup/run', { method: 'POST' }),
+  listBackupArchives: (providerId: string) =>
+    request<BackupArchive[]>(`/api/settings/backup/providers/${providerId}/archives`, {
+      timeoutMs: 120_000,
+    }),
+  deleteBackupArchive: (providerId: string, key: string) =>
+    request<void>(`/api/settings/backup/providers/${providerId}/archives/${key}`, { method: 'DELETE' }),
+  /** Download URLs are plain GETs the browser can follow with its cookie. */
+  backupArchiveUrl: (providerId: string, key: string) =>
+    withApiBase(`/api/settings/backup/providers/${providerId}/archives/${key}`),
+  backupExportUrl: () => withApiBase('/api/settings/backup/export'),
+  restoreBackup: (providerId: string, key: string) =>
+    request<{ runId: string }>('/api/settings/backup/restore', {
+      method: 'POST',
+      body: JSON.stringify({ providerId, key }),
+    }),
+  restoreBackupFromFile: async (file: File) => {
+    const form = new FormData()
+    form.append('file', file, file.name)
+    const res = await fetch(withApiBase('/api/settings/backup/restore/upload'), { method: 'POST', body: form })
+    if (!res.ok) throw new Error(await errorText(res))
+    return res.json() as Promise<{ runId: string }>
+  },
+
   setShelfStorage: (shelfId: string, providerId: string | null) =>
     request<Shelf>(`/api/shelves/${shelfId}/storage`, {
       method: 'POST',

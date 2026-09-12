@@ -23,6 +23,7 @@ import { site } from './messages/site'
 import { kanban } from './messages/kanban'
 import { project } from './messages/project'
 import { notes } from './messages/notes'
+import { backup } from './messages/backup'
 
 export { LANGUAGES, type Lang, type LangDef } from './langs'
 
@@ -64,6 +65,7 @@ const MESSAGES = {
   kanban,
   project,
   notes,
+  backup,
 } as const
 
 type NsMap = typeof MESSAGES

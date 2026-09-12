@@ -77,12 +77,46 @@
 
       <ol class="timeline" reversed>
 
-        <!-- ================================================== v0.8 -->
+        <!-- ================================================== v0.9 -->
         <li class="release release--latest">
           <div class="release-head">
-            <span class="release-badge release-badge--latest mono">v0.8</span>
+            <span class="release-badge release-badge--latest mono">v0.9</span>
+            <h2>Backup &amp; restore, and any S3 bucket as storage</h2>
+            <p class="release-date mono">12 Sep 2026 · latest</p>
+          </div>
+          <p>The instance can now save itself. One zip per run — database
+             snapshot, uploads, attachments, branding and every body parked at
+             a storage provider — lands in the buckets you choose, on a
+             schedule, and comes back with one click.</p>
+          <ul class="release-list">
+            <li><strong>Backup &amp; restore</strong>: Settings → Backup
+                archives the whole instance to one or more storage providers,
+                keeps the newest N per target, and derives the next run from
+                the last one so a restart never doubles or skips it. Restore
+                swaps the database in through SQLite's online backup API behind
+                a maintenance gate, re-runs migrations, keeps sessions for
+                accounts that still exist, and pulls offloaded bodies back
+                inline so the archive stands alone. Offloaded bodies are
+                fetched into the zip; git clones are never included.</li>
+            <li><strong>S3-compatible storage</strong>: AWS S3, MinIO,
+                Cloudflare R2, Backblaze B2, Ceph — anything speaking the S3
+                API — joins Azure Blob and Google Drive as a provider for shelf
+                content and backup targets. Hand-rolled SigV4, no AWS SDK,
+                path-style by default for self-hosted services.</li>
+            <li><strong>Create the bucket from BeeDocs</strong>: a
+                <em>Create bucket</em> button next to <em>Test connection</em>
+                makes the missing bucket on the service (region-aware for AWS)
+                and ends with the same writability probe, so green means
+                writable, not merely present.</li>
+          </ul>
+        </li>
+
+        <!-- ================================================== v0.8 -->
+        <li class="release">
+          <div class="release-head">
+            <span class="release-badge mono">v0.8</span>
             <h2>Kanban boards, Gantt plans, and a workspace that wears your name</h2>
-            <p class="release-date mono">7 Sep 2026 · latest</p>
+            <p class="release-date mono">7 Sep 2026</p>
           </div>
           <p>The library learned to track work — and to look like yours. Boards
              and project plans sit next to pages and diagrams; notes click

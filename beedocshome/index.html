@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BeeDocs — self-hosted systems documentation with a diagram studio inside</title>
-  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks, OneNote-style notes, kanban boards, Gantt project plans, searchable file attachments — and an MCP server so AI agents write docs alongside you." />
+  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks, OneNote-style notes, kanban boards, Gantt project plans, searchable file attachments, scheduled backups to any S3-compatible bucket — and an MCP server so AI agents write docs alongside you." />
   <meta property="og:title" content="BeeDocs — documentation that draws its own architecture" />
   <meta property="og:description" content="Self-hosted docs for systems teams: Markdown books, BeeDiagram Studio, isometric views, slides, OneNote-style notes, kanban boards, Gantt plans, searchable file attachments, full-text search, and an MCP server for AI agents. One container, SQLite inside. MIT-licensed and free forever." />
   <meta property="og:type" content="website" />
@@ -48,7 +48,7 @@
       <a href="#agents">Agents</a>
       <a href="#desktop">Desktop</a>
       <a href="#selfhost">Self-host</a>
-      <a href="releases.html">Releases<span class="nav-badge">v0.8</span></a>
+      <a href="releases.html">Releases<span class="nav-badge">v0.9</span></a>
     </nav>
     <div class="head-actions">
       <a class="btn btn-ghost" href="https://github.com/bartbeecoders/beedocs" rel="noopener">
@@ -72,8 +72,8 @@
       <div class="hero-copy">
         <p class="eyebrow"><span class="dot" aria-hidden="true"></span>self-hosted · single container · SQLite inside</p>
         <a class="release-flag" href="releases.html">
-          <span class="flag-badge">v0.8</span>
-          <span>New: OneNote-style notes &amp; owner-only privacy</span>
+          <span class="flag-badge">v0.9</span>
+          <span>New: backup &amp; restore, S3-compatible storage</span>
           <span class="flag-arrow" aria-hidden="true">→</span>
         </a>
         <h1>Documentation that draws its own architecture.</h1>
@@ -300,6 +300,13 @@
              mark a shelf, book or document private so only they can see it.</p>
         </article>
         <article class="card">
+          <h3>Backups to your bucket</h3>
+          <p>Archive the whole instance — database, uploads, attachments,
+             branding, even bodies parked in the cloud — to Azure Blob, Google
+             Drive or any S3-compatible bucket, on a schedule. Restore from any
+             archive in one click; BeeDocs can even create the bucket.</p>
+        </article>
+        <article class="card">
           <h3>Git repos on the shelf</h3>
           <p>Connect GitHub, Azure DevOps or any clone URL and browse repos like
              books — Markdown rendered, code highlighted, edits saved, committed
@@ -476,10 +483,11 @@ claude mcp add beedocs -- dotnet run \
         <h2>One container. Your server. Your data.</h2>
         <p>A .NET&nbsp;10 API serves the built React workspace, uploads and the
            database from a single process. SQLite is embedded — there is no
-           database server to run, and a backup is one file.</p>
+           database server to run, and a backup is one zip.</p>
         <ul class="check-list">
           <li>Deploy with Docker Compose, Podman or K3S — or as a systemd user service on Arch/Omarchy</li>
-          <li>Optional cloud storage for page bodies — Azure Blob or Google Drive</li>
+          <li>Optional cloud storage for page bodies — Azure Blob, Google Drive or any S3-compatible bucket</li>
+          <li>Scheduled backups of the whole instance to those same providers, restored in one click</li>
           <li>Opt-in sign-in wall; API key for machine callers; pluggable external sign-in</li>
           <li>This page and the demo run on the same VPS</li>
         </ul>

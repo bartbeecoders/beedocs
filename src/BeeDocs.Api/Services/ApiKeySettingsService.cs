@@ -26,6 +26,13 @@ public sealed class ApiKeySettingsService(SqliteConnectionFactory db, IOptions<A
     // -1 unread, 0 false, 1 true. bool? cannot be volatile.
     private volatile int _allowAnonymous = -1;
 
+    /// <summary>Forget the cached values — after a restore replaced app_setting underneath us.</summary>
+    public void Invalidate()
+    {
+        _stored = null;
+        _allowAnonymous = -1;
+    }
+
     /// <summary>The key requests are checked against: stored if present, else configured. Null = no auth.</summary>
     public async Task<string?> GetEffectiveKeyAsync(CancellationToken ct = default)
     {

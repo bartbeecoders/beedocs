@@ -16,7 +16,7 @@ namespace BeeDocs.Api.Services;
 /// store an opaque key instead of a derived name. The SDK refreshes access
 /// tokens from the stored refresh token by itself.
 /// </summary>
-public sealed class GoogleDriveContentStore : IContentStore
+public sealed class GoogleDriveContentStore : IContentStore, IBackupStore
 {
     private readonly DriveService _drive;
     private readonly string _folderId;
@@ -111,6 +111,117 @@ public sealed class GoogleDriveContentStore : IContentStore
             // Already gone — deletion is idempotent.
         }
     }
+
+    // ----- IBackupStore: archives are addressed by *name* inside the folder -----
+    // Content bodies use Drive's own file ids because the row records whatever
+    // key PutAsync returns; a backup has to be found again by the name it was
+    // given, so these look the file up by name first.
+
+    public async Task UploadAsync(string key, Stream content, long length, CancellationToken ct)
+    {
+        try
+        {
+            var existing = await FindByNameAsync(key, ct);
+            if (existing is not null)
+            {
+                var update = _drive.Files.Update(new Google.Apis.Drive.v3.Data.File(), existing.Id, content, "application/zip");
+                var updated = await update.UploadAsync(ct);
+                if (updated.Status == UploadStatus.Completed) return;
+                if (updated.Exception is not GoogleApiException { HttpStatusCode: System.Net.HttpStatusCode.NotFound })
+                    throw Wrap(updated.Exception ?? new InvalidOperationException("Drive upload did not complete."));
+                content.Position = 0;
+            }
+
+            var meta = new Google.Apis.Drive.v3.Data.File
+            {
+                Name = key,
+                MimeType = "application/zip",
+                Parents = string.IsNullOrEmpty(_folderId) ? null : [_folderId],
+            };
+            var create = _drive.Files.Create(meta, content, "application/zip");
+            create.Fields = "id";
+            var progress = await create.UploadAsync(ct);
+            if (progress.Status != UploadStatus.Completed)
+                throw Wrap(progress.Exception ?? new InvalidOperationException("Drive upload did not complete."));
+        }
+        catch (Exception ex) when (ex is not ContentUnavailableException)
+        {
+            throw Wrap(ex);
+        }
+    }
+
+    public async Task DownloadAsync(string key, Stream destination, CancellationToken ct)
+    {
+        try
+        {
+            var file = await FindByNameAsync(key, ct)
+                ?? throw new ContentUnavailableException(_providerName, $"Google Drive has no file named '{key}'.");
+            var progress = await _drive.Files.Get(file.Id).DownloadAsync(destination, ct);
+            if (progress.Status != Google.Apis.Download.DownloadStatus.Completed)
+                throw Wrap(progress.Exception ?? new InvalidOperationException("Drive download did not complete."));
+        }
+        catch (Exception ex) when (ex is not ContentUnavailableException)
+        {
+            throw Wrap(ex);
+        }
+    }
+
+    public async Task<IReadOnlyList<StoredObject>> ListAsync(string prefix, CancellationToken ct)
+    {
+        try
+        {
+            var list = new List<StoredObject>();
+            string? pageToken = null;
+            do
+            {
+                var req = _drive.Files.List();
+                // Drive has no starts-with; 'contains' narrows server-side and the
+                // prefix check below makes it exact.
+                req.Q = $"'{_folderId}' in parents and trashed = false and name contains '{Escape(prefix)}'";
+                req.Fields = "nextPageToken, files(id, name, size, modifiedTimeDateTimeOffset)";
+                req.PageSize = 200;
+                req.PageToken = pageToken;
+                var page = await req.ExecuteAsync(ct);
+                foreach (var f in page.Files ?? [])
+                {
+                    if (!f.Name.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                    list.Add(new StoredObject(f.Name, f.Size ?? 0, f.ModifiedTimeDateTimeOffset));
+                }
+                pageToken = page.NextPageToken;
+            } while (!string.IsNullOrEmpty(pageToken));
+            return list;
+        }
+        catch (Exception ex) when (ex is not ContentUnavailableException)
+        {
+            throw Wrap(ex);
+        }
+    }
+
+    /// <summary>Delete-by-name for the backup side; the content side's <see cref="DeleteAsync"/> takes a file id.</summary>
+    async Task IBackupStore.DeleteAsync(string key, CancellationToken ct)
+    {
+        try
+        {
+            var file = await FindByNameAsync(key, ct);
+            if (file is not null) await DeleteAsync(file.Id, ct);
+        }
+        catch (Exception ex) when (ex is not ContentUnavailableException)
+        {
+            throw Wrap(ex);
+        }
+    }
+
+    private async Task<Google.Apis.Drive.v3.Data.File?> FindByNameAsync(string name, CancellationToken ct)
+    {
+        var req = _drive.Files.List();
+        req.Q = $"'{_folderId}' in parents and trashed = false and name = '{Escape(name)}'";
+        req.Fields = "files(id, name)";
+        req.PageSize = 2;
+        var page = await req.ExecuteAsync(ct);
+        return page.Files?.FirstOrDefault(f => f.Name == name);
+    }
+
+    private static string Escape(string value) => value.Replace("\\", "\\\\").Replace("'", "\\'");
 
     public async Task<StorageTestResultDto> TestAsync(CancellationToken ct)
     {

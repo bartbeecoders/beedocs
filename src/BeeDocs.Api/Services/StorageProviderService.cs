@@ -8,8 +8,10 @@ public static class StorageProviderKinds
 {
     public const string AzureBlob = "azure-blob";
     public const string GoogleDrive = "google-drive";
+    /// <summary>AWS S3 and everything that speaks its API: MinIO, Ceph RGW, Cloudflare R2, Backblaze B2, Wasabi, Hetzner…</summary>
+    public const string S3 = "s3";
 
-    public static readonly IReadOnlyList<string> All = [AzureBlob, GoogleDrive];
+    public static readonly IReadOnlyList<string> All = [AzureBlob, GoogleDrive, S3];
 
     /// <summary>Accepts the spellings a UI or a hand-written request is likely to send.</summary>
     public static string? Normalize(string? raw) =>
@@ -17,6 +19,7 @@ public static class StorageProviderKinds
         {
             "azureblob" or "azure" or "blob" or "azurestorage" => AzureBlob,
             "googledrive" or "google" or "drive" or "gdrive" => GoogleDrive,
+            "s3" or "aws" or "awss3" or "minio" or "s3compatible" or "r2" or "b2" => S3,
             _ => null,
         };
 
@@ -24,10 +27,12 @@ public static class StorageProviderKinds
     {
         AzureBlob => "Azure Blob Storage",
         GoogleDrive => "Google Drive",
+        S3 => "S3-compatible storage",
         _ => kind,
     };
 
     public const string DefaultAzureContainer = "beedocs";
+    public const string DefaultS3Region = "us-east-1";
 }
 
 /// <summary>
@@ -45,7 +50,14 @@ public sealed record StorageProviderSecret(
     string? GoogleClientSecret,
     string? GoogleRefreshToken,
     string? GoogleFolderId,
-    DateTimeOffset UpdatedAt
+    DateTimeOffset UpdatedAt,
+    string? S3Endpoint = null,
+    string S3Region = StorageProviderKinds.DefaultS3Region,
+    string? S3Bucket = null,
+    string? S3AccessKey = null,
+    string? S3SecretKey = null,
+    bool S3PathStyle = true,
+    string? S3Prefix = null
 )
 {
     /// <summary>
@@ -58,6 +70,9 @@ public sealed record StorageProviderSecret(
         StorageProviderKinds.GoogleDrive => !string.IsNullOrEmpty(GoogleRefreshToken)
             && !string.IsNullOrEmpty(GoogleClientId)
             && !string.IsNullOrEmpty(GoogleClientSecret),
+        StorageProviderKinds.S3 => !string.IsNullOrEmpty(S3Bucket)
+            && !string.IsNullOrEmpty(S3AccessKey)
+            && !string.IsNullOrEmpty(S3SecretKey),
         _ => false,
     };
 }
@@ -98,10 +113,11 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
 {
     private const string SelectColumns =
         "id, kind, name, azure_connection_string, azure_container, google_client_id, "
-        + "google_client_secret, google_refresh_token, google_folder_id, created_at, updated_at";
+        + "google_client_secret, google_refresh_token, google_folder_id, created_at, updated_at, "
+        + "s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, s3_path_style, s3_prefix";
 
-    /// <summary>The four tables whose bodies can point at a provider.</summary>
-    private static readonly string[] ContentTables = ["page", "page_revision", "diagram", "slide_deck", "kanban_board", "project_plan", "note"];
+    /// <summary>The tables whose bodies can point at a provider.</summary>
+    public static readonly string[] ContentTables = ["page", "page_revision", "diagram", "slide_deck", "kanban_board", "project_plan", "note"];
 
     public async Task<IReadOnlyList<StorageProviderDto>> ListAsync(CancellationToken ct = default)
     {
@@ -117,7 +133,7 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
         var list = new List<StorageProviderDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
-            list.Add(ToDto(ReadEntity(reader), shelfCount: (int)reader.GetInt64(11)));
+            list.Add(ToDto(ReadEntity(reader), shelfCount: (int)reader.GetInt64(18)));
         return list;
     }
 
@@ -146,18 +162,36 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
             AzureContainer = kind == StorageProviderKinds.AzureBlob ? NormalizeContainer(request.Container) : null,
             GoogleClientId = kind == StorageProviderKinds.GoogleDrive ? NormalizeSecret(request.ClientId) : null,
             GoogleClientSecret = kind == StorageProviderKinds.GoogleDrive ? NormalizeSecret(request.ClientSecret) : null,
+            S3Endpoint = kind == StorageProviderKinds.S3 ? NormalizeEndpoint(request.Endpoint) : null,
+            S3Region = kind == StorageProviderKinds.S3 ? NormalizeRegion(request.Region) : null,
+            S3Bucket = kind == StorageProviderKinds.S3 ? NormalizeSecret(request.Bucket) : null,
+            S3AccessKey = kind == StorageProviderKinds.S3 ? NormalizeSecret(request.AccessKey) : null,
+            S3SecretKey = kind == StorageProviderKinds.S3 ? NormalizeSecret(request.SecretKey) : null,
+            // Self-hosted services (MinIO & co.) need path-style; AWS is happier
+            // virtual-hosted. Whether an endpoint was given is the better default
+            // for both, and the request can still say otherwise.
+            S3PathStyle = kind == StorageProviderKinds.S3
+                && (request.PathStyle ?? NormalizeEndpoint(request.Endpoint) is not null),
+            S3Prefix = kind == StorageProviderKinds.S3 ? NormalizePrefix(request.Prefix) : null,
             CreatedAt = now,
             UpdatedAt = now,
         };
+        if (kind == StorageProviderKinds.S3 && row.S3Endpoint is null && request.Endpoint is { Length: > 0 } bad
+            && !string.IsNullOrWhiteSpace(bad))
+        {
+            throw new ArgumentException("The S3 endpoint must be an absolute http(s) URL, for example https://minio.example.com:9000.");
+        }
 
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO storage_provider (id, kind, name, azure_connection_string, azure_container,
               google_client_id, google_client_secret, google_refresh_token, google_folder_id,
-              created_at, updated_at)
+              created_at, updated_at,
+              s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, s3_path_style, s3_prefix)
             VALUES ($id, $kind, $name, $azure_connection_string, $azure_container,
-              $google_client_id, $google_client_secret, NULL, NULL, $created_at, $updated_at)
+              $google_client_id, $google_client_secret, NULL, NULL, $created_at, $updated_at,
+              $s3_endpoint, $s3_region, $s3_bucket, $s3_access_key, $s3_secret_key, $s3_path_style, $s3_prefix)
             """;
         SqliteHelpers.Add(cmd, "$id", row.Id);
         SqliteHelpers.Add(cmd, "$kind", row.Kind);
@@ -168,6 +202,7 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
         SqliteHelpers.Add(cmd, "$google_client_secret", row.GoogleClientSecret);
         SqliteHelpers.Add(cmd, "$created_at", SqliteHelpers.FormatTimestamp(row.CreatedAt));
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(row.UpdatedAt));
+        AddS3Parameters(cmd, row);
         await cmd.ExecuteNonQueryAsync(ct);
         return ToDto(row, shelfCount: 0);
     }
@@ -216,6 +251,24 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
                 existing.GoogleFolderId = null;
             }
         }
+        else if (existing.Kind == StorageProviderKinds.S3)
+        {
+            // Endpoint: null leaves it, "" means AWS (derived from the region).
+            if (request.Endpoint is not null)
+            {
+                var next = NormalizeEndpoint(request.Endpoint);
+                if (next is null && !string.IsNullOrWhiteSpace(request.Endpoint))
+                    throw new ArgumentException("The S3 endpoint must be an absolute http(s) URL, for example https://minio.example.com:9000.");
+                existing.S3Endpoint = next;
+            }
+            if (request.Region is not null) existing.S3Region = NormalizeRegion(request.Region);
+            if (request.Bucket is not null) existing.S3Bucket = NormalizeSecret(request.Bucket);
+            if (request.AccessKey is not null) existing.S3AccessKey = NormalizeSecret(request.AccessKey);
+            // null leaves the stored value alone, "" clears it. Anything else replaces it.
+            if (request.SecretKey is not null) existing.S3SecretKey = NormalizeSecret(request.SecretKey);
+            if (request.PathStyle is bool pathStyle) existing.S3PathStyle = pathStyle;
+            if (request.Prefix is not null) existing.S3Prefix = NormalizePrefix(request.Prefix);
+        }
 
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -225,6 +278,9 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
               azure_connection_string = $azure_connection_string, azure_container = $azure_container,
               google_client_id = $google_client_id, google_client_secret = $google_client_secret,
               google_refresh_token = $google_refresh_token, google_folder_id = $google_folder_id,
+              s3_endpoint = $s3_endpoint, s3_region = $s3_region, s3_bucket = $s3_bucket,
+              s3_access_key = $s3_access_key, s3_secret_key = $s3_secret_key,
+              s3_path_style = $s3_path_style, s3_prefix = $s3_prefix,
               updated_at = $updated_at
             WHERE id = $id
             """;
@@ -237,6 +293,7 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
         SqliteHelpers.Add(cmd, "$google_refresh_token", existing.GoogleRefreshToken);
         SqliteHelpers.Add(cmd, "$google_folder_id", existing.GoogleFolderId);
         SqliteHelpers.Add(cmd, "$updated_at", SqliteHelpers.FormatTimestamp(existing.UpdatedAt));
+        AddS3Parameters(cmd, existing);
         await cmd.ExecuteNonQueryAsync(ct);
         return ToDto(existing, await ShelvesUsingAsync(conn, id, ct));
     }
@@ -326,6 +383,41 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
         return value.Length == 0 ? StorageProviderKinds.DefaultAzureContainer : value;
     }
 
+    /// <summary>Null for blank (AWS) or anything that is not an absolute http(s) URL — the callers turn the latter into a validation error.</summary>
+    private static string? NormalizeEndpoint(string? raw)
+    {
+        var value = (raw ?? string.Empty).Trim().TrimEnd('/');
+        if (value.Length == 0) return null;
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            ? value
+            : null;
+    }
+
+    private static string NormalizeRegion(string? raw)
+    {
+        var value = (raw ?? string.Empty).Trim().ToLowerInvariant();
+        return value.Length == 0 ? StorageProviderKinds.DefaultS3Region : value;
+    }
+
+    /// <summary>No leading or trailing slashes; null when empty. The store joins it with "/".</summary>
+    private static string? NormalizePrefix(string? raw)
+    {
+        var value = (raw ?? string.Empty).Trim().Trim('/');
+        return value.Length == 0 ? null : value;
+    }
+
+    private static void AddS3Parameters(SqliteCommand cmd, StorageProvider p)
+    {
+        SqliteHelpers.Add(cmd, "$s3_endpoint", p.S3Endpoint);
+        SqliteHelpers.Add(cmd, "$s3_region", p.S3Region);
+        SqliteHelpers.Add(cmd, "$s3_bucket", p.S3Bucket);
+        SqliteHelpers.Add(cmd, "$s3_access_key", p.S3AccessKey);
+        SqliteHelpers.Add(cmd, "$s3_secret_key", p.S3SecretKey);
+        SqliteHelpers.Add(cmd, "$s3_path_style", p.S3PathStyle ? 1 : 0);
+        SqliteHelpers.Add(cmd, "$s3_prefix", p.S3Prefix);
+    }
+
     private static StorageProvider ReadEntity(SqliteDataReader reader) => new()
     {
         Id = reader.GetString(0),
@@ -339,6 +431,13 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
         GoogleFolderId = SqliteHelpers.GetNullableString(reader, 8),
         CreatedAt = SqliteHelpers.ReadTimestamp(reader, 9),
         UpdatedAt = SqliteHelpers.ReadTimestamp(reader, 10),
+        S3Endpoint = SqliteHelpers.GetNullableString(reader, 11),
+        S3Region = SqliteHelpers.GetNullableString(reader, 12),
+        S3Bucket = SqliteHelpers.GetNullableString(reader, 13),
+        S3AccessKey = SqliteHelpers.GetNullableString(reader, 14),
+        S3SecretKey = SqliteHelpers.GetNullableString(reader, 15),
+        S3PathStyle = !reader.IsDBNull(16) && reader.GetInt64(16) != 0,
+        S3Prefix = SqliteHelpers.GetNullableString(reader, 17),
     };
 
     private static StorageProviderSecret ToSecret(StorageProvider p) => new(
@@ -351,7 +450,14 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
         p.GoogleClientSecret,
         p.GoogleRefreshToken,
         p.GoogleFolderId,
-        p.UpdatedAt);
+        p.UpdatedAt,
+        p.S3Endpoint,
+        p.S3Region is { Length: > 0 } r ? r : StorageProviderKinds.DefaultS3Region,
+        p.S3Bucket,
+        p.S3AccessKey,
+        p.S3SecretKey,
+        p.S3PathStyle,
+        p.S3Prefix);
 
     private static StorageProviderDto ToDto(StorageProvider p, int shelfCount)
     {
@@ -368,6 +474,16 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
             GoogleClientId: p.GoogleClientId,
             HasGoogleClientSecret: !string.IsNullOrEmpty(p.GoogleClientSecret),
             GoogleConnected: !string.IsNullOrEmpty(p.GoogleRefreshToken),
+            S3Endpoint: p.Kind == StorageProviderKinds.S3 ? p.S3Endpoint : null,
+            S3Region: p.Kind == StorageProviderKinds.S3
+                ? (p.S3Region is { Length: > 0 } r ? r : StorageProviderKinds.DefaultS3Region)
+                : null,
+            S3Bucket: p.Kind == StorageProviderKinds.S3 ? p.S3Bucket : null,
+            S3AccessKey: p.Kind == StorageProviderKinds.S3 ? p.S3AccessKey : null,
+            HasS3SecretKey: !string.IsNullOrEmpty(p.S3SecretKey),
+            S3SecretKeyHint: !string.IsNullOrEmpty(p.S3SecretKey) ? SecretHint(p.S3SecretKey) : null,
+            S3PathStyle: p.Kind == StorageProviderKinds.S3 && p.S3PathStyle,
+            S3Prefix: p.Kind == StorageProviderKinds.S3 ? p.S3Prefix : null,
             ShelfCount: shelfCount,
             CreatedAt: p.CreatedAt,
             UpdatedAt: p.UpdatedAt);
