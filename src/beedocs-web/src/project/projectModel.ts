@@ -6,6 +6,36 @@
 
 export type TaskKind = 'task' | 'milestone'
 
+/** Same palette as kanban cards, so a colour means the same thing across a book. */
+export const PROJECT_COLORS = ['accent', 'info', 'ok', 'warn', 'danger', 'muted'] as const
+export type ProjectColor = (typeof PROJECT_COLORS)[number]
+
+/** Columns of the WBS table whose width the user can drag. */
+export const PROJECT_COLUMNS = ['name', 'kind', 'start', 'duration', 'finish', 'progress', 'predecessors', 'assignee'] as const
+export type ProjectColumn = (typeof PROJECT_COLUMNS)[number]
+
+/** Gantt time scales, coarse to fine — the order Ctrl+wheel steps through. */
+export const PROJECT_SCALES = ['months', 'weeks', 'days', 'hours'] as const
+export type ProjectScale = (typeof PROJECT_SCALES)[number]
+
+export const COLUMN_MIN_WIDTH = 40
+export const COLUMN_MAX_WIDTH = 800
+export const TABLE_MIN_WIDTH = 160
+export const TABLE_MAX_WIDTH = 1600
+
+/**
+ * Presentation the plan carries with it: pixel widths of the WBS columns and
+ * of the table half of the split. Everything is optional — an absent entry
+ * means the CSS default — so a plan written before the field existed, or by
+ * an agent that never sets it, renders exactly as it did.
+ */
+export type ProjectLayout = {
+  table?: number
+  columns?: Partial<Record<ProjectColumn, number>>
+  /** Gantt zoom; absent = days. */
+  scale?: ProjectScale
+}
+
 export type ProjectTask = {
   id: string
   title: string
@@ -21,11 +51,14 @@ export type ProjectTask = {
   predecessors: string[]
   assigneeId: string | null
   assigneeName: string | null
+  /** Bar / diamond colour; null = the theme accent. */
+  color: ProjectColor | null
 }
 
 export type ProjectDoc = {
   version: 1
   tasks: ProjectTask[]
+  layout?: ProjectLayout
 }
 
 export type ResolvedTask = ProjectTask & {
@@ -98,6 +131,7 @@ export function emptyPlan(): ProjectDoc {
         predecessors: [],
         assigneeId: null,
         assigneeName: null,
+        color: null,
       },
     ],
   }
@@ -137,6 +171,7 @@ export function starterPlan(labels?: Partial<StarterLabels>): ProjectDoc {
         predecessors: [],
         assigneeId: null,
         assigneeName: null,
+        color: null,
       },
       {
         id: design,
@@ -149,6 +184,7 @@ export function starterPlan(labels?: Partial<StarterLabels>): ProjectDoc {
         predecessors: [],
         assigneeId: null,
         assigneeName: null,
+        color: null,
       },
       {
         id: build,
@@ -161,6 +197,7 @@ export function starterPlan(labels?: Partial<StarterLabels>): ProjectDoc {
         predecessors: [design],
         assigneeId: null,
         assigneeName: null,
+        color: null,
       },
       {
         id: ready,
@@ -173,6 +210,7 @@ export function starterPlan(labels?: Partial<StarterLabels>): ProjectDoc {
         predecessors: [build],
         assigneeId: null,
         assigneeName: null,
+        color: null,
       },
       {
         id: ship,
@@ -185,6 +223,7 @@ export function starterPlan(labels?: Partial<StarterLabels>): ProjectDoc {
         predecessors: [ready],
         assigneeId: null,
         assigneeName: null,
+        color: null,
       },
     ],
   }
@@ -219,6 +258,34 @@ function asProgress(value: unknown): number {
   return Math.max(0, Math.min(100, Math.round(value)))
 }
 
+function asColor(value: unknown): ProjectColor | null {
+  if (typeof value !== 'string') return null
+  return (PROJECT_COLORS as readonly string[]).includes(value) ? (value as ProjectColor) : null
+}
+
+function asWidth(value: unknown, min: number, max: number): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return Math.round(Math.max(min, Math.min(max, value)))
+}
+
+function asLayout(raw: unknown): ProjectLayout | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const o = raw as Record<string, unknown>
+  const out: ProjectLayout = {}
+  const table = asWidth(o.table, TABLE_MIN_WIDTH, TABLE_MAX_WIDTH)
+  if (table != null) out.table = table
+  if (typeof o.scale === 'string' && (PROJECT_SCALES as readonly string[]).includes(o.scale)) out.scale = o.scale as ProjectScale
+  if (o.columns && typeof o.columns === 'object') {
+    const cols: Partial<Record<ProjectColumn, number>> = {}
+    for (const key of PROJECT_COLUMNS) {
+      const w = asWidth((o.columns as Record<string, unknown>)[key], COLUMN_MIN_WIDTH, COLUMN_MAX_WIDTH)
+      if (w != null) cols[key] = w
+    }
+    if (Object.keys(cols).length > 0) out.columns = cols
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 function asStart(value: unknown): string | null {
   if (typeof value !== 'string') return null
   return parseIsoDate(value) ? formatIsoDate(parseIsoDate(value)!) : null
@@ -243,6 +310,7 @@ function asTask(raw: unknown): ProjectTask | null {
     predecessors: [...new Set(preds)],
     assigneeId: asOptionalString(o.assigneeId),
     assigneeName: asOptionalString(o.assigneeName),
+    color: asColor(o.color),
   }
 }
 
@@ -256,7 +324,8 @@ export function parsePlan(source: string | null | undefined): ProjectDoc {
       ? o.tasks.map(asTask).filter((t): t is ProjectTask => t !== null)
       : []
     if (tasks.length === 0) return emptyPlan()
-    return sanitizePlan({ version: 1, tasks })
+    const layout = asLayout(o.layout)
+    return sanitizePlan(layout ? { version: 1, tasks, layout } : { version: 1, tasks })
   } catch {
     return emptyPlan()
   }
@@ -285,7 +354,38 @@ export function sanitizePlan(doc: ProjectDoc): ProjectDoc {
       duration: t.kind === 'milestone' ? 0 : Math.max(1, t.duration),
     }
   })
-  return { version: 1, tasks }
+  return doc.layout ? { version: 1, tasks, layout: doc.layout } : { version: 1, tasks }
+}
+
+/** Merge widths in; a null/undefined entry clears that width back to the default. */
+export function updateLayout(
+  doc: ProjectDoc,
+  patch: { table?: number | null; columns?: Partial<Record<ProjectColumn, number | null>>; scale?: ProjectScale | null },
+): ProjectDoc {
+  const next: ProjectLayout = { ...(doc.layout ?? {}) }
+  if (patch.scale !== undefined) {
+    if (patch.scale == null) delete next.scale
+    else next.scale = patch.scale
+  }
+  if (patch.table !== undefined) {
+    const w = asWidth(patch.table, TABLE_MIN_WIDTH, TABLE_MAX_WIDTH)
+    if (w == null) delete next.table
+    else next.table = w
+  }
+  if (patch.columns) {
+    const cols: Partial<Record<ProjectColumn, number>> = { ...(next.columns ?? {}) }
+    for (const key of PROJECT_COLUMNS) {
+      if (!(key in patch.columns)) continue
+      const w = asWidth(patch.columns[key], COLUMN_MIN_WIDTH, COLUMN_MAX_WIDTH)
+      if (w == null) delete cols[key]
+      else cols[key] = w
+    }
+    if (Object.keys(cols).length > 0) next.columns = cols
+    else delete next.columns
+  }
+  const { layout: _dropped, ...rest } = doc
+  void _dropped
+  return Object.keys(next).length > 0 ? { ...rest, layout: next } : rest
 }
 
 export function countTasks(doc: ProjectDoc): number {
@@ -330,6 +430,11 @@ export function isDescendantOf(doc: ProjectDoc, id: string, ancestorId: string):
 
 function descendantIds(doc: ProjectDoc, id: string): string[] {
   return doc.tasks.filter((t) => isDescendantOf(doc, t.id, id)).map((t) => t.id)
+}
+
+/** Index one past the task at `index` and all its descendants (they always follow it). */
+export function taskBlockEnd(doc: ProjectDoc, index: number): number {
+  return blockEnd(doc, index)
 }
 
 function blockEnd(doc: ProjectDoc, index: number): number {
@@ -454,6 +559,7 @@ export function addTask(doc: ProjectDoc, afterId: string | null, kind: TaskKind,
     predecessors: [],
     assigneeId: null,
     assigneeName: null,
+    color: null,
   }
   if (!afterId) return { ...doc, tasks: [...doc.tasks, task] }
   const idx = doc.tasks.findIndex((t) => t.id === afterId)
@@ -492,7 +598,7 @@ export function predecessorsFromIndexText(doc: ProjectDoc, id: string, text: str
 export function updateTask(
   doc: ProjectDoc,
   id: string,
-  patch: Partial<Pick<ProjectTask, 'title' | 'kind' | 'start' | 'duration' | 'progress' | 'assigneeId' | 'assigneeName' | 'predecessors'>>,
+  patch: Partial<Pick<ProjectTask, 'title' | 'kind' | 'start' | 'duration' | 'progress' | 'assigneeId' | 'assigneeName' | 'predecessors' | 'color'>>,
 ): ProjectDoc {
   const current = doc.tasks.find((t) => t.id === id)
   if (!current) return doc
@@ -562,6 +668,30 @@ export function moveTask(doc: ProjectDoc, id: string, dir: -1 | 1): ProjectDoc {
   return sanitizePlan({ ...doc, tasks: next })
 }
 
+/**
+ * Drop a task (with its descendants) in front of `beforeId`, taking that
+ * row's parent so it lands as a sibling of what it was dropped on; null puts
+ * it last at the root. Dropping onto its own subtree is a no-op.
+ */
+export function moveTaskBefore(doc: ProjectDoc, id: string, beforeId: string | null): ProjectDoc {
+  const idx = doc.tasks.findIndex((t) => t.id === id)
+  if (idx < 0 || beforeId === id) return doc
+  if (beforeId && isDescendantOf(doc, beforeId, id)) return doc
+  const end = blockEnd(doc, idx)
+  const block = doc.tasks.slice(idx, end)
+  const rest = [...doc.tasks.slice(0, idx), ...doc.tasks.slice(end)]
+  let insertAt = rest.length
+  let parentId: string | null = null
+  if (beforeId) {
+    insertAt = rest.findIndex((t) => t.id === beforeId)
+    if (insertAt < 0) return doc
+    parentId = rest[insertAt].parentId
+  }
+  const moved = block.map((t, i) => (i === 0 ? { ...t, parentId } : t))
+  rest.splice(insertAt, 0, ...moved)
+  return sanitizePlan({ ...doc, tasks: rest })
+}
+
 /** Shift a leaf (or a summary and all descendants) by calendar days. */
 export function shiftTask(doc: ProjectDoc, id: string, days: number): ProjectDoc {
   if (days === 0) return doc
@@ -601,7 +731,8 @@ export function projectToHtml(source: string, title?: string): string {
       const start = r.startDate ? formatIsoDate(r.startDate) : '—'
       const finish = r.finishDate ? formatIsoDate(r.finishDate) : '—'
       const who = r.assigneeName?.trim() ? esc(r.assigneeName.trim()) : ''
-      return `<tr data-kind="${esc(kind)}"><td>${indent}${esc(r.title) || '…'}</td><td>${esc(kind)}</td><td>${start}</td><td>${r.durationDays}</td><td>${finish}</td><td>${r.progressPct}%</td><td>${who}</td></tr>`
+      const color = r.color ? ` data-color="${esc(r.color)}"` : ''
+      return `<tr data-kind="${esc(kind)}"${color}><td>${indent}${esc(r.title) || '…'}</td><td>${esc(kind)}</td><td>${start}</td><td>${r.durationDays}</td><td>${finish}</td><td>${r.progressPct}%</td><td>${who}</td></tr>`
     })
     .join('')
   const caption = title ? `<figcaption>${esc(title)}</figcaption>` : ''

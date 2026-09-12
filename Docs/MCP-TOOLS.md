@@ -268,8 +268,8 @@ documented in [KANBAN.md](./KANBAN.md).
 | `beedocs_create_project_plan` | `bookId`, `title`, `source?` | Raw JSON create; omit source for one empty task |
 | `beedocs_update_project_plan` | `planId`, `title?`, `source?` | Update title and/or document (null keeps current) |
 | `beedocs_delete_project_plan` | `planId` | Delete plan |
-| `beedocs_create_project_plan_with_tasks` | `bookId`, `title`, `tasks?` | Structured create — validated tasks |
-| `beedocs_update_project_plan_tasks` | `planId`, `tasks[]`, `title?` | Replace tasks with the same structured model |
+| `beedocs_create_project_plan_with_tasks` | `bookId`, `title`, `tasks?` | Structured create — validated tasks; each may carry `color` (accent/info/ok/warn/danger/muted) |
+| `beedocs_update_project_plan_tasks` | `planId`, `tasks[]`, `title?` | Replace tasks with the same structured model; the plan's stored `layout` (column/split widths) is kept |
 
 #### Structured tasks
 

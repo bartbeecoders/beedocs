@@ -21,7 +21,7 @@
   min-height: 12rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface);
+  background: var(--bg-elevated);
   overflow: hidden;
 }
 
@@ -35,7 +35,7 @@
   gap: 0.35rem;
   padding: 0.4rem 0.5rem;
   border-bottom: 1px solid var(--border);
-  background: var(--surface-2, var(--surface));
+  background: var(--bg-soft);
 }
 
 .project-split {
@@ -46,33 +46,108 @@
 
 .project-table {
   width: min(46%, 520px);
-  min-width: 220px;
+  min-width: 160px;
+  flex: none;
   overflow: auto;
-  border-right: 1px solid var(--border);
 }
 
+/* Column widths come from the <colgroup> the editor renders (defaults or the
+   plan's stored layout), so the table is as wide as its columns and scrolls
+   sideways inside the pane instead of squeezing cells. */
 .project-table table {
-  width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.8rem;
 }
 
+.project-splitter {
+  flex: none;
+  width: 6px;
+  margin: 0 -2px;
+  cursor: col-resize;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  z-index: 3;
+  touch-action: none;
+}
+
+.project-splitter:hover,
+.project-splitter:active {
+  background: color-mix(in srgb, var(--accent, #3b82f6) 35%, transparent);
+}
+
 .project-table thead th {
   position: sticky;
+  user-select: none;
   top: 0;
   z-index: 1;
-  background: var(--surface-2, var(--surface));
+  background: var(--bg-soft);
   border-bottom: 1px solid var(--border);
   text-align: left;
   font-weight: 600;
   padding: 0.35rem 0.4rem;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Sits inside the header (which clips overflow) at its right edge; wide
+   enough to grab, with a thin visible line so the affordance is discoverable. */
+.project-col-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  z-index: 2;
+}
+
+.project-col-resizer::after {
+  content: '';
+  position: absolute;
+  top: 25%;
+  bottom: 25%;
+  right: 3px;
+  width: 1px;
+  background: var(--border);
+}
+
+.project-col-resizer:hover::after,
+.project-col-resizer:active::after {
+  background: var(--accent, #3b82f6);
+  width: 2px;
 }
 
 .project-row td {
   border-bottom: 1px solid var(--border);
   padding: 0 0.35rem;
   vertical-align: middle;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.project-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.project-name-wrap .project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-color-dot {
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--project-color, var(--accent, #3b82f6));
 }
 
 .project-row.is-selected {
@@ -84,13 +159,41 @@
   font-weight: 650;
 }
 
-.project-col-name { min-width: 10rem; }
-.project-col-kind { width: 6.5rem; }
-.project-col-date { width: 7.5rem; }
-.project-col-dur { width: 3.5rem; }
-.project-col-pct { width: 3.6rem; }
-.project-col-pred { width: 4.2rem; }
-.project-col-who { width: 8rem; }
+/* One custom property per colour; bars, diamonds, dots and swatches all read it. */
+.color-accent { --project-color: var(--accent, #3b82f6); }
+.color-info { --project-color: #3b82f6; }
+.color-ok { --project-color: #22c55e; }
+.color-warn { --project-color: #f59e0b; }
+.color-danger { --project-color: var(--danger, #ef4444); }
+.color-muted { --project-color: var(--muted, #888); }
+
+.project-colors {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.35rem;
+  border-left: 1px solid var(--border);
+}
+
+.project-swatch {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  padding: 0;
+  cursor: pointer;
+  background: var(--project-color, var(--bg));
+}
+
+.project-swatch:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.project-swatch.is-on {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 1px;
+}
 
 .project-name-input,
 .project-table input[type='date'],
@@ -111,13 +214,14 @@
 .project-table select:focus {
   outline: none;
   border-color: var(--accent, #3b82f6);
-  background: var(--surface);
+  background: var(--bg-elevated);
 }
 
 .project-gantt {
   flex: 1;
   min-width: 0;
   overflow: auto;
+  border-left: 1px solid var(--border);
 }
 
 .project-gantt-inner {
@@ -129,7 +233,7 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--surface-2, var(--surface));
+  background: var(--bg-soft);
   border-bottom: 1px solid var(--border);
 }
 
@@ -198,16 +302,16 @@
   display: flex;
   align-items: center;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--accent, #3b82f6) 55%, var(--surface));
-  color: var(--on-accent, #fff);
+  background: color-mix(in srgb, var(--project-color, var(--accent, #3b82f6)) 55%, var(--bg-elevated));
+  color: var(--accent-fg);
   overflow: hidden;
   cursor: grab;
   z-index: 2;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #3b82f6) 40%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--project-color, var(--accent, #3b82f6)) 40%, transparent);
 }
 
 .project-bar.is-summary {
-  background: color-mix(in srgb, var(--fg, #111) 70%, var(--surface));
+  background: color-mix(in srgb, var(--project-color, var(--text)) 70%, var(--bg-elevated));
   border-radius: 2px;
   height: 10px !important;
   margin-top: 11px !important;
@@ -229,7 +333,7 @@
   display: block;
   width: 12px;
   height: 12px;
-  background: var(--accent, #3b82f6);
+  background: var(--project-color, var(--accent, #3b82f6));
   transform: rotate(45deg);
   margin-top: 8px;
 }
@@ -237,7 +341,7 @@
 .project-bar-progress {
   position: absolute;
   inset: 0 auto 0 0;
-  background: color-mix(in srgb, var(--accent, #3b82f6) 85%, #000);
+  background: color-mix(in srgb, var(--project-color, var(--accent, #3b82f6)) 85%, #000);
   pointer-events: none;
 }
 
@@ -268,6 +372,10 @@
   cursor: default;
 }
 
+.project.is-readonly .project-colors {
+  display: none;
+}
+
 .project.is-compact .project-table {
   width: min(40%, 320px);
   min-width: 160px;
@@ -283,4 +391,92 @@
 .hybrid-project-block .project.is-compact,
 .project-embed .project.is-compact {
   height: 16rem;
+}
+
+/* ----- Gantt zoom, context menu, row drag ----- */
+
+.project-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-left: auto;
+}
+
+.project-zoom-level {
+  min-width: 4.2rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.project-gantt-month.is-today,
+.project-gantt-day.is-today {
+  color: var(--accent, #3b82f6);
+  font-weight: 700;
+}
+
+/* The scroll container is the positioning root for the drop indicator. */
+.project-table {
+  position: relative;
+}
+
+.project-grip {
+  flex: none;
+  width: 0.7rem;
+  height: 1rem;
+  border-radius: 3px;
+  cursor: grab;
+  touch-action: none;
+  color: var(--muted);
+  opacity: 0.35;
+  background: radial-gradient(circle, currentColor 1px, transparent 1.2px) 0 0 / 5px 5px;
+}
+
+.project-row:hover .project-grip,
+.project-row.is-selected .project-grip {
+  opacity: 0.8;
+}
+
+.project-grip:active {
+  cursor: grabbing;
+}
+
+.project-row.is-dragging {
+  opacity: 0.45;
+}
+
+.project-drop-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--accent, #3b82f6);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.project-drop-line::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent, #3b82f6);
+}
+
+.project-context-menu {
+  position: fixed;
+  z-index: 60;
+}
+
+.project-context-menu .project-colors {
+  border-left: none;
+  padding: 0.25rem 0.55rem;
+}
+
+.project-context-item.is-on::before {
+  content: '✓ ';
 }
