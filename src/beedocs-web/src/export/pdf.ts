@@ -684,6 +684,13 @@ const PRINT_CSS = `
   .export-project-table { border-collapse: collapse; width: 100%; font-size: 11px; }
   .export-project-table th, .export-project-table td { border: 1px solid #d0d4dc; padding: 4px 6px; text-align: left; }
   .export-project-table th { background: #f3f4f7; }
+  .export-project-table tr[data-color] td:first-child { border-left-width: 4px; }
+  .export-project-table tr[data-color="accent"] td:first-child { border-left-color: #f5b400; }
+  .export-project-table tr[data-color="info"] td:first-child { border-left-color: #3b82f6; }
+  .export-project-table tr[data-color="ok"] td:first-child { border-left-color: #22c55e; }
+  .export-project-table tr[data-color="warn"] td:first-child { border-left-color: #f59e0b; }
+  .export-project-table tr[data-color="danger"] td:first-child { border-left-color: #ef4444; }
+  .export-project-table tr[data-color="muted"] td:first-child { border-left-color: #9aa0ab; }
   .export-note-page { border: 1px solid #d0d4dc; border-radius: 6px; overflow: hidden; max-width: 100%; }
   .export-note-block { position: absolute; font-size: 12px; line-height: 1.45; }
   .export-note-text p, .export-note-text h1, .export-note-text h2, .export-note-text h3 { margin: 0 0 4px; }

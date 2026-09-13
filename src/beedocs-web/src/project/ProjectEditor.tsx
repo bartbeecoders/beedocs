@@ -1,14 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useUserDirectory, userLabel } from '../hooks/useUserDirectory'
-import { useI18n } from '../i18n'
+import { useI18n, type MessageKey } from '../i18n'
 import type { UserSummary } from '../types'
 import {
+  COLUMN_MAX_WIDTH,
+  COLUMN_MIN_WIDTH,
+  PROJECT_COLORS,
+  PROJECT_SCALES,
+  TABLE_MIN_WIDTH,
+  TABLE_MAX_WIDTH,
+  addDays,
   addTask,
   daysBetween,
   formatIsoDate,
   indentTask,
   isSummary,
   moveTask,
+  moveTaskBefore,
   outdentTask,
   parsePlan,
   predecessorIndexText,
@@ -20,8 +28,14 @@ import {
   resolvePlan,
   serializePlan,
   shiftTask,
+  taskBlockEnd,
+  type ProjectColor,
+  type ProjectColumn,
+  type ProjectLayout,
+  type ProjectScale,
   type ResolvedTask,
   type TaskKind,
+  updateLayout,
   updateTask,
   type ProjectDoc,
 } from './projectModel'
@@ -35,10 +49,122 @@ type Props = {
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/** Kanban's colour names double as the bar colour names — one glossary per book. */
+const COLOR_KEYS: Record<ProjectColor, MessageKey> = {
+  accent: 'kanban.color.accent',
+  info: 'kanban.color.info',
+  ok: 'kanban.color.ok',
+  warn: 'kanban.color.warn',
+  danger: 'kanban.color.danger',
+  muted: 'kanban.color.muted',
+}
+
+const SCALE_KEYS: Record<ProjectScale, MessageKey> = {
+  months: 'project.scale.months',
+  weeks: 'project.scale.weeks',
+  days: 'project.scale.days',
+  hours: 'project.scale.hours',
+}
+
+/**
+ * Pixels per day at each zoom, plus how much calendar the chart pads around
+ * the plan: a months view of a two-week plan should still show a year, an
+ * hours view of the same plan should not be a mile of empty grid.
+ */
+const SCALES: Record<ProjectScale, { dayW: number; compactDayW: number; padBefore: number; padAfter: number; minDays: number }> = {
+  months: { dayW: 4, compactDayW: 3, padBefore: 30, padAfter: 60, minDays: 365 },
+  weeks: { dayW: 9, compactDayW: 7, padBefore: 14, padAfter: 28, minDays: 140 },
+  days: { dayW: 22, compactDayW: 16, padBefore: 7, padAfter: 14, minDays: 42 },
+  hours: { dayW: 168, compactDayW: 120, padBefore: 2, padAfter: 4, minDays: 14 },
+}
+
+/** Pixel widths a column has until someone drags it. Compact embeds start narrower. */
+const DEFAULT_WIDTHS: Record<ProjectColumn, number> = {
+  name: 176,
+  kind: 104,
+  start: 120,
+  duration: 56,
+  finish: 120,
+  progress: 58,
+  predecessors: 68,
+  assignee: 128,
+}
+const COMPACT_WIDTHS: Partial<Record<ProjectColumn, number>> = { name: 150, start: 104, progress: 50 }
+
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
+/** Only used as the drag baseline when the table has not been measured yet. */
+const DEFAULT_TABLE_WIDTH = 420
+
+type HeaderCell = { key: string; label: string; width: number; cls?: string }
+
+/** Two header rows for a scale: coarse on top, the unit of the grid below. */
+function buildHeader(days: Date[], scale: ProjectScale, dayW: number, todayOff: number): { top: HeaderCell[]; bottom: HeaderCell[] } {
+  const group = (keyOf: (d: Date, i: number) => string, labelOf: (d: Date, i: number) => string, clsOf?: (d: Date, i: number) => string) => {
+    const cells: HeaderCell[] = []
+    days.forEach((d, i) => {
+      const key = keyOf(d, i)
+      const last = cells[cells.length - 1]
+      if (last && last.key === key) last.width += dayW
+      else cells.push({ key, label: labelOf(d, i), width: dayW, cls: clsOf?.(d, i) })
+    })
+    return cells
+  }
+  const byMonth = () => group((d) => `${d.getFullYear()}-${d.getMonth()}`, (d) => `${MONTHS[d.getMonth()]} ${d.getFullYear()}`)
+
+  switch (scale) {
+    case 'months':
+      return {
+        top: group((d) => String(d.getFullYear()), (d) => String(d.getFullYear())),
+        bottom: group(
+          (d) => `${d.getFullYear()}-${d.getMonth()}`,
+          (d) => MONTHS[d.getMonth()],
+          (d) => (d.getMonth() === days[todayOff]?.getMonth() && d.getFullYear() === days[todayOff]?.getFullYear() ? 'is-today' : ''),
+        ),
+      }
+    case 'weeks': {
+      // ISO-style weeks starting Monday; the first cell may be a partial week.
+      const monday = (d: Date) => formatIsoDate(addDays(d, -((d.getDay() + 6) % 7)))
+      return {
+        top: byMonth(),
+        bottom: group(monday, (d) => String(d.getDate()), (d) => (monday(d) === monday(days[todayOff] ?? new Date(0)) ? 'is-today' : '')),
+      }
+    }
+    case 'hours': {
+      const hourW = dayW / 4
+      const bottom: HeaderCell[] = []
+      days.forEach((d, i) => {
+        for (const h of [0, 6, 12, 18]) {
+          bottom.push({ key: `${i}-${h}`, label: `${h}h`, width: hourW, cls: d.getDay() === 0 || d.getDay() === 6 ? 'is-weekend' : '' })
+        }
+      })
+      return {
+        top: group(
+          (_d, i) => String(i),
+          (d) => `${DOW[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`,
+          (_d, i) => (i === todayOff ? 'is-today' : ''),
+        ),
+        bottom,
+      }
+    }
+    default:
+      return {
+        top: byMonth(),
+        bottom: group(
+          (_d, i) => String(i),
+          (d) => String(d.getDate()),
+          (d, i) => `${d.getDay() === 0 || d.getDay() === 6 ? 'is-weekend' : ''}${i === todayOff ? ' is-today' : ''}`,
+        ),
+      }
+  }
+}
 
 function commit(doc: ProjectDoc, onChange?: (next: string) => void) {
   onChange?.(serializePlan(doc))
 }
+
+type Menu = { x: number; y: number; rowId: string | null }
 
 export function ProjectEditor({ source, onChange, compact = false, readOnly = false }: Props) {
   const { t } = useI18n()
@@ -47,13 +173,35 @@ export function ProjectEditor({ source, onChange, compact = false, readOnly = fa
   const rows = useMemo(() => resolvePlan(doc), [doc])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
+  const tbodyRef = useRef<HTMLTableSectionElement>(null)
   const ganttRef = useRef<HTMLDivElement>(null)
+  const ganttBodyRef = useRef<HTMLDivElement>(null)
   const syncing = useRef(false)
   const dragBase = useRef<ProjectDoc | null>(null)
 
-  const dayW = compact ? 16 : 22
+  // Widths and zoom live in the document so every reader sees the same
+  // table, but a drag renders from local state and commits once on
+  // pointer-up — one saved revision per drag, not one per pixel. A read-only
+  // view keeps its changes locally, which is why this is state rather than
+  // derived from `doc`.
+  const [layout, setLayout] = useState<ProjectLayout>(() => doc.layout ?? {})
+  useEffect(() => {
+    setLayout(doc.layout ?? {})
+  }, [doc.layout])
+  const splitRef = useRef<HTMLDivElement>(null)
+  const resize = useRef<{ kind: 'column'; key: ProjectColumn; originX: number; base: number } | { kind: 'table'; originX: number; base: number } | null>(null)
+
+  const columnWidth = (key: ProjectColumn) =>
+    layout.columns?.[key] ?? (compact ? COMPACT_WIDTHS[key] : undefined) ?? DEFAULT_WIDTHS[key]
+
+  const scale: ProjectScale = layout.scale ?? 'days'
+  const scaleCfg = SCALES[scale]
+  const dayW = compact ? scaleCfg.compactDayW : scaleCfg.dayW
   const rowH = compact ? 28 : 32
-  const range = useMemo(() => planRange(rows), [rows])
+  const range = useMemo(
+    () => planRange(rows, scaleCfg.padBefore, scaleCfg.padAfter, scaleCfg.minDays),
+    [rows, scaleCfg],
+  )
 
   const syncScroll = (from: 'table' | 'gantt', top: number) => {
     if (syncing.current) return
@@ -73,6 +221,241 @@ export function ProjectEditor({ source, onChange, compact = false, readOnly = fa
     },
     [editable, onChange],
   )
+
+  // ----- column / split resizing -----
+
+  const startColumnResize = (key: ProjectColumn) => (e: React.PointerEvent<HTMLElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    resize.current = { kind: 'column', key, originX: e.clientX, base: columnWidth(key) }
+  }
+
+  const startTableResize = (e: React.PointerEvent<HTMLElement>) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const base = tableRef.current?.getBoundingClientRect().width ?? DEFAULT_TABLE_WIDTH
+    resize.current = { kind: 'table', originX: e.clientX, base }
+  }
+
+  const onResizeMove = (e: React.PointerEvent<HTMLElement>) => {
+    const st = resize.current
+    if (!st) return
+    const dx = e.clientX - st.originX
+    if (st.kind === 'column') {
+      const w = clamp(st.base + dx, COLUMN_MIN_WIDTH, COLUMN_MAX_WIDTH)
+      setLayout((l) => ({ ...l, columns: { ...(l.columns ?? {}), [st.key]: w } }))
+    } else {
+      // Leave the Gantt at least a few days wide whatever the container is.
+      const room = (splitRef.current?.getBoundingClientRect().width ?? Infinity) - 160
+      const w = clamp(st.base + dx, TABLE_MIN_WIDTH, Math.min(TABLE_MAX_WIDTH, room))
+      setLayout((l) => ({ ...l, table: w }))
+    }
+  }
+
+  const onResizeEnd = () => {
+    const st = resize.current
+    if (!st) return
+    resize.current = null
+    if (!editable) return
+    if (st.kind === 'column') {
+      const w = layout.columns?.[st.key]
+      if (w != null && w !== (doc.layout?.columns?.[st.key] ?? null)) apply(updateLayout(doc, { columns: { [st.key]: w } }))
+    } else if (layout.table != null && layout.table !== doc.layout?.table) {
+      apply(updateLayout(doc, { table: layout.table }))
+    }
+  }
+
+  // Double-click a handle to forget the stored width for that column / the split.
+  const resetColumn = (key: ProjectColumn) => {
+    setLayout((l) => {
+      const cols = { ...(l.columns ?? {}) }
+      delete cols[key]
+      return { ...l, columns: cols }
+    })
+    if (editable && doc.layout?.columns?.[key] != null) apply(updateLayout(doc, { columns: { [key]: null } }))
+  }
+  const resetTable = () => {
+    setLayout((l) => {
+      const { table: _t, ...rest } = l
+      void _t
+      return rest
+    })
+    if (editable && doc.layout?.table != null) apply(updateLayout(doc, { table: null }))
+  }
+
+  // ----- zoom -----
+
+  // The calendar instant under the cursor (or the viewport centre) before a
+  // zoom, restored by the layout effect after the new scale has rendered.
+  const zoomAnchor = useRef<{ ms: number; px: number } | null>(null)
+  const zoomTo = useCallback(
+    (next: ProjectScale, clientX?: number) => {
+      if (next === scale) return
+      const gantt = ganttRef.current
+      if (gantt) {
+        const rect = gantt.getBoundingClientRect()
+        const px = clientX != null ? clientX - rect.left : rect.width / 2
+        const dayFloat = (gantt.scrollLeft + px) / dayW
+        zoomAnchor.current = { ms: range.start.getTime() + dayFloat * 86400000, px }
+      }
+      setLayout((l) => ({ ...l, scale: next }))
+      if (editable) apply(updateLayout(doc, { scale: next }))
+    },
+    [apply, dayW, doc, editable, range.start, scale],
+  )
+  const zoomToRef = useRef(zoomTo)
+  zoomToRef.current = zoomTo
+  const scaleRef = useRef(scale)
+  scaleRef.current = scale
+
+  useLayoutEffect(() => {
+    const anchor = zoomAnchor.current
+    const gantt = ganttRef.current
+    if (!anchor || !gantt) return
+    zoomAnchor.current = null
+    const off = (anchor.ms - range.start.getTime()) / 86400000
+    gantt.scrollLeft = Math.max(0, off * dayW - anchor.px)
+  }, [dayW, range.start])
+
+  useEffect(() => {
+    const el = ganttRef.current
+    if (!el) return
+    let last = 0
+    // Native listener so preventDefault works (React wheel is passive) — the
+    // browser must not page-zoom on Ctrl+wheel. One level per 200 ms so a
+    // flick of the wheel steps, rather than jumping months→hours.
+    const handler = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      e.preventDefault()
+      const now = Date.now()
+      if (now - last < 200) return
+      last = now
+      const idx = PROJECT_SCALES.indexOf(scaleRef.current)
+      const next = PROJECT_SCALES[clamp(idx + (e.deltaY < 0 ? 1 : -1), 0, PROJECT_SCALES.length - 1)]
+      zoomToRef.current(next, e.clientX)
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [])
+
+  const stepZoom = (dir: -1 | 1) => {
+    const idx = PROJECT_SCALES.indexOf(scale)
+    zoomTo(PROJECT_SCALES[clamp(idx + dir, 0, PROJECT_SCALES.length - 1)])
+  }
+
+  const goToToday = () => {
+    const gantt = ganttRef.current
+    if (!gantt) return
+    const off = daysBetween(range.start, today)
+    gantt.scrollTo({ left: Math.max(0, off * dayW - gantt.clientWidth / 4), behavior: 'smooth' })
+  }
+
+  // ----- context menu -----
+
+  const [menu, setMenu] = useState<Menu | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const openMenu = (e: React.MouseEvent, rowId: string | null) => {
+    const tag = (e.target as HTMLElement | null)?.tagName
+    // Inputs keep the browser's own cut/copy/paste menu.
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+    e.preventDefault()
+    e.stopPropagation()
+    if (rowId) setSelectedId(rowId)
+    setMenu({ x: e.clientX, y: e.clientY, rowId })
+  }
+
+  useLayoutEffect(() => {
+    const el = menuRef.current
+    if (!menu || !el) return
+    const pad = 8
+    const rect = el.getBoundingClientRect()
+    const x = Math.min(menu.x, window.innerWidth - rect.width - pad)
+    const y = Math.min(menu.y, window.innerHeight - rect.height - pad)
+    el.style.left = `${Math.max(pad, x)}px`
+    el.style.top = `${Math.max(pad, y)}px`
+  }, [menu])
+
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const onDown = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) close()
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('pointerdown', onDown, true)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('blur', close)
+    window.addEventListener('resize', close)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('blur', close)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [menu])
+
+  const onGanttContextMenu = (e: React.MouseEvent) => {
+    const body = ganttBodyRef.current
+    let rowId: string | null = null
+    if (body) {
+      const idx = Math.floor((e.clientY - body.getBoundingClientRect().top) / rowH)
+      rowId = idx >= 0 && idx < rows.length ? rows[idx].id : null
+    }
+    openMenu(e, rowId)
+  }
+
+  // ----- row drag (reorder) -----
+
+  const rowDrag = useRef<{ id: string; blockStart: number; blockEnd: number } | null>(null)
+  const [dragging, setDragging] = useState<{ id: string; dropIdx: number | null; top: number } | null>(null)
+
+  const onGripDown = (row: ResolvedTask) => (e: React.PointerEvent<HTMLElement>) => {
+    if (!editable) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const idx = rows.findIndex((r) => r.id === row.id)
+    rowDrag.current = { id: row.id, blockStart: idx, blockEnd: taskBlockEnd(doc, idx) }
+    setSelectedId(row.id)
+    setDragging({ id: row.id, dropIdx: null, top: 0 })
+  }
+
+  const onGripMove = (e: React.PointerEvent<HTMLElement>) => {
+    const st = rowDrag.current
+    const tbody = tbodyRef.current
+    const table = tableRef.current
+    if (!st || !tbody || !table) return
+    const bodyRect = tbody.getBoundingClientRect()
+    const tableRect = table.getBoundingClientRect()
+    let idx = clamp(Math.round((e.clientY - bodyRect.top) / rowH), 0, rows.length)
+    // Every slot inside the dragged block is the same "nowhere" — snap it to
+    // the block's own position so the line does not flicker through it.
+    if (idx > st.blockStart && idx <= st.blockEnd) idx = st.blockStart
+    const top = bodyRect.top - tableRect.top + table.scrollTop + idx * rowH
+    setDragging({ id: st.id, dropIdx: idx, top })
+    // Nudge the list when the pointer sits near an edge.
+    if (e.clientY < tableRect.top + 28) table.scrollTop -= 8
+    else if (e.clientY > tableRect.bottom - 28) table.scrollTop += 8
+  }
+
+  const onGripUp = () => {
+    const st = rowDrag.current
+    rowDrag.current = null
+    const drop = dragging
+    setDragging(null)
+    if (!st || !drop || drop.dropIdx == null) return
+    if (drop.dropIdx === st.blockStart) return
+    const beforeId = rows[drop.dropIdx]?.id ?? null
+    apply(moveTaskBefore(doc, st.id, beforeId))
+  }
+
+  // ----- keyboard -----
 
   useEffect(() => {
     if (!selectedId && rows[0]) setSelectedId(rows[0].id)
@@ -97,6 +480,8 @@ export function ProjectEditor({ source, onChange, compact = false, readOnly = fa
     return () => window.removeEventListener('keydown', onKey)
   }, [apply, doc, editable, selectedId])
 
+  // ----- calendar -----
+
   const days: Date[] = useMemo(() => {
     const list: Date[] = []
     for (let i = 0; i < range.days; i += 1) {
@@ -114,18 +499,29 @@ export function ProjectEditor({ source, onChange, compact = false, readOnly = fa
   }, [])
   const todayOff = daysBetween(range.start, today)
 
-  const months = useMemo(() => {
-    const groups: { key: string; label: string; span: number }[] = []
-    for (const d of days) {
-      const key = `${d.getFullYear()}-${d.getMonth()}`
-      const last = groups[groups.length - 1]
-      if (last && last.key === key) last.span += 1
-      else groups.push({ key, label: `${MONTHS[d.getMonth()]} ${d.getFullYear()}`, span: 1 })
-    }
-    return groups
-  }, [days])
+  const header = useMemo(() => buildHeader(days, scale, dayW, todayOff), [days, scale, dayW, todayOff])
 
   const showAssignee = users.length > 0 || rows.some((r) => r.assigneeId) || usersLoading
+
+  const columns: { key: ProjectColumn; label: string; className: string; title?: string }[] = [
+    { key: 'name', label: t('project.col.name'), className: 'project-col-name' },
+    ...(compact ? [] : [{ key: 'kind' as const, label: t('project.col.kind'), className: 'project-col-kind' }]),
+    { key: 'start', label: t('project.col.start'), className: 'project-col-date' },
+    ...(compact ? [] : [{ key: 'duration' as const, label: t('project.col.duration'), className: 'project-col-dur' }]),
+    ...(compact ? [] : [{ key: 'finish' as const, label: t('project.col.finish'), className: 'project-col-date' }]),
+    { key: 'progress', label: t('project.col.progress'), className: 'project-col-pct' },
+    ...(compact
+      ? []
+      : [{ key: 'predecessors' as const, label: t('project.col.predecessors'), className: 'project-col-pred', title: t('project.predHint') }]),
+    ...(showAssignee && !compact ? [{ key: 'assignee' as const, label: t('project.assignee'), className: 'project-col-who' }] : []),
+  ]
+  const tableWidth = columns.reduce((sum, c) => sum + columnWidth(c.key), 0)
+
+  const menuRow = menu?.rowId ? rows.find((r) => r.id === menu.rowId) ?? null : null
+  const closeAnd = (fn: () => void) => () => {
+    fn()
+    setMenu(null)
+  }
 
   return (
     <div className={`project${compact ? ' is-compact' : ''}${readOnly ? ' is-readonly' : ''}`}>
@@ -157,6 +553,27 @@ export function ProjectEditor({ source, onChange, compact = false, readOnly = fa
           >
             {t('project.outdent')}
           </button>
+          <div className="project-colors" role="group" aria-label={t('project.color')} title={t('project.color')}>
+            <button
+              type="button"
+              className={`project-swatch none${selected && !selected.color ? ' is-on' : ''}`}
+              disabled={!selected}
+              title={t('project.colorNone')}
+              aria-label={t('project.colorNone')}
+              onClick={() => selected && apply(updateTask(doc, selected.id, { color: null }))}
+            />
+            {PROJECT_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={`project-swatch color-${c}${selected?.color === c ? ' is-on' : ''}`}
+                disabled={!selected}
+                title={t(COLOR_KEYS[c])}
+                aria-label={t(COLOR_KEYS[c])}
+                onClick={() => selected && apply(updateTask(doc, selected.id, { color: c }))}
+              />
+            ))}
+          </div>
           <button
             type="button"
             className="btn sm ghost danger"
@@ -169,32 +586,53 @@ export function ProjectEditor({ source, onChange, compact = false, readOnly = fa
           >
             {t('project.deleteTask')}
           </button>
+          <div className="project-zoom" role="group" aria-label={t('project.zoom')} title={t('project.zoomHint')}>
+            <button type="button" className="btn sm ghost" disabled={scale === 'months'} aria-label={t('project.zoomOut')} onClick={() => stepZoom(-1)}>
+              −
+            </button>
+            <span className="project-zoom-level">{t(SCALE_KEYS[scale])}</span>
+            <button type="button" className="btn sm ghost" disabled={scale === 'hours'} aria-label={t('project.zoomIn')} onClick={() => stepZoom(1)}>
+              +
+            </button>
+          </div>
         </div>
       )}
-      <div className="project-split">
+      <div className="project-split" ref={splitRef}>
         <div
           className="project-table"
           ref={tableRef}
+          style={layout.table != null ? { width: `min(${layout.table}px, calc(100% - 160px))` } : undefined}
           onScroll={(e) => syncScroll('table', e.currentTarget.scrollTop)}
+          onContextMenu={(e) => openMenu(e, null)}
         >
-          <table>
+          <table style={{ width: tableWidth }}>
+            <colgroup>
+              {columns.map((c) => (
+                <col key={c.key} style={{ width: columnWidth(c.key) }} />
+              ))}
+            </colgroup>
             <thead>
               <tr>
-                <th className="project-col-name">{t('project.col.name')}</th>
-                {!compact && <th className="project-col-kind">{t('project.col.kind')}</th>}
-                <th className="project-col-date">{t('project.col.start')}</th>
-                {!compact && <th className="project-col-dur">{t('project.col.duration')}</th>}
-                {!compact && <th className="project-col-date">{t('project.col.finish')}</th>}
-                <th className="project-col-pct">{t('project.col.progress')}</th>
-                {!compact && (
-                  <th className="project-col-pred" title={t('project.predHint')}>
-                    {t('project.col.predecessors')}
+                {columns.map((c) => (
+                  <th key={c.key} className={c.className} title={c.title}>
+                    {c.label}
+                    <span
+                      className="project-col-resizer"
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label={t('project.resizeColumn', { name: c.label })}
+                      title={t('project.resizeHint')}
+                      onPointerDown={startColumnResize(c.key)}
+                      onPointerMove={onResizeMove}
+                      onPointerUp={onResizeEnd}
+                      onPointerCancel={onResizeEnd}
+                      onDoubleClick={() => resetColumn(c.key)}
+                    />
                   </th>
-                )}
-                {showAssignee && !compact && <th className="project-col-who">{t('project.assignee')}</th>}
+                ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody ref={tbodyRef}>
               {rows.map((row) => (
                 <TaskRow
                   key={row.id}
@@ -203,6 +641,7 @@ export function ProjectEditor({ source, onChange, compact = false, readOnly = fa
                   compact={compact}
                   readOnly={!editable}
                   selected={selectedId === row.id}
+                  dragging={dragging?.id === row.id}
                   showAssignee={showAssignee && !compact}
                   users={users}
                   usersReady={!usersLoading}
@@ -212,40 +651,55 @@ export function ProjectEditor({ source, onChange, compact = false, readOnly = fa
                   onPredecessors={(text) =>
                     apply(updateTask(doc, row.id, { predecessors: predecessorsFromIndexText(doc, row.id, text) }))
                   }
+                  onContextMenu={(e) => openMenu(e, row.id)}
+                  onGripDown={onGripDown(row)}
+                  onGripMove={onGripMove}
+                  onGripUp={onGripUp}
                 />
               ))}
             </tbody>
           </table>
+          {dragging?.dropIdx != null && <div className="project-drop-line" style={{ top: dragging.top }} />}
         </div>
+        <div
+          className="project-splitter"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t('project.resizeSplit')}
+          title={t('project.resizeHint')}
+          onPointerDown={startTableResize}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeEnd}
+          onPointerCancel={onResizeEnd}
+          onDoubleClick={resetTable}
+        />
         <div
           className="project-gantt"
           ref={ganttRef}
+          title={t('project.zoomHint')}
           onScroll={(e) => {
             syncScroll('gantt', e.currentTarget.scrollTop)
           }}
+          onContextMenu={onGanttContextMenu}
         >
           <div className="project-gantt-inner" style={{ width: days.length * dayW, ['--project-row-h' as string]: `${rowH}px` }}>
             <div className="project-gantt-head">
               <div className="project-gantt-months">
-                {months.map((m) => (
-                  <div key={m.key} className="project-gantt-month" style={{ width: m.span * dayW }}>
-                    {m.label}
+                {header.top.map((c) => (
+                  <div key={c.key} className={`project-gantt-month${c.cls ? ` ${c.cls}` : ''}`} style={{ width: c.width }}>
+                    {c.label}
                   </div>
                 ))}
               </div>
               <div className="project-gantt-days">
-                {days.map((d, i) => (
-                  <div
-                    key={i}
-                    className={`project-gantt-day${d.getDay() === 0 || d.getDay() === 6 ? ' is-weekend' : ''}${i === todayOff ? ' is-today' : ''}`}
-                    style={{ width: dayW }}
-                  >
-                    {d.getDate()}
+                {header.bottom.map((c) => (
+                  <div key={c.key} className={`project-gantt-day${c.cls ? ` ${c.cls}` : ''}`} style={{ width: c.width }}>
+                    {c.label}
                   </div>
                 ))}
               </div>
             </div>
-            <div className="project-gantt-body" style={{ height: rows.length * rowH }}>
+            <div className="project-gantt-body" ref={ganttBodyRef} style={{ height: rows.length * rowH }}>
               {todayOff >= 0 && todayOff < days.length && (
                 <div className="project-today" style={{ left: todayOff * dayW + dayW / 2 }} />
               )}
@@ -293,7 +747,88 @@ export function ProjectEditor({ source, onChange, compact = false, readOnly = fa
           </div>
         </div>
       </div>
+
+      {menu && (
+        <div ref={menuRef} className="tree-context-menu project-context-menu" style={{ left: menu.x, top: menu.y }} role="menu">
+          {menuRow && <div className="tree-context-heading">{menuRow.title || '…'}</div>}
+          {editable && menuRow && (
+            <>
+              <MenuItem label={t('project.addTaskBelow')} onClick={closeAnd(() => apply(addTask(doc, menuRow.id, 'task', t('project.newTask'))))} />
+              <MenuItem
+                label={t('project.addMilestoneBelow')}
+                onClick={closeAnd(() => apply(addTask(doc, menuRow.id, 'milestone', t('project.newMilestone'))))}
+              />
+              <div className="tree-context-sep" />
+              <MenuItem label={t('project.indent')} onClick={closeAnd(() => apply(indentTask(doc, menuRow.id)))} />
+              <MenuItem label={t('project.outdent')} disabled={!menuRow.parentId} onClick={closeAnd(() => apply(outdentTask(doc, menuRow.id)))} />
+              <MenuItem label={t('project.moveUp')} onClick={closeAnd(() => apply(moveTask(doc, menuRow.id, -1)))} />
+              <MenuItem label={t('project.moveDown')} onClick={closeAnd(() => apply(moveTask(doc, menuRow.id, 1)))} />
+              <div className="tree-context-sep" />
+              <div className="project-colors" role="group" aria-label={t('project.color')}>
+                <button
+                  type="button"
+                  className={`project-swatch none${!menuRow.color ? ' is-on' : ''}`}
+                  title={t('project.colorNone')}
+                  aria-label={t('project.colorNone')}
+                  onClick={closeAnd(() => apply(updateTask(doc, menuRow.id, { color: null })))}
+                />
+                {PROJECT_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`project-swatch color-${c}${menuRow.color === c ? ' is-on' : ''}`}
+                    title={t(COLOR_KEYS[c])}
+                    aria-label={t(COLOR_KEYS[c])}
+                    onClick={closeAnd(() => apply(updateTask(doc, menuRow.id, { color: c })))}
+                  />
+                ))}
+              </div>
+              <div className="tree-context-sep" />
+              <MenuItem
+                label={t('project.deleteTask')}
+                danger
+                disabled={doc.tasks.length <= 1}
+                onClick={closeAnd(() => {
+                  apply(removeTask(doc, menuRow.id))
+                  setSelectedId(null)
+                })}
+              />
+              <div className="tree-context-sep" />
+            </>
+          )}
+          {editable && !menuRow && (
+            <>
+              <MenuItem label={t('project.addTask')} onClick={closeAnd(() => apply(addTask(doc, null, 'task', t('project.newTask'))))} />
+              <MenuItem
+                label={t('project.addMilestone')}
+                onClick={closeAnd(() => apply(addTask(doc, null, 'milestone', t('project.newMilestone'))))}
+              />
+              <div className="tree-context-sep" />
+            </>
+          )}
+          <div className="tree-context-heading">{t('project.zoom')}</div>
+          {PROJECT_SCALES.map((s) => (
+            <MenuItem key={s} label={t(SCALE_KEYS[s])} on={s === scale} onClick={closeAnd(() => zoomTo(s, menu.x))} />
+          ))}
+          <div className="tree-context-sep" />
+          <MenuItem label={t('project.goToToday')} onClick={closeAnd(goToToday)} />
+        </div>
+      )}
     </div>
+  )
+}
+
+function MenuItem({ label, onClick, disabled, danger, on }: { label: string; onClick: () => void; disabled?: boolean; danger?: boolean; on?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      className={`tree-context-item project-context-item${danger ? ' danger' : ''}${on ? ' is-on' : ''}`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {label}
+    </button>
   )
 }
 
@@ -303,6 +838,7 @@ function TaskRow({
   compact,
   readOnly,
   selected,
+  dragging,
   showAssignee,
   users,
   usersReady,
@@ -310,12 +846,17 @@ function TaskRow({
   onSelect,
   onChange,
   onPredecessors,
+  onContextMenu,
+  onGripDown,
+  onGripMove,
+  onGripUp,
 }: {
   row: ResolvedTask
   doc: ProjectDoc
   compact: boolean
   readOnly: boolean
   selected: boolean
+  dragging: boolean
   showAssignee: boolean
   users: UserSummary[]
   usersReady: boolean
@@ -323,6 +864,10 @@ function TaskRow({
   onSelect: () => void
   onChange: (patch: Parameters<typeof updateTask>[2]) => void
   onPredecessors: (text: string) => void
+  onContextMenu: (e: React.MouseEvent) => void
+  onGripDown: (e: React.PointerEvent<HTMLElement>) => void
+  onGripMove: (e: React.PointerEvent<HTMLElement>) => void
+  onGripUp: () => void
 }) {
   const { t } = useI18n()
   const known = users.some((u) => u.id === row.assigneeId)
@@ -333,22 +878,37 @@ function TaskRow({
 
   return (
     <tr
-      className={`project-row${selected ? ' is-selected' : ''}${summary ? ' is-summary' : ''}${row.kind === 'milestone' ? ' is-milestone' : ''}`}
+      className={`project-row${selected ? ' is-selected' : ''}${summary ? ' is-summary' : ''}${row.kind === 'milestone' ? ' is-milestone' : ''}${dragging ? ' is-dragging' : ''}`}
       style={{ height: rowH }}
       onClick={onSelect}
+      onContextMenu={onContextMenu}
     >
       <td className="project-col-name" style={{ paddingLeft: 8 + row.depth * 14 }}>
-        {readOnly ? (
-          <span className="project-name">{row.title || '…'}</span>
-        ) : (
-          <input
-            className="project-name-input"
-            value={row.title}
-            aria-label={t('project.col.name')}
-            onChange={(e) => onChange({ title: e.target.value })}
-            onFocus={onSelect}
-          />
-        )}
+        <span className="project-name-wrap">
+          {!readOnly && (
+            <span
+              className="project-grip"
+              title={t('project.dragHandle')}
+              aria-label={t('project.dragHandle')}
+              onPointerDown={onGripDown}
+              onPointerMove={onGripMove}
+              onPointerUp={onGripUp}
+              onPointerCancel={onGripUp}
+            />
+          )}
+          {row.color ? <span className={`project-color-dot color-${row.color}`} aria-hidden="true" /> : null}
+          {readOnly ? (
+            <span className="project-name">{row.title || '…'}</span>
+          ) : (
+            <input
+              className="project-name-input"
+              value={row.title}
+              aria-label={t('project.col.name')}
+              onChange={(e) => onChange({ title: e.target.value })}
+              onFocus={onSelect}
+            />
+          )}
+        </span>
       </td>
       {!compact && (
         <td className="project-col-kind">
@@ -515,7 +1075,7 @@ function GanttBar({
   const progressW = row.kind === 'milestone' ? 0 : (width * row.progressPct) / 100
 
   const onPointerDown = (mode: 'move' | 'start' | 'end') => (e: React.PointerEvent) => {
-    if (readOnly) return
+    if (readOnly || e.button !== 0) return
     e.preventDefault()
     e.stopPropagation()
     onSelect()
@@ -541,7 +1101,7 @@ function GanttBar({
   if (row.kind === 'milestone' && !row.isSummary) {
     return (
       <div
-        className={`project-bar is-milestone${selected ? ' is-selected' : ''}`}
+        className={`project-bar is-milestone${selected ? ' is-selected' : ''}${row.color ? ` color-${row.color}` : ''}`}
         style={{ top, left: left + dayW / 2 - 7, height: rowH }}
         onPointerDown={onPointerDown('move')}
         onPointerMove={onPointerMove}
@@ -555,7 +1115,7 @@ function GanttBar({
 
   return (
     <div
-      className={`project-bar${row.isSummary ? ' is-summary' : ''}${selected ? ' is-selected' : ''}`}
+      className={`project-bar${row.isSummary ? ' is-summary' : ''}${selected ? ' is-selected' : ''}${row.color ? ` color-${row.color}` : ''}`}
       style={{ top, left, width, height: rowH - 8, marginTop: 4 }}
       onPointerDown={onPointerDown('move')}
       onPointerMove={onPointerMove}

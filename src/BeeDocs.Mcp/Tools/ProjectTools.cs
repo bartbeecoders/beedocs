@@ -9,7 +9,7 @@ public sealed class ProjectTools(BeeDocsApiClient client)
 {
     /// <summary>Matches the web editor schema in src/beedocs-web/src/project/projectModel.ts.</summary>
     private const string SchemaHint =
-        "Plan document: {version:1, tasks:[{id, title, kind, start, duration, progress, parentId, predecessors, assigneeId, assigneeName}]}. " +
+        "Plan document: {version:1, tasks:[{id, title, kind, start, duration, progress, parentId, predecessors, assigneeId, assigneeName, color}], layout?:{table?, columns?}}. " +
         "kind is task|milestone; start is YYYY-MM-DD or null; duration is calendar days (0 for a milestone); " +
         "progress is 0–100; parentId nests a task under another (WBS); predecessors are finish-to-start task ids; " +
         "assigneeId is an account id from the user directory (assigneeName is a display snapshot). " +
@@ -100,7 +100,9 @@ public sealed class ProjectTools(BeeDocsApiClient client)
         ToolHelpers.RunAsync(async () =>
         {
             var existing = await client.GetProjectPlanAsync(planId, ct);
-            var source = BuildPlanSource(tasks);
+            // Column and split widths are presentation the plan carries with
+            // it; replacing the tasks should not reset how the table is laid out.
+            var source = BuildPlanSource(tasks, ExistingLayout(existing));
             return ToolHelpers.Json(await client.UpdateProjectPlanAsync(
                 planId,
                 new
@@ -125,7 +127,31 @@ public sealed class ProjectTools(BeeDocsApiClient client)
         }
     }
 
-    private static string BuildPlanSource(List<ProjectTaskInput>? tasks)
+    private static JsonElement? ExistingLayout(JsonElement plan)
+    {
+        var source = BeeDocsApiClient.Prop(plan, "source");
+        if (string.IsNullOrWhiteSpace(source)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(source);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("layout", out var layout)
+                && layout.ValueKind == JsonValueKind.Object
+                ? layout.Clone()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static readonly HashSet<string> Colors = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "accent", "info", "ok", "warn", "danger", "muted",
+    };
+
+    private static string BuildPlanSource(List<ProjectTaskInput>? tasks, JsonElement? layout = null)
     {
         IReadOnlyList<ProjectTaskInput> input = tasks is { Count: > 0 }
             ? tasks
@@ -154,10 +180,11 @@ public sealed class ProjectTools(BeeDocsApiClient client)
                 ["predecessors"] = preds,
                 ["assigneeId"] = string.IsNullOrWhiteSpace(t.AssigneeId) ? null : t.AssigneeId.Trim(),
                 ["assigneeName"] = string.IsNullOrWhiteSpace(t.AssigneeName) ? null : t.AssigneeName.Trim(),
+                ["color"] = t.Color is { } c && Colors.Contains(c.Trim()) ? c.Trim().ToLowerInvariant() : null,
             };
         }).ToList();
 
-        return JsonSerializer.Serialize(new { version = 1, tasks = mapped }, SourceJson);
+        return JsonSerializer.Serialize(new { version = 1, tasks = mapped, layout }, SourceJson);
     }
 
     private static readonly JsonSerializerOptions SourceJson = new()
@@ -197,4 +224,7 @@ public sealed class ProjectTaskInput
 
     [Description("Display name snapshot for the assignee")]
     public string? AssigneeName { get; set; }
+
+    [Description("Bar colour: accent | info | ok | warn | danger | muted; omit for the theme accent")]
+    public string? Color { get; set; }
 }

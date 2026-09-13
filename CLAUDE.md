@@ -292,8 +292,17 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   (`ProjectCanvas.tsx`) and/or a page embed: inline ` ```project ` (JSON on the
   page) or ` ```project-ref ` (the plan id; editing the embed updates the stored
   item). v1: WBS table + custom Gantt, indent/outdent, drag bars to move and
-  edges to resize, FS predecessors, optional assignee. Agents use
-  `beedocs_create_project_plan_with_tasks` /
+  edges to resize, FS predecessors, optional assignee, a per-task `color`
+  (kanban's six names), and a `layout` block (`table` + `columns` px widths,
+  `scale` = months|weeks|days|hours Gantt zoom) the plan carries so every
+  reader sees the same split, column widths and zoom — drags render from
+  local state and commit once on pointer-up, Ctrl+wheel steps the scale via a
+  native non-passive listener keeping the instant under the cursor fixed, and
+  `beedocs_update_project_plan_tasks` copies `layout` across when it replaces
+  the tasks. Right-click on the chart or a table row opens a context menu
+  (add below, indent/outdent, move, colour, delete, zoom, go to today); the
+  grip before a task name drags its block up/down (`moveTaskBefore`, adopts
+  the drop target's parent). Agents use `beedocs_create_project_plan_with_tasks` /
   `beedocs_update_project_plan_tasks`. See `Docs/PROJECT.md`.
 - **Notes** (`note` table, same storage shape as `diagram` / `slide_deck` /
   `kanban_board` / `project_plan`) are OneNote-style pages: a free-form canvas
