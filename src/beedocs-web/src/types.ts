@@ -1346,3 +1346,32 @@ export type GenerateLogoResult = {
   model: string
   elapsedMs: number
 }
+
+// --- Word documents (.docx attachments opened in the editor) ---
+
+/** Page size and margins in twips (1/1440 in), the unit Word's sectPr uses. */
+export type WordPageSetup = {
+  width: number
+  height: number
+  top: number
+  right: number
+  bottom: number
+  left: number
+}
+
+export type WordDocument = {
+  id: string
+  bookId: string
+  title: string
+  fileName: string
+  /** Body HTML in the dialect Docs/WORD.md describes (paragraph styles as data-style, raw chunks as data-docx-raw). */
+  html: string
+  /** The document's own styles.xml as CSS scoped to .docx-body. */
+  css: string
+  page: WordPageSetup
+  /** Headers/footers exist in the file; they are kept but not shown. */
+  hasHeaderFooter: boolean
+  styleGallery: string[]
+  sizeBytes: number
+  updatedAt: string
+}

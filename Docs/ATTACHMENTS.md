@@ -234,3 +234,9 @@ an agent surveying a book sees its files without a second call.
 - Legacy binary Office formats (`.doc`, `.xls`, `.ppt`) and Visio are not read.
 - Not included in book export/import archives.
 - No text extraction from document bodies for search.
+
+## Word documents
+
+A `.docx` attachment is the one kind the workspace can open and edit rather
+than only preview: the canvas mounts the Word editor, and saves replace the
+bytes under the same id. See [WORD.md](WORD.md).

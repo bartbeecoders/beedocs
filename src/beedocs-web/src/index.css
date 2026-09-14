@@ -932,6 +932,13 @@ select:focus {
   margin-top: 0.35rem;
 }
 
+/* The Word editor scrolls inside itself, so it gets a fixed share of the
+   viewport rather than growing the page with the document. */
+.attachment-preview.is-word {
+  height: calc(100vh - var(--header-h) - 7.5rem);
+  min-height: 420px;
+}
+
 .attachment-preview-frame {
   flex: 1;
   min-height: 60vh;
@@ -6789,4 +6796,122 @@ html[data-scheme='dark'] {
 .toast-error {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+/* ===== Full-page section mode (HybridPageEditor) ===== */
+.block-expand {
+  width: 1.35rem;
+  height: 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.block-expand:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg-soft);
+}
+
+/* The whole browser window: below the search palette (1300), above everything else. */
+.hybrid-fullpage {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body.hybrid-fullpage-open {
+  overflow: hidden;
+}
+
+.hybrid-fullpage-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.6rem 1rem 1rem;
+}
+
+.hybrid-focus-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-pane, var(--bg));
+}
+
+.hybrid-focus-close {
+  margin-left: 0.25rem;
+}
+
+.hybrid-focus-label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hybrid-focus-count {
+  white-space: nowrap;
+}
+
+/* The one block fills what is left of the viewport under the canvas chrome;
+   embedded editors that normally size themselves for an inline slot stretch
+   to that height instead. */
+.hybrid-focus {
+  /* Window height minus the bar, the AI strip and the body padding. */
+  --focus-h: calc(100vh - 7.5rem);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: var(--focus-h);
+}
+
+.hybrid-focus .hybrid-block-wrap {
+  flex: 1;
+}
+
+.hybrid-focus .hybrid-text-block {
+  min-height: var(--focus-h);
+}
+
+.hybrid-focus .hybrid-visual-body--studio,
+.hybrid-focus .hybrid-visual-body--studio .bee-workbench {
+  min-height: var(--focus-h);
+}
+
+.hybrid-focus .hybrid-project-block .project,
+.hybrid-focus .project-embed .project,
+.hybrid-focus .hybrid-note-block .note,
+.hybrid-focus .note.is-compact {
+  height: var(--focus-h);
+}
+
+.hybrid-focus .hybrid-kanban-block .hybrid-visual-body,
+.hybrid-focus .kanban-embed,
+.hybrid-focus .hybrid-visual-body--freedraw,
+.hybrid-focus .hybrid-visual-body--excelgrid {
+  min-height: var(--focus-h);
+}
+
+.hybrid-focus .media-embed {
+  --media-body-h: var(--focus-h);
 }

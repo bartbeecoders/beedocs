@@ -13,8 +13,10 @@ import {
   canPreviewAttachment,
   formatFileSize,
   isImageAttachment,
+  isWordDocument,
 } from '../media/attachments'
 import { useFileDropZone } from '../hooks/useFileDropZone'
+import { WordEditor } from '../word/WordEditor'
 
 export type AttachmentEditorState = {
   attachment: Attachment | null
@@ -164,6 +166,19 @@ export function AttachmentCanvas({ onStateChange }: Props) {
     [applySaved],
   )
 
+  /**
+   * A Word-editor save changes only the bytes (size, timestamp), so the row is
+   * refreshed without touching the metadata fields the person may be editing.
+   */
+  const onDocumentSaved = useCallback(
+    (saved: Attachment) => {
+      if (idRef.current !== saved.id) return
+      setAttachment(saved)
+      patchAttachment(saved.bookId, saved)
+    },
+    [patchAttachment],
+  )
+
   const download = useCallback(() => {
     const a = document.createElement('a')
     a.href = api.attachmentUrl(idRef.current)
@@ -236,6 +251,7 @@ export function AttachmentCanvas({ onStateChange }: Props) {
   }
 
   const previewUrl = `${api.attachmentUrl(attachment.id, true)}&v=${fileVersion}`
+  const isWord = isWordDocument(attachment.fileName)
   const statusLabel = saving
     ? t('common.saving')
     : replacing
@@ -320,8 +336,18 @@ export function AttachmentCanvas({ onStateChange }: Props) {
         }}
       />
 
-      <div className="attachment-preview">
-        {canPreviewAttachment(attachment.contentType) ? (
+      <div className={`attachment-preview${isWord ? ' is-word' : ''}`}>
+        {isWord ? (
+          // The Word editor owns the whole preview area; re-keyed on every
+          // file replacement so a new upload reloads the document.
+          <WordEditor
+            key={`${attachment.id}:${fileVersion}`}
+            attachmentId={attachment.id}
+            canEdit={canWrite}
+            onSaved={onDocumentSaved}
+            onDownload={download}
+          />
+        ) : canPreviewAttachment(attachment.contentType) ? (
           isImageAttachment(attachment.contentType) ? (
             <img className="attachment-preview-image" src={previewUrl} alt={attachment.title} />
           ) : (

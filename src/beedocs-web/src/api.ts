@@ -41,6 +41,8 @@ import type {
   BookshelfSitePage,
   Attachment,
   AttachmentSummary,
+  WordDocument,
+  WordPageSetup,
   SlideDeck,
   SlideDeckSummary,
   KanbanBoard,
@@ -605,6 +607,25 @@ export const api = {
    */
   attachmentUrl: (id: string, inline = false) =>
     withApiBase(`/api/attachments/${id}/download${inline ? '?inline=true' : ''}`),
+
+  /**
+   * Word documents — a .docx attachment opened in the editor. The read converts
+   * the file to HTML server-side; the save converts back and replaces the bytes
+   * under the same id, so links to the attachment survive every edit.
+   */
+  getWordDocument: (id: string) =>
+    request<WordDocument>(`/api/attachments/${id}/word`, { timeoutMs: 120_000 }),
+  saveWordDocument: (id: string, body: { html: string; page?: WordPageSetup | null }) =>
+    request<Attachment>(`/api/attachments/${id}/word`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+      timeoutMs: 120_000,
+    }),
+  createWordDocument: (bookId: string, title: string) =>
+    request<Attachment>(`/api/books/${bookId}/attachments/word`, {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    }),
 
   /** Slide deck templates — app-wide layouts a new deck can start from. */
   listSlideTemplates: () => request<SlideTemplateSummary[]>('/api/slide-templates'),

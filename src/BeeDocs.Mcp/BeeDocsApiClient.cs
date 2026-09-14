@@ -221,6 +221,17 @@ public sealed class BeeDocsApiClient(HttpClient http)
         return PostFileAsync(path, base64, fileName, fields, ct);
     }
 
+    // --- Word documents (.docx attachments opened in the editor) ---
+
+    public Task<JsonElement> GetWordDocumentAsync(string attachmentId, CancellationToken ct = default)
+        => GetAsync($"/api/attachments/{Uri.EscapeDataString(attachmentId)}/word", ct);
+
+    public Task<JsonElement> SaveWordDocumentAsync(string attachmentId, object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Put, $"/api/attachments/{Uri.EscapeDataString(attachmentId)}/word", body, ct);
+
+    public Task<JsonElement> CreateWordDocumentAsync(string bookId, object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Post, $"/api/books/{Uri.EscapeDataString(bookId)}/attachments/word", body, ct);
+
     public Task<JsonElement> ReplaceAttachmentFileAsync(
         string id,
         string base64,

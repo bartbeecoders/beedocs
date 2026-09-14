@@ -1,4 +1,5 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { Suspense, createContext, lazy, useCallback, useContext, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { withApiBase } from '../basePath'
@@ -176,6 +177,15 @@ function keepBlockId(from: ContentSegment, to: ContentSegment): ContentSegment {
   return to
 }
 
+/**
+ * True while a block is shown on its own, full page. Embedded editors read it
+ * to drop their `compact` inline shape — a project plan gets every column
+ * back, a board its full card size — without each block component growing a
+ * prop it would have to thread through two layers of wrappers.
+ */
+const BlockFocusContext = createContext(false)
+const useFullPage = () => useContext(BlockFocusContext)
+
 type Props = {
   content: string
   onChange: (next: string) => void
@@ -248,6 +258,12 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
   const [linkDragging, setLinkDragging] = useState(false)
   /** Cell the toolbar inserts into — follows focus/clicks. Always 0 without a grid. */
   const [activeCell, setActiveCell] = useState(0)
+  /**
+   * Block shown full page, by block id — null is the ordinary inline flow.
+   * Held as an id rather than an address so a reorder or an insert above it
+   * cannot silently swap which block is open.
+   */
+  const [focusId, setFocusId] = useState<string | null>(null)
   const { renameInTree } = useWorkspace()
 
   useEffect(() => {
@@ -897,7 +913,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
     }
   }
 
-  const renderBlock = (seg: ContentSegment, cellIdx: number, index: number) => {
+  const renderBlock = (seg: ContentSegment, cellIdx: number, index: number, fullPage = false) => {
     const globalIndex = cellOffsets[cellIdx] + index
     const cellSegs = doc.cells[cellIdx]
     return (
@@ -906,12 +922,14 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         id={outlineId(globalIndex)}
         className={`hybrid-block-wrap${
           reorder.dragAddr?.cell === cellIdx && reorder.dragAddr?.index === index ? ' is-dragging' : ''
-        }`}
+        }${fullPage ? ' is-full-page' : ''}`}
         data-block-index={index}
         data-outline-id={outlineId(globalIndex)}
       >
+        {!fullPage && (
         <BlockHandle
           label={blockLabel(seg, t)}
+          onFullPage={() => setFocusId(blockId(seg))}
           canMoveUp={index > 0}
           canMoveDown={index < cellSegs.length - 1}
           canMoveLeft={gridMode && cellIdx > 0}
@@ -930,6 +948,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
           onMoveRight={() => moveSegment({ cell: cellIdx, index }, { cell: cellIdx + 1, gap: 0 })}
           onRemove={() => removeSegment(cellIdx, index)}
         />
+        )}
         {seg.type === 'text' ? (
           <RichTextBlock
             cellIndex={cellIdx}
@@ -1002,15 +1021,100 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             onRemove={() => removeSegment(cellIdx, index)}
           />
         )}
-        <InsertGap
-          busy={busy}
-          onInsert={(k) => void handleInsert(k, { cell: cellIdx, at: index + 1 })}
-          dropSlot={`before:${cellIdx}:${index + 1}`}
-          dropLabel={t('editor.insertImageHere')}
-          dragging={dragging}
-          reorderProps={reorder.gapProps({ cell: cellIdx, gap: index + 1 })}
-          reorderActive={sameGap(reorder.overGap, { cell: cellIdx, gap: index + 1 })}
-        />
+        {!fullPage && (
+          <InsertGap
+            busy={busy}
+            onInsert={(k) => void handleInsert(k, { cell: cellIdx, at: index + 1 })}
+            dropSlot={`before:${cellIdx}:${index + 1}`}
+            dropLabel={t('editor.insertImageHere')}
+            dragging={dragging}
+            reorderProps={reorder.gapProps({ cell: cellIdx, gap: index + 1 })}
+            reorderActive={sameGap(reorder.overGap, { cell: cellIdx, gap: index + 1 })}
+          />
+        )}
+      </div>
+    )
+  }
+
+  // Every block in reading order — what the full-page bar pages through.
+  const allBlocks = doc.cells.flatMap((segs, cell) => segs.map((seg, index) => ({ seg, cell, index })))
+  const focusAt = focusId ? allBlocks.findIndex((b) => blockId(b.seg) === focusId) : -1
+  const focused = focusAt >= 0 ? allBlocks[focusAt] : null
+  const fullPageOpen = focused !== null
+
+  // The overlay covers the browser window, so the page behind it must not
+  // scroll under the wheel — and the class lets other chrome stand aside.
+  useEffect(() => {
+    if (!fullPageOpen) return
+    document.body.classList.add('hybrid-fullpage-open')
+    return () => document.body.classList.remove('hybrid-fullpage-open')
+  }, [fullPageOpen])
+
+  if (focused) {
+    const step = (dir: -1 | 1) => {
+      const next = allBlocks[focusAt + dir]
+      if (next) setFocusId(blockId(next.seg))
+    }
+    // Same root element as the inline branch, so the drop listeners bound to
+    // rootRef keep their node across the switch. The overlay itself is
+    // portaled to <body>: a fixed layer inside the canvas would be clipped
+    // by any transformed or overflow-hidden ancestor.
+    return (
+      <div ref={rootRef} className="hybrid-page-editor is-focused">
+        {createPortal(
+          <div className="hybrid-fullpage" role="dialog" aria-modal="true" aria-label={blockLabel(focused.seg, t)}>
+            <div className="hybrid-focus-bar">
+              <button type="button" className="btn sm" onClick={() => setFocusId(null)}>
+                ← {t('editor.focus.back')}
+              </button>
+              <span className="hybrid-focus-label" title={blockLabel(focused.seg, t)}>
+                {blockLabel(focused.seg, t)}
+              </span>
+              <span className="muted sm hybrid-focus-count">
+                {t('editor.focus.of', { n: focusAt + 1, total: allBlocks.length })}
+              </span>
+              <button
+                type="button"
+                className="btn sm ghost"
+                disabled={focusAt === 0}
+                title={t('editor.focus.prev')}
+                aria-label={t('editor.focus.prev')}
+                onClick={() => step(-1)}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="btn sm ghost"
+                disabled={focusAt >= allBlocks.length - 1}
+                title={t('editor.focus.next')}
+                aria-label={t('editor.focus.next')}
+                onClick={() => step(1)}
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                className="btn sm ghost hybrid-focus-close"
+                title={t('common.close')}
+                aria-label={t('common.close')}
+                onClick={() => setFocusId(null)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="hybrid-fullpage-body">
+              {insertError && <div className="banner error compact">{insertError}</div>}
+              <AiAssistBar />
+              <BlockFocusContext.Provider value={true}>
+                <div className="hybrid-focus" data-cell-root={focused.cell}>
+                  {renderBlock(focused.seg, focused.cell, focused.index, true)}
+                </div>
+              </BlockFocusContext.Provider>
+            </div>
+          </div>,
+          document.body,
+        )}
       </div>
     )
   }
@@ -1124,6 +1228,7 @@ function BlockHandle({
   onMoveLeft,
   onMoveRight,
   onRemove,
+  onFullPage,
 }: {
   label: string
   canMoveUp: boolean
@@ -1138,6 +1243,7 @@ function BlockHandle({
   onMoveLeft: () => void
   onMoveRight: () => void
   onRemove: () => void
+  onFullPage: () => void
 }) {
   const { t } = useI18n()
   return (
@@ -1173,6 +1279,15 @@ function BlockHandle({
         }
       >
         <span aria-hidden="true">{'⠿'}</span>
+      </button>
+      <button
+        type="button"
+        className="block-expand"
+        onClick={onFullPage}
+        aria-label={t('editor.block.fullPageAria', { label })}
+        title={t('editor.block.fullPage')}
+      >
+        ⤢
       </button>
       {canRemove && (
         <button
@@ -1896,6 +2011,7 @@ function FreeDrawFenceBlock({
   onRemove: () => void
 }) {
   const { t } = useI18n()
+  const fullPage = useFullPage()
   return (
     <div className="hybrid-visual-diagram hybrid-freedraw-block">
       <div className="hybrid-fence-chrome">
@@ -1906,7 +2022,7 @@ function FreeDrawFenceBlock({
         </button>
       </div>
       <div className="hybrid-visual-body hybrid-visual-body--freedraw">
-        <FreeDrawCanvas source={segment.body} onChange={onBodyChange} compact />
+        <FreeDrawCanvas source={segment.body} onChange={onBodyChange} compact={!fullPage} />
       </div>
     </div>
   )
@@ -1922,6 +2038,7 @@ function ExcelGridFenceBlock({
   onRemove: () => void
 }) {
   const { t } = useI18n()
+  const fullPage = useFullPage()
   return (
     <div className="hybrid-visual-diagram hybrid-excelgrid-block">
       <div className="hybrid-fence-chrome">
@@ -1932,7 +2049,7 @@ function ExcelGridFenceBlock({
         </button>
       </div>
       <div className="hybrid-visual-body hybrid-visual-body--excelgrid">
-        <ExcelGridCanvas source={segment.body} onChange={onBodyChange} compact />
+        <ExcelGridCanvas source={segment.body} onChange={onBodyChange} compact={!fullPage} />
       </div>
     </div>
   )
@@ -1950,6 +2067,7 @@ function KanbanFenceBlock({
   onRemove: () => void
 }) {
   const { t } = useI18n()
+  const fullPage = useFullPage()
   if (segment.lang === 'kanban-ref') {
     return <KanbanRefFence boardId={segment.body.trim().split(/\s+/)[0] ?? ''} bookId={bookId} onRemove={onRemove} />
   }
@@ -1964,7 +2082,7 @@ function KanbanFenceBlock({
         </button>
       </div>
       <div className="hybrid-visual-body">
-        <KanbanBoard source={segment.body} onChange={onBodyChange} compact />
+        <KanbanBoard source={segment.body} onChange={onBodyChange} compact={!fullPage} />
       </div>
     </div>
   )
@@ -1980,6 +2098,7 @@ function KanbanRefFence({
   onRemove: () => void
 }) {
   const { t } = useI18n()
+  const fullPage = useFullPage()
   const { canWrite } = useAuth()
   const [source, setSource] = useState<string | null>(null)
   const [title, setTitle] = useState('')
@@ -2038,14 +2157,14 @@ function KanbanRefFence({
           {canWrite ? (
             <KanbanBoard
               source={source}
-              compact
+              compact={!fullPage}
               onChange={(next) => {
                 setSource(next)
                 void persist(next)
               }}
             />
           ) : (
-            <KanbanView source={source} compact />
+            <KanbanView source={source} compact={!fullPage} />
           )}
         </div>
       ) : null}
@@ -2065,6 +2184,7 @@ function NoteFenceBlock({
   onRemove: () => void
 }) {
   const { t } = useI18n()
+  const fullPage = useFullPage()
   if (segment.lang === 'note-ref') {
     return <NoteRefFence noteId={segment.body.trim().split(/\s+/)[0] ?? ''} bookId={bookId} onRemove={onRemove} />
   }
@@ -2079,7 +2199,7 @@ function NoteFenceBlock({
         </button>
       </div>
       <div className="hybrid-visual-body">
-        <NoteEditor source={segment.body} onChange={onBodyChange} compact />
+        <NoteEditor source={segment.body} onChange={onBodyChange} compact={!fullPage} />
       </div>
     </div>
   )
@@ -2095,6 +2215,7 @@ function NoteRefFence({
   onRemove: () => void
 }) {
   const { t } = useI18n()
+  const fullPage = useFullPage()
   const { canWrite } = useAuth()
   const [source, setSource] = useState<string | null>(null)
   const [title, setTitle] = useState('')
@@ -2153,14 +2274,14 @@ function NoteRefFence({
           {canWrite ? (
             <NoteEditor
               source={source}
-              compact
+              compact={!fullPage}
               onChange={(next) => {
                 setSource(next)
                 void persist(next)
               }}
             />
           ) : (
-            <NoteView source={source} compact />
+            <NoteView source={source} compact={!fullPage} />
           )}
         </div>
       ) : null}
@@ -2180,6 +2301,7 @@ function ProjectFenceBlock({
   onRemove: () => void
 }) {
   const { t } = useI18n()
+  const fullPage = useFullPage()
   if (segment.lang === 'project-ref') {
     return <ProjectRefFence planId={segment.body.trim().split(/\s+/)[0] ?? ''} bookId={bookId} onRemove={onRemove} />
   }
@@ -2194,7 +2316,7 @@ function ProjectFenceBlock({
         </button>
       </div>
       <div className="hybrid-visual-body">
-        <ProjectEditor source={segment.body} onChange={onBodyChange} compact />
+        <ProjectEditor source={segment.body} onChange={onBodyChange} compact={!fullPage} />
       </div>
     </div>
   )
@@ -2210,6 +2332,7 @@ function ProjectRefFence({
   onRemove: () => void
 }) {
   const { t } = useI18n()
+  const fullPage = useFullPage()
   const { canWrite } = useAuth()
   const [source, setSource] = useState<string | null>(null)
   const [title, setTitle] = useState('')
@@ -2268,14 +2391,14 @@ function ProjectRefFence({
           {canWrite ? (
             <ProjectEditor
               source={source}
-              compact
+              compact={!fullPage}
               onChange={(next) => {
                 setSource(next)
                 void persist(next)
               }}
             />
           ) : (
-            <ProjectView source={source} compact />
+            <ProjectView source={source} compact={!fullPage} />
           )}
         </div>
       ) : null}

@@ -1621,3 +1621,34 @@ public sealed record GitAssistResultDto(
     int ElapsedMs,
     IReadOnlyList<string> ContextFiles
 );
+
+// --- Word documents (.docx attachments opened in the editor) ---
+
+/// <summary>A .docx attachment as the Word editor sees it: HTML body, the document's own styles as CSS, and the page.</summary>
+/// <param name="Css">Stylesheet derived from the package's styles.xml, scoped to <c>.docx-body</c>.</param>
+/// <param name="HasHeaderFooter">The document has headers/footers; they are kept but not shown in the editor.</param>
+/// <param name="StyleGallery">Paragraph style ids the editor offers, in ribbon order.</param>
+public sealed record WordDocumentDto(
+    string Id,
+    string BookId,
+    string Title,
+    string FileName,
+    string Html,
+    string Css,
+    Services.Word.WordPageSetup Page,
+    bool HasHeaderFooter,
+    IReadOnlyList<string> StyleGallery,
+    long SizeBytes,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="Html">The editor body, in the HTML dialect Docs/WORD.md describes.</param>
+/// <param name="Page">Null keeps the document's page size and margins.</param>
+public sealed record SaveWordDocumentRequest(
+    [property: Required] string Html,
+    Services.Word.WordPageSetup? Page = null
+);
+
+public sealed record CreateWordDocumentRequest(
+    [property: Required, MinLength(1)] string Title
+);

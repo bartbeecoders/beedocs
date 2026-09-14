@@ -100,6 +100,9 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_get_attachment` | `attachmentId` | One file's title, description, owner, type, size |
 | `beedocs_upload_attachment` | `bookId`, `base64`, `fileName`, `title?`, `description?` | File a document against a book |
 | `beedocs_read_attachment` | `attachmentId` | Contents — `text` for text formats, `base64` otherwise |
+| `beedocs_read_word_document` | `attachmentId` | A `.docx` as editable HTML + the document's CSS + page setup (see `Docs/WORD.md`) |
+| `beedocs_write_word_document` | `attachmentId`, `html`, `page?` | Replace the body of a `.docx`; the file is rewritten in place, other parts preserved |
+| `beedocs_create_word_document` | `bookId`, `title`, `html?` | A new `.docx` attachment, blank or with an HTML body |
 | `beedocs_update_attachment` | `attachmentId`, `title`, `description?`, `ownerId?`, `fileName?` | Properties only; `""` clears, omit leaves alone |
 | `beedocs_replace_attachment_file` | `attachmentId`, `base64`, `fileName` | New bytes, same id — links keep working |
 | `beedocs_link_attachment_in_page` | `pageId`, `attachmentId`, `label?`, `heading?` | Append a Markdown link to the file |

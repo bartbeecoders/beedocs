@@ -148,3 +148,8 @@ export function collectDroppedFiles(dt: DataTransfer | null): File[] {
   }
   return []
 }
+
+/** A .docx the workspace opens in the Word editor rather than as a download. */
+export function isWordDocument(fileName: string): boolean {
+  return attachmentExtension(fileName) === 'docx'
+}

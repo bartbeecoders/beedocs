@@ -128,6 +128,7 @@ type Creating =
   | { bookId: string; kind: 'kanban' }
   | { bookId: string; kind: 'project' }
   | { bookId: string; kind: 'note' }
+  | { bookId: string; kind: 'word' }
   | { bookId: string; kind: 'folder' }
 
 function PrivateBadge({ on }: { on?: boolean }) {
@@ -159,6 +160,7 @@ export function NavTree() {
     createKanbanBoard,
     createProjectPlan,
     createNote,
+    createWordDocument,
     deleteBook,
     deleteShelf,
     renameShelf,
@@ -364,6 +366,11 @@ export function NavTree() {
       setChildTitle('')
       setCreatingIn(null)
       void navigate(`/books/${bookId}/notes/${note.id}`)
+    } else if (kind === 'word') {
+      const file = await createWordDocument(bookId, childTitle.trim())
+      setChildTitle('')
+      setCreatingIn(null)
+      void navigate(`/books/${bookId}/files/${file.id}`)
     } else {
       const diagram = await createDiagram(bookId, childTitle.trim(), creatingIn.diagramKind)
       setChildTitle('')
@@ -753,6 +760,11 @@ export function NavTree() {
                 label={t('nav.newNote')}
                 write
                 onClick={() => beginCreateInBook({ bookId: menu.bookId, kind: 'note' })}
+              />
+              <MenuItem
+                label={t('nav.newWord')}
+                write
+                onClick={() => beginCreateInBook({ bookId: menu.bookId, kind: 'word' })}
               />
               <MenuItem
                 label={t('nav.uploadFile')}
@@ -1510,6 +1522,8 @@ function BookNode({
                               ? t('nav.projectTitle')
                               : creatingIn.kind === 'note'
                                 ? t('nav.noteTitle')
+                                : creatingIn.kind === 'word'
+                                  ? t('nav.wordTitle')
                             : t('nav.diagramTitle')
                   }
                 />

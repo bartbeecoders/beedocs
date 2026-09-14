@@ -199,8 +199,16 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   editor canvas, resizable/collapsible right properties pane
   (`PropertiesPane.tsx`). Page editing (`HybridPageEditor.tsx`) renders
   Markdown with embedded Mermaid and `beediagram`/`beediagram-ref` fences
-  (`markdownFences.ts`, `pageBlocks.ts`). All API calls go through the typed
-  client in `api.ts`.
+  (`markdownFences.ts`, `pageBlocks.ts`). Any block can be opened **full
+  page** (the ⤢ button on its handle): the editor keeps a `focusId` (a block
+  id, not an address, so a reorder cannot swap which block is open) and
+  renders only that block inside `.hybrid-fullpage`, a fixed layer portaled
+  to `<body>` that covers the whole browser window (z-index 1100, under the
+  search palette; `body.hybrid-fullpage-open` locks page scroll) with a bar
+  for Back / previous / next / close; `BlockFocusContext` tells embedded
+  editors to drop their `compact` inline shape, and `.hybrid-focus` CSS
+  stretches them to the window height. All API
+  calls go through the typed client in `api.ts`.
 - **Page grid layout** (`pageLayout.ts`) — a page can arrange its blocks in a
   COLS×ROWS grid of cells instead of one top-to-bottom flow. The whole feature
   lives in the page's Markdown as HTML comment markers
@@ -377,6 +385,25 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   the medium are `beedocs_read_attachment` (text for text formats, base64
   otherwise, and a refusal above 8 MB — base64 of a 100 MB PDF is ~133 MB of
   context) and `beedocs_link_attachment_in_page`. See `Docs/ATTACHMENTS.md`.
+- **Word documents** (`Services/Word/` — `DocxReader`, `DocxDocumentWriter`,
+  `HtmlLite`, `WordStyles`, `WordDocumentService`; UI `src/word/` mounted by
+  `AttachmentCanvas` for `.docx`) — a `.docx` attachment opens in a Word-like
+  editor (ribbon, print layout with real pages, ruler, styles gallery, auto-save)
+  instead of as a download; **New Word document** in the book menu creates a
+  blank one (`POST /api/books/{id}/attachments/word`). The attachment stays an
+  attachment: `GET /api/attachments/{id}/word` converts the package to HTML +
+  a CSS rendering of its own `styles.xml` + page setup, `PUT` converts HTML back
+  and replaces the bytes under the same id. The load-bearing decision is that
+  **only `word/document.xml` is regenerated** — every other part is copied
+  through and rels/numbering/styles are appended to, never rewritten — and that
+  anything without an HTML shape (fields, footnote refs, content controls,
+  shapes) rides along as an opaque `data-docx-raw` chunk written back verbatim.
+  Paragraphs keep their style id (`data-style`), so a heading is saved as the
+  document's own Heading 1. The editor is plain `contentEditable` (no document
+  model), paginated by pushing straddling blocks with a margin rather than
+  splitting the DOM, with its own snapshot undo history. MCP:
+  `beedocs_read_word_document` / `beedocs_write_word_document` /
+  `beedocs_create_word_document`. See `Docs/WORD.md`.
 - **Favorites** (`favorite` table, `Services/FavoriteService.cs`, UI
   `FavoritesPanel.tsx` above the tree in the left pane) — per-user starred items
   (kinds `book | page | diagram | slides | kanban | project | note | attachment`, the search queue's
@@ -642,6 +669,7 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/PROJECT.md` — project plans: WBS + Gantt, page embed, book-tree item.
 - `Docs/NOTES.md` — notes: OneNote-style free-form pages (text, checklists, images, ink), page embed, book-tree item.
 - `Docs/ATTACHMENTS.md` — book attachments: storage, upload rules, and why they are not uploads.
+- `Docs/WORD.md` — Word documents: the .docx editor, the HTML dialect, what survives a save.
 - `Docs/GIT-INTEGRATION.md` — git/DevOps repos browsed as books; clones, security, search.
 - `Docs/USERS-AND-ROLES.md` — accounts, roles, sessions, and the opt-in sign-in wall.
 - `Docs/RBA-INTEGRATION.md` — delegating sign-in to the central RBA service (application DOC).

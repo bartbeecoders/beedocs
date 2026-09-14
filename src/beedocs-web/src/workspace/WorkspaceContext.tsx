@@ -99,6 +99,8 @@ type WorkspaceCtx = {
   createNote: (bookId: string, title: string) => Promise<NoteSummary>
   /** Upload a file into a book. Rejects with the server's message on a bad type or size. */
   uploadAttachment: (bookId: string, file: File) => Promise<AttachmentSummary>
+  /** A blank .docx filed against the book, opened in the Word editor. */
+  createWordDocument: (bookId: string, title: string) => Promise<AttachmentSummary>
   /** Replace a summary in the tree after its properties were saved elsewhere. */
   patchAttachment: (bookId: string, next: AttachmentSummary) => void
   deleteBook: (bookId: string) => Promise<void>
@@ -704,6 +706,19 @@ graph LR
     return created
   }, [])
 
+  const createWordDocument = useCallback(async (bookId: string, title: string) => {
+    const created = await api.createWordDocument(bookId, title)
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.id === bookId
+          ? { ...b, expanded: true, attachments: sortAttachments([...b.attachments, created]) }
+          : b,
+      ),
+    )
+    setExpandedIds((s) => new Set(s).add(bookId))
+    return created
+  }, [])
+
   const patchAttachment = useCallback((bookId: string, next: AttachmentSummary) => {
     setBooks((prev) =>
       prev.map((b) =>
@@ -1119,6 +1134,7 @@ graph LR
       createProjectPlan,
       createNote,
       uploadAttachment,
+      createWordDocument,
       patchAttachment,
       deleteBook,
       deleteShelf,
@@ -1167,6 +1183,7 @@ graph LR
       createProjectPlan,
       createNote,
       uploadAttachment,
+      createWordDocument,
       patchAttachment,
       deleteBook,
       deleteShelf,

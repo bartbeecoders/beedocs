@@ -127,6 +127,7 @@ builder.Services.AddSingleton<IKanbanBoardService, KanbanBoardService>();
 builder.Services.AddSingleton<IProjectPlanService, ProjectPlanService>();
 builder.Services.AddSingleton<INoteService, NoteService>();
 builder.Services.AddSingleton<IAttachmentService, AttachmentService>();
+builder.Services.AddSingleton<BeeDocs.Api.Services.Word.IWordDocumentService, BeeDocs.Api.Services.Word.WordDocumentService>();
 builder.Services.AddSingleton<ISlideTemplateService, SlideTemplateService>();
 builder.Services.AddSingleton<SlideDeckPptxExporter>();
 builder.Services.AddSingleton<IShapeCollectionService, ShapeCollectionService>();
@@ -1924,6 +1925,87 @@ api.MapDelete("/attachments/{id}", async (string id, IAttachmentService attachme
 {
     var ok = await attachments.DeleteAsync(id, ct);
     return ok ? Results.NoContent() : Results.NotFound();
+});
+
+// --- Word documents: a .docx attachment opened in the editor ---
+// The attachment stays an attachment; these routes look inside it. A read
+// converts the package to HTML for the editor, a save converts back and
+// replaces the bytes under the same id, like a manual re-upload.
+static IResult WordProblem(BeeDocs.Api.Services.Word.WordDocumentException e) =>
+    Results.Json(new { error = e.Message }, statusCode: e.Status);
+
+api.MapGet("/attachments/{id}/word", async (
+    string id, BeeDocs.Api.Services.Word.IWordDocumentService word, CancellationToken ct) =>
+{
+    try
+    {
+        var doc = await word.ReadAsync(id, ct);
+        return doc is null ? Results.NotFound() : Results.Ok(doc);
+    }
+    catch (BeeDocs.Api.Services.Word.WordDocumentException e)
+    {
+        return WordProblem(e);
+    }
+});
+
+api.MapPut("/attachments/{id}/word", async (
+    string id, SaveWordDocumentRequest body, BeeDocs.Api.Services.Word.IWordDocumentService word, CancellationToken ct) =>
+{
+    if (body.Html is null)
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["html"] = ["Html is required."] });
+    if (body.Page is { } page && (page.Width < 1000 || page.Height < 1000 || page.Width > 40000 || page.Height > 40000
+        || page.Top < 0 || page.Right < 0 || page.Bottom < 0 || page.Left < 0))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["page"] = ["Page size or margins are out of range."] });
+    try
+    {
+        var saved = await word.SaveAsync(id, body, ct);
+        return saved is null ? Results.NotFound() : Results.Ok(saved);
+    }
+    catch (BeeDocs.Api.Services.Word.WordDocumentException e)
+    {
+        return WordProblem(e);
+    }
+    catch (InvalidAttachmentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["file"] = [e.Message] });
+    }
+});
+
+// Pictures inside the package, served to the editor by their part name.
+api.MapGet("/attachments/{id}/word/media/{**name}", async (
+    string id, string name, BeeDocs.Api.Services.Word.IWordDocumentService word, HttpContext http, CancellationToken ct) =>
+{
+    try
+    {
+        var media = await word.OpenMediaAsync(id, name, ct);
+        if (media is null) return Results.NotFound();
+        http.Response.Headers.CacheControl = "private, max-age=3600";
+        return Results.File(media.Content, media.ContentType);
+    }
+    catch (BeeDocs.Api.Services.Word.WordDocumentException e)
+    {
+        return WordProblem(e);
+    }
+});
+
+api.MapPost("/books/{bookId}/attachments/word", async (
+    string bookId, CreateWordDocumentRequest body, BeeDocs.Api.Services.Word.IWordDocumentService word, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+    try
+    {
+        var created = await word.CreateBlankAsync(bookId, body.Title.Trim(), ct);
+        return Results.Created($"/api/attachments/{created.Id}", created);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (InvalidAttachmentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["file"] = [e.Message] });
+    }
 });
 
 api.MapGet("/books/{bookId}/collections", async (string bookId, IShapeCollectionService collections, CancellationToken ct) =>
