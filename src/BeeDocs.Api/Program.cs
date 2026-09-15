@@ -3219,6 +3219,14 @@ api.MapGet("/books/{id}/export", async (string id, string? format, IExportServic
     return ExportResult(await export.ExportBookAsync(id, parsed, ct));
 });
 
+api.MapGet("/books/{bookId}/chapters/{chapterId}/export", async (string bookId, string chapterId, string? format, IExportService export, CancellationToken ct) =>
+{
+    if (!TryParseFormat(format, out var parsed))
+        return Results.BadRequest(new { error = "Unknown format. Use archive, markdown, or docx." });
+
+    return ExportResult(await export.ExportChapterAsync(bookId, chapterId, parsed, ct));
+});
+
 api.MapGet("/pages/{id}/export", async (string id, string? format, IExportService export, CancellationToken ct) =>
 {
     if (!TryParseFormat(format, out var parsed))

@@ -22,6 +22,7 @@ public interface IExportService
 {
     Task<ExportPayload?> ExportBookAsync(string bookId, ExportFormat format, CancellationToken ct = default);
     Task<ExportPayload?> ExportPageAsync(string pageId, ExportFormat format, CancellationToken ct = default);
+    Task<ExportPayload?> ExportChapterAsync(string bookId, string chapterId, ExportFormat format, CancellationToken ct = default);
 }
 
 public sealed partial class ExportService(
@@ -105,6 +106,52 @@ public sealed partial class ExportService(
                 "text/markdown; charset=utf-8",
                 $"{name}.md"),
             ExportFormat.Docx => new ExportPayload(BuildPageDocx(page, book), DocxContentType, $"{name}.docx"),
+            _ => null,
+        };
+    }
+
+    // --- Folder (chapter) ---
+
+    public async Task<ExportPayload?> ExportChapterAsync(string bookId, string chapterId, ExportFormat format, CancellationToken ct = default)
+    {
+        var book = await documents.GetBookAsync(bookId, ct);
+        if (book is null) return null;
+
+        var chapter = (await documents.ListChaptersAsync(bookId, ct)).FirstOrDefault(c => c.Id == chapterId);
+        if (chapter is null) return null;
+
+        // ListPagesAsync applies the privacy filter and the tree's ordering.
+        var pages = new List<PageDto>();
+        foreach (var summary in await documents.ListPagesAsync(bookId, ct))
+        {
+            if (summary.ChapterId != chapterId) continue;
+            var page = await documents.GetPageAsync(summary.Id, ct);
+            if (page is not null) pages.Add(page);
+        }
+
+        // Diagrams attached to the folder's pages, plus any book-level ones a
+        // -ref fence points at, so the export stands alone.
+        var pageIds = pages.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+        var referenced = pages.SelectMany(p => ReferencedDiagramIds(p.Content)).ToHashSet(StringComparer.Ordinal);
+        var diagramList = new List<DiagramDto>();
+        foreach (var summary in await diagrams.ListByBookAsync(bookId, ct))
+        {
+            var linked = summary.PageId is not null && pageIds.Contains(summary.PageId);
+            if (!linked && !referenced.Contains(summary.Id)) continue;
+            var full = await diagrams.GetAsync(summary.Id, ct);
+            if (full is not null) diagramList.Add(full);
+        }
+
+        var collectionList = (await collections.ListByBookAsync(bookId, ct)).ToList();
+        var bundle = new BookBundle(book, [chapter], pages, diagramList, collectionList);
+
+        var name = SlugHelper.Slugify($"{book.Title} {chapter.Title}") is { Length: > 0 } s ? s : "folder";
+
+        return format switch
+        {
+            ExportFormat.Archive => new ExportPayload(BuildArchive(bundle, "book"), ZipContentType, $"{name}.beedocs"),
+            ExportFormat.Markdown => new ExportPayload(BuildMarkdownZip(bundle), ZipContentType, $"{name}-markdown.zip"),
+            ExportFormat.Docx => new ExportPayload(BuildChapterDocx(bundle, chapter), DocxContentType, $"{name}.docx"),
             _ => null,
         };
     }
@@ -449,6 +496,34 @@ public sealed partial class ExportService(
 
         if (bundle.Pages.Count == 0)
             writer.AddBlocks([new MarkdownDoc.ParagraphBlock(MarkdownDoc.ParseInlines("This book has no pages yet."))]);
+
+        return writer.Build();
+    }
+
+    private byte[] BuildChapterDocx(BookBundle bundle, ChapterDto chapter)
+    {
+        var writer = new DocxWriter(ResolveDocxImage);
+
+        writer.AddTitlePage(
+            chapter.Title,
+            bundle.Book.Title,
+            [
+                $"{bundle.Pages.Count} page(s)",
+                $"Exported from BeeDocs on {DateTimeOffset.Now:f}",
+            ]);
+
+        writer.AddContentsList([.. bundle.Pages.Select(p => p.Title)]);
+
+        for (var i = 0; i < bundle.Pages.Count; i++)
+        {
+            var page = bundle.Pages[i];
+            if (i > 0) writer.AddPageBreak();
+            writer.AddHeading(page.Title, 1);
+            writer.AddBlocks(MarkdownDoc.Parse(page.Content));
+        }
+
+        if (bundle.Pages.Count == 0)
+            writer.AddBlocks([new MarkdownDoc.ParagraphBlock(MarkdownDoc.ParseInlines("This folder has no pages yet."))]);
 
         return writer.Build();
     }

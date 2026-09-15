@@ -89,6 +89,31 @@ import { withApiBase } from './basePath'
  * "One or more validation errors occurred." in `title`, so `errors` has to be
  * read first or every rejected field reports the same useless line.
  */
+/** Fetch a server-rendered export and save it through the browser. */
+async function downloadExportFrom(path: string, fallbackName: string): Promise<string> {
+  const res = await fetch(withApiBase(path))
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || `${res.status} ${res.statusText}`)
+  }
+
+  // Prefer the server's filename; fall back to something sensible.
+  const disposition = res.headers.get('content-disposition') ?? ''
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)
+  const fileName = match ? decodeURIComponent(match[1]) : fallbackName
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  return fileName
+}
+
 async function errorText(res: Response): Promise<string> {
   const text = await res.text()
   if (!text) return `${res.status} ${res.statusText}`
@@ -679,29 +704,15 @@ export const api = {
    * through the browser. PDF is not handled here — it is produced client-side
    * by src/export/pdf.ts, which needs a DOM to render diagrams.
    */
-  downloadExport: async (kind: 'books' | 'pages', id: string, format: ExportFormat) => {
-    const res = await fetch(withApiBase(`/api/${kind}/${id}/export?format=${format}`))
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(text || `${res.status} ${res.statusText}`)
-    }
+  downloadExport: (kind: 'books' | 'pages', id: string, format: ExportFormat) =>
+    downloadExportFrom(`/api/${kind}/${id}/export?format=${format}`, `${kind}-${id}.${format}`),
 
-    // Prefer the server's filename; fall back to something sensible.
-    const disposition = res.headers.get('content-disposition') ?? ''
-    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)
-    const fileName = match ? decodeURIComponent(match[1]) : `${kind}-${id}.${format}`
-
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = fileName
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 10_000)
-    return fileName
-  },
+  /** One folder (chapter) of a book. */
+  downloadChapterExport: (bookId: string, chapterId: string, format: ExportFormat) =>
+    downloadExportFrom(
+      `/api/books/${bookId}/chapters/${chapterId}/export?format=${format}`,
+      `folder-${chapterId}.${format}`,
+    ),
 
   /** Describe an import file without writing anything. */
   inspectImport: async (file: File): Promise<ImportPreview> => {
@@ -711,7 +722,6 @@ export const api = {
     if (!res.ok) throw new Error(await errorText(res))
     return res.json() as Promise<ImportPreview>
   },
-
   importFile: async (
     file: File,
     options: { mode: ImportNameMode; targetBookId?: string; title?: string },

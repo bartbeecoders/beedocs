@@ -117,9 +117,61 @@ export async function exportBookToPdf(bookId: string, onProgress?: ExportProgres
     (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title),
   )
 
-  onProgress?.(`Loading ${sorted.length} page(s)…`)
+  const note =
+    chapters.length > 0
+      ? `${chapters.length} chapter(s) · ${sorted.length} page(s)`
+      : `${sorted.length} page(s)`
+
+  await printPages(
+    { title: book.title, description: book.description, note, empty: 'This book has no pages yet.' },
+    sorted,
+    onProgress,
+  )
+}
+
+/**
+ * Load one folder (chapter) of a book and open a print-ready document with
+ * just its pages, in tree order.
+ */
+export async function exportChapterToPdf(
+  bookId: string,
+  chapterId: string,
+  onProgress?: ExportProgress,
+): Promise<void> {
+  onProgress?.('Loading folder…')
+  const [book, pageList, chapters] = await Promise.all([
+    api.getBook(bookId),
+    api.listPages(bookId),
+    api.listChapters(bookId),
+  ])
+  const chapter = chapters.find((c) => c.id === chapterId)
+  if (!chapter) throw new Error('Folder not found.')
+
+  const sorted = pageList
+    .filter((p) => p.chapterId === chapterId)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title))
+
+  await printPages(
+    {
+      title: chapter.title,
+      description: book.title,
+      note: `${sorted.length} page(s)`,
+      empty: 'This folder has no pages yet.',
+    },
+    sorted,
+    onProgress,
+  )
+}
+
+/** Cover + contents + one section per page, then the print dialog. */
+async function printPages(
+  cover: { title: string; description?: string | null; note: string; empty: string },
+  summaries: { id: string }[],
+  onProgress?: ExportProgress,
+): Promise<void> {
+  onProgress?.(`Loading ${summaries.length} page(s)…`)
   const pages: Page[] = []
-  for (const p of sorted) {
+  for (const p of summaries) {
     pages.push(await api.getPage(p.id))
   }
 
@@ -147,27 +199,22 @@ export async function exportBookToPdf(bookId: string, onProgress?: ExportProgres
             ${pages.map((p) => `<li><a href="#page-${esc(p.id)}">${esc(p.title)}</a></li>`).join('')}
           </ol>
         </nav>`
-      : '<p class="muted">This book has no pages yet.</p>'
-
-  const chapterNote =
-    chapters.length > 0
-      ? `<p class="export-meta">${chapters.length} chapter(s) · ${pages.length} page(s)</p>`
-      : `<p class="export-meta">${pages.length} page(s)</p>`
+      : `<p class="muted">${esc(cover.empty)}</p>`
 
   const generated = new Date().toLocaleString()
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>${esc(book.title)} — PDF export</title>
+  <title>${esc(cover.title)} — PDF export</title>
   <style>${PRINT_CSS}</style>
 </head>
 <body>
   <header class="export-cover">
     <p class="export-brand">${esc(getBrandTitle())}</p>
-    <h1>${esc(book.title)}</h1>
-    ${book.description ? `<p class="export-desc">${esc(book.description)}</p>` : ''}
-    ${chapterNote}
+    <h1>${esc(cover.title)}</h1>
+    ${cover.description ? `<p class="export-desc">${esc(cover.description)}</p>` : ''}
+    <p class="export-meta">${esc(cover.note)}</p>
     <p class="export-meta">Exported ${esc(generated)}</p>
   </header>
   ${toc}

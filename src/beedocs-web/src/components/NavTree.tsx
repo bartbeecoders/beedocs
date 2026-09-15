@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { withBase } from '../basePath'
 import { bookshelfSitePath } from '../markdownLinks'
-import { exportBookToPdf, exportPageToPdf } from '../export/pdf'
+import { exportBookToPdf, exportChapterToPdf, exportPageToPdf } from '../export/pdf'
 import { ImportDialog } from './ImportDialog'
 import type { ExportFormat } from '../types'
 import { useAuth } from '../auth/AuthContext'
@@ -233,17 +233,24 @@ export function NavTree() {
    * the only route that can rasterise diagrams); the rest stream from the API.
    */
   const runExport = (
-    scope: 'book' | 'page',
-    id: string,
+    target:
+      | { scope: 'book'; id: string }
+      | { scope: 'page'; id: string }
+      | { scope: 'folder'; bookId: string; chapterId: string },
     format: ExportFormat | 'pdf',
   ) => {
     setBusyExport(true)
-    const job =
-      format === 'pdf'
-        ? scope === 'book'
-          ? exportBookToPdf(id)
-          : exportPageToPdf(id)
-        : api.downloadExport(scope === 'book' ? 'books' : 'pages', id, format).then(() => undefined)
+    let job: Promise<unknown>
+    if (target.scope === 'folder') {
+      job =
+        format === 'pdf'
+          ? exportChapterToPdf(target.bookId, target.chapterId)
+          : api.downloadChapterExport(target.bookId, target.chapterId, format)
+    } else if (format === 'pdf') {
+      job = target.scope === 'book' ? exportBookToPdf(target.id) : exportPageToPdf(target.id)
+    } else {
+      job = api.downloadExport(target.scope === 'book' ? 'books' : 'pages', target.id, format)
+    }
 
     void job
       .then(() => {
@@ -777,7 +784,7 @@ export function NavTree() {
               <div className="tree-context-sep" />
               <ExportItems
                 busy={busyExport}
-                onPick={(format) => runExport('book', menu.bookId, format)}
+                onPick={(format) => runExport({ scope: 'book', id: menu.bookId }, format)}
               />
               <MenuItem
                 label={t('nav.importIntoBook')}
@@ -843,6 +850,13 @@ export function NavTree() {
                 }}
               />
               <div className="tree-context-sep" />
+              <ExportItems
+                busy={busyExport}
+                onPick={(format) =>
+                  runExport({ scope: 'folder', bookId: menu.bookId, chapterId: menu.chapterId }, format)
+                }
+              />
+              <div className="tree-context-sep" />
               <MenuItem
                 label={t('nav.deleteFolder')}
                 write
@@ -883,7 +897,7 @@ export function NavTree() {
               <div className="tree-context-sep" />
               <ExportItems
                 busy={busyExport}
-                onPick={(format) => runExport('page', menu.pageId, format)}
+                onPick={(format) => runExport({ scope: 'page', id: menu.pageId }, format)}
               />
               <div className="tree-context-sep" />
               <MenuItem
