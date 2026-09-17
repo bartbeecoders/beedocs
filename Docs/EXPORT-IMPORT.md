@@ -72,14 +72,36 @@ A single document exports as one `.md` file with the same front matter.
 
 A real WordprocessingML document with headings (navigable in Word's outline
 pane), paragraphs, bold/italic/strikethrough, inline code, hyperlinks, bulleted
-and numbered lists, block quotes, tables, horizontal rules, and embedded images.
-A book gets a title page and a contents list; each page starts on a new page.
+and numbered lists, block quotes, tables, horizontal rules, embedded images and
+— when exported from the UI — diagram pictures. A book gets a title page and a
+contents list; each page starts on a new page.
+
+**Diagrams** (Mermaid, C4, BeeDiagram, isometric, sketch fences, and their
+`-ref` variants) are drawn by the browser, because rasterising them needs a
+DOM the API does not have. A Word export from the UI is therefore two calls:
+
+```
+GET  /api/books/<id>/export/diagrams          → { diagrams: [{ key, kind, source, title }] }
+POST /api/books/<id>/export?format=docx        body { images: [{ key, data: <PNG base64 or data: URL> }] }
+```
+
+(the same pair exists under `/api/pages/<id>/export` and
+`/api/books/<id>/chapters/<id>/export`). The UI renders each listed fence with
+the PDF export's SVG renderers at 2× and posts the PNGs; the writer embeds a
+picture for every key it recognises, centred and clamped to the text column.
+The `key` is a hash of the fence's language and text, so a page edited between
+the two calls gets the source-block fallback for that fence rather than a
+stale picture. Any other caller — `curl`, the MCP server, a script — can do the
+same, or use the plain `GET` and receive diagrams as captioned source blocks.
 
 Known limits:
 
-- **Diagrams are not rendered.** Mermaid, C4, PlantUML and BeeDiagram fences
-  appear as captioned source blocks — rasterising them needs a browser, which
-  the API does not have. Use PDF when you need diagram images.
+- **Plain API exports do not render diagrams.** `GET …/export?format=docx`
+  writes Mermaid, C4, PlantUML, BeeDiagram and isometric fences as captioned
+  source blocks. Export from the UI, or post rendered PNGs as above.
+- **Kanban boards, project plans and notes** embedded in a page are still
+  written as source blocks — they render to HTML, not SVG, so there is no
+  picture to take.
 - **SVG images are not embedded** (the format cannot hold them); they appear as
   `[image: alt (url)]`. PNG, JPEG, GIF and WebP embed normally.
 - Nested lists are flattened to a single level.

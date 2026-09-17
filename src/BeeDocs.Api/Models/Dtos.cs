@@ -1652,3 +1652,20 @@ public sealed record SaveWordDocumentRequest(
 public sealed record CreateWordDocumentRequest(
     [property: Required, MinLength(1)] string Title
 );
+
+/// <summary>One browser-rendered diagram for a Word export.</summary>
+/// <param name="Key">The fence key from <c>GET …/export/diagrams</c>.</param>
+/// <param name="Data">PNG bytes, base64 or a <c>data:image/png;base64,</c> URL.</param>
+public sealed record DocxExportImage(string Key, string Data);
+
+/// <summary>
+/// Body of <c>POST …/export?format=docx</c>: the pictures the browser drew
+/// for the fences the matching <c>GET …/export/diagrams</c> listed. Anything
+/// that is not a PNG, or is over the cap, is skipped and that fence falls back
+/// to a source block.
+/// </summary>
+public sealed record DocxExportRequest(List<DocxExportImage>? Images)
+{
+    public const int MaxImages = 500;
+    public const int MaxImageBytes = 24 * 1024 * 1024;
+}

@@ -3211,12 +3211,60 @@ static bool TryParseFormat(string? value, out ExportFormat format)
     }
 }
 
+// A Word export can carry diagram pictures the browser rendered: the GET
+// variant of each route lists the fences to draw (`…/export/diagrams`), the
+// POST variant takes the PNGs back and embeds them. The plain GET export
+// stays for curl/MCP callers and writes diagrams as source blocks.
+static ExportOptions ReadExportOptions(DocxExportRequest? body)
+{
+    var images = new Dictionary<string, DocxImage>(StringComparer.Ordinal);
+    foreach (var image in body?.Images ?? [])
+    {
+        if (images.Count >= DocxExportRequest.MaxImages) break;
+        if (string.IsNullOrWhiteSpace(image.Key) || string.IsNullOrWhiteSpace(image.Data)) continue;
+
+        // Accept a bare base64 string or a data: URL, which is what a canvas hands out.
+        var payload = image.Data;
+        var comma = payload.IndexOf(',');
+        if (payload.StartsWith("data:", StringComparison.OrdinalIgnoreCase) && comma > 0)
+            payload = payload[(comma + 1)..];
+
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(payload); }
+        catch (FormatException) { continue; }
+        if (bytes.Length == 0 || bytes.Length > DocxExportRequest.MaxImageBytes) continue;
+
+        // The writer trusts the extension it is handed, so only take what the
+        // header says is a PNG — the one format the browser renderer produces.
+        if (bytes is not [0x89, 0x50, 0x4E, 0x47, ..]) continue;
+        var size = ImageInfo.TryReadDimensions(bytes);
+        if (size is null) continue;
+
+        images[image.Key] = new DocxImage(bytes, "png", size.Value.Width, size.Value.Height);
+    }
+    return new ExportOptions(images);
+}
+
 api.MapGet("/books/{id}/export", async (string id, string? format, IExportService export, CancellationToken ct) =>
 {
     if (!TryParseFormat(format, out var parsed))
         return Results.BadRequest(new { error = "Unknown format. Use archive, markdown, or docx." });
 
-    return ExportResult(await export.ExportBookAsync(id, parsed, ct));
+    return ExportResult(await export.ExportBookAsync(id, parsed, ct: ct));
+});
+
+api.MapPost("/books/{id}/export", async (string id, string? format, DocxExportRequest? body, IExportService export, CancellationToken ct) =>
+{
+    if (!TryParseFormat(format, out var parsed))
+        return Results.BadRequest(new { error = "Unknown format. Use archive, markdown, or docx." });
+
+    return ExportResult(await export.ExportBookAsync(id, parsed, ReadExportOptions(body), ct));
+}).WithMetadata(new RequireRole(UserRoles.Viewer));
+
+api.MapGet("/books/{id}/export/diagrams", async (string id, IExportService export, CancellationToken ct) =>
+{
+    var fences = await export.ListBookDiagramFencesAsync(id, ct);
+    return fences is null ? Results.NotFound() : Results.Ok(new { diagrams = fences });
 });
 
 api.MapGet("/books/{bookId}/chapters/{chapterId}/export", async (string bookId, string chapterId, string? format, IExportService export, CancellationToken ct) =>
@@ -3224,7 +3272,21 @@ api.MapGet("/books/{bookId}/chapters/{chapterId}/export", async (string bookId, 
     if (!TryParseFormat(format, out var parsed))
         return Results.BadRequest(new { error = "Unknown format. Use archive, markdown, or docx." });
 
-    return ExportResult(await export.ExportChapterAsync(bookId, chapterId, parsed, ct));
+    return ExportResult(await export.ExportChapterAsync(bookId, chapterId, parsed, ct: ct));
+});
+
+api.MapPost("/books/{bookId}/chapters/{chapterId}/export", async (string bookId, string chapterId, string? format, DocxExportRequest? body, IExportService export, CancellationToken ct) =>
+{
+    if (!TryParseFormat(format, out var parsed))
+        return Results.BadRequest(new { error = "Unknown format. Use archive, markdown, or docx." });
+
+    return ExportResult(await export.ExportChapterAsync(bookId, chapterId, parsed, ReadExportOptions(body), ct));
+}).WithMetadata(new RequireRole(UserRoles.Viewer));
+
+api.MapGet("/books/{bookId}/chapters/{chapterId}/export/diagrams", async (string bookId, string chapterId, IExportService export, CancellationToken ct) =>
+{
+    var fences = await export.ListChapterDiagramFencesAsync(bookId, chapterId, ct);
+    return fences is null ? Results.NotFound() : Results.Ok(new { diagrams = fences });
 });
 
 api.MapGet("/pages/{id}/export", async (string id, string? format, IExportService export, CancellationToken ct) =>
@@ -3232,7 +3294,21 @@ api.MapGet("/pages/{id}/export", async (string id, string? format, IExportServic
     if (!TryParseFormat(format, out var parsed))
         return Results.BadRequest(new { error = "Unknown format. Use archive, markdown, or docx." });
 
-    return ExportResult(await export.ExportPageAsync(id, parsed, ct));
+    return ExportResult(await export.ExportPageAsync(id, parsed, ct: ct));
+});
+
+api.MapPost("/pages/{id}/export", async (string id, string? format, DocxExportRequest? body, IExportService export, CancellationToken ct) =>
+{
+    if (!TryParseFormat(format, out var parsed))
+        return Results.BadRequest(new { error = "Unknown format. Use archive, markdown, or docx." });
+
+    return ExportResult(await export.ExportPageAsync(id, parsed, ReadExportOptions(body), ct));
+}).WithMetadata(new RequireRole(UserRoles.Viewer));
+
+api.MapGet("/pages/{id}/export/diagrams", async (string id, IExportService export, CancellationToken ct) =>
+{
+    var fences = await export.ListPageDiagramFencesAsync(id, ct);
+    return fences is null ? Results.NotFound() : Results.Ok(new { diagrams = fences });
 });
 
 // --- Import ---

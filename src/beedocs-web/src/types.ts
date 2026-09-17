@@ -156,6 +156,18 @@ export type PageRevision = {
 /** Server-rendered export formats. PDF is produced in the browser instead. */
 export type ExportFormat = 'archive' | 'markdown' | 'docx'
 
+/**
+ * One diagram fence a Word export would embed as a picture if the browser
+ * renders it (`GET …/export/diagrams`). `-ref` fences arrive already resolved
+ * to the stored diagram's source.
+ */
+export type ExportDiagramFence = {
+  key: string
+  kind: 'mermaid' | 'beediagram' | 'isometric' | 'freedraw' | string
+  source: string
+  title: string | null
+}
+
 export type SearchKind =
   | 'page'
   | 'diagram'

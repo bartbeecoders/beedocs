@@ -126,3 +126,7 @@ Users can set the properties (title, owner etc)
     - user can change the Title (BeeDocs)
     - Add a broader set of themes
     - Take the colors/theme from the active theme of omarchy, when running as an app inn omarchy
+
+
+Exporting a folder or book to MS word that has diagrams in it, exports the diagrams as a link/reference.
+Can you include the image of the diagram in the ms word doc

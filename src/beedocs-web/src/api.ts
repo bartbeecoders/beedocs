@@ -14,6 +14,7 @@ import type {
   UserSummary,
   Diagram,
   DiagramSummary,
+  ExportDiagramFence,
   ExportFormat,
   Favorite,
   FavoriteKind,
@@ -90,8 +91,12 @@ import { withApiBase } from './basePath'
  * read first or every rejected field reports the same useless line.
  */
 /** Fetch a server-rendered export and save it through the browser. */
-async function downloadExportFrom(path: string, fallbackName: string): Promise<string> {
-  const res = await fetch(withApiBase(path))
+async function downloadExportFrom(
+  path: string,
+  fallbackName: string,
+  init?: RequestInit,
+): Promise<string> {
+  const res = await fetch(withApiBase(path), init)
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || `${res.status} ${res.statusText}`)
@@ -713,6 +718,21 @@ export const api = {
       `/api/books/${bookId}/chapters/${chapterId}/export?format=${format}`,
       `folder-${chapterId}.${format}`,
     ),
+
+  /**
+   * The diagram fences a Word export of `exportPath` (an `…/export` route)
+   * would embed if the browser draws them — see src/export/docx.ts.
+   */
+  listExportDiagrams: async (exportPath: string): Promise<ExportDiagramFence[]> =>
+    (await request<{ diagrams: ExportDiagramFence[] }>(`${exportPath}/diagrams`)).diagrams,
+
+  /** Word export with the pictures the browser rendered for those fences. */
+  downloadRenderedExport: (exportPath: string, images: { key: string; data: string }[]) =>
+    downloadExportFrom(`${exportPath}?format=docx`, 'export.docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images }),
+    }),
 
   /** Describe an import file without writing anything. */
   inspectImport: async (file: File): Promise<ImportPreview> => {

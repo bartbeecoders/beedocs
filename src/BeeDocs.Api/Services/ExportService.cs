@@ -18,11 +18,26 @@ public enum ExportFormat
 
 public sealed record ExportPayload(byte[] Content, string ContentType, string FileName);
 
+/// <summary>
+/// Browser-rendered diagram pictures for a DOCX export, keyed by
+/// <see cref="DiagramFence.KeyFor"/>. Empty means every diagram fence falls
+/// back to a captioned source block, which is what a plain API call gets.
+/// </summary>
+public sealed record ExportOptions(IReadOnlyDictionary<string, DocxImage> DiagramImages)
+{
+    public static readonly ExportOptions None = new(new Dictionary<string, DocxImage>(StringComparer.Ordinal));
+}
+
 public interface IExportService
 {
-    Task<ExportPayload?> ExportBookAsync(string bookId, ExportFormat format, CancellationToken ct = default);
-    Task<ExportPayload?> ExportPageAsync(string pageId, ExportFormat format, CancellationToken ct = default);
-    Task<ExportPayload?> ExportChapterAsync(string bookId, string chapterId, ExportFormat format, CancellationToken ct = default);
+    Task<ExportPayload?> ExportBookAsync(string bookId, ExportFormat format, ExportOptions? options = null, CancellationToken ct = default);
+    Task<ExportPayload?> ExportPageAsync(string pageId, ExportFormat format, ExportOptions? options = null, CancellationToken ct = default);
+    Task<ExportPayload?> ExportChapterAsync(string bookId, string chapterId, ExportFormat format, ExportOptions? options = null, CancellationToken ct = default);
+
+    /// <summary>The diagram fences a DOCX export of this scope would embed if the caller renders them. Null when the target does not exist.</summary>
+    Task<IReadOnlyList<DiagramFenceDto>?> ListBookDiagramFencesAsync(string bookId, CancellationToken ct = default);
+    Task<IReadOnlyList<DiagramFenceDto>?> ListPageDiagramFencesAsync(string pageId, CancellationToken ct = default);
+    Task<IReadOnlyList<DiagramFenceDto>?> ListChapterDiagramFencesAsync(string bookId, string chapterId, CancellationToken ct = default);
 }
 
 public sealed partial class ExportService(
@@ -42,10 +57,17 @@ public sealed partial class ExportService(
 
     // --- Book ---
 
-    public async Task<ExportPayload?> ExportBookAsync(string bookId, ExportFormat format, CancellationToken ct = default)
+    public async Task<IReadOnlyList<DiagramFenceDto>?> ListBookDiagramFencesAsync(string bookId, CancellationToken ct = default)
+    {
+        var bundle = await LoadBookAsync(bookId, ct);
+        return bundle is null ? null : CollectDiagramFences(bundle);
+    }
+
+    public async Task<ExportPayload?> ExportBookAsync(string bookId, ExportFormat format, ExportOptions? options = null, CancellationToken ct = default)
     {
         var bundle = await LoadBookAsync(bookId, ct);
         if (bundle is null) return null;
+        options ??= ExportOptions.None;
 
         var name = SlugHelper.Slugify(bundle.Book.Title) is { Length: > 0 } s ? s : "book";
 
@@ -53,14 +75,42 @@ public sealed partial class ExportService(
         {
             ExportFormat.Archive => new ExportPayload(BuildArchive(bundle, "book"), ZipContentType, $"{name}.beedocs"),
             ExportFormat.Markdown => new ExportPayload(BuildMarkdownZip(bundle), ZipContentType, $"{name}-markdown.zip"),
-            ExportFormat.Docx => new ExportPayload(BuildBookDocx(bundle), DocxContentType, $"{name}.docx"),
+            ExportFormat.Docx => new ExportPayload(BuildBookDocx(bundle, options), DocxContentType, $"{name}.docx"),
             _ => null,
         };
     }
 
     // --- Single page ---
 
-    public async Task<ExportPayload?> ExportPageAsync(string pageId, ExportFormat format, CancellationToken ct = default)
+    public async Task<IReadOnlyList<DiagramFenceDto>?> ListPageDiagramFencesAsync(string pageId, CancellationToken ct = default)
+    {
+        var loaded = await LoadPageAsync(pageId, ct);
+        return loaded is null ? null : CollectDiagramFences(loaded.Value.Bundle);
+    }
+
+    public async Task<ExportPayload?> ExportPageAsync(string pageId, ExportFormat format, ExportOptions? options = null, CancellationToken ct = default)
+    {
+        var loaded = await LoadPageAsync(pageId, ct);
+        if (loaded is null) return null;
+        var (bundle, page, chapter) = loaded.Value;
+        options ??= ExportOptions.None;
+
+        var name = SlugHelper.Slugify(page.Title) is { Length: > 0 } s ? s : "document";
+
+        return format switch
+        {
+            ExportFormat.Archive => new ExportPayload(BuildArchive(bundle, "page"), ZipContentType, $"{name}.beedocs"),
+            ExportFormat.Markdown => new ExportPayload(
+                Encoding.UTF8.GetBytes(PageMarkdown(page, chapter?.Title)),
+                "text/markdown; charset=utf-8",
+                $"{name}.md"),
+            ExportFormat.Docx => new ExportPayload(BuildPageDocx(page, bundle.Book, options), DocxContentType, $"{name}.docx"),
+            _ => null,
+        };
+    }
+
+    /// <summary>A single page as a one-page bundle, plus the page and its folder for the formats that want them.</summary>
+    private async Task<(BookBundle Bundle, PageDto Page, ChapterDto? Chapter)?> LoadPageAsync(string pageId, CancellationToken ct)
     {
         var page = await documents.GetPageAsync(pageId, ct);
         if (page is null) return null;
@@ -95,24 +145,36 @@ public sealed partial class ExportService(
             [page],
             pageDiagrams,
             []);
-
-        var name = SlugHelper.Slugify(page.Title) is { Length: > 0 } s ? s : "document";
-
-        return format switch
-        {
-            ExportFormat.Archive => new ExportPayload(BuildArchive(bundle, "page"), ZipContentType, $"{name}.beedocs"),
-            ExportFormat.Markdown => new ExportPayload(
-                Encoding.UTF8.GetBytes(PageMarkdown(page, chapter?.Title)),
-                "text/markdown; charset=utf-8",
-                $"{name}.md"),
-            ExportFormat.Docx => new ExportPayload(BuildPageDocx(page, book), DocxContentType, $"{name}.docx"),
-            _ => null,
-        };
+        return (bundle, page, chapter);
     }
 
     // --- Folder (chapter) ---
 
-    public async Task<ExportPayload?> ExportChapterAsync(string bookId, string chapterId, ExportFormat format, CancellationToken ct = default)
+    public async Task<IReadOnlyList<DiagramFenceDto>?> ListChapterDiagramFencesAsync(string bookId, string chapterId, CancellationToken ct = default)
+    {
+        var loaded = await LoadChapterAsync(bookId, chapterId, ct);
+        return loaded is null ? null : CollectDiagramFences(loaded.Value.Bundle);
+    }
+
+    public async Task<ExportPayload?> ExportChapterAsync(string bookId, string chapterId, ExportFormat format, ExportOptions? options = null, CancellationToken ct = default)
+    {
+        var loaded = await LoadChapterAsync(bookId, chapterId, ct);
+        if (loaded is null) return null;
+        var (bundle, chapter) = loaded.Value;
+        options ??= ExportOptions.None;
+
+        var name = SlugHelper.Slugify($"{bundle.Book.Title} {chapter.Title}") is { Length: > 0 } s ? s : "folder";
+
+        return format switch
+        {
+            ExportFormat.Archive => new ExportPayload(BuildArchive(bundle, "book"), ZipContentType, $"{name}.beedocs"),
+            ExportFormat.Markdown => new ExportPayload(BuildMarkdownZip(bundle), ZipContentType, $"{name}-markdown.zip"),
+            ExportFormat.Docx => new ExportPayload(BuildChapterDocx(bundle, chapter, options), DocxContentType, $"{name}.docx"),
+            _ => null,
+        };
+    }
+
+    private async Task<(BookBundle Bundle, ChapterDto Chapter)?> LoadChapterAsync(string bookId, string chapterId, CancellationToken ct)
     {
         var book = await documents.GetBookAsync(bookId, ct);
         if (book is null) return null;
@@ -143,17 +205,7 @@ public sealed partial class ExportService(
         }
 
         var collectionList = (await collections.ListByBookAsync(bookId, ct)).ToList();
-        var bundle = new BookBundle(book, [chapter], pages, diagramList, collectionList);
-
-        var name = SlugHelper.Slugify($"{book.Title} {chapter.Title}") is { Length: > 0 } s ? s : "folder";
-
-        return format switch
-        {
-            ExportFormat.Archive => new ExportPayload(BuildArchive(bundle, "book"), ZipContentType, $"{name}.beedocs"),
-            ExportFormat.Markdown => new ExportPayload(BuildMarkdownZip(bundle), ZipContentType, $"{name}-markdown.zip"),
-            ExportFormat.Docx => new ExportPayload(BuildChapterDocx(bundle, chapter), DocxContentType, $"{name}.docx"),
-            _ => null,
-        };
+        return (new BookBundle(book, [chapter], pages, diagramList, collectionList), chapter);
     }
 
     // --- Loading ---
@@ -455,9 +507,46 @@ public sealed partial class ExportService(
 
     // --- DOCX ---
 
-    private byte[] BuildBookDocx(BookBundle bundle)
+    /// <summary>
+    /// Every diagram fence in the bundle's pages, deduplicated by key, with
+    /// <c>-ref</c> fences resolved to the stored diagram's source so the
+    /// browser can draw them without a second round-trip. A reference to a
+    /// diagram the bundle does not hold is left out — the writer then falls
+    /// back to the reference block, as it always did.
+    /// </summary>
+    private static List<DiagramFenceDto> CollectDiagramFences(BookBundle bundle)
     {
-        var writer = new DocxWriter(ResolveDocxImage);
+        var byId = bundle.Diagrams.ToDictionary(d => d.Id, StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var fences = new List<DiagramFenceDto>();
+
+        foreach (var page in bundle.Pages)
+        {
+            foreach (var block in MarkdownDoc.Parse(page.Content))
+            {
+                if (block is not MarkdownDoc.CodeBlock code || !DiagramFence.IsRenderable(code.Language)) continue;
+                var key = DiagramFence.KeyFor(code.Language, code.Text);
+                if (!seen.Add(key)) continue;
+
+                if (DiagramFence.IsReference(code.Language))
+                {
+                    if (!byId.TryGetValue(DiagramFence.ReferencedId(code.Text), out var diagram)) continue;
+                    if (string.IsNullOrWhiteSpace(diagram.Source)) continue;
+                    fences.Add(new DiagramFenceDto(key, DiagramFence.RendererFor(code.Language, diagram.Kind), diagram.Source, diagram.Title));
+                }
+                else if (!string.IsNullOrWhiteSpace(code.Text))
+                {
+                    fences.Add(new DiagramFenceDto(key, DiagramFence.RendererFor(code.Language, null), code.Text, null));
+                }
+            }
+        }
+
+        return fences;
+    }
+
+    private byte[] BuildBookDocx(BookBundle bundle, ExportOptions options)
+    {
+        var writer = new DocxWriter(ResolveDocxImage, options.DiagramImages);
         var chaptersById = bundle.Chapters.ToDictionary(c => c.Id, StringComparer.Ordinal);
 
         writer.AddTitlePage(
@@ -500,9 +589,9 @@ public sealed partial class ExportService(
         return writer.Build();
     }
 
-    private byte[] BuildChapterDocx(BookBundle bundle, ChapterDto chapter)
+    private byte[] BuildChapterDocx(BookBundle bundle, ChapterDto chapter, ExportOptions options)
     {
-        var writer = new DocxWriter(ResolveDocxImage);
+        var writer = new DocxWriter(ResolveDocxImage, options.DiagramImages);
 
         writer.AddTitlePage(
             chapter.Title,
@@ -528,9 +617,9 @@ public sealed partial class ExportService(
         return writer.Build();
     }
 
-    private byte[] BuildPageDocx(PageDto page, BookDto book)
+    private byte[] BuildPageDocx(PageDto page, BookDto book, ExportOptions options)
     {
-        var writer = new DocxWriter(ResolveDocxImage);
+        var writer = new DocxWriter(ResolveDocxImage, options.DiagramImages);
         writer.AddTitlePage(
             page.Title,
             book.Title,

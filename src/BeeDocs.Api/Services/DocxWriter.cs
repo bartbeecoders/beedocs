@@ -20,11 +20,16 @@ public sealed record DocxImage(byte[] Data, string Extension, int PixelWidth, in
 /// System.IO.Packaging version flagged by NuGet audit).
 ///
 /// Deliberate limitations, documented in Docs/EXPORT-IMPORT.md:
-///   • Mermaid/BeeDiagram fences become captioned code blocks — rasterising
-///     them needs a browser, which the API does not have.
+///   • Mermaid/BeeDiagram fences become pictures only when the caller supplies
+///     them (<paramref name="diagramImages"/>, keyed by
+///     <see cref="DiagramFence.KeyFor"/>) — rasterising them needs a browser,
+///     which the API does not have, so the web UI renders and posts them.
+///     Without a picture a fence becomes a captioned code block.
 ///   • SVG images cannot be embedded in a .docx; they are linked instead.
 /// </summary>
-public sealed class DocxWriter(Func<string, DocxImage?>? imageResolver = null)
+public sealed class DocxWriter(
+    Func<string, DocxImage?>? imageResolver = null,
+    IReadOnlyDictionary<string, DocxImage>? diagramImages = null)
 {
     private const int EmuPerInch = 914400;
     private const int ContentWidthEmu = (int)(6.2 * EmuPerInch);
@@ -151,6 +156,14 @@ public sealed class DocxWriter(Func<string, DocxImage?>? imageResolver = null)
 
     private void AddCodeBlock(MarkdownDoc.CodeBlock code)
     {
+        if (diagramImages is not null
+            && DiagramFence.IsRenderable(code.Language)
+            && diagramImages.TryGetValue(DiagramFence.KeyFor(code.Language, code.Text), out var picture))
+        {
+            AddDiagramPicture(picture, code.Language);
+            return;
+        }
+
         var caption = code.Language switch
         {
             "mermaid" => "Mermaid diagram (source)",
@@ -160,6 +173,7 @@ public sealed class DocxWriter(Func<string, DocxImage?>? imageResolver = null)
             "beediagram-ref" => "BeeDiagram reference",
             "isometric" => "Isometric diagram (source)",
             "isometric-ref" => "Isometric diagram reference",
+            "freedraw" or "sketch" => "Sketch (source)",
             _ => null,
         };
 
@@ -290,6 +304,37 @@ public sealed class DocxWriter(Func<string, DocxImage?>? imageResolver = null)
             return Run($"[image: {Esc(label)}]", italic: true, color: "666666", raw: true);
         }
 
+        return PictureRun(resolved, image.Alt, pixelScale: 1);
+    }
+
+    /// <summary>
+    /// A rendered diagram as a block-level picture: centred, kept with the
+    /// caption that follows. Browser renders are drawn at 2× device pixels for
+    /// crispness in print, so the picture is placed at half its pixel size —
+    /// the same on-page size the diagram has in the editor — and then, like
+    /// every picture, clamped to the text column.
+    /// </summary>
+    private void AddDiagramPicture(DocxImage picture, string language)
+    {
+        var alt = language switch
+        {
+            "mermaid" or "c4" => "Mermaid diagram",
+            "isometric" or "isometric-ref" => "Isometric diagram",
+            "freedraw" or "sketch" => "Sketch",
+            _ => "Diagram",
+        };
+        _body.Append(Paragraph(
+            PictureRun(picture, alt, pixelScale: DiagramRenderScale),
+            jc: "center",
+            spacingBefore: 120,
+            spacingAfter: 180));
+    }
+
+    /// <summary>Device pixels per CSS pixel the web UI renders diagram PNGs at.</summary>
+    public const int DiagramRenderScale = 2;
+
+    private string PictureRun(DocxImage resolved, string? altText, int pixelScale)
+    {
         var name = $"image{_media.Count + 1}.{resolved.Extension}";
         _media.Add((name, resolved.Data));
         _mediaExtensions.Add(resolved.Extension);
@@ -297,9 +342,9 @@ public sealed class DocxWriter(Func<string, DocxImage?>? imageResolver = null)
         var relId = NextRelId();
         _rels.Add((relId, $"media/{name}", false, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"));
 
-        var (cx, cy) = ScaleToContent(resolved.PixelWidth, resolved.PixelHeight);
+        var (cx, cy) = ScaleToContent(resolved.PixelWidth / pixelScale, resolved.PixelHeight / pixelScale);
         var id = _drawingId++;
-        var alt = Esc(string.IsNullOrWhiteSpace(image.Alt) ? name : image.Alt);
+        var alt = Esc(string.IsNullOrWhiteSpace(altText) ? name : altText!);
 
         return $"""
             <w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">

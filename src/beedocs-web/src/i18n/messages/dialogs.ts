@@ -52,7 +52,7 @@ const en = {
   'dialogs.exportFormat.archive': 'BeeDocs archive',
   'dialogs.exportHint.pdf': 'Opens a print view — choose “Save as PDF”',
   'dialogs.exportHint.markdown': 'Portable text, diagrams as fenced blocks',
-  'dialogs.exportHint.docx': 'Formatted document with images and tables',
+  'dialogs.exportHint.docx': 'Formatted document with images, diagrams and tables',
   'dialogs.exportHint.archive': 'Lossless — re-importable, keeps diagrams and images',
   'dialogs.mdDropTitle': 'Add Markdown',
   'dialogs.mdDropLead':
@@ -123,7 +123,7 @@ const fr: Msgs = {
   'dialogs.exportFormat.archive': 'Archive BeeDocs',
   'dialogs.exportHint.pdf': 'Ouvre une vue d’impression — choisissez « Enregistrer au format PDF »',
   'dialogs.exportHint.markdown': 'Texte portable, diagrammes en blocs de code',
-  'dialogs.exportHint.docx': 'Document mis en forme avec images et tableaux',
+  'dialogs.exportHint.docx': 'Document mis en forme avec images, diagrammes et tableaux',
   'dialogs.exportHint.archive': 'Sans perte — réimportable, conserve diagrammes et images',
   'dialogs.mdDropTitle': 'Ajouter du Markdown',
   'dialogs.mdDropLead':
@@ -192,7 +192,7 @@ const de: Msgs = {
   'dialogs.exportFormat.archive': 'BeeDocs-Archiv',
   'dialogs.exportHint.pdf': 'Öffnet eine Druckansicht — wählen Sie „Als PDF speichern“',
   'dialogs.exportHint.markdown': 'Portabler Text, Diagramme als Codeblöcke',
-  'dialogs.exportHint.docx': 'Formatiertes Dokument mit Bildern und Tabellen',
+  'dialogs.exportHint.docx': 'Formatiertes Dokument mit Bildern, Diagrammen und Tabellen',
   'dialogs.exportHint.archive': 'Verlustfrei — wieder importierbar, behält Diagramme und Bilder',
   'dialogs.mdDropTitle': 'Markdown hinzufügen',
   'dialogs.mdDropLead':
@@ -261,7 +261,7 @@ const es: Msgs = {
   'dialogs.exportFormat.archive': 'Archivo BeeDocs',
   'dialogs.exportHint.pdf': 'Abre una vista de impresión — elige «Guardar como PDF»',
   'dialogs.exportHint.markdown': 'Texto portable, diagramas como bloques de código',
-  'dialogs.exportHint.docx': 'Documento con formato, imágenes y tablas',
+  'dialogs.exportHint.docx': 'Documento con formato, imágenes, diagramas y tablas',
   'dialogs.exportHint.archive': 'Sin pérdidas — reimportable, conserva diagramas e imágenes',
   'dialogs.mdDropTitle': 'Añadir Markdown',
   'dialogs.mdDropLead':
@@ -330,7 +330,7 @@ const nl: Msgs = {
   'dialogs.exportFormat.archive': 'BeeDocs-archief',
   'dialogs.exportHint.pdf': 'Opent een afdrukweergave — kies “Opslaan als PDF”',
   'dialogs.exportHint.markdown': 'Portable tekst, diagrammen als codeblokken',
-  'dialogs.exportHint.docx': 'Opgemaakt document met afbeeldingen en tabellen',
+  'dialogs.exportHint.docx': 'Opgemaakt document met afbeeldingen, diagrammen en tabellen',
   'dialogs.exportHint.archive': 'Verliesvrij — opnieuw importeerbaar, behoudt diagrammen en afbeeldingen',
   'dialogs.mdDropTitle': 'Markdown toevoegen',
   'dialogs.mdDropLead':
@@ -399,7 +399,7 @@ const ja: Msgs = {
   'dialogs.exportFormat.archive': 'BeeDocs アーカイブ',
   'dialogs.exportHint.pdf': '印刷ビューを開きます。「PDF として保存」を選択してください',
   'dialogs.exportHint.markdown': 'ポータブルなテキスト。ダイアグラムはコードブロックとして出力',
-  'dialogs.exportHint.docx': '画像と表を含む書式付きドキュメント',
+  'dialogs.exportHint.docx': '画像・図・表を含む書式付きドキュメント',
   'dialogs.exportHint.archive': '無劣化 — 再インポート可能。ダイアグラムと画像を保持',
   'dialogs.mdDropTitle': 'Markdown を追加',
   'dialogs.mdDropLead':
@@ -468,7 +468,7 @@ const zh: Msgs = {
   'dialogs.exportFormat.archive': 'BeeDocs 归档',
   'dialogs.exportHint.pdf': '打开打印视图 — 请选择「另存为 PDF」',
   'dialogs.exportHint.markdown': '可移植的文本，图表以代码块形式导出',
-  'dialogs.exportHint.docx': '带图片和表格的格式化文档',
+  'dialogs.exportHint.docx': '带图片、图表和表格的格式化文档',
   'dialogs.exportHint.archive': '无损 — 可重新导入，保留图表和图片',
   'dialogs.mdDropTitle': '添加 Markdown',
   'dialogs.mdDropLead': '「{name}」是 Markdown 文件。将其添加为可编辑页面，或作为图书中的文件保留。',

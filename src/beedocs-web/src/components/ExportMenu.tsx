@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
+import { exportToDocx } from '../export/docx'
 import { exportBookToPdf, exportPageToPdf } from '../export/pdf'
 import { useI18n, type MessageKey } from '../i18n'
 import type { ExportFormat } from '../types'
@@ -104,11 +105,11 @@ export function ExportMenu({ scope, id, title, className = '', variant = 'button
         setStatus(t('dialogs.printOpened'))
         showToast(t('dialogs.printOpened'), 'ok')
       } else {
-        const fileName = await api.downloadExport(
-          scope === 'book' ? 'books' : 'pages',
-          id,
-          choice,
-        )
+        // Word goes through the browser too, so diagrams arrive as pictures.
+        const fileName =
+          choice === 'docx'
+            ? await exportToDocx({ scope, id }, setStatus)
+            : await api.downloadExport(scope === 'book' ? 'books' : 'pages', id, choice)
         setStatus(t('dialogs.downloaded', { name: fileName }))
         showToast(t('dialogs.downloaded', { name: fileName }), 'ok')
       }

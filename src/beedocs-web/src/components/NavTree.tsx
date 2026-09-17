@@ -3,6 +3,7 @@ import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { withBase } from '../basePath'
 import { bookshelfSitePath } from '../markdownLinks'
+import { exportToDocx } from '../export/docx'
 import { exportBookToPdf, exportChapterToPdf, exportPageToPdf } from '../export/pdf'
 import { ImportDialog } from './ImportDialog'
 import type { ExportFormat } from '../types'
@@ -230,7 +231,8 @@ export function NavTree() {
 
   /**
    * Run one export from a context menu. PDF is rendered in the browser (it is
-   * the only route that can rasterise diagrams); the rest stream from the API.
+   * the only route that can rasterise diagrams), Word renders its diagrams
+   * here and hands them to the API, and the rest stream from the API.
    */
   const runExport = (
     target:
@@ -241,7 +243,9 @@ export function NavTree() {
   ) => {
     setBusyExport(true)
     let job: Promise<unknown>
-    if (target.scope === 'folder') {
+    if (format === 'docx') {
+      job = exportToDocx(target)
+    } else if (target.scope === 'folder') {
       job =
         format === 'pdf'
           ? exportChapterToPdf(target.bookId, target.chapterId)
