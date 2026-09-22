@@ -6,6 +6,7 @@ import { bookshelfSitePath } from '../markdownLinks'
 import { exportToDocx } from '../export/docx'
 import { exportBookToPdf, exportChapterToPdf, exportPageToPdf } from '../export/pdf'
 import { ImportDialog } from './ImportDialog'
+import { ReorganizeDialog } from './ReorganizeDialog'
 import type { ExportFormat } from '../types'
 import { useAuth } from '../auth/AuthContext'
 import { useI18n } from '../i18n'
@@ -198,6 +199,7 @@ export function NavTree() {
   const [dragOver, setDragOver] = useState<string | null>(null)
   const [busyExport, setBusyExport] = useState(false)
   const [importOpen, setImportOpen] = useState<{ targetBookId?: string } | null>(null)
+  const [reorgOpen, setReorgOpen] = useState<{ scope: 'book' | 'shelf'; id: string; title: string } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   /**
    * One hidden file input for the whole tree, retargeted per book. Rendering one
@@ -696,6 +698,14 @@ export function NavTree() {
                   setMenu(null)
                 }}
               />
+              <MenuItem
+                label={t('reorg.menuItem')}
+                write
+                onClick={() => {
+                  setReorgOpen({ scope: 'shelf', id: menu.shelfId, title: menu.title })
+                  setMenu(null)
+                }}
+              />
               <div className="tree-context-sep" />
               <MenuItem
                 label={t('nav.openShelf')}
@@ -795,6 +805,14 @@ export function NavTree() {
                 write
                 onClick={() => {
                   setImportOpen({ targetBookId: menu.bookId })
+                  setMenu(null)
+                }}
+              />
+              <MenuItem
+                label={t('reorg.menuItem')}
+                write
+                onClick={() => {
+                  setReorgOpen({ scope: 'book', id: menu.bookId, title: menu.title })
                   setMenu(null)
                 }}
               />
@@ -1131,6 +1149,14 @@ export function NavTree() {
 
       {mdDropDialog}
 
+      {reorgOpen && (
+        <ReorganizeDialog
+          scope={reorgOpen.scope}
+          scopeId={reorgOpen.id}
+          title={reorgOpen.title}
+          onClose={() => setReorgOpen(null)}
+        />
+      )}
       {importOpen && (
         <ImportDialog
           defaultTargetBookId={importOpen.targetBookId}

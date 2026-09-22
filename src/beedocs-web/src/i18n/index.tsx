@@ -25,6 +25,8 @@ import { project } from './messages/project'
 import { notes } from './messages/notes'
 import { backup } from './messages/backup'
 import { word } from './messages/word'
+import { sectionMenu } from './messages/sectionMenu'
+import { reorganize } from './messages/reorganize'
 
 export { LANGUAGES, type Lang, type LangDef } from './langs'
 
@@ -68,6 +70,8 @@ const MESSAGES = {
   notes,
   backup,
   word,
+  sectionMenu,
+  reorganize,
 } as const
 
 type NsMap = typeof MESSAGES

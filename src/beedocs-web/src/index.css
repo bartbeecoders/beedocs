@@ -6915,3 +6915,78 @@ body.hybrid-fullpage-open {
 .hybrid-focus .media-embed {
   --media-body-h: var(--focus-h);
 }
+
+/* Generic context menu (ContextMenu.tsx) — the tree menu's chrome plus submenus. */
+.ctx-menu {
+  max-width: 300px;
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.ctx-check {
+  flex: 0 0 1rem;
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.ctx-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ctx-hint {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  padding-left: 0.75rem;
+}
+
+.ctx-sub {
+  position: relative;
+}
+
+.ctx-sub > [aria-expanded='true'] {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-soft));
+}
+
+.ctx-submenu {
+  position: absolute;
+  top: -0.35rem;
+  left: calc(100% + 0.2rem);
+  z-index: 1;
+  min-width: 200px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+/* Bridge the gap between trigger and submenu so the pointer can cross it. */
+.ctx-submenu::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -0.4rem;
+  width: 0.4rem;
+}
+
+.ctx-submenu.is-flipped {
+  left: auto;
+  right: calc(100% + 0.2rem);
+}
+
+.ctx-footer {
+  font-size: 0.7rem;
+  padding: 0.35rem 0.55rem 0.15rem;
+  border-top: 1px solid var(--border);
+  margin-top: 0.2rem;
+}
+
+/* The link picker opens from the full-page block view too (z-index 1100). */
+.link-doc-overlay {
+  z-index: 1250;
+}

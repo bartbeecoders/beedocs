@@ -85,6 +85,19 @@ import { ProjectEditor } from '../project/ProjectEditor'
 import { ProjectView } from '../project/ProjectView'
 import { NoteEditor } from '../notes/NoteEditor'
 import { NoteView } from '../notes/NoteView'
+import {
+  applyTextareaEdit,
+  codeBlock,
+  insertBlock,
+  insertLink,
+  kindAtCaret,
+  toggleInline,
+  turnLinesInto,
+  type LineKind,
+  type TextEdit,
+} from '../sectionEdits'
+import { ContextMenu, type MenuEntry } from './ContextMenu'
+import { LinkDocumentDialog } from './LinkDocumentDialog'
 
 // Lazy so pages without an isometric section don't load the iso editor module.
 const IsometricEditor = lazy(() => import('../isometric/IsometricEditor'))
@@ -272,8 +285,14 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
     lastEmitted.current = content
   }, [content])
 
+  const docRef = useRef(doc)
+  docRef.current = doc
+
   const emit = useCallback(
     (next: EditorDoc) => {
+      // Ahead of the re-render: a blur handler firing in the same tick (the
+      // section menu blurs a field right after editing it) must see this doc.
+      docRef.current = next
       setDoc(next)
       const md = serializeEditorDoc(next)
       lastEmitted.current = md
@@ -282,8 +301,6 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
     [onChange],
   )
 
-  const docRef = useRef(doc)
-  docRef.current = doc
   const activeCellRef = useRef(activeCell)
   activeCellRef.current = Math.min(activeCell, doc.cells.length - 1)
 
@@ -900,6 +917,226 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
     [updateSegment],
   )
 
+  /**
+   * Section context menu — right-click inside a text section. The textarea and
+   * the selection it had are captured at open time; the block's address is read
+   * back off the textarea when an action runs, since opening the menu blurs the
+   * field and that blur may re-cut the blocks around it.
+   */
+  const [sectionMenu, setSectionMenu] = useState<{
+    x: number
+    y: number
+    ta: HTMLTextAreaElement
+    start: number
+    end: number
+  } | null>(null)
+  const [linkPicker, setLinkPicker] = useState<{ ta: HTMLTextAreaElement; start: number; end: number } | null>(null)
+
+  const openSectionMenu = useCallback((e: React.MouseEvent) => {
+    // Shift+right-click is the way back to the browser's own menu (spelling, copy…).
+    if (e.shiftKey) return
+    const ta = (e.target as Element | null)?.closest?.('textarea.hybrid-text-block')
+    if (!(ta instanceof HTMLTextAreaElement)) return
+    e.preventDefault()
+    e.stopPropagation()
+    // The keyboard's Menu key reports no pointer position — open at the field instead.
+    const r = ta.getBoundingClientRect()
+    const fromKeyboard = e.clientX === 0 && e.clientY === 0
+    setSectionMenu({
+      x: fromKeyboard ? r.left + 24 : e.clientX,
+      y: fromKeyboard ? r.top + 24 : e.clientY,
+      ta,
+      start: ta.selectionStart,
+      end: ta.selectionEnd,
+    })
+  }, [])
+
+  const closeSectionMenu = useCallback(() => setSectionMenu(null), [])
+
+  const sectionMenuEntries = (m: { ta: HTMLTextAreaElement; start: number; end: number }): MenuEntry[] => {
+    const { ta, start, end } = m
+    const cell = Number(ta.dataset.cellIndex)
+    const index = Number(ta.dataset.segmentIndex)
+    const seg = doc.cells[cell]?.[index]
+    const cellSegs = doc.cells[cell] ?? []
+    const lineKind = kindAtCaret(ta.value, start)
+    const edit = (make: (value: string, s: number, e: number) => TextEdit) => () => {
+      if (ta.isConnected) applyTextareaEdit(ta, make(ta.value, start, end))
+    }
+    const item = (label: string, onSelect: () => void, extra?: Partial<Extract<MenuEntry, { kind: 'item' }>>): MenuEntry => ({
+      kind: 'item',
+      label,
+      onSelect,
+      ...extra,
+    })
+    /** A list at the caret — or, with lines selected, those lines turned into one. */
+    const list = (kind: LineKind, snippet: string, select: [number, number]) =>
+      edit((v, s, e) => (s !== e ? turnLinesInto(v, s, e, kind) : insertBlock(v, s, e, snippet, select)))
+
+    const turnInto: LineKind[] = ['paragraph', 'h1', 'h2', 'h3', 'h4', 'bullet', 'numbered', 'check', 'quote']
+    const hasBlocks = cell >= 0 && index >= 0 && seg != null
+
+    return [
+      ...(seg ? [{ kind: 'heading' as const, label: blockLabel(seg, t) }] : []),
+      item(t('sectionMenu.linkDocument'), () => setLinkPicker({ ta, start, end })),
+      item(t('sectionMenu.linkUrl'), () => {
+        const url = window.prompt(t('sectionMenu.linkUrlPrompt'), 'https://')?.trim()
+        if (!url || url === 'https://') return
+        edit((v, s, e) => insertLink(v, s, e, url, url))()
+      }),
+      { kind: 'sep' },
+      {
+        kind: 'sub',
+        label: t('sectionMenu.format'),
+        entries: [
+          item(t('sectionMenu.bold'), edit((v, s, e) => toggleInline(v, s, e, '**', 'bold text'))),
+          item(t('sectionMenu.italic'), edit((v, s, e) => toggleInline(v, s, e, '_', 'italic text'))),
+          item(t('sectionMenu.code'), edit((v, s, e) => toggleInline(v, s, e, '`', 'code'))),
+          item(t('sectionMenu.strike'), edit((v, s, e) => toggleInline(v, s, e, '~~', 'text'))),
+        ],
+      },
+      {
+        kind: 'sub',
+        label: t('sectionMenu.turnInto'),
+        entries: turnInto.map((k) =>
+          item(t(`sectionMenu.kind.${k}` as MessageKey), edit((v, s, e) => turnLinesInto(v, s, e, k)), {
+            checked: lineKind === k,
+          }),
+        ),
+      },
+      { kind: 'sep' },
+      {
+        kind: 'sub',
+        label: t('sectionMenu.listMenu'),
+        entries: [
+          item(t('sectionMenu.insertList'), list('bullet', '- First item\n- Second item\n- Third item', [2, 12])),
+          item(t('sectionMenu.insertNumbered'), list('numbered', '1. First step\n2. Second step\n3. Third step', [3, 13])),
+          item(t('sectionMenu.insertChecklist'), list('check', '- [ ] First task\n- [ ] Second task', [6, 16])),
+        ],
+      },
+      item(
+        t('sectionMenu.tableItem'),
+        // A table never swallows the selection — it lands after it.
+        edit((v, _s, e) => insertBlock(v, e, e, '| Column | Value |\n| --- | --- |\n| Example | … |', [2, 8])),
+      ),
+      {
+        kind: 'sub',
+        label: t('sectionMenu.insert'),
+        entries: [
+          item(t('sectionMenu.insertCode'), edit((v, s, e) => codeBlock(v, s, e, 'code'))),
+          item(
+            t('sectionMenu.insertCallout'),
+            edit((v, s, e) => insertBlock(v, s, e, '> **Note:** Add an important callout here.', [12, 42])),
+          ),
+          item(t('sectionMenu.insertDivider'), edit((v, _s, e) => insertBlock(v, e, e, '---'))),
+          item(t('sectionMenu.insertImage'), () => {
+            if (!ta.isConnected) return
+            ta.focus()
+            ta.setSelectionRange(start, end)
+            pickFiles()
+          }),
+          item(
+            t('sectionMenu.insertDate'),
+            edit((_v, s, e) => ({ start: s, end: e, text: new Date().toISOString().slice(0, 10) })),
+          ),
+        ],
+      },
+      {
+        kind: 'sub',
+        label: t('sectionMenu.blockBelow'),
+        disabled: !hasBlocks || busy,
+        entries: gapInsertItems(t).map(([kind, label]) =>
+          item(label, () => void handleInsert(kind, { cell, at: index + 1 })),
+        ),
+      },
+      { kind: 'sep' },
+      item(t('sectionMenu.newSectionBelow'), () => void handleInsert('section', { cell, at: index + 1 }), {
+        disabled: !hasBlocks,
+      }),
+      item(
+        t('sectionMenu.splitHere'),
+        () => {
+          if (!ta.isConnected) return
+          const title = window.prompt(t('editor.promptSectionTitle'), t('editor.sectionTitleDefault'))?.trim()
+          if (!title) return
+          // Same level as the heading this section opens with, else a section (##).
+          const level = /^(#{1,6})\s/.exec(ta.value)?.[1] ?? '##'
+          applyTextareaEdit(ta, insertBlock(ta.value, start, start, `${level} ${title}`, undefined, true))
+          // Blocks are re-cut on blur — do it now so the new section is its own block.
+          ta.blur()
+          setTimeout(() => {
+            const next = rootRef.current?.querySelector<HTMLTextAreaElement>(
+              `textarea[data-cell-index="${cell}"][data-segment-index="${index + 1}"]`,
+            )
+            if (!next) return
+            next.focus()
+            const eol = next.value.indexOf('\n')
+            const caret = eol === -1 ? next.value.length : eol
+            next.setSelectionRange(caret, caret)
+          }, 0)
+        },
+        { disabled: !hasBlocks },
+      ),
+      item(
+        t('sectionMenu.moveUp'),
+        () => moveSegment({ cell, index }, { cell, gap: index - 1 }),
+        { disabled: !hasBlocks || index === 0 },
+      ),
+      item(
+        t('sectionMenu.moveDown'),
+        () => moveSegment({ cell, index }, { cell, gap: index + 2 }),
+        { disabled: !hasBlocks || index >= cellSegs.length - 1 },
+      ),
+      ...(focusId == null && seg
+        ? [item(t('sectionMenu.fullPage'), () => setFocusId(blockId(seg)))]
+        : []),
+      { kind: 'sep' },
+      item(t('sectionMenu.delete'), () => removeSegment(cell, index), {
+        danger: true,
+        disabled: !hasBlocks || (!doc.layout && doc.cells.reduce((n, c) => n + c.length, 0) <= 1),
+      }),
+    ]
+  }
+
+  const sectionOverlays = (
+    <>
+      {sectionMenu && (
+        <ContextMenu
+          x={sectionMenu.x}
+          y={sectionMenu.y}
+          entries={sectionMenuEntries(sectionMenu)}
+          onClose={closeSectionMenu}
+          onDismiss={() => {
+            const { ta, start, end } = sectionMenu
+            if (!ta.isConnected) return
+            ta.focus()
+            ta.setSelectionRange(start, end)
+          }}
+          footer={t('sectionMenu.footer')}
+          ariaLabel={t('sectionMenu.aria')}
+        />
+      )}
+      {linkPicker && (
+        <LinkDocumentDialog
+          bookId={bookId}
+          pageId={pageId}
+          onClose={() => {
+            const { ta, start, end } = linkPicker
+            setLinkPicker(null)
+            if (!ta.isConnected) return
+            ta.focus()
+            ta.setSelectionRange(start, end)
+          }}
+          onPick={(target) => {
+            const { ta, start, end } = linkPicker
+            setLinkPicker(null)
+            if (ta.isConnected) applyTextareaEdit(ta, insertLink(ta.value, start, end, target.title, target.url))
+          }}
+        />
+      )}
+    </>
+  )
+
   const layout = doc.layout
   const gridMode = layout != null
   const totalBlocks = doc.cells.reduce((sum, c) => sum + c.length, 0)
@@ -960,6 +1197,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             onChange={(text) => updateSegment(cellIdx, index, { type: 'text', text })}
             onBlur={normalizeBlocks}
             onRemovePiece={(raw) => removePieceFromSegment(cellIdx, index, raw)}
+            onContextMenu={openSectionMenu}
           />
         ) : isMediaFenceLang(seg.lang) ? (
           <MediaFenceBlock
@@ -1115,6 +1353,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
           </div>,
           document.body,
         )}
+        {sectionOverlays}
       </div>
     )
   }
@@ -1193,6 +1432,7 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
           </section>
         ))}
       </div>
+      {sectionOverlays}
     </div>
   )
 }
@@ -1407,6 +1647,7 @@ function RichTextBlock({
   onRemovePiece,
   placeholder,
   dragging,
+  onContextMenu,
 }: {
   cellIndex: number
   segmentIndex: number
@@ -1420,6 +1661,8 @@ function RichTextBlock({
   onRemovePiece: (raw: string) => void
   placeholder?: string
   dragging: boolean
+  /** Right-click in one of the block's text fields — the section context menu. */
+  onContextMenu?: (e: React.MouseEvent) => void
 }) {
   const { t } = useI18n()
   const pieces = splitTextWithImagesAndTables(value)
@@ -1458,6 +1701,7 @@ function RichTextBlock({
     return (
       <div
         className={`rich-text-block${dragging ? ' drop-active' : ''}`}
+        onContextMenu={onContextMenu}
         data-drop-slot={`segment:${cellIndex}:${segmentIndex}`}
         data-drop-label={t('editor.insertImageSection')}
       >
@@ -1481,6 +1725,7 @@ function RichTextBlock({
   return (
     <div
       className={`rich-text-block has-images${dragging ? ' drop-active' : ''}`}
+        onContextMenu={onContextMenu}
       data-drop-slot={`segment:${cellIndex}:${segmentIndex}`}
       data-drop-label={t('editor.insertImageSection')}
     >
@@ -1748,6 +1993,29 @@ function InsertToolbar({
   )
 }
 
+/** What the "+" between blocks (and the section menu's "Add block below") can insert. */
+function gapInsertItems(t: TFunction): [InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked' | 'note-linked', string][] {
+  return [
+    ['section', t('editor.insert.section')],
+    ['subsection', t('editor.insert.subsection')],
+    ['beediagram', 'BeeDiagram'],
+    ['beediagram-linked', t('editor.insert.linkedDiagram')],
+    ['isometric', t('editor.insert.isometric')],
+    ['freedraw', t('editor.insert.freedraw')],
+    ['excelgrid', t('editor.insert.spreadsheet')],
+    ['kanban', t('editor.insert.kanban')],
+    ['kanban-linked', t('editor.insert.linkedKanban')],
+    ['project', t('editor.insert.project')],
+    ['project-linked', t('editor.insert.linkedProject')],
+    ['note', t('editor.insert.note')],
+    ['note-linked', t('editor.insert.linkedNote')],
+    ['mermaid-flow', t('editor.insert.flowchart')],
+    ['mermaid-sequence', t('editor.insert.sequence')],
+    ['table', t('editor.insert.table')],
+    ['callout', t('editor.insert.callout')],
+  ]
+}
+
 function InsertGap({
   busy,
   onInsert,
@@ -1797,27 +2065,7 @@ function InsertGap({
       {reorderActive && <span className="insert-gap-drop-label muted sm">{t('editor.moveHere')}</span>}
       {open && (
         <div className="insert-gap-menu">
-          {(
-            [
-              ['section', t('editor.insert.section')],
-              ['subsection', t('editor.insert.subsection')],
-              ['beediagram', 'BeeDiagram'],
-              ['beediagram-linked', t('editor.insert.linkedDiagram')],
-              ['isometric', t('editor.insert.isometric')],
-              ['freedraw', t('editor.insert.freedraw')],
-              ['excelgrid', t('editor.insert.spreadsheet')],
-              ['kanban', t('editor.insert.kanban')],
-              ['kanban-linked', t('editor.insert.linkedKanban')],
-              ['project', t('editor.insert.project')],
-              ['project-linked', t('editor.insert.linkedProject')],
-              ['note', t('editor.insert.note')],
-              ['note-linked', t('editor.insert.linkedNote')],
-              ['mermaid-flow', t('editor.insert.flowchart')],
-              ['mermaid-sequence', t('editor.insert.sequence')],
-              ['table', t('editor.insert.table')],
-              ['callout', t('editor.insert.callout')],
-            ] as const
-          ).map(([kind, text]) => (
+          {gapInsertItems(t).map(([kind, text]) => (
             <button
               key={kind}
               type="button"

@@ -463,6 +463,41 @@ public static class DatabaseInitializer
             CREATE TRIGGER IF NOT EXISTS trg_git_repo_assist_job_delete AFTER DELETE ON git_repo BEGIN
               DELETE FROM git_assist_job WHERE repo_id = OLD.id;
             END;
+
+            -- AI reorganisation of a book or shelf (ReorganizeService): analyze
+            -- (queued → analyzing → proposed), then a person applies what they
+            -- kept (applying → applied). JSON columns hold the structure as it
+            -- was analysed, the proposal, the ticked selection and the apply log.
+            CREATE TABLE IF NOT EXISTS reorg_job (
+              id TEXT PRIMARY KEY NOT NULL,
+              scope TEXT NOT NULL,
+              scope_id TEXT NOT NULL,
+              scope_title TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'queued',
+              progress TEXT,
+              error TEXT,
+              instructions TEXT,
+              provider_id TEXT,
+              model TEXT,
+              provider_name TEXT,
+              model_used TEXT,
+              prompt_tokens INTEGER,
+              completion_tokens INTEGER,
+              elapsed_ms INTEGER,
+              snapshot TEXT,
+              proposal TEXT,
+              selection TEXT,
+              log TEXT,
+              created_by TEXT,
+              created_by_name TEXT,
+              created_by_admin INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL,
+              started_at TEXT,
+              finished_at TEXT,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_reorg_job_scope ON reorg_job(scope, scope_id);
             """;
 
         await cmd.ExecuteNonQueryAsync(ct);
@@ -584,6 +619,26 @@ public static class DatabaseInitializer
                     finished_at = $now,
                     updated_at = $now
                 WHERE status IN ('queued', 'running')
+                """;
+            SqliteHelpers.Add(sweep, "$now", SqliteHelpers.FormatTimestamp(DateTimeOffset.UtcNow));
+            await sweep.ExecuteNonQueryAsync(ct);
+        }
+
+        // Reorganisation runs are in-process tasks too. An interrupted analysis
+        // is simply failed; an interrupted apply may have done part of its work,
+        // which its log (written as it goes) and page history both show.
+        await using (var sweep = connection.CreateCommand())
+        {
+            sweep.CommandText = """
+                UPDATE reorg_job
+                SET status = 'failed',
+                    error = CASE status WHEN 'applying'
+                      THEN 'Interrupted by a server restart while applying — some changes may have been made; check the book and its page history.'
+                      ELSE 'Interrupted by a server restart — run it again.' END,
+                    progress = NULL,
+                    finished_at = $now,
+                    updated_at = $now
+                WHERE status IN ('queued', 'analyzing', 'applying')
                 """;
             SqliteHelpers.Add(sweep, "$now", SqliteHelpers.FormatTimestamp(DateTimeOffset.UtcNow));
             await sweep.ExecuteNonQueryAsync(ct);

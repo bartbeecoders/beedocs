@@ -1,6 +1,7 @@
 using System.Reflection;
 using BeeDocs.Api.Models;
 using BeeDocs.Api.Services;
+using BeeDocs.Api.Services.Reorganize;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
@@ -156,6 +157,9 @@ builder.Services.AddSingleton<GitAssistService>();
 // library on completion. Singleton so the in-flight cancellation handles live
 // as long as the runs they belong to.
 builder.Services.AddSingleton<GitAssistJobService>();
+// AI reorganisation of a book or shelf — analyze → proposal → apply, as
+// background runs on the same pattern (see Docs/REORGANIZE.md).
+builder.Services.AddSingleton<ReorganizeService>();
 // Opt-in background fetch (BeeDocs:GitFetchMinutes, default 0 = off): keeps
 // the behind-the-remote badges honest; pulling stays a person's explicit verb.
 builder.Services.AddSingleton(new GitFetchOptions(
@@ -2555,6 +2559,59 @@ storageProviders.MapGet("/google/callback", async (
 // content reads below them ride the default read-for-everyone rule, and Sync —
 // the one non-admin write — the default write-for-editors rule. GitException
 // carries a message already phrased for the person who has to fix it.
+// ---------------------------------------------------------------------------
+// AI reorganisation (ReorganizeService, Docs/REORGANIZE.md). Starting and
+// applying are writes (the default editor rule): they spend the configured
+// LLM provider and, on apply, restructure content. Reads are the default
+// viewer rule, but a job is visible only to whoever started it and to admins —
+// its proposal quotes titles of pages that person could see.
+// ---------------------------------------------------------------------------
+var reorgApi = api.MapGroup("/reorganize").WithTags("Reorganize");
+
+reorgApi.MapPost("/jobs", async (StartReorgRequest body, ReorganizeService reorg, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await reorg.StartAsync(body, ct));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["reorganize"] = [ex.Message] });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: ex.Message);
+    }
+});
+
+reorgApi.MapGet("/jobs", async (string? scope, string? scopeId, ReorganizeService reorg, CancellationToken ct) =>
+    Results.Ok(await reorg.ListAsync(scope, scopeId, ct)));
+
+reorgApi.MapGet("/jobs/{jobId}", async (string jobId, ReorganizeService reorg, CancellationToken ct) =>
+    await reorg.GetAsync(jobId, ct) is { } job ? Results.Ok(job) : Results.NotFound());
+
+reorgApi.MapPost("/jobs/{jobId}/apply", async (
+    string jobId, ApplyReorgRequest body, ReorganizeService reorg, CancellationToken ct) =>
+{
+    try
+    {
+        return await reorg.ApplyAsync(jobId, body, ct) is { } job ? Results.Ok(job) : Results.NotFound();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: ex.Message);
+    }
+});
+
+// Deleting the record cancels a run still in progress; what an apply already
+// changed stays (it is ordinary library content, with page history).
+reorgApi.MapDelete("/jobs/{jobId}", async (string jobId, ReorganizeService reorg, CancellationToken ct) =>
+    await reorg.DeleteAsync(jobId, ct) ? Results.NoContent() : Results.NotFound());
+
 var gitApi = api.MapGroup("/git").WithTags("Git");
 var gitAdmin = RequireRole.Admin;
 

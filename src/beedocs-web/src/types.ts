@@ -1387,3 +1387,95 @@ export type WordDocument = {
   sizeBytes: number
   updatedAt: string
 }
+
+/**
+ * AI reorganisation of a book or shelf (`/api/reorganize`, ReorganizeService):
+ * analyze → a proposal the person trims → apply. Nothing is deleted — merged
+ * and duplicate pages are archived with a note. See Docs/REORGANIZE.md.
+ */
+export type ReorgScope = 'book' | 'shelf'
+export type ReorgStatus = 'queued' | 'analyzing' | 'proposed' | 'applying' | 'applied' | 'failed'
+
+export type ReorgSource = {
+  pageId: string
+  bookId: string
+  title: string
+  folderTitle: string | null
+  words: number
+}
+
+export type ReorgPagePlan = {
+  id: string
+  title: string
+  action: 'keep' | 'merge' | 'rewrite'
+  moved: boolean
+  renamed: boolean
+  sources: ReorgSource[]
+  reason: string | null
+}
+
+export type ReorgFolderPlan = { title: string | null; exists: boolean; pages: ReorgPagePlan[] }
+
+export type ReorgBookPlan = {
+  bookId: string
+  currentTitle: string
+  newTitle: string | null
+  folders: ReorgFolderPlan[]
+}
+
+export type ReorgRemoval = { id: string; page: ReorgSource; reason: string | null; duplicateOf: string | null }
+
+export type ReorgProposal = {
+  summary: string
+  books: ReorgBookPlan[]
+  removals: ReorgRemoval[]
+  untouched: ReorgSource[]
+}
+
+export type ReorgSnapshot = {
+  books: {
+    id: string
+    title: string
+    folders: { id: string; title: string; sortOrder: number }[]
+    pages: {
+      id: string
+      title: string
+      folderId: string | null
+      sortOrder: number
+      words: number
+      updatedAt: string
+      excluded: boolean
+    }[]
+  }[]
+}
+
+export type ReorgLogEntry = {
+  itemId: string | null
+  status: 'ok' | 'skipped' | 'failed'
+  message: string
+  bookId: string | null
+  pageId: string | null
+}
+
+export type ReorgJob = {
+  id: string
+  scope: ReorgScope
+  scopeId: string
+  scopeTitle: string
+  status: ReorgStatus
+  progress: string | null
+  error: string | null
+  instructions: string | null
+  providerName: string | null
+  model: string | null
+  promptTokens: number | null
+  completionTokens: number | null
+  elapsedMs: number | null
+  createdByName: string | null
+  createdAt: string
+  startedAt: string | null
+  finishedAt: string | null
+  proposal: ReorgProposal | null
+  current: ReorgSnapshot | null
+  log: ReorgLogEntry[] | null
+}

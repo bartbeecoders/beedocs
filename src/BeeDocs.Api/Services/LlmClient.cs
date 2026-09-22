@@ -49,6 +49,9 @@ public sealed class LlmClient(
     /// <summary>DocDraft writes a whole document — an editing budget would cut it off.</summary>
     private static readonly TimeSpan DocDraftTimeout = TimeSpan.FromSeconds(240);
 
+    /// <summary>A reorganisation plan reads a whole book or shelf and answers with its entire new outline.</summary>
+    private static readonly TimeSpan ReorgPlanTimeout = TimeSpan.FromSeconds(360);
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         // OpenAI's request fields are snake_case (max_tokens, …).
@@ -131,7 +134,12 @@ public sealed class LlmClient(
         var model = await ResolveModelAsync(provider, request.Model, ct);
         var started = Stopwatch.GetTimestamp();
         var budget = request.MaxTokens ?? LlmPrompts.MaxTokens(task, request);
-        var timeout = task is LlmPrompts.DocDraft or LlmPrompts.Logo ? DocDraftTimeout : CompleteTimeout;
+        var timeout = task switch
+        {
+            LlmPrompts.ReorgPlan => ReorgPlanTimeout,
+            LlmPrompts.DocDraft or LlmPrompts.Logo or LlmPrompts.ReorgMerge => DocDraftTimeout,
+            _ => CompleteTimeout,
+        };
 
         var (text, promptTokens, completionTokens) =
             await AttemptAsync(provider, model, task, request, budget, timeout, ct);
@@ -220,7 +228,7 @@ public sealed class LlmClient(
         // asking for minutes. DocDraft treats empty as a failure further up.
         var text = ReadChoiceText(root) ?? string.Empty;
         var (promptTokens, completionTokens) = ReadUsage(root);
-        if (text.Length == 0 && task == LlmPrompts.BookOutline)
+        if (text.Length == 0 && task is LlmPrompts.BookOutline or LlmPrompts.ReorgPlan)
         {
             // qwen-3.8-27b on Cerebras puts the reply in message.reasoning and
             // leaves content empty. That is chain-of-thought for a document, but
@@ -291,7 +299,7 @@ public sealed class LlmClient(
     /// </summary>
     private static void ApplyJsonResponseFormat(Dictionary<string, object?> payload, string kind, string task)
     {
-        if (task != LlmPrompts.BookOutline) return;
+        if (task is not (LlmPrompts.BookOutline or LlmPrompts.ReorgPlan)) return;
         if (kind is not (LlmProviderKinds.OpenRouter or LlmProviderKinds.XAi
             or LlmProviderKinds.OpenAi or LlmProviderKinds.Cerebras))
         {
@@ -645,8 +653,22 @@ public static class LlmPrompts
     /// </summary>
     public const string Logo = "logo";
 
+    /// <summary>
+    /// Library reorganisation, step one (ReorganizeService): the context is an
+    /// outline of a book or shelf with an excerpt of every page, and the answer
+    /// is JSON — the proposed structure, which pages merge, which are duplicates.
+    /// </summary>
+    public const string ReorgPlan = "reorgplan";
+
+    /// <summary>
+    /// Library reorganisation, step two: the context is one or more whole pages,
+    /// the answer is the single cleaner page they become. Embedded blocks arrive
+    /// as placeholders that must come back untouched.
+    /// </summary>
+    public const string ReorgMerge = "reorgmerge";
+
     public static readonly IReadOnlyList<string> Tasks =
-        [Continue, Rewrite, Grammar, Format, Summarize, DocDraft, BookOutline, Logo];
+        [Continue, Rewrite, Grammar, Format, Summarize, DocDraft, BookOutline, Logo, ReorgPlan, ReorgMerge];
 
     /// <summary>Enough context to be grounded, not enough to blow up the bill.</summary>
     private const int MaxContextChars = 6000;
@@ -670,6 +692,8 @@ public static class LlmPrompts
             "docdraft" or "document" or "docgen" => DocDraft,
             "bookoutline" or "bookplan" => BookOutline,
             "logo" or "icon" => Logo,
+            "reorgplan" or "reorganize" or "reorganise" => ReorgPlan,
+            "reorgmerge" => ReorgMerge,
             _ => null,
         };
 
@@ -788,12 +812,68 @@ public static class LlmPrompts
               background rectangle unless it is part of the mark (a rounded tile is fine).
             """,
 
+        ReorgPlan => """
+            You are an information architect tidying up a documentation library.
+            You are given the current structure of a book or a shelf of books —
+            every page with an id like p12, its folder, and an excerpt of its text.
+            Propose a cleaner, simpler structure. Respond in JSON.
+
+            Rules:
+            - Reply with ONLY a JSON object, no preamble, no commentary, no Markdown fence. Shape:
+              {"summary":"...","books":[{"book":"b1","title":"...","sections":[{"folder":"...","pages":[{"title":"...","sources":["p1"],"action":"keep","reason":"..."}]}]}],"remove":[{"source":"p9","duplicateOf":"p1","reason":"..."}]}
+            - Every page id you were given must appear exactly once: either in the
+              "sources" of one proposed page, or in "remove". Never invent ids.
+            - "action" is one of:
+              keep    — the page stays as written; it may get a new title, folder or position.
+              merge   — two or more source pages that cover the same topic become one page.
+              rewrite — one page whose text is repetitive, rambling or hard to read is
+                        rewritten to be simpler; every fact is kept.
+              Prefer keep. Merge only pages that genuinely overlap. Rewrite only pages
+              that clearly need it. Moving and renaming is cheap; rewriting is not.
+            - "remove" is only for a page whose content is fully contained in another
+              page ("duplicateOf" names that page's id). If a page has anything unique,
+              merge it instead. Removed pages are archived, not deleted.
+            - Folders are one level deep. "folder" is the folder title, or "" for the
+              top level of the book. Group related pages; do not make a folder for a
+              single page unless it clearly belongs apart. Order sections and pages in
+              the order a newcomer should read them: overview first, reference last.
+            - "books" uses only the book ids you were given; do not create books. On a
+              shelf you may move pages between those books when they clearly belong
+              elsewhere. "title" on a book is optional — include it only to improve
+              an unclear book title.
+            - Titles are short, specific and consistent in style (2–6 words).
+            - "reason" is one short sentence a person can check. "summary" is two to
+              four sentences on what you changed and why.
+            - Text such as [embedded beediagram] stands for a diagram or other embedded
+              block; treat it as part of the page.
+            """,
+
+        ReorgMerge => """
+            You are a senior technical writer consolidating documentation pages into
+            one clean page. You are given one or more source pages and the title of
+            the page they become.
+
+            Rules:
+            - Keep every unique fact, number, name, link, image and code sample from the
+              sources. Say each thing once: remove repetition between and within them.
+            - Make it simpler and easier to read: clear headings (## and below), short
+              paragraphs, lists where the content is a list. Plain words, active voice.
+            - Do not start with a # H1 title — the page title is shown separately.
+            - Lines such as <<<BLOCK 3>>> stand for diagrams, tables of data or code
+              that must survive exactly. Copy every one of them, unchanged, on a line of
+              its own, at the place it belongs. Never drop, edit or duplicate one.
+            - Invent nothing. Where sources disagree, keep both statements and say
+              they differ rather than choosing one.
+            - Reply with ONLY the page's Markdown. No preamble, no commentary, and never
+              wrap the whole answer in a code fence.
+            """,
+
         _ => "You are a concise writing assistant. Reply with only the requested text.",
     };
 
     public static string UserMessage(string task, LlmCompleteRequest request)
     {
-        if (task is DocDraft or BookOutline)
+        if (task is DocDraft or BookOutline or ReorgPlan or ReorgMerge)
         {
             // Head, not Tail: the bundle is ordered most-important-first
             // (README, manifests, docs, then source), so the start must survive
@@ -802,7 +882,12 @@ public static class LlmPrompts
             var material = Head(request.Context, MaxDocContextChars);
             if (material.Length > 0)
             {
-                builder0.Append("Source material — the repository's file tree and file excerpts:\n\n")
+                builder0.Append(task switch
+                    {
+                        ReorgPlan => "The library as it is now — books, folders and page excerpts:\n\n",
+                        ReorgMerge => "Source pages:\n\n",
+                        _ => "Source material — the repository's file tree and file excerpts:\n\n",
+                    })
                     .Append(material)
                     .Append("\n\n");
             }
@@ -861,7 +946,8 @@ public static class LlmPrompts
     {
         Grammar or Format => 0.1,
         Rewrite or DocDraft => 0.4,
-        BookOutline => 0.2,
+        BookOutline or ReorgPlan => 0.2,
+        ReorgMerge => 0.3,
         // Creative work — identical retries of a rejected logo would be useless.
         Logo => 0.8,
         _ => 0.3,
@@ -878,7 +964,7 @@ public static class LlmPrompts
     /// </summary>
     public static string ReasoningEffort(string task) => task switch
     {
-        Rewrite or Summarize or DocDraft or Logo => "low",
+        Rewrite or Summarize or DocDraft or Logo or ReorgMerge => "low",
         _ => "none",
     };
 
@@ -897,6 +983,11 @@ public static class LlmPrompts
         // A JSON outline of ≤ 8 pages. Reasoning is off for this task; 2048
         // still leaves room if a model ignores that and thinks a little.
         BookOutline => 2048,
+        // The whole new outline of up to a few hundred pages, one line of JSON
+        // each; reasoning is off, as for the book outline.
+        ReorgPlan => 16000,
+        // One consolidated page, possibly several sources' worth.
+        ReorgMerge => 8192,
         // SVG path data is token-hungry; a modest mark still runs long.
         Logo => 4096,
         // Roughly two tokens of headroom per token of input, since these tasks

@@ -67,6 +67,8 @@ import type {
   GitBranch,
   GitConnection,
   GitAssistJob,
+  ReorgJob,
+  ReorgScope,
   GitAssistKind,
   GitAssistPublishResult,
   GitAssistResult,
@@ -1134,6 +1136,22 @@ export const api = {
       body: JSON.stringify(body),
     }),
   /** Delete the job record; a still-running job is cancelled first. */
+  /** AI reorganisation: analyse a book/shelf into a proposal (a background job the UI polls). */
+  startReorg: (body: { scope: ReorgScope; scopeId: string; instructions?: string }) =>
+    request<ReorgJob>('/api/reorganize/jobs', { method: 'POST', body: JSON.stringify(body) }),
+  listReorgJobs: (scope?: ReorgScope, scopeId?: string) => {
+    const params = new URLSearchParams()
+    if (scope) params.set('scope', scope)
+    if (scopeId) params.set('scopeId', scopeId)
+    return request<ReorgJob[]>(`/api/reorganize/jobs?${params}`)
+  },
+  getReorgJob: (jobId: string, signal?: AbortSignal) =>
+    request<ReorgJob>(`/api/reorganize/jobs/${jobId}`, { signal }),
+  /** Apply the ticked parts of a proposal — runs in the background, like the analysis. */
+  applyReorg: (jobId: string, body: { items: string[]; removals: string[]; renameBooks: string[] }) =>
+    request<ReorgJob>(`/api/reorganize/jobs/${jobId}/apply`, { method: 'POST', body: JSON.stringify(body) }),
+  /** Delete the job; a running analysis/apply is cancelled. */
+  deleteReorgJob: (jobId: string) => request<void>(`/api/reorganize/jobs/${jobId}`, { method: 'DELETE' }),
   deleteGitAssistJob: (jobId: string) =>
     request<void>(`/api/git/assist/jobs/${jobId}`, { method: 'DELETE' }),
   /** Working-tree delete — shows as dirty until committed. */

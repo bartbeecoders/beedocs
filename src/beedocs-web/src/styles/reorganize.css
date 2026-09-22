@@ -1,0 +1,438 @@
+/* AI reorganisation dialog (ReorganizeDialog.tsx). */
+
+.reorg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: color-mix(in srgb, #000 45%, transparent);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 5vh 1rem 1rem;
+}
+
+.reorg-dialog {
+  width: min(72rem, 100%);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.reorg-head,
+.reorg-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+}
+
+.reorg-head {
+  border-bottom: 1px solid var(--border);
+}
+
+.reorg-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reorg-foot {
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.reorg-foot-spacer {
+  flex: 1 1 auto;
+}
+
+.reorg-body {
+  padding: 0.9rem 1rem;
+  overflow-y: auto;
+  min-height: 8rem;
+}
+
+.reorg-section-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+
+.reorg-status {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.reorg-status.is-analyzing,
+.reorg-status.is-applying,
+.reorg-status.is-queued {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+
+.reorg-status.is-proposed {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.reorg-status.is-applied {
+  color: #3aa55d;
+  border-color: color-mix(in srgb, #3aa55d 50%, var(--border));
+}
+
+.reorg-status.is-failed {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+}
+
+/* Setup */
+
+.reorg-setup p {
+  margin: 0 0 0.6rem;
+  line-height: 1.5;
+}
+
+.reorg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.8rem 0;
+  font-size: 0.85rem;
+}
+
+.reorg-field textarea {
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: inherit;
+  resize: vertical;
+}
+
+.reorg-earlier-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.reorg-earlier-row:hover {
+  background: var(--bg-soft);
+}
+
+/* Running */
+
+.reorg-running {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1rem 0;
+}
+
+.reorg-running p {
+  margin: 0 0 0.3rem;
+}
+
+.reorg-spinner {
+  flex: 0 0 auto;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+  animation: reorg-spin 0.9s linear infinite;
+}
+
+@keyframes reorg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reorg-spinner {
+    animation-duration: 3s;
+  }
+}
+
+/* Proposal */
+
+.reorg-summary-box {
+  margin-bottom: 0.9rem;
+}
+
+.reorg-summary {
+  margin: 0 0 0.4rem;
+  line-height: 1.5;
+}
+
+.reorg-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.reorg-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 1rem;
+}
+
+@media (max-width: 820px) {
+  .reorg-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.reorg-col {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: var(--bg-soft);
+  min-width: 0;
+}
+
+.reorg-book + .reorg-book {
+  margin-top: 0.8rem;
+}
+
+.reorg-book-title {
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.reorg-folder {
+  margin: 0.15rem 0 0.35rem 0.6rem;
+}
+
+.reorg-folder-title {
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin: 0.35rem 0 0.15rem;
+}
+
+.reorg-new {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--accent);
+}
+
+.reorg-now-page {
+  font-size: 0.85rem;
+  padding: 0.12rem 0 0.12rem 0.7rem;
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.reorg-now-page.is-archive {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--muted) 70%, transparent);
+  color: var(--muted);
+}
+
+.reorg-now-page.is-private {
+  color: var(--muted);
+}
+
+.reorg-item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  padding: 0.3rem 0.35rem 0.3rem 0.7rem;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.reorg-item:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.reorg-item input[type='checkbox'] {
+  /* The app's form rules make inputs full-width blocks. */
+  display: inline-block;
+  width: auto;
+  margin: 0.2rem 0 0;
+  flex: 0 0 auto;
+}
+
+.reorg-check-spacer {
+  flex: 0 0 13px;
+}
+
+.reorg-item.is-noop {
+  cursor: default;
+  color: var(--muted);
+}
+
+.reorg-item.is-noop:hover {
+  background: transparent;
+}
+
+.reorg-item.is-off .reorg-item-main {
+  opacity: 0.5;
+}
+
+.reorg-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  font-size: 0.88rem;
+}
+
+.reorg-item-reason {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.reorg-words {
+  opacity: 0.75;
+}
+
+.reorg-badge {
+  display: inline-block;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  margin-right: 0.2rem;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  vertical-align: 0.08em;
+}
+
+.reorg-badge.is-move {
+  color: #3b82f6;
+  border-color: color-mix(in srgb, #3b82f6 45%, transparent);
+}
+
+.reorg-badge.is-rename {
+  color: #8b5cf6;
+  border-color: color-mix(in srgb, #8b5cf6 45%, transparent);
+}
+
+.reorg-badge.is-merge {
+  color: #d97706;
+  border-color: color-mix(in srgb, #d97706 45%, transparent);
+}
+
+.reorg-badge.is-rewrite {
+  color: #0d9488;
+  border-color: color-mix(in srgb, #0d9488 45%, transparent);
+}
+
+.reorg-badge.is-archive {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.reorg-untouched {
+  margin-top: 0.8rem;
+}
+
+.reorg-untouched ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1.4rem;
+}
+
+/* Result */
+
+.reorg-done {
+  font-weight: 700;
+  color: #3aa55d;
+  margin: 0 0 0.6rem;
+}
+
+.reorg-log {
+  margin-top: 0.6rem;
+}
+
+.reorg-log ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reorg-log-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.2rem 0;
+  font-size: 0.87rem;
+}
+
+.reorg-log-row > span:nth-child(2) {
+  flex: 1 1 auto;
+}
+
+.reorg-log-icon {
+  flex: 0 0 1rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.reorg-log-row.is-ok .reorg-log-icon {
+  color: #3aa55d;
+}
+
+.reorg-log-row.is-skipped {
+  color: var(--muted);
+}
+
+.reorg-log-row.is-failed .reorg-log-icon {
+  color: var(--danger);
+}
+
+.reorg-usage {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+}
+
+/* Apply confirmation, in place of a browser confirm() box. */
+.reorg-confirm {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-soft));
+}
+
+.reorg-confirm-text {
+  flex: 1 1 18rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}

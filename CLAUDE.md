@@ -207,7 +207,13 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   search palette; `body.hybrid-fullpage-open` locks page scroll) with a bar
   for Back / previous / next / close; `BlockFocusContext` tells embedded
   editors to drop their `compact` inline shape, and `.hybrid-focus` CSS
-  stretches them to the window height. All API
+  stretches them to the window height. Right-clicking in a text section opens
+  the **section context menu** (`components/ContextMenu.tsx`, edits in
+  `sectionEdits.ts`): link to a document (`LinkDocumentDialog.tsx` — current
+  book, or library search), insert list/table/code/callout, format, "turn
+  into", add a block below, split/move/delete the section. Text edits go
+  through `document.execCommand('insertText')` so the textarea's own Ctrl+Z
+  still works; Shift+right-click keeps the browser menu. All API
   calls go through the typed client in `api.ts`.
 - **Page grid layout** (`pageLayout.ts`) — a page can arrange its blocks in a
   COLS×ROWS grid of cells instead of one top-to-bottom flow. The whole feature
@@ -404,6 +410,22 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   splitting the DOM, with its own snapshot undo history. MCP:
   `beedocs_read_word_document` / `beedocs_write_word_document` /
   `beedocs_create_word_document`. See `Docs/WORD.md`.
+- **AI reorganisation** (`Services/Reorganize/` — `ReorganizeService`,
+  `ReorgText`; `reorg_job` table; UI `ReorganizeDialog.tsx`, "Reorganise with
+  AI…" on the tree's book and shelf menus; `/api/reorganize/jobs`) — the default
+  LLM provider analyses a book or shelf (outline + page excerpts, short `p12`
+  aliases, JSON plan via the `reorgplan` task) into a *proposal*: folders,
+  order, titles, merges, rewrites, duplicates. A person unticks what they
+  disagree with and applies the rest; both steps are background runs on the
+  git-assist-job pattern. The load-bearing rule is that **nothing is deleted**:
+  merged-away and duplicate pages move to an `Archive — reorganised …` folder
+  with a note linking to their replacement; rewrites are page revisions;
+  fenced blocks are swapped for `<<<BLOCK n>>>` placeholders around the
+  `reorgmerge` call and restored byte for byte; an answer keeping < 35 % of the
+  words is refused; pages edited since the analysis, private pages (and, on a
+  shelf, private books) are never touched. Links to moved/merged pages are
+  rewritten and emptied folders removed. Jobs are visible to their creator and
+  admins only. See `Docs/REORGANIZE.md`.
 - **Favorites** (`favorite` table, `Services/FavoriteService.cs`, UI
   `FavoritesPanel.tsx` above the tree in the left pane) — per-user starred items
   (kinds `book | page | diagram | slides | kanban | project | note | attachment`, the search queue's
@@ -674,6 +696,7 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/USERS-AND-ROLES.md` — accounts, roles, sessions, and the opt-in sign-in wall.
 - `Docs/RBA-INTEGRATION.md` — delegating sign-in to the central RBA service (application DOC).
 - `Docs/LLM-PROVIDERS.md` — LLM providers, key storage, and the `/api/llm` security trade-off.
+- `Docs/REORGANIZE.md` — AI reorganisation of a book/shelf: proposal, review, apply, safety rails.
 - `Docs/BACKUP-RESTORE.md` — whole-instance backups to storage providers (incl. S3-compatible), scheduling, and the restore sequence.
 - `Docs/BRANDING.md` — instance title/logo, AI logo generation, themes, the Omarchy desktop theme.
 - `Docs/I18N.md` — the seven UI languages, the typed message-dictionary layer, glossary rules.

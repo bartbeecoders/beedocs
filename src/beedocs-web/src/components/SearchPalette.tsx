@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useI18n, type MessageKey } from '../i18n'
+import { KIND_ICON } from '../searchKinds'
 import {
   HIGHLIGHT_CLOSE,
   HIGHLIGHT_OPEN,
@@ -25,19 +26,6 @@ const KIND_ORDER: SearchKind[] = [
   'gitfile',
 ]
 
-const KIND_ICON: Record<SearchKind, string> = {
-  page: '\u{1F4C4}',
-  diagram: '\u2B21',
-  slides: '\u{1F39E}\uFE0F',
-  kanban: '\u{1F4CB}',
-  project: '\u{1F4CA}',
-  note: '\u{1F4DD}',
-  attachment: '\u{1F4CE}',
-  book: '\u{1F4D8}',
-  folder: '\u{1F4C1}',
-  shelf: '\u{1F4DA}',
-  gitfile: '\u{1F4E6}',
-}
 
 /** Debounce long enough to skip intermediate keystrokes, short enough to feel live. */
 const DEBOUNCE_MS = 120
