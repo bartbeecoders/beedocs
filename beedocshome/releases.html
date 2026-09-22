@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BeeDocs releases — every version and what it brought</title>
-  <meta name="description" content="The BeeDocs release history: kanban boards, Gantt project plans, git repos on the shelf, grid page layouts, the isometric editor, slide decks — version by version, all in the same free MIT-licensed build." />
+  <meta name="description" content="The BeeDocs release history: AI reorganisation of whole books, an in-browser Word editor, word clouds, kanban boards, Gantt project plans, git repos on the shelf, grid page layouts, the isometric editor, slide decks — version by version, all in the same free MIT-licensed build." />
   <meta property="og:title" content="BeeDocs releases" />
   <meta property="og:description" content="Every BeeDocs version and what it brought — from the first commit to kanban boards and Gantt plans. All features ship in the same free, MIT-licensed build." />
   <meta property="og:type" content="website" />
@@ -48,7 +48,7 @@
       <a href="index.html#agents">Agents</a>
       <a href="index.html#desktop">Desktop</a>
       <a href="index.html#selfhost">Self-host</a>
-      <a href="releases.html" aria-current="page">Releases<span class="nav-badge">v0.8</span></a>
+      <a href="releases.html" aria-current="page">Releases<span class="nav-badge">v1.0</span></a>
     </nav>
     <div class="head-actions">
       <a class="btn btn-ghost" href="https://github.com/bartbeecoders/beedocs" rel="noopener">
@@ -77,12 +77,62 @@
 
       <ol class="timeline" reversed>
 
-        <!-- ================================================== v0.9 -->
+        <!-- ================================================== v1.0 -->
         <li class="release release--latest">
           <div class="release-head">
-            <span class="release-badge release-badge--latest mono">v0.9</span>
+            <span class="release-badge release-badge--latest mono">v1.0</span>
+            <h2>AI that tidies the library, Word in the browser, and cloud points</h2>
+            <p class="release-date mono">22 Sep 2026 · latest · 1.0.0</p>
+          </div>
+          <p>BeeDocs turns 1.0. Your AI provider can now read a whole book and
+             propose how to make it simpler. Word documents open and save in
+             place. Pages get a right-click menu, and every book shows at a
+             glance what it is about.</p>
+          <ul class="release-list">
+            <li><strong>Reorganise with AI</strong>: right-click a book or a
+                shelf and the configured AI provider reads every page. It
+                proposes a cleaner structure: folders and reading order, clearer
+                titles, overlapping pages merged, duplicates archived, rambling
+                pages rewritten more simply. You see the current and proposed
+                structure side by side, untick anything you disagree with, and
+                apply the rest in the background. Nothing is deleted. Merged
+                and duplicate pages move to an Archive folder with a link to
+                where their content went. Rewrites are page revisions.
+                Diagrams and code never pass through the model. Pages edited
+                since the analysis are left alone, and so are private pages.</li>
+            <li><strong>Right-click a section</strong>: a context menu inside
+                the page editor. Link to any document in the library (the current
+                book, or a search of everything), insert a list, table, code
+                block, callout or divider, format the selection, turn lines into
+                headings, lists, checklists or quotes, and split, move or delete
+                the section. Every edit goes through the browser's own undo.
+                Shift+right-click still gives you the browser's menu.</li>
+            <li><strong>Cloud points</strong>: book and shelf overviews show the
+                most used words across their documents, bigger the more they are
+                used. That includes diagram labels and the text inside attached
+                PDFs and Word files. Click a word to search for it. Only
+                documents you can see are counted.</li>
+            <li><strong>Word documents, edited in place</strong> (0.9.x): a
+                <span class="mono">.docx</span> attachment opens in a Word-like
+                editor with a ribbon, real pages and the document's own styles,
+                and saves back to the same file under the same id. Anything
+                without an HTML shape rides along untouched. Agents get
+                read/write/create tools for Word documents too.</li>
+            <li><strong>Full-page blocks</strong> (0.9.x): open any block of a
+                page on its own, window-sized, and page through the rest with
+                previous/next.</li>
+            <li><strong>Better Word export</strong> (0.9.5–0.9.6): export a single
+                chapter as well as a whole book, and diagrams now land in the
+                <span class="mono">.docx</span> as images.</li>
+          </ul>
+        </li>
+
+        <!-- ================================================== v0.9 -->
+        <li class="release">
+          <div class="release-head">
+            <span class="release-badge mono">v0.9</span>
             <h2>Backup &amp; restore, and any S3 bucket as storage</h2>
-            <p class="release-date mono">12 Sep 2026 · latest · 0.9.2</p>
+            <p class="release-date mono">12 Sep 2026 · 0.9.2</p>
           </div>
           <p>The instance can now save itself. One zip per run — database
              snapshot, uploads, attachments, branding and every body parked at

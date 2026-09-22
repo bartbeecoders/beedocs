@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BeeDocs — self-hosted systems documentation with a diagram studio inside</title>
-  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks, OneNote-style notes, kanban boards, Gantt project plans, searchable file attachments, scheduled backups to any S3-compatible bucket — and an MCP server so AI agents write docs alongside you." />
+  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks, OneNote-style notes, kanban boards, Gantt project plans, searchable file attachments, an in-browser Word editor, AI reorganisation of whole books, scheduled backups to any S3-compatible bucket — and an MCP server so AI agents write docs alongside you." />
   <meta property="og:title" content="BeeDocs — documentation that draws its own architecture" />
   <meta property="og:description" content="Self-hosted docs for systems teams: Markdown books, BeeDiagram Studio, isometric views, slides, OneNote-style notes, kanban boards, Gantt plans, searchable file attachments, full-text search, and an MCP server for AI agents. One container, SQLite inside. MIT-licensed and free forever." />
   <meta property="og:type" content="website" />
@@ -48,7 +48,7 @@
       <a href="#agents">Agents</a>
       <a href="#desktop">Desktop</a>
       <a href="#selfhost">Self-host</a>
-      <a href="releases.html">Releases<span class="nav-badge">v0.9</span></a>
+      <a href="releases.html">Releases<span class="nav-badge">v1.0</span></a>
     </nav>
     <div class="head-actions">
       <a class="btn btn-ghost" href="https://github.com/bartbeecoders/beedocs" rel="noopener">
@@ -72,8 +72,8 @@
       <div class="hero-copy">
         <p class="eyebrow"><span class="dot" aria-hidden="true"></span>self-hosted · single container · SQLite inside</p>
         <a class="release-flag" href="releases.html">
-          <span class="flag-badge">v0.9</span>
-          <span>New: backup &amp; restore, S3-compatible storage</span>
+          <span class="flag-badge">v1.0</span>
+          <span>New: reorganise with AI, a Word editor, cloud points</span>
           <span class="flag-arrow" aria-hidden="true">→</span>
         </a>
         <h1>Documentation that draws its own architecture.</h1>
@@ -227,13 +227,21 @@
           <h3>Markdown with live diagrams</h3>
           <p>Mermaid, C4 and BeeDiagram fences render inline as you type.
              Autosave runs every 1.5&nbsp;seconds; history keeps one revision per
-             sitting, not per keystroke.</p>
+             sitting, not per keystroke. Open any block full page to work on it
+             alone.</p>
         </article>
         <article class="card">
           <h3>Grid page layouts</h3>
           <p>Arrange a page's sections in a 2×1, 3×1, 2×2 or 3×2 grid of cells
              and drag blocks between them. The layout is plain Markdown, so
              preview, exports and the reader site all render it.</p>
+        </article>
+        <article class="card">
+          <h3>Right-click a section</h3>
+          <p>A context menu inside the text: link to any page, diagram, board
+             or file in the library, insert a list, table or code block, turn
+             lines into headings or checklists, split or move the section.
+             Ctrl+Z undoes all of it.</p>
         </article>
         <article class="card">
           <h3>Slides from the same library</h3>
@@ -270,11 +278,24 @@
              every replacement.</p>
         </article>
         <article class="card">
+          <h3>Word documents, edited in place</h3>
+          <p>A <span class="mono">.docx</span> in a book opens in a Word-like
+             editor — ribbon, real pages, your document's own styles — and saves
+             back to the same file. Export a book or a single chapter to Word,
+             diagrams included as images.</p>
+        </article>
+        <article class="card">
           <h3>Search that is never stale</h3>
           <p>SQLite FTS5 over every page, book, diagram label — and the text
              <em>inside</em> attached PDFs and documents. Whoever wrote the row
              — UI, agent or import — it gets indexed.
              <span class="mono">Ctrl+K</span> opens it anywhere.</p>
+        </article>
+        <article class="card">
+          <h3>Cloud points</h3>
+          <p>Every book and shelf overview shows a word cloud of what its
+             documents actually talk about — the more a word is used, the bigger
+             it gets. Click a word to search for it.</p>
         </article>
         <article class="card">
           <h3>Favorites at hand</h3>
@@ -324,6 +345,14 @@
              draft its README, documentation or user manual. Run it in the
              background, then publish the result as a book page. Nothing lands
              without your review.</p>
+        </article>
+        <article class="card">
+          <h3>Reorganise a book with AI</h3>
+          <p>Let your AI provider read a whole book or shelf and propose a
+             cleaner structure: folders and reading order, clearer titles,
+             overlapping pages merged, duplicates archived. Review it side by
+             side, untick what you disagree with, apply the rest. Nothing is
+             deleted, and diagrams never pass through the model.</p>
         </article>
       </div>
     </div>
