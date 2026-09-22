@@ -5,7 +5,7 @@ import { useI18n, type MessageKey } from '../i18n'
 import { useBranding } from '../branding'
 import { withApiBase } from '../basePath'
 import { useAuth } from '../auth/AuthContext'
-import { useWorkspace } from '../workspace/WorkspaceContext'
+import { useWorkspace, type TreeBook } from '../workspace/WorkspaceContext'
 import { loadPaneLayout, savePaneLayout, type PaneLayout } from '../workspace/layoutPrefs'
 import { api } from '../api'
 import { withBase } from '../basePath'
@@ -32,6 +32,7 @@ import { HelpPanel } from './HelpPanel'
 import { ExportMenu } from './ExportMenu'
 import { WorkspaceToolbar } from './WorkspaceToolbar'
 import { SearchPalette } from './SearchPalette'
+import { WordCloud } from './WordCloud'
 import { NamePromptDialog } from './NamePromptDialog'
 import {
   ATTACHMENT_ACCEPT,
@@ -61,6 +62,12 @@ export function WorkspaceShell() {
   const [attachmentState, setAttachmentState] = useState<AttachmentEditorState | null>(null)
   const [version, setVersion] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
+  /** What the palette opens with — a word clicked in an overview's cloud, else empty. */
+  const [searchSeed, setSearchSeed] = useState('')
+  const searchFor = (text: string) => {
+    setSearchSeed(text)
+    setSearchOpen(true)
+  }
 
   // Ctrl/Cmd+K from anywhere, including while typing in the editor — search is
   // navigation, not text entry, so it outranks whatever has focus.
@@ -68,6 +75,7 @@ export function WorkspaceShell() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
+        setSearchSeed('')
         setSearchOpen(true)
       }
     }
@@ -287,7 +295,7 @@ export function WorkspaceShell() {
           <button
             type="button"
             className="ws-search-trigger"
-            onClick={() => setSearchOpen(true)}
+            onClick={() => searchFor('')}
             title={t('shell.searchTooltip')}
           >
             <span aria-hidden="true">{'⌕'}</span>
@@ -353,8 +361,8 @@ export function WorkspaceShell() {
           {view === 'stats' && <StatsPage />}
           {view === 'help' && <HelpPanel />}
           {view === 'welcome' && <WelcomeCanvas />}
-          {view === 'shelf' && <ShelfOverview shelfId={params.shelfId!} />}
-          {view === 'book' && <BookOverview bookId={params.bookId!} />}
+          {view === 'shelf' && <ShelfOverview shelfId={params.shelfId!} onSearch={searchFor} />}
+          {view === 'book' && <BookOverview bookId={params.bookId!} onSearch={searchFor} />}
           {view === 'page' && <PageCanvas onStateChange={setPageState} />}
           {view === 'diagram' && <DiagramCanvas onStateChange={setDiagramState} />}
           {view === 'slides' && <SlideCanvas onStateChange={setSlideState} />}
@@ -389,7 +397,7 @@ export function WorkspaceShell() {
         </ResizablePane>
       </div>
 
-      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <SearchPalette open={searchOpen} initialQuery={searchSeed} onClose={() => setSearchOpen(false)} />
     </div>
   )
 }
@@ -621,7 +629,7 @@ function WelcomeCanvas() {
  * A shelf has no content of its own, so its canvas is the list of books on it
  * and a way to add another.
  */
-function ShelfOverview({ shelfId }: { shelfId: string }) {
+function ShelfOverview({ shelfId, onSearch }: { shelfId: string; onSearch: (word: string) => void }) {
   const navigate = useNavigate()
   const { canWrite } = useAuth()
   const { t } = useI18n()
@@ -675,6 +683,15 @@ function ShelfOverview({ shelfId }: { shelfId: string }) {
         </p>
       )}
 
+      {shelved.length > 0 && (
+        <WordCloud
+          scope="shelf"
+          id={shelfId}
+          refreshKey={shelved.map((b) => `${b.id}:${b.updatedAt}`).join('|')}
+          onSearch={onSearch}
+        />
+      )}
+
       <div className="row" style={{ gap: '0.5rem', marginTop: '1rem' }}>
         <a className="btn primary sm" href={withBase(bookshelfSitePath(shelf.slug))} target="_blank" rel="noreferrer">
           {t('shell.openWebsite')}
@@ -702,7 +719,7 @@ function ShelfOverview({ shelfId }: { shelfId: string }) {
   )
 }
 
-function BookOverview({ bookId }: { bookId: string }) {
+function BookOverview({ bookId, onSearch }: { bookId: string; onSearch: (word: string) => void }) {
   const navigate = useNavigate()
   const { canWrite } = useAuth()
   const { t } = useI18n()
@@ -778,6 +795,8 @@ function BookOverview({ bookId }: { bookId: string }) {
         {t('shell.bookHint')}
         {canWrite && ` ${t('shell.bookHintDrop')}`}
       </p>
+
+      <WordCloud scope="book" id={bookId} refreshKey={bookContentKey(book)} onSearch={onSearch} />
 
       {book.attachments.length > 0 && (
         <>
@@ -920,4 +939,17 @@ function BookOverview({ bookId }: { bookId: string }) {
       />
     </div>
   )
+}
+
+/**
+ * Changes whenever anything the word cloud counts could have changed: an item
+ * added, removed or renamed, or a page saved (its version moves).
+ */
+function bookContentKey(book: TreeBook): string {
+  return [
+    book.pages.map((p) => `${p.id}:${p.version}:${p.title}`).join(','),
+    [book.diagrams, book.slideDecks, book.kanbanBoards, book.projectPlans, book.notes, book.attachments]
+      .map((list) => list.map((x) => `${x.id}:${x.title}`).join(','))
+      .join('|'),
+  ].join('#')
 }

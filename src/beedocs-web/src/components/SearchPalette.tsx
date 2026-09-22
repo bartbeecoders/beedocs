@@ -33,9 +33,11 @@ const DEBOUNCE_MS = 120
 type Props = {
   open: boolean
   onClose: () => void
+  /** Text to search for as it opens (a word clicked in an overview's word cloud). */
+  initialQuery?: string
 }
 
-export function SearchPalette({ open, onClose }: Props) {
+export function SearchPalette({ open, onClose, initialQuery = '' }: Props) {
   const navigate = useNavigate()
   const { t } = useI18n()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -54,12 +56,12 @@ export function SearchPalette({ open, onClose }: Props) {
 
   useEffect(() => {
     if (!open) return
-    setQuery('')
+    setQuery(initialQuery)
     setResponse(null)
     setError(null)
     setActive(0)
     inputRef.current?.focus()
-  }, [open])
+  }, [open, initialQuery])
 
   useEffect(() => {
     if (!open) return

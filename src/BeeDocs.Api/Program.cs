@@ -160,6 +160,9 @@ builder.Services.AddSingleton<GitAssistJobService>();
 // AI reorganisation of a book or shelf — analyze → proposal → apply, as
 // background runs on the same pattern (see Docs/REORGANIZE.md).
 builder.Services.AddSingleton<ReorganizeService>();
+// "Cloud points" on book/shelf overviews — counted from the search index,
+// cached per scope + viewer until the scope's index rows change.
+builder.Services.AddSingleton<WordCloudService>();
 // Opt-in background fetch (BeeDocs:GitFetchMinutes, default 0 = off): keeps
 // the behind-the-remote badges honest; pulling stays a person's explicit verb.
 builder.Services.AddSingleton(new GitFetchOptions(
@@ -2559,6 +2562,23 @@ storageProviders.MapGet("/google/callback", async (
 // content reads below them ride the default read-for-everyone rule, and Sync —
 // the one non-admin write — the default write-for-editors rule. GitException
 // carries a message already phrased for the person who has to fix it.
+// ---------------------------------------------------------------------------
+// "Cloud points" — word clouds for the book and shelf overview pages. Reads, so
+// the default viewer rule; a book or shelf the caller cannot see is a 404, and
+// the words only come from documents they could find in search.
+// ---------------------------------------------------------------------------
+api.MapGet("/books/{id}/wordcloud", async (
+    string id, int? limit, IDocumentService documents, WordCloudService clouds, CancellationToken ct) =>
+    await documents.GetBookAsync(id, ct) is null
+        ? Results.NotFound()
+        : Results.Ok(await clouds.ForBookAsync(id, limit, ct)));
+
+api.MapGet("/shelves/{id}/wordcloud", async (
+    string id, int? limit, IDocumentService documents, WordCloudService clouds, CancellationToken ct) =>
+    await documents.GetShelfAsync(id, ct) is null
+        ? Results.NotFound()
+        : Results.Ok(await clouds.ForShelfAsync(id, limit, ct)));
+
 // ---------------------------------------------------------------------------
 // AI reorganisation (ReorganizeService, Docs/REORGANIZE.md). Starting and
 // applying are writes (the default editor rule): they spend the configured

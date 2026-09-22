@@ -1479,3 +1479,13 @@ export type ReorgJob = {
   current: ReorgSnapshot | null
   log: ReorgLogEntry[] | null
 }
+
+/** "Cloud points" — most used words in a book's or shelf's documents (WordCloudService). */
+export type WordCloudEntry = { word: string; count: number; documents: number }
+export type WordCloud = {
+  scope: 'book' | 'shelf'
+  id: string
+  documents: number
+  totalWords: number
+  words: WordCloudEntry[]
+}

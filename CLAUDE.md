@@ -410,6 +410,19 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   splitting the DOM, with its own snapshot undo history. MCP:
   `beedocs_read_word_document` / `beedocs_write_word_document` /
   `beedocs_create_word_document`. See `Docs/WORD.md`.
+- **Cloud points** (`Services/WordCloudService.cs`, UI `components/WordCloud.tsx`
+  on the book and shelf overviews in `WorkspaceShell.tsx`; `GET
+  /api/books/{id}/wordcloud`, `GET /api/shelves/{id}/wordcloud`) — a word cloud
+  of the most used words across the scope's documents, sized by frequency
+  (square-root scale, biggest words dealt to the middle). Counted from
+  `search_doc`, not the entities, so it covers every kind search covers
+  (including text extracted from PDFs/Word) and filters with the same
+  `Privacy.SearchSql` — a word only counts from documents the viewer could find.
+  Stopwords for en/fr/de/es/nl, ids/numbers dropped, English plurals folded
+  into their singular only when both occur. Cached per scope + viewer, keyed by
+  the scope's row count + newest `indexed_at`. Clicking a word opens the search
+  palette with it (`SearchPalette`'s `initialQuery`); the section collapses
+  (`beedocs-cloud-collapsed` in localStorage).
 - **AI reorganisation** (`Services/Reorganize/` — `ReorganizeService`,
   `ReorgText`; `reorg_job` table; UI `ReorganizeDialog.tsx`, "Reorganise with
   AI…" on the tree's book and shelf menus; `/api/reorganize/jobs`) — the default

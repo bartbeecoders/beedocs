@@ -69,6 +69,7 @@ import type {
   GitAssistJob,
   ReorgJob,
   ReorgScope,
+  WordCloud,
   GitAssistKind,
   GitAssistPublishResult,
   GitAssistResult,
@@ -1136,6 +1137,11 @@ export const api = {
       body: JSON.stringify(body),
     }),
   /** Delete the job record; a still-running job is cancelled first. */
+  /** "Cloud points": the most used words in a book's documents (only those the caller can see). */
+  getBookWordCloud: (bookId: string, limit?: number) =>
+    request<WordCloud>(`/api/books/${bookId}/wordcloud${limit ? `?limit=${limit}` : ''}`),
+  getShelfWordCloud: (shelfId: string, limit?: number) =>
+    request<WordCloud>(`/api/shelves/${shelfId}/wordcloud${limit ? `?limit=${limit}` : ''}`),
   /** AI reorganisation: analyse a book/shelf into a proposal (a background job the UI polls). */
   startReorg: (body: { scope: ReorgScope; scopeId: string; instructions?: string }) =>
     request<ReorgJob>('/api/reorganize/jobs', { method: 'POST', body: JSON.stringify(body) }),

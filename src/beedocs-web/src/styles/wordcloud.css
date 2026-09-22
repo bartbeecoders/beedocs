@@ -1,0 +1,88 @@
+/* "Cloud points" on the book and shelf overviews (WordCloud.tsx). */
+
+.word-cloud {
+  margin-top: 1.4rem;
+  padding: 0.8rem 1rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-soft);
+}
+
+.word-cloud-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.word-cloud-head .book-overview-subhead {
+  margin: 0;
+}
+
+.word-cloud-sub {
+  margin: 0.2rem 0 0.4rem;
+}
+
+.word-cloud-words {
+  list-style: none;
+  margin: 0;
+  padding: 0.6rem 0.2rem 0.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.15rem 0.7rem;
+  line-height: 1.15;
+}
+
+.word-cloud-word {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  padding: 0.1rem 0.25rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    transform 0.12s ease;
+}
+
+.word-cloud-word:hover,
+.word-cloud-word:focus-visible {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  transform: scale(1.06);
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .word-cloud-word:hover,
+  .word-cloud-word:focus-visible {
+    transform: none;
+  }
+}
+
+/* Six tones mixed from the theme's own accent and text colours, so the cloud
+   follows every theme (including Omarchy) instead of fixed brand colours. */
+.word-cloud-word.tone-0 {
+  color: var(--accent);
+}
+
+.word-cloud-word.tone-1 {
+  color: color-mix(in srgb, var(--accent) 60%, var(--text, currentColor));
+}
+
+.word-cloud-word.tone-2 {
+  color: color-mix(in srgb, var(--accent) 35%, var(--text, currentColor));
+}
+
+.word-cloud-word.tone-3 {
+  color: var(--text, currentColor);
+}
+
+.word-cloud-word.tone-4 {
+  color: color-mix(in srgb, var(--accent) 80%, var(--muted));
+}
+
+.word-cloud-word.tone-5 {
+  color: color-mix(in srgb, var(--text, currentColor) 70%, var(--muted));
+}

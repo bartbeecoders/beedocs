@@ -27,6 +27,7 @@ import { backup } from './messages/backup'
 import { word } from './messages/word'
 import { sectionMenu } from './messages/sectionMenu'
 import { reorganize } from './messages/reorganize'
+import { cloud } from './messages/cloud'
 
 export { LANGUAGES, type Lang, type LangDef } from './langs'
 
@@ -72,6 +73,7 @@ const MESSAGES = {
   word,
   sectionMenu,
   reorganize,
+  cloud,
 } as const
 
 type NsMap = typeof MESSAGES

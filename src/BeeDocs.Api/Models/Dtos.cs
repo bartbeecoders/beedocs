@@ -1669,3 +1669,18 @@ public sealed record DocxExportRequest(List<DocxExportImage>? Images)
     public const int MaxImages = 500;
     public const int MaxImageBytes = 24 * 1024 * 1024;
 }
+
+/// <summary>"Cloud points": the most common words in a book's or shelf's documents (WordCloudService).</summary>
+/// <param name="Documents">Documents counted — only those the caller can see.</param>
+/// <param name="TotalWords">Candidate words read, stopwords included.</param>
+public sealed record WordCloudDto(
+    string Scope,
+    string Id,
+    int Documents,
+    int TotalWords,
+    IReadOnlyList<WordCloudEntryDto> Words
+);
+
+/// <param name="Word">The most common spelling of the word ("API", not "api").</param>
+/// <param name="Documents">How many documents use it at least once.</param>
+public sealed record WordCloudEntryDto(string Word, int Count, int Documents);
