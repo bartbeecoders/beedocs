@@ -4,7 +4,7 @@
   margin-top: 1.4rem;
   padding: 0.8rem 1rem 1rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--r12);
   background: var(--bg-soft);
 }
 
@@ -40,7 +40,7 @@
   background: transparent;
   font-family: inherit;
   padding: 0.1rem 0.25rem;
-  border-radius: 6px;
+  border-radius: var(--r6);
   cursor: pointer;
   transition:
     background 0.12s ease,

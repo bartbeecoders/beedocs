@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { THEMES, useTheme, type ThemeId } from '../theme'
+import { THEMES, UI_STYLES, useTheme, type ThemeId } from '../theme'
 import { LANGUAGES, useI18n, type MessageKey } from '../i18n'
 import { deriveOmarchyVars } from '../omarchyTheme'
 import { useBranding } from '../branding'
@@ -52,6 +52,8 @@ export function SettingsPanel({ onResetPanes }: Props) {
   const {
     theme,
     setTheme,
+    uiStyle,
+    setUiStyle,
     density,
     setDensity,
     showPreviewDefault,
@@ -170,6 +172,31 @@ export function SettingsPanel({ onResetPanes }: Props) {
                     </span>
                   </button>
                 )}
+              </div>
+            </section>
+
+            <section className="settings-section">
+              <h2>{t('settings.uiStyle')}</h2>
+              <div className="theme-grid">
+                {UI_STYLES.map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    className={`theme-card style-card ${uiStyle === st ? 'active' : ''}`}
+                    data-preview-style={st}
+                    onClick={() => setUiStyle(st)}
+                  >
+                    <span className="style-preview" aria-hidden>
+                      <i className="sp-btn" />
+                      <i className="sp-field" />
+                      <i className="sp-tag" />
+                    </span>
+                    <span className="theme-card-body">
+                      <strong>{t(`settings.style.${st}` as MessageKey)}</strong>
+                      <span className="muted sm">{t(`settings.styleDesc.${st}` as MessageKey)}</span>
+                    </span>
+                  </button>
+                ))}
               </div>
             </section>
 

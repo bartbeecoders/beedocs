@@ -130,3 +130,7 @@ Users can set the properties (title, owner etc)
 
 Exporting a folder or book to MS word that has diagrams in it, exports the diagrams as a link/reference.
 Can you include the image of the diagram in the ms word doc
+
+Add more visual styles and themes, now the borders are rounded, maybe add some style templates to make the look more professional, clean, square corners etc
+
+in preview mode on a document, when double clicking on a text/line, jump to edit mode and put the cursor at that spot

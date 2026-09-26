@@ -102,7 +102,7 @@
 .backup-panel .backup-archive,
 .backup-panel .backup-run {
   border: 1px solid var(--border, #e5e7eb);
-  border-radius: 8px;
+  border-radius: var(--r8);
   padding: 8px 12px;
   display: flex;
   flex-wrap: wrap;

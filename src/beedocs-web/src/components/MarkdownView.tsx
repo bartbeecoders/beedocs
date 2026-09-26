@@ -12,6 +12,7 @@ import {
   useState,
   type ComponentProps,
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react'
 import { Link } from 'react-router-dom'
@@ -26,6 +27,7 @@ import { parsePageLayout, serializePageLayout } from '../pageLayout'
 import { isInternalDocHref } from '../markdownLinks'
 import { useMarkdownSite } from '../site/markdownSite'
 import { remarkHtmlBreaks, remarkTableThemes } from '../markdownTable'
+import { rehypeSourcePositions, sourceOffsetAtPoint, type SourceTarget } from '../sourcePositions'
 import { outlineId } from '../pageOutline'
 import { highlightCode, resolveLanguage } from '../syntaxHighlight'
 import { DataTree } from './DataTree'
@@ -55,6 +57,7 @@ mermaid.initialize({
 
 /** Module scope: a fresh array each render would defeat react-markdown's own memoization. */
 const REMARK_PLUGINS = [remarkGfm, remarkTableThemes, remarkHtmlBreaks]
+const REHYPE_SOURCE_PLUGINS = [rehypeSourcePositions]
 
 /** Fence labels that get the collapsible tree instead of a flat code block. */
 function dataTreeLang(lang: string | undefined): 'json' | 'xml' | null {
@@ -959,6 +962,11 @@ export type MarkdownViewProps = {
   onContentChange?: (next: string) => void
   /** Used to deep-link beediagram-ref “Open editor” */
   bookId?: string
+  /**
+   * Double-click on prose: the source position under the pointer — the grid
+   * cell (0 without a grid) and a character offset into that cell's Markdown.
+   */
+  onSourceDoubleClick?: (target: SourceTarget) => void
 }
 
 type MarkdownBodyProps = MarkdownViewProps & {
@@ -968,6 +976,8 @@ type MarkdownBodyProps = MarkdownViewProps & {
    * counts blocks across all cells in order.
    */
   blockIndexOffset?: number
+  /** Grid cell this body renders, reported with source double-clicks. */
+  cellIndex?: number
 }
 
 /**
@@ -1015,6 +1025,8 @@ export const MarkdownView = memo(function MarkdownView(props: MarkdownViewProps)
             editable={props.editable}
             bookId={props.bookId}
             blockIndexOffset={offsets[i]}
+            cellIndex={i}
+            onSourceDoubleClick={props.onSourceDoubleClick}
             onContentChange={onContentChange ? (next) => handleCellChange(i, next) : undefined}
           />
         </div>
@@ -1029,6 +1041,8 @@ const MarkdownBody = memo(function MarkdownBody({
   onContentChange,
   bookId,
   blockIndexOffset = 0,
+  cellIndex = 0,
+  onSourceDoubleClick,
 }: MarkdownBodyProps) {
   const { t } = useI18n()
   const site = useMarkdownSite()
@@ -1471,9 +1485,33 @@ const MarkdownBody = memo(function MarkdownBody({
     ],
   )
 
+  const handleDoubleClick = useCallback(
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      if (!onSourceDoubleClick) return
+      const target = e.target as HTMLElement
+      // Embeds (diagrams, inline editors, links) keep their own double-click.
+      if (target.closest('a, button, input, textarea, select, svg, canvas, [contenteditable="true"]')) return
+      const el = target.closest<HTMLElement>('[data-src]')
+      if (!el || !e.currentTarget.contains(el)) return
+      const offset = sourceOffsetAtPoint(el, e.clientX, e.clientY, content)
+      if (offset == null) return
+      e.preventDefault()
+      window.getSelection()?.removeAllRanges()
+      onSourceDoubleClick({ cell: cellIndex, offset })
+    },
+    [cellIndex, content, onSourceDoubleClick],
+  )
+
   return (
-    <div className={`markdown-body${editable ? ' markdown-body--editable' : ''}`}>
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={components}>
+    <div
+      className={`markdown-body${editable ? ' markdown-body--editable' : ''}`}
+      onDoubleClick={onSourceDoubleClick ? handleDoubleClick : undefined}
+    >
+      <ReactMarkdown
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={onSourceDoubleClick ? REHYPE_SOURCE_PLUGINS : undefined}
+        components={components}
+      >
         {content}
       </ReactMarkdown>
     </div>

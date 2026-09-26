@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { useI18n, type MessageKey } from '../i18n'
 import { gitFilePath } from '../gitPaths'
 import { GitAssistDialog } from './GitAssistDialog'
+import { useMenuInViewport } from '../hooks/useMenuInViewport'
 import { bumpGitStatus, refreshGitRepos, useGitRepos } from '../hooks/useGitRepos'
 import type { GitAssistKind, GitRepo, GitTreeEntry } from '../types'
 import '../styles/git.css'
@@ -63,17 +65,14 @@ export function GitTree() {
     }
   }, [menu])
 
+  const menuStyle = useMenuInViewport(menuRef, menu)
+
   if (!repos || repos.length === 0) return null
 
   const openMenu = (e: React.MouseEvent, repo: GitRepo) => {
     e.preventDefault()
     e.stopPropagation()
-    const pad = 8
-    setMenu({
-      repo,
-      x: Math.min(e.clientX, window.innerWidth - 220 - pad),
-      y: Math.min(e.clientY, window.innerHeight - 340 - pad),
-    })
+    setMenu({ repo, x: e.clientX, y: e.clientY })
   }
 
   const syncFromMenu = (repo: GitRepo) => {
@@ -143,12 +142,13 @@ export function GitTree() {
         </ul>
       )}
 
-      {menu && (
+      {menu &&
+        createPortal(
         <div
           ref={menuRef}
           className="tree-context-menu"
           role="menu"
-          style={{ position: 'fixed', left: Math.max(8, menu.x), top: Math.max(8, menu.y), zIndex: 1200 }}
+          style={menuStyle}
         >
           <div className="tree-context-heading">📦 {menu.repo.name}</div>
           <button
@@ -206,8 +206,9 @@ export function GitTree() {
               </button>
             </>
           ) : null}
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
 
       {assist && (
         <GitAssistDialog

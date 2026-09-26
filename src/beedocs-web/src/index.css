@@ -18,7 +18,22 @@ html[data-theme='honey-light'] {
   --header-bg: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
   --tree-active: color-mix(in srgb, var(--accent) 16%, var(--bg-elevated));
   --shadow: 0 1px 0 rgba(26, 24, 20, 0.04), 0 12px 32px rgba(26, 24, 20, 0.06);
-  --radius: 10px;
+  /* Corner radii scale with the UI style (html[data-style], see below); every
+     rounded corner in the app is one of these, so "rounded" stays pixel-exact. */
+  --radius-scale: 1;
+  --r-pill: 999px;
+  --r1: calc(1px * var(--radius-scale));
+  --r2: calc(2px * var(--radius-scale));
+  --r3: calc(3px * var(--radius-scale));
+  --r4: calc(4px * var(--radius-scale));
+  --r5: calc(5px * var(--radius-scale));
+  --r6: calc(6px * var(--radius-scale));
+  --r7: calc(7px * var(--radius-scale));
+  --r8: calc(8px * var(--radius-scale));
+  --r10: calc(10px * var(--radius-scale));
+  --r12: calc(12px * var(--radius-scale));
+  --r14: calc(14px * var(--radius-scale));
+  --radius: var(--r10);
   --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
   --header-h: 52px;
@@ -253,6 +268,84 @@ html[data-theme='high-contrast'] {
   --shadow: none;
 }
 
+html[data-theme='paper'] {
+  color-scheme: light;
+  --bg: #f5f6f8;
+  --bg-elevated: #ffffff;
+  --bg-soft: #eceef2;
+  --bg-pane: #fafbfc;
+  --text: #16181d;
+  --muted: #5b6270;
+  --border: #dde0e6;
+  --border-strong: #b9bfca;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-fg: #ffffff;
+  --danger: #c0262d;
+  --header-bg: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  --tree-active: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 8px 24px rgba(16, 24, 40, 0.06);
+}
+
+html[data-theme='ink'] {
+  color-scheme: light;
+  --bg: #f4f4f4;
+  --bg-elevated: #ffffff;
+  --bg-soft: #e9e9e9;
+  --bg-pane: #fafafa;
+  --text: #111111;
+  --muted: #5c5c5c;
+  --border: #d9d9d9;
+  --border-strong: #a8a8a8;
+  --accent: #111111;
+  --accent-strong: #000000;
+  --accent-fg: #ffffff;
+  --danger: #c0262d;
+  --header-bg: color-mix(in srgb, var(--bg-elevated) 95%, transparent);
+  --tree-active: #ececec;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme='graphite'] {
+  color-scheme: dark;
+  --bg: #111113;
+  --bg-elevated: #19191c;
+  --bg-soft: #232327;
+  --bg-pane: #151517;
+  --text: #ececee;
+  --muted: #9a9aa3;
+  --border: #2c2c31;
+  --border-strong: #45454d;
+  --accent: #e4e4e7;
+  --accent-strong: #ffffff;
+  --accent-fg: #111113;
+  --danger: #f87171;
+  --header-bg: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  --tree-active: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+  --shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+
+/* ===== UI styles =====
+   Orthogonal to the color theme: corner shape and elevation. Declared after
+   the theme blocks so, at equal specificity, a style's --shadow wins. */
+html[data-style='soft'] {
+  --radius-scale: 1.5;
+}
+
+html[data-style='clean'] {
+  --radius-scale: 0.4;
+  --r-pill: 4px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-pop: 0 4px 14px rgba(0, 0, 0, 0.14);
+}
+
+html[data-style='square'] {
+  --radius-scale: 0;
+  --r-pill: 0;
+  --shadow: none;
+  --shadow-pop: 0 2px 6px rgba(0, 0, 0, 0.14);
+}
+
 html[data-density='compact'] {
   --header-h: 44px;
   --pane-header-h: 34px;
@@ -348,7 +441,7 @@ select {
   height: 22px;
   object-fit: contain;
   display: block;
-  border-radius: 4px;
+  border-radius: var(--r4);
 }
 
 .brand-text {
@@ -373,7 +466,7 @@ select {
 .ws-theme-pill {
   font-size: 0.75rem;
   padding: 0.2rem 0.55rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--border);
   color: var(--muted);
   background: var(--bg-soft);
@@ -385,7 +478,7 @@ select {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   padding: 0.12rem 0.45rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--border);
   color: var(--muted);
   background: var(--bg-soft);
@@ -419,7 +512,7 @@ select {
   min-height: 28px;
   padding: 0 0.55rem;
   font-size: 0.8125rem;
-  border-radius: 6px;
+  border-radius: var(--r6);
   font-weight: 500;
   line-height: 1;
 }
@@ -470,7 +563,7 @@ select {
   max-width: min(240px, 28vw);
   height: 28px;
   padding: 0 0.55rem 0 0.3rem;
-  border-radius: 6px;
+  border-radius: var(--r6);
   border: 1px solid transparent;
   background: color-mix(in srgb, var(--bg-soft) 65%, transparent);
   font-size: 0.8125rem;
@@ -501,7 +594,7 @@ select {
   justify-content: center;
   width: 1.2rem;
   height: 1.2rem;
-  border-radius: 4px;
+  border-radius: var(--r4);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent-strong);
   flex-shrink: 0;
@@ -533,7 +626,7 @@ select {
   flex-shrink: 0;
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
 }
@@ -730,7 +823,7 @@ html[data-density='compact'] .ws-toolbar-context {
   border: 1px solid var(--border);
   background: var(--bg-soft);
   color: var(--text);
-  border-radius: 8px;
+  border-radius: var(--r8);
   padding: 0.45rem 0.8rem;
   cursor: pointer;
   display: inline-flex;
@@ -748,7 +841,7 @@ html[data-density='compact'] .ws-toolbar-context {
 .btn.sm {
   padding: 0.28rem 0.6rem;
   font-size: 0.82rem;
-  border-radius: 7px;
+  border-radius: var(--r7);
 }
 
 .btn.primary {
@@ -822,7 +915,7 @@ html[data-density='compact'] .ws-toolbar-context {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--r6);
   width: 28px;
   height: 28px;
   display: inline-flex;
@@ -853,7 +946,7 @@ html[data-density='compact'] .ws-toolbar-context {
 .segmented {
   display: inline-flex;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   overflow: hidden;
   background: var(--bg-elevated);
 }
@@ -880,7 +973,7 @@ select {
   width: 100%;
   border: 1px solid var(--border);
   background: var(--bg-elevated);
-  border-radius: 8px;
+  border-radius: var(--r8);
   padding: 0.5rem 0.65rem;
 }
 
@@ -902,7 +995,7 @@ select:focus {
 .banner.error {
   margin: 0.5rem 0;
   padding: 0.55rem 0.7rem;
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: color-mix(in srgb, var(--danger) 12%, var(--bg-elevated));
   border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
   color: var(--danger);
@@ -994,7 +1087,7 @@ select:focus {
   outline: 1px dashed var(--accent);
   outline-offset: -1px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border-radius: 6px;
+  border-radius: var(--r6);
 }
 
 .book-overview.file-drop-over,
@@ -1040,7 +1133,7 @@ select:focus {
   gap: 0.5rem;
   padding: 0.5rem 0.7rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: var(--bg-elevated);
 }
 
@@ -1088,7 +1181,7 @@ select:focus {
   margin-bottom: 0.55rem;
   padding: 0.45rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: var(--bg-elevated);
 }
 
@@ -1113,7 +1206,7 @@ select:focus {
   display: flex;
   align-items: center;
   gap: 0.15rem;
-  border-radius: 7px;
+  border-radius: var(--r7);
   min-height: 30px;
   padding-right: 0.15rem;
 }
@@ -1146,7 +1239,7 @@ select:focus {
   min-width: 0;
   flex: 1;
   padding: 0.25rem 0.2rem;
-  border-radius: 6px;
+  border-radius: var(--r6);
 }
 
 /* Some tree rows are <button>s rather than links (git folders expand in
@@ -1183,7 +1276,7 @@ button.tree-label {
   text-transform: uppercase;
   color: var(--accent-strong);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 0 0.35rem;
   line-height: 1.4;
 }
@@ -1330,7 +1423,7 @@ button.tree-label {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r10);
   background: var(--bg-elevated);
   box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 70%, transparent);
   overflow: hidden;
@@ -1343,7 +1436,7 @@ button.tree-label {
   max-width: none;
   max-height: min(70vh, calc(100vh - 9rem));
   align-self: stretch;
-  border-radius: 10px;
+  border-radius: var(--r10);
   padding: 0;
 }
 
@@ -1402,7 +1495,7 @@ button.tree-label {
   line-height: 1;
   cursor: pointer;
   padding: 0.05rem 0.35rem;
-  border-radius: 4px;
+  border-radius: var(--r4);
 }
 
 .page-outline-toggle:hover {
@@ -1439,7 +1532,7 @@ button.tree-label {
   font-size: 0.78rem;
   line-height: 1.3;
   padding: 0.28rem 0.4rem;
-  border-radius: 6px;
+  border-radius: var(--r6);
   cursor: pointer;
 }
 
@@ -1591,7 +1684,7 @@ button.tree-label {
 .canvas-title:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: var(--r2);
 }
 
 .toolbar-group {
@@ -1683,7 +1776,7 @@ button.tree-label {
 /* Media inserts (Image / PDF / 3D) sit in a quiet sub-group */
 .insert-toolbar-group--media {
   padding: 0.12rem 0.2rem;
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: color-mix(in srgb, var(--bg-soft) 55%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
@@ -1720,7 +1813,7 @@ button.tree-label {
 .insert-gap-btn {
   width: 1.6rem;
   height: 1.6rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px dashed var(--border-strong);
   background: var(--bg-elevated);
   color: var(--muted);
@@ -1742,7 +1835,7 @@ button.tree-label {
   gap: 0.3rem;
   padding: 0.35rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: var(--bg-elevated);
   max-width: 100%;
 }
@@ -1759,7 +1852,7 @@ button.tree-label {
   font-size: 0.86rem;
   line-height: 1.5;
   padding: 0.65rem 0.75rem;
-  border-radius: 8px;
+  border-radius: var(--r8);
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text);
@@ -1931,7 +2024,7 @@ button.tree-label {
 .markdown-body pre {
   overflow: auto;
   padding: 0.75rem 0.9rem;
-  border-radius: 10px;
+  border-radius: var(--r10);
   background: var(--bg-soft);
   border: 1px solid var(--border);
   font-family: var(--mono);
@@ -1946,7 +2039,7 @@ button.tree-label {
 .markdown-body :not(pre) > code {
   background: var(--bg-soft);
   padding: 0.1rem 0.35rem;
-  border-radius: 5px;
+  border-radius: var(--r5);
 }
 
 /* Same grid lines as the table designer, so a page reads like its editor.
@@ -1991,7 +2084,7 @@ button.tree-label {
 .mermaid-block {
   overflow: auto;
   padding: 0.65rem;
-  border-radius: 10px;
+  border-radius: var(--r10);
   background: var(--bg-soft);
   border: 1px solid var(--border);
   margin: 0.85rem 0;
@@ -2132,7 +2225,7 @@ button.tree-label {
   gap: 0.35rem;
   padding: 0.3rem 0.35rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: var(--bg-pane);
 }
 
@@ -2159,7 +2252,7 @@ button.tree-label {
   min-height: 28px;
   padding: 0 0.5rem;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -2190,7 +2283,7 @@ button.tree-label {
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: transparent;
   cursor: pointer;
   padding: 0;
@@ -2203,7 +2296,7 @@ button.tree-label {
 
 .freedraw-size-dot {
   display: block;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--text);
 }
 
@@ -2214,7 +2307,7 @@ button.tree-label {
 .freedraw-swatch {
   width: 20px;
   height: 20px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 2px solid var(--border-strong);
   padding: 0;
   cursor: pointer;
@@ -2237,7 +2330,7 @@ button.tree-label {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--r6);
   overflow: hidden;
   border: 1px solid var(--border);
   cursor: pointer;
@@ -2265,7 +2358,7 @@ button.tree-label {
   width: 4.2rem;
   height: 28px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: var(--bg-elevated);
   padding: 0 0.35rem;
   font: inherit;
@@ -2277,7 +2370,7 @@ button.tree-label {
   position: relative;
   width: 100%;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--r8);
   overflow: hidden;
   background: #fff;
   touch-action: none;
@@ -2350,7 +2443,7 @@ button.tree-label {
   gap: 0.35rem;
   padding: 0.3rem 0.35rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: var(--bg-soft);
 }
 
@@ -2378,7 +2471,7 @@ button.tree-label {
   height: 1.7rem;
   padding: 0 0.45rem;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -2408,7 +2501,7 @@ button.tree-label {
   justify-content: center;
   width: 1.7rem;
   height: 1.7rem;
-  border-radius: 6px;
+  border-radius: var(--r6);
   font-size: 0.78rem;
   color: var(--muted);
   cursor: pointer;
@@ -2424,7 +2517,7 @@ button.tree-label {
 .excelgrid-select {
   height: 1.7rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: var(--bg-elevated);
   color: var(--text);
   font: inherit;
@@ -2444,7 +2537,7 @@ button.tree-label {
   min-width: 2.6rem;
   padding: 0.2rem 0.4rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: var(--bg-soft);
   font-family: var(--mono);
   font-size: 0.75rem;
@@ -2457,7 +2550,7 @@ button.tree-label {
   min-width: 0;
   height: 1.8rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: var(--bg-elevated);
   color: var(--text);
   font: inherit;
@@ -2469,7 +2562,7 @@ button.tree-label {
   position: relative;
   overflow: auto;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: var(--bg-elevated);
   outline: none;
 }
@@ -2518,7 +2611,7 @@ button.tree-label {
   min-width: 10rem;
   padding: 0.25rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: var(--bg-elevated);
   box-shadow: var(--shadow);
   display: flex;
@@ -2533,7 +2626,7 @@ button.tree-label {
   font: inherit;
   font-size: 0.82rem;
   padding: 0.35rem 0.55rem;
-  border-radius: 6px;
+  border-radius: var(--r6);
   cursor: pointer;
 }
 
@@ -2582,7 +2675,7 @@ button.tree-label {
   font-size: 0.82rem;
   line-height: 1.45;
   padding: 0.65rem 0.75rem;
-  border-radius: 8px;
+  border-radius: var(--r8);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
@@ -2595,7 +2688,7 @@ button.tree-label {
   font-family: var(--mono);
   font-size: 0.82rem;
   background: var(--bg-soft);
-  border-radius: 8px;
+  border-radius: var(--r8);
 }
 
 .bee-editor--compact {
@@ -2694,7 +2787,7 @@ button.tree-label {
 .embed-snippet {
   overflow: auto;
   padding: 0.55rem 0.65rem;
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: var(--bg-soft);
   border: 1px solid var(--border);
   font-family: var(--mono);
@@ -2732,7 +2825,7 @@ button.tree-label {
   text-decoration: none;
   border: 1px solid transparent;
   border-bottom: 2px solid transparent;
-  border-radius: 8px 8px 0 0;
+  border-radius: var(--r8) var(--r8) 0 0;
   margin-bottom: -1px;
 }
 
@@ -2798,7 +2891,7 @@ button.tree-label {
   display: grid;
   grid-template-columns: 1.4fr 1fr 0.6fr;
   height: 36px;
-  border-radius: 7px;
+  border-radius: var(--r7);
   overflow: hidden;
   border: 1px solid var(--border);
 }
@@ -2855,6 +2948,55 @@ button.tree-label {
 .theme-card[data-preview-theme='high-contrast'] .sw-elev { background: #111; }
 .theme-card[data-preview-theme='high-contrast'] .sw-accent { background: #ffe600; }
 
+.theme-card[data-preview-theme='paper'] .sw-bg { background: #f5f6f8; }
+.theme-card[data-preview-theme='paper'] .sw-elev { background: #ffffff; }
+.theme-card[data-preview-theme='paper'] .sw-accent { background: #2563eb; }
+
+.theme-card[data-preview-theme='ink'] .sw-bg { background: #f4f4f4; }
+.theme-card[data-preview-theme='ink'] .sw-elev { background: #ffffff; }
+.theme-card[data-preview-theme='ink'] .sw-accent { background: #111111; }
+
+.theme-card[data-preview-theme='graphite'] .sw-bg { background: #111113; }
+.theme-card[data-preview-theme='graphite'] .sw-elev { background: #19191c; }
+.theme-card[data-preview-theme='graphite'] .sw-accent { background: #e4e4e7; }
+
+/* UI style cards: a mini mock of a panel with a button and a tag, drawn with
+   the card's own radius scale so the choice previews itself. */
+.style-card .style-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 36px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  border-radius: calc(7px * var(--preview-scale));
+  box-shadow: var(--preview-shadow);
+}
+.style-card .style-preview .sp-btn {
+  width: 38px;
+  height: 18px;
+  background: var(--accent);
+  border-radius: calc(5px * var(--preview-scale));
+}
+.style-card .style-preview .sp-field {
+  flex: 1;
+  height: 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: calc(4px * var(--preview-scale));
+}
+.style-card .style-preview .sp-tag {
+  width: 22px;
+  height: 12px;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--preview-pill);
+}
+.style-card[data-preview-style='rounded'] { --preview-scale: 1; --preview-pill: 999px; --preview-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); }
+.style-card[data-preview-style='soft'] { --preview-scale: 1.5; --preview-pill: 999px; --preview-shadow: 0 6px 16px rgba(0, 0, 0, 0.14); }
+.style-card[data-preview-style='clean'] { --preview-scale: 0.4; --preview-pill: 2px; --preview-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); }
+.style-card[data-preview-style='square'] { --preview-scale: 0; --preview-pill: 0; --preview-shadow: none; }
+
 .theme-card-body {
   display: grid;
   gap: 0.15rem;
@@ -2885,7 +3027,7 @@ button.tree-label {
   min-width: 0;
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--r7);
   background: var(--bg-elevated);
 }
 
@@ -2933,7 +3075,7 @@ button.tree-label {
   resize: vertical;
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--r7);
   background: var(--bg-elevated);
 }
 
@@ -3019,7 +3161,7 @@ button.tree-label {
   min-width: 200px;
   max-width: 260px;
   padding: 0.35rem;
-  border-radius: 10px;
+  border-radius: var(--r10);
   border: 1px solid var(--border-strong);
   background: var(--bg-elevated);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22), 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
@@ -3045,7 +3187,7 @@ button.tree-label {
   text-align: left;
   width: 100%;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--r7);
   background: transparent;
   color: inherit;
   padding: 0.4rem 0.55rem;
@@ -3115,7 +3257,7 @@ button.tree-label {
   font-weight: 600;
   background: color-mix(in srgb, var(--accent) 18%, var(--bg-elevated));
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   margin-bottom: 0.35rem;
 }
 
@@ -3128,7 +3270,7 @@ button.tree-label {
   font-size: 0.82rem;
   color: var(--accent-strong);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
-  border-radius: 8px;
+  border-radius: var(--r8);
   border: 1px dashed var(--accent);
   margin-bottom: 0.35rem;
   pointer-events: none;
@@ -3159,7 +3301,7 @@ button.tree-label {
 .edit-image-preview {
   margin: 0.15rem 0;
   padding: 0.45rem;
-  border-radius: 10px;
+  border-radius: var(--r10);
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   display: grid;
@@ -3173,7 +3315,7 @@ button.tree-label {
   width: auto;
   height: auto;
   margin: 0 auto;
-  border-radius: 8px;
+  border-radius: var(--r8);
   object-fit: contain;
   background: var(--bg-soft);
 }
@@ -3189,7 +3331,7 @@ button.tree-label {
 .insert-gap.drop-ready {
   opacity: 1;
   min-height: 2rem;
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   border: 1px dashed color-mix(in srgb, var(--accent) 50%, var(--border));
 }
@@ -3201,7 +3343,7 @@ button.tree-label {
 .markdown-body img {
   max-width: 100%;
   height: auto;
-  border-radius: 8px;
+  border-radius: var(--r8);
   border: 1px solid var(--border);
   margin: 0.5rem 0;
 }
@@ -3246,13 +3388,21 @@ button.tree-label {
   min-width: 190px;
   max-width: 260px;
   padding: 0.35rem;
-  border-radius: 10px;
+  border-radius: var(--r10);
   border: 1px solid var(--border-strong);
   background: var(--bg-elevated);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--shadow-pop, 0 12px 32px rgba(0, 0, 0, 0.22));
   display: flex;
   flex-direction: column;
   gap: 0.12rem;
+}
+
+/* Taller than the window (short screens, long book menus): scroll inside.
+   Not for .ctx-menu — its submenus nest inside it and would be clipped. */
+.tree-context-menu:not(.ctx-menu) {
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .tree-context-heading {
@@ -3270,7 +3420,7 @@ button.tree-label {
   width: 100%;
   text-align: left;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--r7);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -3304,7 +3454,7 @@ button.tree-label {
 .tree-row.drag-over {
   outline: 1px dashed var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border-radius: 6px;
+  border-radius: var(--r6);
 }
 
 .tree-row.child {
@@ -3327,7 +3477,7 @@ button.tree-label {
 .drop-line {
   height: 3px;
   margin: 0 0.5rem;
-  border-radius: 2px;
+  border-radius: var(--r2);
   background: transparent;
 }
 
@@ -3339,7 +3489,7 @@ button.tree-label {
 /* The "Not on a shelf" heading is also where a book is dropped to unshelve it,
    so it needs the same drag affordance as a real row. */
 .tree-group-label.root-drop {
-  border-radius: 6px;
+  border-radius: var(--r6);
 }
 
 .tree-group-label.root-drop.drag-over {
@@ -3362,7 +3512,7 @@ button.tree-label {
   gap: 0.5rem;
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: var(--bg-elevated);
 }
 
@@ -3463,13 +3613,13 @@ button.tree-label {
   min-height: 24px;
   margin: 0;
   border: 1.5px solid var(--accent, #e6a817);
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: color-mix(in srgb, var(--bg-elevated) 92%, #fff 8%);
   color: var(--text);
   font: 650 12px/1.25 var(--font, system-ui, sans-serif);
   text-align: center;
   padding: 0.2rem 0.35rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-pop, 0 2px 10px rgba(0, 0, 0, 0.2));
   outline: none;
   box-sizing: border-box;
 }
@@ -3520,7 +3670,7 @@ button.tree-label {
   overflow: auto;
   font-size: 0.7rem;
   background: var(--bg-soft);
-  border-radius: 7px;
+  border-radius: var(--r7);
   padding: 0.45rem;
   border: 1px solid var(--border);
 }
@@ -3534,7 +3684,7 @@ button.tree-label {
 .bee-diagram-view {
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r10);
   background: var(--bg-soft);
   padding: 0.45rem;
   overflow: auto;
@@ -3694,7 +3844,7 @@ button.tree-label {
   display: flex;
   height: 420px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   overflow: hidden;
 }
 
@@ -3805,7 +3955,7 @@ button.tree-label {
   height: 28px;
   padding: 0 0.4rem;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -3845,7 +3995,7 @@ button.tree-label {
   justify-content: center;
   width: 30px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--r6);
   cursor: pointer;
 }
 
@@ -3953,7 +4103,7 @@ button.tree-label {
   min-width: 0;
   padding: 0.2rem 0.05rem;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -4041,7 +4191,7 @@ button.tree-label {
   font-size: 1.1rem;
   line-height: 1;
   padding: 0.15rem 0.35rem;
-  border-radius: 4px;
+  border-radius: var(--r4);
   cursor: pointer;
   align-self: start;
 }
@@ -4065,9 +4215,9 @@ button.tree-label {
   width: min(420px, 100%);
   padding: 1.1rem 1.15rem 1.1rem;
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: var(--r12);
   background: var(--bg-elevated);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-pop, 0 18px 48px rgba(0, 0, 0, 0.35));
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -4111,7 +4261,7 @@ button.tree-label {
   margin: 0;
   padding: 0.5rem;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r10);
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -4135,7 +4285,7 @@ button.tree-label {
   margin: 0;
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: var(--bg-soft);
   cursor: pointer;
   font-size: 0.88rem;
@@ -4211,13 +4361,13 @@ button.tree-label {
   margin: 0;
   padding: 1px 2px;
   border: 1px solid #2f7be5;
-  border-radius: 2px;
+  border-radius: var(--r2);
   background: #ffffff;
   resize: none;
   overflow: hidden;
   line-height: 1.25;
   font-family: var(--font);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-pop, 0 2px 8px rgba(0, 0, 0, 0.18));
 }
 
 /* Context menu + shape picker */
@@ -4227,9 +4377,9 @@ button.tree-label {
   min-width: 190px;
   padding: 0.25rem;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: var(--bg-elevated);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--shadow-pop, 0 12px 30px rgba(0, 0, 0, 0.28));
   display: flex;
   flex-direction: column;
   gap: 0.05rem;
@@ -4243,7 +4393,7 @@ button.tree-label {
   width: 100%;
   padding: 0.32rem 0.5rem;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--r5);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -4278,9 +4428,9 @@ button.tree-label {
   width: 260px;
   padding: 0.4rem;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: var(--r10);
   background: var(--bg-elevated);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-pop, 0 14px 34px rgba(0, 0, 0, 0.3));
 }
 
 .studio-shape-picker-head {
@@ -4308,7 +4458,7 @@ button.tree-label {
   gap: 0.1rem;
   padding: 0.3rem 0.1rem;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--r7);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -4460,7 +4610,7 @@ button.tree-label {
   min-width: 28px;
   height: 26px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: var(--bg-elevated);
   color: var(--text);
   font: inherit;
@@ -4482,7 +4632,7 @@ button.tree-label {
 .studio-swatch {
   aspect-ratio: 1;
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--r3);
   cursor: pointer;
   padding: 0;
 }
@@ -4550,7 +4700,7 @@ button.tree-label {
   display: inline-block;
   margin-left: 0.35rem;
   padding: 0.05rem 0.4rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-size: 0.7rem;
   font-weight: 700;
   vertical-align: middle;
@@ -4576,7 +4726,7 @@ button.tree-label {
 .help-toc a {
   padding: 0.25rem 0.6rem;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-size: 0.78rem;
   color: var(--muted);
   text-decoration: none;
@@ -4719,7 +4869,7 @@ button.tree-label {
   padding: 0.05rem 0.3rem;
   border: 1px solid var(--border-strong);
   border-bottom-width: 2px;
-  border-radius: 4px;
+  border-radius: var(--r4);
   background: var(--bg-elevated);
   font-family: var(--mono);
   font-size: 0.72rem;
@@ -4750,10 +4900,10 @@ button.tree-label {
   min-width: 240px;
   width: 260px;
   padding: 0.35rem;
-  border-radius: 10px;
+  border-radius: var(--r10);
   border: 1px solid var(--border-strong);
   background: var(--bg-elevated);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--shadow-pop, 0 12px 32px rgba(0, 0, 0, 0.22));
   display: flex;
   flex-direction: column;
   gap: 0.12rem;
@@ -4780,7 +4930,7 @@ button.tree-label {
   width: 100%;
   text-align: left;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--r7);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -4849,10 +4999,10 @@ button.tree-label {
   max-height: min(85vh, 720px);
   display: flex;
   flex-direction: column;
-  border-radius: 14px;
+  border-radius: var(--r14);
   border: 1px solid var(--border-strong);
   background: var(--bg-elevated);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-pop, 0 24px 60px rgba(0, 0, 0, 0.35));
 }
 
 .modal.modal--compact {
@@ -4951,7 +5101,7 @@ button.tree-label {
 
 .import-summary {
   padding: 0.7rem 0.8rem;
-  border-radius: 10px;
+  border-radius: var(--r10);
   border: 1px solid var(--border);
   background: var(--bg-soft);
   display: flex;
@@ -4988,7 +5138,7 @@ button.tree-label {
   --media-inner-radius: 9px;
   margin: 1.15rem 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r10);
   background: var(--bg-elevated);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--border) 35%, transparent),
@@ -5025,7 +5175,7 @@ html[data-theme='high-contrast'] .media-embed {
   z-index: 1400;
   margin: 0;
   --media-body-h: calc(100vh - 1.25rem * 2 - var(--media-chrome-h));
-  border-radius: 12px;
+  border-radius: var(--r12);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--border) 50%, transparent),
     0 24px 64px rgba(0, 0, 0, 0.45);
@@ -5076,7 +5226,7 @@ html[data-theme='high-contrast'] .media-embed {
   justify-content: center;
   height: 18px;
   padding: 0 0.38rem;
-  border-radius: 4px;
+  border-radius: var(--r4);
   font-size: 0.625rem;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -5116,7 +5266,7 @@ html[data-theme='forest'] .media-embed-badge--model {
   padding: 0 0.4rem;
   border-color: transparent !important;
   background: transparent !important;
-  border-radius: 5px;
+  border-radius: var(--r5);
   font-weight: 500;
   transition:
     color 0.12s ease,
@@ -5255,12 +5405,12 @@ html[data-theme='high-contrast'] .media-embed-frame {
   background: rgba(12, 11, 10, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(10px);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 0.28rem 0.75rem;
   white-space: nowrap;
   opacity: 1;
   transition: opacity 0.5s ease;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-pop, 0 4px 16px rgba(0, 0, 0, 0.25));
 }
 
 .model-viewer-hint.is-faded {
@@ -5306,7 +5456,7 @@ html[data-theme='high-contrast'] .media-embed-frame {
   color: var(--text);
   background: var(--bg-soft);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r6);
   padding: 0.2rem 0.45rem;
   max-width: 100%;
   overflow: hidden;
@@ -5377,7 +5527,7 @@ html[data-density='compact'] .media-embed-title {
   color: var(--muted);
   background: var(--bg-soft);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   cursor: pointer;
   transition: color 0.12s ease, border-color 0.12s ease;
 }
@@ -5391,7 +5541,7 @@ html[data-density='compact'] .media-embed-title {
   font-family: var(--mono);
   font-size: 0.66rem;
   padding: 0.05rem 0.3rem;
-  border-radius: 4px;
+  border-radius: var(--r4);
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--muted);
@@ -5533,7 +5683,7 @@ html[data-density='compact'] .media-embed-title {
 .search-hit-snippet mark {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
   color: var(--text);
-  border-radius: 2px;
+  border-radius: var(--r2);
   padding: 0 0.1em;
 }
 
@@ -5564,7 +5714,7 @@ html[data-density='compact'] .media-embed-title {
   font-size: 0.7rem;
   padding: 0.02rem 0.28rem;
   margin-right: 0.15rem;
-  border-radius: 4px;
+  border-radius: var(--r4);
   border: 1px solid var(--border);
   background: var(--bg-elevated);
 }
@@ -5617,7 +5767,7 @@ html[data-density='compact'] .media-embed-title {
   color: var(--muted);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--r6);
   cursor: grab;
   opacity: 1;
   transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
@@ -5645,7 +5795,7 @@ html[data-density='compact'] .media-embed-title {
   color: var(--muted);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--r6);
   cursor: pointer;
 }
 
@@ -5673,7 +5823,7 @@ html[data-density='compact'] .media-embed-title {
   display: block;
   width: 100%;
   height: 2px;
-  border-radius: 2px;
+  border-radius: var(--r2);
   background: var(--border-strong);
   opacity: 0.5;
   transition: height 0.08s ease, background 0.08s ease, opacity 0.08s ease, box-shadow 0.08s ease;
@@ -5838,7 +5988,7 @@ html[data-theme='high-contrast'] {
 .data-tree {
   margin: 0.9rem 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r10);
   background: var(--bg-soft);
   overflow: hidden;
 }
@@ -5893,7 +6043,7 @@ html[data-theme='high-contrast'] {
   list-style: none;
   cursor: pointer;
   position: relative;
-  border-radius: 4px;
+  border-radius: var(--r4);
 }
 
 .dtree-node > summary::-webkit-details-marker {
@@ -6164,8 +6314,8 @@ html[data-theme='high-contrast'] {
   padding: 0.4rem 0.5rem;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+  border-radius: var(--r8);
+  box-shadow: var(--shadow-pop, 0 6px 20px rgb(0 0 0 / 0.18));
 }
 
 .md-table-swatch {
@@ -6230,7 +6380,7 @@ html[data-theme='high-contrast'] {
   font-size: 0.95rem;
   line-height: 1;
   padding: 0.15rem 0.32rem;
-  border-radius: 4px;
+  border-radius: var(--r4);
 }
 
 .md-table-x:hover:not(:disabled) {
@@ -6263,7 +6413,7 @@ html[data-theme='high-contrast'] {
   font-size: 0.8rem;
   line-height: 1;
   padding: 0.15rem 0.25rem;
-  border-radius: 4px;
+  border-radius: var(--r4);
   opacity: 0;
   transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
@@ -6325,7 +6475,7 @@ html[data-theme='high-contrast'] {
 /* Theme picker in the table chrome. */
 .md-table-theme {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: var(--bg-elevated);
   color: var(--text);
   font: inherit;
@@ -6459,7 +6609,7 @@ html[data-scheme='dark'] {
   padding: 0.85rem 1rem;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
 }
 
 .stats-tile-value {
@@ -6520,7 +6670,7 @@ html[data-scheme='dark'] {
   display: inline-block;
   width: 10px;
   height: 10px;
-  border-radius: 3px;
+  border-radius: var(--r3);
 }
 
 .stats-swatch.created {
@@ -6546,7 +6696,7 @@ html[data-scheme='dark'] {
   align-items: flex-end;
   justify-content: center;
   min-width: 0;
-  border-radius: 4px 4px 0 0;
+  border-radius: var(--r4) var(--r4) 0 0;
 }
 
 .stats-day.hover {
@@ -6565,7 +6715,7 @@ html[data-scheme='dark'] {
 
 .stats-bar {
   flex: 1;
-  border-radius: 3px 3px 0 0;
+  border-radius: var(--r3) var(--r3) 0 0;
 }
 
 .stats-bar.created {
@@ -6586,8 +6736,8 @@ html[data-scheme='dark'] {
   padding: 0.45rem 0.6rem;
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
+  border-radius: var(--r6);
+  box-shadow: var(--shadow-pop, 0 4px 14px rgb(0 0 0 / 18%));
   font-size: 0.8rem;
   white-space: nowrap;
   pointer-events: none;
@@ -6723,7 +6873,7 @@ html[data-scheme='dark'] {
   align-items: center;
   max-width: 14rem;
   padding: 0.2rem 0.55rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-size: 0.72rem;
   font-weight: 650;
   line-height: 1.2;
@@ -6780,7 +6930,7 @@ html[data-scheme='dark'] {
 
 .toast {
   padding: 0.55rem 0.8rem;
-  border-radius: 8px;
+  border-radius: var(--r8);
   font-size: 0.82rem;
   line-height: 1.35;
   background: var(--bg-elevated);
@@ -6811,7 +6961,7 @@ html[data-scheme='dark'] {
   color: var(--muted);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--r6);
   cursor: pointer;
 }
 

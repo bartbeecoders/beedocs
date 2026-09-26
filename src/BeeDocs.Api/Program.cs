@@ -220,10 +220,29 @@ app.UseRouting();
 app.UseCors();
 
 var wwwroot = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+// Cache policy for the built UI. index.html names the bundle by content hash
+// and every build deletes the old bundle, so a cached index.html is a blank
+// page waiting to happen: it asks for /assets/index-<old>.js, gets a 404, and
+// React never starts. Sent with only validators (ETag, Last-Modified) and no
+// Cache-Control, browsers may reuse it heuristically for days after an
+// upgrade — the "installed it, now it's blank" report. So index.html is
+// always revalidated (no-cache; the ETag keeps that a 304), while the hashed
+// files under /assets can never change and are cached for good.
+var spaStaticFiles = new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        var headers = ctx.Context.Response.Headers;
+        if (ctx.File.Name.Equals("index.html", StringComparison.OrdinalIgnoreCase))
+            headers.CacheControl = "no-cache";
+        else if (ctx.Context.Request.Path.StartsWithSegments("/assets"))
+            headers.CacheControl = "public, max-age=31536000, immutable";
+    },
+};
 if (Directory.Exists(wwwroot))
 {
     app.UseDefaultFiles();
-    app.UseStaticFiles();
+    app.UseStaticFiles(spaStaticFiles);
 }
 
 // Gate /uploads behind the same sign-in as /api. Static file middleware answers
@@ -3754,7 +3773,9 @@ v1.MapPut("/publish", async (PublishDocumentRequest body, IDocumentService docs,
 // SPA fallback (production container with wwwroot)
 if (Directory.Exists(wwwroot))
 {
-    app.MapFallbackToFile("index.html");
+    // Same options: a deep link (/books/…) is served index.html too, and must
+    // not be cached any more than "/" is.
+    app.MapFallbackToFile("index.html", spaStaticFiles);
 }
 
 app.Run();

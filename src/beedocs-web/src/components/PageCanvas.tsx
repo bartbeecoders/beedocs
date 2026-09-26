@@ -17,6 +17,7 @@ import { MarkdownView } from './MarkdownView'
 import { ExportMenu } from './ExportMenu'
 import { PageOutlineNav } from './PageOutlineNav'
 import { SyncedInput, SyncedTextarea } from './SyncedText'
+import type { SourceTarget } from '../sourcePositions'
 
 export type PageEditorState = {
   page: Page | null
@@ -83,6 +84,8 @@ export function PageCanvas({ onStateChange }: Props) {
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
+  /** Where a double-click in the preview asked the editor to put its caret. */
+  const [caretTarget, setCaretTarget] = useState<(SourceTarget & { seq: number }) | null>(null)
 
   const titleRef = useRef(title)
   const contentRef = useRef(content)
@@ -115,6 +118,20 @@ export function PageCanvas({ onStateChange }: Props) {
     },
     [pageId],
   )
+
+  // Double-click in the preview: open the editor with the caret on that spot.
+  // Split view already shows the editor, so it only moves the caret there.
+  const editAtSource = useCallback(
+    (target: SourceTarget) => {
+      setCaretTarget((prev) => ({ ...target, seq: (prev?.seq ?? 0) + 1 }))
+      if (mode === 'preview') setMode('edit')
+    },
+    [mode, setMode],
+  )
+
+  useEffect(() => {
+    setCaretTarget(null)
+  }, [pageId])
 
   useEffect(() => {
     // Restore the last view for this page; fall back to the settings default.
@@ -352,7 +369,11 @@ export function PageCanvas({ onStateChange }: Props) {
                     key={m}
                     type="button"
                     className={mode === m ? 'active' : ''}
-                    onClick={() => setMode(m)}
+                    onClick={() => {
+                      // A mode picked by hand opens at the top, not at an old double-click.
+                      setCaretTarget(null)
+                      setMode(m)
+                    }}
                     title={t(`canvas.modeHint.${m}` as MessageKey)}
                   >
                     {t(`canvas.mode.${m}` as MessageKey)}
@@ -382,6 +403,7 @@ export function PageCanvas({ onStateChange }: Props) {
                 bookId={bookId}
                 pageId={pageId}
                 placeholder={t('canvas.pageEditorPlaceholder')}
+                caretTarget={caretTarget}
                 onChange={(next) => {
                   setContent(next)
                   setDirty(true)
@@ -403,7 +425,11 @@ export function PageCanvas({ onStateChange }: Props) {
           )}
           {(mode === 'preview' || mode === 'split') && (
             <div className="editor-preview">
-              <MarkdownView content={content} bookId={bookId} />
+              <MarkdownView
+                content={content}
+                bookId={bookId}
+                onSourceDoubleClick={canWrite ? editAtSource : undefined}
+              />
             </div>
           )}
         </div>

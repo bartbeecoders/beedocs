@@ -39,7 +39,7 @@
   margin-left: 0.35rem;
   font-size: 0.62rem;
   padding: 0 0.3rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--border);
   color: var(--muted);
   white-space: nowrap;
@@ -91,7 +91,7 @@
 .git-toolbar-dirty {
   font-size: 0.72rem;
   padding: 0.05rem 0.4rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--border);
   color: var(--muted);
 }
@@ -124,7 +124,7 @@
   align-items: baseline;
   gap: 0.4rem;
   padding: 0.15rem 0.25rem;
-  border-radius: 6px;
+  border-radius: var(--r6);
   color: inherit;
   text-decoration: none;
 }
@@ -167,7 +167,7 @@ a.git-root-entry:hover {
   margin: 0;
   padding: 0.75rem 1rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   overflow-x: auto;
   font-size: 0.8rem;
   line-height: 1.5;
@@ -233,7 +233,7 @@ a.git-root-entry:hover {
 .git-repo-status {
   font-size: 0.68rem;
   padding: 0.05rem 0.4rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--border);
   color: var(--muted);
   white-space: nowrap;
@@ -280,10 +280,10 @@ a.git-root-entry:hover {
   background: var(--elev, var(--bg, #fff));
   color: inherit;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r10);
   padding: 1rem 1.1rem;
   width: min(34rem, calc(100vw - 2rem));
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-pop, 0 12px 40px rgba(0, 0, 0, 0.25));
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -339,7 +339,7 @@ a.git-root-entry:hover {
   line-height: 1.55;
   padding: 0.75rem 1rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   background: transparent;
   color: inherit;
   tab-size: 2;
@@ -351,7 +351,7 @@ a.git-root-entry:hover {
   margin: 0;
   padding: 0.5rem 0;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   overflow-x: auto;
   font-family: var(--mono, ui-monospace, monospace);
   font-size: 0.76rem;
@@ -400,7 +400,7 @@ a.git-root-entry:hover {
   background: transparent;
   color: inherit;
   padding: 0.25rem 0.4rem;
-  border-radius: 6px;
+  border-radius: var(--r6);
   cursor: pointer;
   font-size: 0.82rem;
 }
@@ -454,7 +454,7 @@ a.git-root-entry:hover {
   margin: 0 0 0.75rem;
   padding: 0.4rem 0.6rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   font-size: 0.8rem;
   color: var(--muted);
 }
@@ -484,7 +484,7 @@ a.git-root-entry:hover {
 
 .git-split-preview {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   padding: 0.5rem 0.9rem;
   max-height: 75vh;
   overflow-y: auto;
@@ -520,7 +520,7 @@ a.git-root-entry:hover {
 
 .git-assist-preview {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   padding: 0.5rem 0.9rem;
   max-height: 46vh;
   overflow-y: auto;
@@ -554,7 +554,7 @@ a.git-root-entry:hover {
   align-items: flex-start;
   gap: 0.6rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r8);
   padding: 0.5rem 0.7rem;
   background: var(--bg-elevated);
 }
@@ -564,7 +564,7 @@ a.git-root-entry:hover {
   font-size: 0.72rem;
   font-weight: 600;
   padding: 0.15rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--border);
   margin-top: 0.1rem;
 }
@@ -671,7 +671,7 @@ a.git-root-entry:hover {
   color: var(--muted);
   background: var(--bg-soft);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   cursor: pointer;
   transition: color 0.12s ease, border-color 0.12s ease;
 }
@@ -689,7 +689,7 @@ a.git-root-entry:hover {
 .git-jobs-badge {
   min-width: 1.15rem;
   padding: 0.05rem 0.35rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent);
   color: var(--accent-contrast, #fff);
   font-size: 0.68rem;
@@ -712,7 +712,7 @@ a.git-root-entry:hover {
   gap: 0.6rem;
   padding: 0.75rem 0.85rem;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: var(--r10);
   background: var(--bg-elevated);
   box-shadow: var(--shadow);
 }

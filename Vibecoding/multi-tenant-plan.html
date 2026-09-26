@@ -1,0 +1,443 @@
+<title>BeeDocs Multi-Tenancy</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --ground: #f4f5f2;
+  --surface: #ffffff;
+  --surface-2: #eceee9;
+  --ink: #1b1f24;
+  --muted: #5b636e;
+  --line: #dadfe2;
+  --accent: #a86b12;
+  --accent-soft: #f5e6c6;
+  --done: #2f7d4f;
+  --doing: #b7791f;
+  --todo: #8a929c;
+  --blocked: #b4443a;
+  --risk-soft: #f6dcd8;
+  --ok-soft: #d8eee0;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #13161a; --surface: #1b1f24; --surface-2: #232830; --ink: #e7eaee; --muted: #9aa3ad;
+    --line: #2e343c; --accent: #e3a43d; --accent-soft: #3a2e17; --done: #58b07e; --doing: #e3a43d;
+    --todo: #7c8590; --blocked: #e0705f; --risk-soft: #3d2320; --ok-soft: #1e3427;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #13161a; --surface: #1b1f24; --surface-2: #232830; --ink: #e7eaee; --muted: #9aa3ad;
+  --line: #2e343c; --accent: #e3a43d; --accent-soft: #3a2e17; --done: #58b07e; --doing: #e3a43d;
+  --todo: #7c8590; --blocked: #e0705f; --risk-soft: #3d2320; --ok-soft: #1e3427;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ground); color: var(--ink);
+  font: 15px/1.6 var(--body); padding-inline: 16px; padding-block: 32px 64px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 48px; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); letter-spacing: -0.01em; }
+h2 { font-size: 24px; }
+h3 { font-size: 17px; }
+p { margin: 0; max-width: 68ch; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+a { color: var(--accent); }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+section { display: grid; gap: 18px; }
+.lede { font-size: 17px; color: var(--muted); }
+
+/* header */
+header { display: grid; gap: 16px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--muted); font-size: 13px; }
+.meta b { color: var(--ink); font-weight: 600; }
+.overall { display: grid; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+.overall-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.big { font: 700 34px/1 var(--display); font-variant-numeric: tabular-nums; }
+.bar { height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; display: flex; }
+.bar span { display: block; height: 100%; }
+.bar .d { background: var(--done); } .bar .g { background: var(--doing); } .bar .b { background: var(--blocked); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 11px; margin-right: 6px; vertical-align: -1px; clip-path: polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%); }
+
+/* recommendation */
+.verdict { background: var(--accent-soft); border-radius: 10px; padding: 22px 24px; display: grid; gap: 12px; }
+.verdict h2 { font-size: 22px; }
+.verdict ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+
+/* tables */
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 680px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font: 600 12px/1.3 var(--mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); }
+th.pick { color: var(--accent); }
+td.pick { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.chip { display: inline-block; font: 500 11.5px/1 var(--mono); padding: 4px 7px; border-radius: 4px; white-space: nowrap; }
+.chip.none { background: var(--ok-soft); color: var(--done); }
+.chip.small { background: var(--accent-soft); color: var(--accent); }
+.chip.fix { background: var(--risk-soft); color: var(--blocked); }
+
+/* diagram */
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 14px; }
+.tier { display: flex; justify-content: center; }
+.node { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; background: var(--surface-2); font-size: 13px; text-align: center; }
+.node b { display: block; font-family: var(--display); font-size: 15px; }
+.arrow { text-align: center; color: var(--muted); font: 12px var(--mono); }
+.cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.cell { border: 1.5px dashed var(--accent); border-radius: 10px; padding: 12px; display: grid; gap: 8px; }
+.cell .ns { font: 600 13px var(--mono); color: var(--accent); }
+.cell .host { font: 12px var(--mono); color: var(--muted); }
+.cell .parts { display: flex; flex-wrap: wrap; gap: 6px; }
+.cell .parts span { font-size: 12px; background: var(--surface-2); border-radius: 4px; padding: 3px 7px; }
+
+/* phases */
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.filters button { font: 500 13px var(--body); padding: 6px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.filters button[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+.filters button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.phase { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.phase > summary { list-style: none; cursor: pointer; padding: 16px 20px; display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; align-items: center; }
+.phase > summary::-webkit-details-marker { display: none; }
+.phase-title { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.phase-title .n { font: 500 13px var(--mono); color: var(--muted); }
+.phase-count { font: 500 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.phase .bar { grid-column: 1 / -1; height: 5px; }
+.phase-why { grid-column: 1 / -1; color: var(--muted); font-size: 14px; }
+.tasks { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.task { display: grid; grid-template-columns: 20px 1fr auto; gap: 4px 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+.task:last-child { border-bottom: 0; }
+.hex { width: 14px; height: 16px; margin-top: 3px; clip-path: polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%); background: var(--todo); }
+.hex.todo { background: transparent; box-shadow: inset 0 0 0 2px var(--todo); }
+.task[data-s="todo"] .hex { background: var(--todo); opacity: 0.45; }
+.task[data-s="doing"] .hex { background: var(--doing); }
+.task[data-s="done"] .hex { background: var(--done); }
+.task[data-s="blocked"] .hex { background: var(--blocked); }
+.task-title { font-weight: 600; }
+.task[data-s="done"] .task-title { color: var(--muted); }
+.task-detail { grid-column: 2 / -1; color: var(--muted); font-size: 14px; max-width: 76ch; }
+.task-files { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px 10px; font: 12px var(--mono); color: var(--muted); }
+.status { font: 500 11.5px/1 var(--mono); padding: 4px 7px; border-radius: 4px; white-space: nowrap; align-self: start; }
+.status.todo { color: var(--todo); background: var(--surface-2); }
+.status.doing { color: var(--doing); background: var(--accent-soft); }
+.status.done { color: var(--done); background: var(--ok-soft); }
+.status.blocked { color: var(--blocked); background: var(--risk-soft); }
+.est { font: 12px var(--mono); color: var(--muted); }
+
+/* lists */
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: grid; gap: 10px; align-content: start; }
+.panel ol, .panel ul { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; }
+.panel li b { font-weight: 600; }
+.risk { border-left: 3px solid var(--blocked); }
+.changelog { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+.changelog span { font-family: var(--mono); color: var(--ink); margin-right: 8px; }
+@media (max-width: 560px) {
+  .task { grid-template-columns: 20px 1fr; }
+  .task .status { grid-column: 2; justify-self: start; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bar span { transition: width 0.3s ease; }
+}
+</style>
+
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">BeeDocs · Vibecoding / plan</span>
+  <h1>Multi-tenancy for the VPS</h1>
+  <p class="lede">Separate, fully isolated BeeDocs systems for selected customers — their own accounts, documents, settings, keys and backups — run from one image on the existing K3S VPS.</p>
+  <div class="meta">
+    <span>Baseline <b>v1.0.0</b> (<code>64f9c0e</code>)</span>
+    <span>Written <b>2026-09-24</b></span>
+    <span>Stage <b id="stage">Assessment — awaiting decision</b></span>
+  </div>
+  <div class="overall" aria-live="polite">
+    <div class="overall-row">
+      <div><span class="big" id="pct">0%</span> <span class="est" id="counts"></span></div>
+      <div class="legend">
+        <span><i style="background:var(--done)"></i>Done</span>
+        <span><i style="background:var(--doing)"></i>In progress</span>
+        <span><i style="background:var(--blocked)"></i>Blocked</span>
+        <span><i style="background:var(--todo);opacity:.45"></i>To do</span>
+      </div>
+    </div>
+    <div class="bar" id="overall-bar"></div>
+  </div>
+</header>
+
+<section class="verdict">
+  <span class="eyebrow">Recommendation</span>
+  <h2>One isolated instance per tenant — not a shared multi-tenant process</h2>
+  <p>Each customer gets their own Kubernetes namespace with its own pod (API + MCP), volume, secrets, hostname and network policy, all running the same BeeDocs image. The application already treats <em>everything</em> as instance-scoped — one SQLite file, five data directories, settings in <code>app_setting</code>, caches in singletons — so an instance is already a complete tenant. What is missing is the tooling to stamp out instances safely and a handful of hardening changes for running on the internet for someone else.</p>
+  <ul>
+    <li><b>Strongest isolation for the least code.</b> A bug in BeeDocs cannot leak data between customers, because no process, file or database is shared.</li>
+    <li><b>Keeps every future feature cheap.</b> A shared process would put a tenant check in front of every query, cache and file path forever.</li>
+    <li><b>Cost:</b> roughly 200–350 MB RAM per tenant at idle, plus one rollout per tenant on upgrade. Fine for a handful of customers; revisit if the count heads towards dozens.</li>
+  </ul>
+</section>
+
+<section>
+  <span class="eyebrow">Options considered</span>
+  <h2>Three ways to isolate tenants</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th></th><th class="pick">A · Instance per tenant</th><th>B · One process, DB per tenant</th><th>C · Shared DB, tenant_id column</th></tr></thead>
+      <tbody>
+        <tr><td><b>Isolation</b></td><td class="pick">Process, disk, network, secrets — separate</td><td>Separate files; shared memory, caches, workers</td><td>Rows only — one missed <code>WHERE</code> leaks</td></tr>
+        <tr><td><b>Code change</b></td><td class="pick">Small hardening (Phase 1)</td><td>Tenant-resolve every request; key 184 connection opens in 29 files, 40+ singletons, 5 file roots, 2 background services, every cache</td><td>All of B plus a column and filter on ~30 tables, FTS, triggers, unique indexes</td></tr>
+        <tr><td><b>Leak risk</b></td><td class="pick">Only infrastructure misconfiguration</td><td>Any cache or singleton not keyed by tenant</td><td>Any query, trigger or export not filtered</td></tr>
+        <tr><td><b>Noisy neighbour</b></td><td class="pick">CPU/RAM limits per pod</td><td>Restore’s maintenance gate, reindexing, git clones block everyone</td><td>Same as B, plus one shared SQLite write lock</td></tr>
+        <tr><td><b>Backup / offboarding</b></td><td class="pick">Existing backup feature, per tenant; delete = drop namespace</td><td>Per-tenant file, but restore logic must be re-scoped</td><td>Surgical row export and delete</td></tr>
+        <tr><td><b>Per-tenant versions</b></td><td class="pick">Possible (version pin)</td><td>No</td><td>No</td></tr>
+        <tr><td><b>Resource cost</b></td><td class="pick">~200–350 MB per tenant</td><td>Lowest</td><td>Lowest</td></tr>
+        <tr><td><b>Rough effort</b></td><td class="pick">~2–3 weeks part-time</td><td>~5–7 weeks, permanent tax</td><td>~8+ weeks, permanent tax</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Target architecture</span>
+  <h2>Every tenant is its own cell</h2>
+  <div class="diagram" role="img" aria-label="Cloudflare routes tenant hostnames through one tunnel to the K3S ingress, which routes each hostname to that tenant's namespace containing pod, volume, secrets and network policy.">
+    <div class="tier"><div class="node"><b>Cloudflare</b>wildcard DNS <code>*.docs.&lt;domain&gt;</code> · one tunnel · Access on MCP hosts</div></div>
+    <div class="arrow">▼ host header</div>
+    <div class="tier"><div class="node"><b>Traefik ingress (bundled with K3S)</b>routes hostname → tenant namespace · replaces one NodePort per service</div></div>
+    <div class="arrow">▼</div>
+    <div class="cells">
+      <div class="cell"><span class="ns">beedocs-main</span><span class="host">docs.&lt;domain&gt; — today’s instance</span><div class="parts"><span>pod: api + mcp</span><span>PVC /data</span><span>Secrets</span><span>NetworkPolicy</span><span>Quota</span></div></div>
+      <div class="cell"><span class="ns">beedocs-acme</span><span class="host">acme.docs.&lt;domain&gt;</span><div class="parts"><span>pod: api + mcp</span><span>PVC /data</span><span>Secrets</span><span>NetworkPolicy</span><span>Quota</span></div></div>
+      <div class="cell"><span class="ns">beedocs-&lt;slug&gt;</span><span class="host">&lt;slug&gt;.docs.&lt;domain&gt;</span><div class="parts"><span>pod: api + mcp</span><span>PVC /data</span><span>Secrets</span><span>NetworkPolicy</span><span>Quota</span></div></div>
+    </div>
+    <p class="est">Nothing crosses a cell boundary: no shared database, volume, secret, cookie, API key or pod network path. Operators reach a tenant only through <code>kubectl</code>.</p>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Impact assessment</span>
+  <h2>What is instance-scoped today, and what it means for a tenant</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Area</th><th>Today</th><th>Impact under option A</th></tr></thead>
+      <tbody>
+        <tr><td><b>Database</b></td><td>One SQLite file via singleton <code>SqliteConnectionFactory</code></td><td><span class="chip none">none</span> one file per tenant volume</td></tr>
+        <tr><td><b>Files</b></td><td>Uploads, attachments, git clones, branding, backup scratch — singleton roots under <code>/data</code></td><td><span class="chip none">none</span> per tenant volume</td></tr>
+        <tr><td><b>Settings</b></td><td>RBA, API key, branding, LLM providers, storage providers, backup schedule — all in <code>app_setting</code> / own tables</td><td><span class="chip none">none</span> separate automatically</td></tr>
+        <tr><td><b>Caches &amp; jobs</b></td><td>Settings caches, <code>ContentStoreRouter</code>, JWKS cache, job cancellation maps, <code>MaintenanceGate</code></td><td><span class="chip none">none</span> per process = per tenant; a restore only pauses that tenant</td></tr>
+        <tr><td><b>Sessions</b></td><td>Host-only cookie (no <code>Domain</code>), token checked against local <code>user_session</code></td><td><span class="chip none">none</span> a session from one tenant is meaningless on another</td></tr>
+        <tr><td><b>First-run setup</b></td><td>Empty user table ⇒ the first visitor claims admin</td><td><span class="chip fix">must fix</span> a fresh tenant URL is claimable by anyone who finds it first</td></tr>
+        <tr><td><b>MCP endpoint</b></td><td>Deployed without bearer token and without an Access policy — open read/write/delete</td><td><span class="chip fix">must fix</span> before any customer; mandatory token per tenant</td></tr>
+        <tr><td><b>Outbound URLs</b></td><td>Admins set LLM base URL, S3 endpoint, git remotes, RBA URL freely</td><td><span class="chip fix">must fix</span> a tenant admin could probe cluster-internal addresses — block via NetworkPolicy + URL guard</td></tr>
+        <tr><td><b>Host features</b></td><td><code>claude-cli</code>/<code>grok-cli</code> LLM kinds spawn local CLIs; Omarchy theme reads the host’s <code>~/.local/state</code></td><td><span class="chip small">small</span> disable in hosted mode</td></tr>
+        <tr><td><b>Exposure</b></td><td>NodePort 32095 (web) / 32096 (MCP), one tunnel route each</td><td><span class="chip small">small</span> move to Ingress host routing; one tunnel, wildcard hostname</td></tr>
+        <tr><td><b>Deploy script</b></td><td><code>deploy-k3s.sh</code> hard-codes namespace <code>beedocs</code></td><td><span class="chip small">small</span> template + fan-out rollout</td></tr>
+        <tr><td><b>Storage limits</b></td><td>K3S <code>local-path</code> volumes don’t enforce their size</td><td><span class="chip small">small</span> app-level quota + disk alerting</td></tr>
+        <tr><td><b>Google Drive / OAuth</b></td><td>Callback built from <code>BeeDocs:PublicBaseUrl</code></td><td><span class="chip small">small</span> set per tenant; register each redirect URI</td></tr>
+        <tr><td><b>RBA sign-in</b></td><td>Company RBA service, application <code>DOC</code></td><td><span class="chip none">none</span> off per tenant by default; customers use local accounts (SSO is an open question)</td></tr>
+        <tr><td><b>Web UI, search, exports, editors</b></td><td>All read through the instance</td><td><span class="chip none">none</span> branding already names each instance</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div style="display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap">
+    <div style="display:grid;gap:8px"><span class="eyebrow">Plan</span><h2>Phases and progress</h2></div>
+    <div class="filters" role="group" aria-label="Filter tasks">
+      <button type="button" id="f-all" data-f="all" aria-pressed="true">All</button>
+      <button type="button" id="f-open" data-f="open" aria-pressed="false">Open</button>
+      <button type="button" id="f-done" data-f="done" aria-pressed="false">Done</button>
+    </div>
+  </div>
+  <div id="phases" style="display:grid;gap:14px"></div>
+</section>
+
+<section>
+  <span class="eyebrow">Before building</span>
+  <h2>Decisions and risks</h2>
+  <div class="two">
+    <div class="panel">
+      <h3>Open questions for you</h3>
+      <ol>
+        <li><b>How many tenants</b> in the first year, and the VPS’s RAM/disk? Sets the per-tenant budget.</li>
+        <li><b>Hostnames:</b> <code>&lt;slug&gt;.docs.&lt;domain&gt;</code> for all, or customer-owned domains too?</li>
+        <li><b>Customer sign-in:</b> are local BeeDocs accounts enough, or will a customer want their own SSO (Entra ID / Google)? That would be a new OIDC provider next to RBA.</li>
+        <li><b>AI features:</b> does each customer bring their own LLM key, or do you supply one (and absorb its cost)?</li>
+        <li><b>Operator access:</b> should you hold a break-glass admin account inside each tenant, or only <code>kubectl</code> access?</li>
+        <li><b>Backups:</b> which bucket/provider holds tenant backups, and how long are they kept after a customer leaves?</li>
+      </ol>
+    </div>
+    <div class="panel risk">
+      <h3>Risks to watch</h3>
+      <ul>
+        <li><b>VPS capacity</b> — every tenant is a .NET process plus the MCP sidecar; one VPS is also one failure domain for all customers.</li>
+        <li><b>Upgrade drift</b> — pinned versions invite tenants that never upgrade; keep pins temporary.</li>
+        <li><b>Disk exhaustion</b> — one tenant filling the node’s disk affects all; quotas and alerts are not optional.</li>
+        <li><b>Misconfigured template</b> — isolation now lives in manifests; the Phase 5 isolation tests must run for every new tenant.</li>
+        <li><b>Legal</b> — hosting customer documents implies a processing agreement and a data-deletion promise.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Log</span>
+  <div class="changelog">
+    <div><span>2026-09-24</span>Assessment and plan written. Awaiting decision on option A and the open questions.</div>
+  </div>
+</section>
+
+</div>
+
+<script>
+// Progress lives here: update a task's status (todo | doing | done | blocked)
+// as work lands, add a line to the Log, and republish.
+const PHASES = [
+  {
+    n: "Phase 0", title: "Decide and prepare", est: "~1 day",
+    why: "Settle the model and close today’s open MCP endpoint before anything customer-facing exists.",
+    tasks: [
+      { t: "Approve isolation model A", d: "Record the decision and the rejected options as an ADR so later features keep assuming one tenant per instance.", f: ["Docs/MULTI-TENANCY.md"], s: "todo" },
+      { t: "Answer the open questions", d: "Tenant count, hostname scheme, customer sign-in, LLM keys, operator access, backup destination.", s: "todo" },
+      { t: "Measure VPS capacity", d: "RAM, CPU, free disk; decide per-tenant requests/limits and the maximum tenant count before an upgrade.", s: "todo" },
+      { t: "Secure the current MCP endpoint", d: "Restore MCP_AUTH_TOKEN (or a Cloudflare Access policy) — it currently accepts every caller with full write access.", f: ["k8s/beedocs/deployment.yaml"], s: "todo" },
+      { t: "Wildcard DNS and tunnel route", d: "*.docs.<domain> (and mcp host pattern) through the existing Cloudflare tunnel to the ingress.", s: "todo" },
+    ],
+  },
+  {
+    n: "Phase 1", title: "Tenant-safe application", est: "~3–4 days",
+    why: "Small code changes so an instance can be handed to someone else on the public internet.",
+    tasks: [
+      { t: "Hosted-tenant mode option", d: "BeeDocs:Tenant section (Id, DisplayName, Hosted=true). Tenant id reported in /api/health for ops. Hosted mode refuses to start with sign-in disabled.", f: ["Services/TenantOptions.cs", "Program.cs"], s: "todo" },
+      { t: "Provisioned first admin", d: "Require BeeDocs:Setup:Token on POST /api/auth/setup (setup screen asks for it), so an unclaimed tenant cannot be claimed by a stranger. Token generated at provisioning and handed to the customer.", f: ["Program.cs", "SetupScreen.tsx", "i18n/messages"], s: "todo" },
+      { t: "Disable host-level features in hosted mode", d: "Hide/refuse claude-cli and grok-cli LLM kinds and the Omarchy desktop palette; keep anonymous publish off by default.", f: ["LlmProviderService.cs", "BrandingService.cs"], s: "todo" },
+      { t: "Outbound URL guard", d: "Reject private, loopback, link-local and cluster addresses for LLM base URLs, S3 endpoints, git remotes and the RBA URL in hosted mode — defence in depth behind NetworkPolicy.", f: ["Services/OutboundUrlGuard.cs"], s: "todo" },
+      { t: "Storage quota", d: "Report tenant disk use (database + uploads + attachments + git) in stats; optional BeeDocs:Tenant:MaxStorageMb refuses uploads and clones past the cap.", f: ["StatsService.cs", "AttachmentService.cs"], s: "todo" },
+      { t: "MCP refuses to run open", d: "In HTTP transport with MCP_REQUIRE_AUTH=1, refuse to start without MCP_AUTH_TOKEN instead of logging a warning.", f: ["BeeDocs.Mcp/Program.cs"], s: "todo" },
+      { t: "Docs and CLAUDE.md", d: "Describe hosted mode, the setup token and the outbound guard.", f: ["Docs/MULTI-TENANCY.md", "CLAUDE.md"], s: "todo" },
+    ],
+  },
+  {
+    n: "Phase 2", title: "Per-tenant deployment template", est: "~2–3 days",
+    why: "Turn today’s single set of manifests into a base every tenant is stamped from.",
+    tasks: [
+      { t: "Kustomize base + tenant overlays", d: "k8s/base (deployment, service, pvc, configmap) and k8s/tenants/<slug>/ overlays; K3S kubectl applies them with -k.", f: ["k8s/base/", "k8s/tenants/"], s: "todo" },
+      { t: "Namespace, ResourceQuota, LimitRange", d: "Namespace beedocs-<slug> with CPU/RAM/PVC quotas from the tenant registry.", s: "todo" },
+      { t: "Ingress host routing", d: "Traefik Ingress per tenant (web + MCP hosts) replacing per-service NodePorts; NodePorts firewalled.", s: "todo" },
+      { t: "NetworkPolicy", d: "Ingress only from the ingress controller; egress denied to pod/service CIDRs and private ranges, DNS and internet allowed.", s: "todo" },
+      { t: "Per-tenant secrets", d: "API key, MCP token and setup token generated at provisioning, stored only as Kubernetes Secrets — never in git.", s: "todo" },
+    ],
+  },
+  {
+    n: "Phase 3", title: "Tenant lifecycle tooling", est: "~2–3 days",
+    why: "One command to create, upgrade, pause, export and remove a tenant.",
+    tasks: [
+      { t: "Tenant registry", d: "k8s/tenants/tenants.yaml — slug, display name, hostnames, limits, optional version pin, contact. The source of truth for every script.", f: ["k8s/tenants/tenants.yaml"], s: "todo" },
+      { t: "tenant.sh create", d: "Render overlay, create namespace and secrets, apply, wait for /api/health, print URL and setup token.", f: ["scripts/tenant.sh"], s: "todo" },
+      { t: "tenant.sh list / status / logs / shell", d: "Operational views per tenant.", s: "todo" },
+      { t: "tenant.sh suspend / resume", d: "Scale to zero keeping data (unpaid, paused, or incident).", s: "todo" },
+      { t: "tenant.sh export / delete", d: "Export a full backup zip for the customer, then delete namespace and volume after a typed confirmation.", s: "todo" },
+      { t: "Fan-out rollout in deploy-k3s.sh", d: "Build and push once, then roll tenants one at a time — internal tenant first — gated on health, stopping at the first failure; honour version pins.", f: ["scripts/deploy-k3s.sh"], s: "todo" },
+    ],
+  },
+  {
+    n: "Phase 4", title: "Operations", est: "~2 days",
+    why: "Backups, monitoring and a restore you have actually rehearsed.",
+    tasks: [
+      { t: "Per-tenant backups", d: "Each tenant’s built-in backup schedule targets an ops S3 bucket under its own prefix with credentials scoped to that prefix.", s: "todo" },
+      { t: "Node-level safety net", d: "Periodic snapshot of the local-path volume directory, kept off the VPS.", s: "todo" },
+      { t: "Monitoring and alerts", d: "Uptime check per tenant hostname (/api/health), disk-usage alert, pod restart alert.", s: "todo" },
+      { t: "Restore runbook and drill", d: "Restore one tenant from its backup into a scratch tenant and verify.", s: "todo" },
+      { t: "Offboarding policy", d: "Export handed over, deletion confirmed, backups expired after N days; processing agreement template.", s: "todo" },
+    ],
+  },
+  {
+    n: "Phase 5", title: "Verify isolation", est: "~1 day",
+    why: "Prove separation with a second tenant before a customer relies on it — and re-run for every new tenant.",
+    tasks: [
+      { t: "Credentials don’t cross", d: "Session cookie, API key and MCP token from tenant A are all rejected by tenant B.", s: "todo" },
+      { t: "Network doesn’t cross", d: "From A’s pod: B’s service, the Kubernetes API and private ranges are unreachable.", s: "todo" },
+      { t: "Setup can’t be claimed", d: "A fresh tenant refuses setup without its token.", s: "todo" },
+      { t: "Outbound guard holds", d: "LLM base URL http://10.43.0.1 or 169.254.169.254 is refused.", s: "todo" },
+      { t: "Files and backups stay separate", d: "A’s /uploads paths 404 on B; A’s backup archive contains no B data; restoring A leaves B serving.", s: "todo" },
+    ],
+  },
+  {
+    n: "Phase 6", title: "Migrate and onboard", est: "~1 day",
+    why: "Bring today’s instance under the template, then the first customer.",
+    tasks: [
+      { t: "Adopt current instance as tenant main", d: "Point the main overlay at the existing volume — no data move; switch its route to the ingress.", s: "todo" },
+      { t: "Onboard first customer", d: "Create tenant, run Phase 5 checks, hand over URL + setup token, confirm backups arrive.", s: "todo" },
+    ],
+  },
+  {
+    n: "Later", title: "Not in this plan", est: "optional",
+    why: "Worth having once there are more tenants; none are needed for isolation.",
+    tasks: [
+      { t: "Tenant console", d: "Small operator UI over the registry and cluster: create, suspend, usage.", s: "todo" },
+      { t: "Customer SSO (OIDC)", d: "Entra ID / Google sign-in per tenant alongside local accounts and RBA.", s: "todo" },
+      { t: "Custom customer domains", d: "Per-tenant certificates and Cloudflare for SaaS.", s: "todo" },
+    ],
+  },
+];
+
+const LABEL = { todo: "To do", doing: "In progress", done: "Done", blocked: "Blocked" };
+let filter = "all";
+try { filter = localStorage.getItem("mt-filter") || "all"; } catch (e) {}
+
+function bar(tasks) {
+  const n = tasks.length || 1;
+  const c = s => tasks.filter(t => t.s === s).length / n * 100;
+  return `<span class="d" style="width:${c("done")}%"></span><span class="g" style="width:${c("doing")}%"></span><span class="b" style="width:${c("blocked")}%"></span>`;
+}
+function esc(s) { return s.replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch])); }
+
+function render() {
+  const core = PHASES.filter(p => p.n !== "Later").flatMap(p => p.tasks);
+  const done = core.filter(t => t.s === "done").length;
+  document.getElementById("pct").textContent = Math.round(done / core.length * 100) + "%";
+  document.getElementById("counts").textContent = `${done} of ${core.length} tasks done · ${core.filter(t => t.s === "doing").length} in progress`;
+  document.getElementById("overall-bar").innerHTML = bar(core);
+
+  document.getElementById("phases").innerHTML = PHASES.map(p => {
+    const shown = p.tasks.filter(t => filter === "all" || (filter === "done" ? t.s === "done" : t.s !== "done"));
+    const pd = p.tasks.filter(t => t.s === "done").length;
+    const open = p.n !== "Later" && pd < p.tasks.length;
+    return `<details class="phase" ${open ? "open" : ""}>
+      <summary>
+        <div class="phase-title"><span class="n">${p.n}</span><h3>${esc(p.title)}</h3><span class="est">${p.est}</span></div>
+        <span class="phase-count">${pd}/${p.tasks.length}</span>
+        <div class="bar">${bar(p.tasks)}</div>
+        <p class="phase-why">${esc(p.why)}</p>
+      </summary>
+      <ul class="tasks">${shown.map(t => `
+        <li class="task" data-s="${t.s}">
+          <div class="hex" aria-hidden="true"></div>
+          <div class="task-title">${esc(t.t)}</div>
+          <span class="status ${t.s}">${LABEL[t.s]}</span>
+          <div class="task-detail">${esc(t.d)}</div>
+          ${t.f ? `<div class="task-files">${t.f.map(esc).join("<span>·</span>")}</div>` : ""}
+        </li>`).join("") || `<li class="task"><div></div><div class="task-detail">Nothing here for this filter.</div></li>`}
+      </ul>
+    </details>`;
+  }).join("");
+
+  document.querySelectorAll(".filters button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.f === filter)));
+}
+
+document.querySelectorAll(".filters button").forEach(b => b.addEventListener("click", () => {
+  filter = b.dataset.f;
+  try { localStorage.setItem("mt-filter", filter); } catch (e) {}
+  render();
+}));
+render();
+</script>

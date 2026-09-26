@@ -227,7 +227,7 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 0.16rem 0.4rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--llm-line);
   color: var(--muted);
   white-space: nowrap;
@@ -272,7 +272,7 @@
   flex: none;
   margin: 0;
   padding: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--llm-line);
   background: var(--bg-soft);
   position: relative;
@@ -363,7 +363,7 @@
   font: inherit;
   line-height: 1;
   padding: 0.1rem 0.25rem;
-  border-radius: 6px;
+  border-radius: var(--r6);
 }
 
 .llm-row-error-x:hover {
@@ -490,7 +490,7 @@
   gap: var(--llm-2);
   text-align: left;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r6);
   background: transparent;
   color: inherit;
   padding: var(--llm-1) var(--llm-2);
@@ -834,7 +834,7 @@ html[data-theme='high-contrast'] .llm-providers .btn.primary:disabled {
   text-transform: uppercase;
   color: var(--muted);
   border: 1px solid var(--llm-line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 0.05rem 0.35rem;
 }
 

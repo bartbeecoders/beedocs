@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { withBase } from '../basePath'
@@ -10,6 +11,7 @@ import { ReorganizeDialog } from './ReorganizeDialog'
 import type { ExportFormat } from '../types'
 import { useAuth } from '../auth/AuthContext'
 import { useI18n } from '../i18n'
+import { useMenuInViewport } from '../hooks/useMenuInViewport'
 import { TREE_DRAG_MIME } from '../markdownLinks'
 import { useWorkspace, type TreeBook, type TreeShelf } from '../workspace/WorkspaceContext'
 import type { TreeSelection } from '../workspace/selection'
@@ -296,14 +298,8 @@ export function NavTree() {
   const openMenu = (e: React.MouseEvent, next: CtxMenu) => {
     e.preventDefault()
     e.stopPropagation()
-    const pad = 8
-    const w = 200
-    const h = 280
-    setMenu({
-      ...next,
-      x: Math.min(e.clientX, window.innerWidth - w - pad),
-      y: Math.min(e.clientY, window.innerHeight - h - pad),
-    })
+    // Placement (flip/clamp against the measured menu) is useMenuInViewport's job.
+    setMenu({ ...next, x: e.clientX, y: e.clientY })
   }
 
   const onCreateBook = async (e: FormEvent) => {
@@ -513,14 +509,7 @@ export function NavTree() {
   /** Books at the library root — everything not on a shelf. */
   const rootBooks = books.filter((b) => !b.shelfId)
 
-  const menuStyle = menu
-    ? {
-        position: 'fixed' as const,
-        left: Math.max(8, menu.x),
-        top: Math.max(8, menu.y),
-        zIndex: 1200,
-      }
-    : undefined
+  const menuStyle = useMenuInViewport(menuRef, menu)
 
   return (
     <div className="nav-tree">
@@ -675,7 +664,9 @@ export function NavTree() {
         </div>
       )}
 
-      {menu && (
+      {menu &&
+        // Portaled so no clipped or transformed ancestor in the left pane can cut it off.
+        createPortal(
         <div ref={menuRef} className="tree-context-menu" style={menuStyle} role="menu">
           {menu.kind === 'shelf' && (
             <>
@@ -1125,8 +1116,9 @@ export function NavTree() {
               />
             </>
           )}
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
 
       <input
         ref={uploadInputRef}

@@ -15,6 +15,9 @@ export type ThemeId =
   | 'tokyo-night'
   | 'rose-pine'
   | 'solarized-light'
+  | 'paper'
+  | 'ink'
+  | 'graphite'
   | 'high-contrast'
   | 'omarchy'
 
@@ -44,8 +47,19 @@ export const THEMES: ThemeDef[] = [
   { id: 'tokyo-night', label: 'Tokyo Night', description: 'Downtown neon blues', scheme: 'dark' },
   { id: 'rose-pine', label: 'Rosé Pine', description: 'Muted rose & iris', scheme: 'dark' },
   { id: 'solarized-light', label: 'Solarized Light', description: 'Classic low-glare paper', scheme: 'light' },
+  { id: 'paper', label: 'Paper', description: 'Paper-white, blue accents', scheme: 'light' },
+  { id: 'ink', label: 'Ink', description: 'Black-and-white editorial', scheme: 'light' },
+  { id: 'graphite', label: 'Graphite', description: 'Neutral monochrome dark', scheme: 'dark' },
   { id: 'high-contrast', label: 'High contrast', description: 'Maximum readability', scheme: 'dark' },
 ]
+
+/**
+ * UI style — corner shape and elevation, independent of the color theme. Each
+ * is an `html[data-style]` block in index.css that rescales the --rN radius
+ * tokens (and flattens shadows for clean/square).
+ */
+export type UiStyle = 'rounded' | 'soft' | 'clean' | 'square'
+export const UI_STYLES: UiStyle[] = ['rounded', 'soft', 'clean', 'square']
 
 type ThemeCtx = {
   theme: ThemeId
@@ -54,6 +68,8 @@ type ThemeCtx = {
   /** Desktop palette from /api/branding — null off Omarchy machines. */
   omarchy: OmarchyTheme | null
   setOmarchy: (palette: OmarchyTheme | null) => void
+  uiStyle: UiStyle
+  setUiStyle: (s: UiStyle) => void
   density: 'comfortable' | 'compact'
   setDensity: (d: 'comfortable' | 'compact') => void
   showPreviewDefault: boolean
@@ -66,6 +82,7 @@ const Ctx = createContext<ThemeCtx | null>(null)
 
 const THEME_KEY = 'beedocs-theme'
 const DENSITY_KEY = 'beedocs-density'
+const STYLE_KEY = 'beedocs-ui-style'
 const PREVIEW_KEY = 'beedocs-preview-default'
 const AUTOSAVE_KEY = 'beedocs-autosave'
 /** Last seen desktop palette, so an 'omarchy' boot doesn't flash the default theme. */
@@ -100,6 +117,10 @@ function loadCachedOmarchy(): OmarchyTheme | null {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeId>(resolveInitialTheme)
   const [omarchy, setOmarchyState] = useState<OmarchyTheme | null>(loadCachedOmarchy)
+  const [uiStyle, setUiStyleState] = useState<UiStyle>(() => {
+    const v = localStorage.getItem(STYLE_KEY) as UiStyle | null
+    return v && UI_STYLES.includes(v) ? v : 'rounded'
+  })
   const [density, setDensityState] = useState<'comfortable' | 'compact'>(() => {
     const d = localStorage.getItem(DENSITY_KEY)
     return d === 'compact' ? 'compact' : 'comfortable'
@@ -136,6 +157,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       root.style.removeProperty('color-scheme')
     }
   }, [theme, scheme, omarchy])
+
+  useEffect(() => {
+    document.documentElement.dataset.style = uiStyle
+    localStorage.setItem(STYLE_KEY, uiStyle)
+  }, [uiStyle])
 
   useEffect(() => {
     document.documentElement.dataset.density = density
@@ -182,6 +208,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       themeDef,
       omarchy,
       setOmarchy,
+      uiStyle,
+      setUiStyle: setUiStyleState,
       density,
       setDensity: setDensityState,
       showPreviewDefault,
@@ -189,7 +217,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       autoSaveEnabled,
       setAutoSaveEnabled: setAutoSaveEnabledState,
     }),
-    [theme, themeDef, omarchy, setOmarchy, density, showPreviewDefault, autoSaveEnabled],
+    [theme, themeDef, omarchy, setOmarchy, uiStyle, density, showPreviewDefault, autoSaveEnabled],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

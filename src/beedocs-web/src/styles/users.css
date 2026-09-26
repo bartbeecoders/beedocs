@@ -199,7 +199,7 @@
   font-size: 0.7rem;
   letter-spacing: 0.02em;
   padding: 0.12rem 0.45rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--usr-line);
   color: var(--muted);
   background: var(--bg-elevated);
@@ -216,7 +216,7 @@
   flex: none;
   font-size: 0.68rem;
   padding: 0.12rem 0.4rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--usr-line);
   color: var(--muted);
 }
@@ -272,7 +272,7 @@
   font-family: var(--mono);
   font-size: 0.9rem;
   padding: 0.1rem 0.35rem;
-  border-radius: 5px;
+  border-radius: var(--r5);
   background: var(--bg);
   user-select: all;
 }
@@ -316,7 +316,7 @@
   height: 28px;
   object-fit: contain;
   display: block;
-  border-radius: 5px;
+  border-radius: var(--r5);
 }
 
 .login-title {
@@ -390,7 +390,7 @@
 .login-method-switch:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: var(--r2);
 }
 
 .login-hint {
@@ -421,7 +421,7 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.2rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text);
@@ -447,7 +447,7 @@
   width: 1.25rem;
   height: 1.25rem;
   flex: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--accent) 30%, var(--bg-soft));
   color: var(--text);
   font-size: 0.62rem;
@@ -464,7 +464,7 @@
   gap: var(--usr-2, 0.5rem);
   padding: 0.65rem;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: var(--r10);
   background: var(--bg-elevated);
   box-shadow: var(--shadow);
 }
@@ -500,7 +500,7 @@
   font-family: var(--mono);
   font-size: 0.7rem;
   padding: 0.05rem 0.35rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--border);
   color: var(--muted);
 }
@@ -568,7 +568,7 @@
 .ws-app-menu-item {
   display: block;
   padding: 0.45rem 0.6rem;
-  border-radius: 6px;
+  border-radius: var(--r6);
   color: var(--text);
   text-decoration: none;
   font-size: 0.88rem;

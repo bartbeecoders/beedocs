@@ -213,7 +213,13 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   book, or library search), insert list/table/code/callout, format, "turn
   into", add a block below, split/move/delete the section. Text edits go
   through `document.execCommand('insertText')` so the textarea's own Ctrl+Z
-  still works; Shift+right-click keeps the browser menu. All API
+  still works; Shift+right-click keeps the browser menu. **Double-clicking
+  prose in the preview** switches Preview to Edit (Split just moves the caret)
+  with the caret on the clicked character (`sourcePositions.ts`: a rehype
+  plugin stamps `data-src` source offsets, the rendered prefix is matched
+  through the source, and `locateTextSegment` maps it to the editor block,
+  per grid cell; a table piece focuses the matching designer cell via
+  `locateTableCell`). All API
   calls go through the typed client in `api.ts`.
 - **Page grid layout** (`pageLayout.ts`) — a page can arrange its blocks in a
   COLS×ROWS grid of cells instead of one top-to-bottom flow. The whole feature
@@ -591,10 +597,16 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   properties under `data-theme='omarchy'` — the one theme not declared in
   index.css, offered in the settings grid only when the palette exists, and
   auto-adopted only for a browser that never chose a theme
-  (`storedThemeAtBoot`). The static theme list grew to 13
-  (`nord`/`gruvbox`/`catppuccin`/`tokyo-night`/`rose-pine`/`solarized-light`
-  added); each is one variable block in index.css plus a swatch rule and a
-  `THEMES` row. See `Docs/BRANDING.md`.
+  (`storedThemeAtBoot`). The static theme list is 16
+  (`nord`/`gruvbox`/`catppuccin`/`tokyo-night`/`rose-pine`/`solarized-light`,
+  then the neutral `paper`/`ink`/`graphite`); each is one variable block in
+  index.css plus a swatch rule and a `THEMES` row. **UI style** is a second,
+  independent axis (`html[data-style]`, `UiStyle` in theme.tsx,
+  `beedocs-ui-style` in localStorage): rounded (default) / soft / clean /
+  square. Every corner in the CSS is a `var(--rN)` token
+  (`calc(Npx * var(--radius-scale))`, pills are `--r-pill`), so a style only
+  sets the scale — never write a raw px `border-radius`. Popover/dialog drop
+  shadows are `var(--shadow-pop, <original>)` so clean/square can flatten them. See `Docs/BRANDING.md`.
 - **UI languages** (`src/i18n/` — `index.tsx` provider + `useI18n()`,
   `langs.ts`, per-feature dictionaries in `messages/*.ts`) — the web UI ships
   in en/fr/de/es/nl/ja/zh, hand-rolled like theme.tsx (no i18n library).

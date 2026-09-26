@@ -70,6 +70,7 @@ import {
   serializePageLayout,
   type PageLayout,
 } from '../pageLayout'
+import { locateTableCell, locateTextSegment, type SourceTarget } from '../sourcePositions'
 import { outlineId } from '../pageOutline'
 import { useAuth } from '../auth/AuthContext'
 import { useWorkspace } from '../workspace/WorkspaceContext'
@@ -205,6 +206,12 @@ type Props = {
   bookId?: string
   pageId?: string
   placeholder?: string
+  /**
+   * Put the caret here — a cell and an offset into that cell's Markdown, as
+   * reported by a double-click in the preview. `seq` makes a repeat of the
+   * same spot a new request.
+   */
+  caretTarget?: (SourceTarget & { seq: number }) | null
 }
 
 /**
@@ -259,7 +266,7 @@ type ReorderGapProps = {
  * its own block list, and blocks drag between cells with the same handle that
  * reorders them.
  */
-export function HybridPageEditor({ content, onChange, bookId, pageId, placeholder }: Props) {
+export function HybridPageEditor({ content, onChange, bookId, pageId, placeholder, caretTarget }: Props) {
   const { t } = useI18n()
   const lastEmitted = useRef(content)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -287,6 +294,60 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
 
   const docRef = useRef(doc)
   docRef.current = doc
+
+  // Double-click in the preview: find the text field holding that source
+  // offset and put the caret on it. Deferred a tick so a freshly mounted
+  // editor has its blocks (and their auto-sized fields) in place first.
+  useEffect(() => {
+    if (!caretTarget) return
+    const timer = window.setTimeout(() => {
+      const root = rootRef.current
+      if (!root) return
+      const parsed = parsePageLayout(content)
+      const cellSource = parsed ? parsed.cells[caretTarget.cell] : content
+      if (cellSource == null) return
+      const at = locateTextSegment(cellSource, caretTarget.offset)
+      if (!at) return
+      // A block split around images/tables has one element per piece: text
+      // pieces are textareas, tables the grid designer.
+      const pieces = [
+        ...root.querySelectorAll<HTMLElement>(
+          `[data-cell-index="${caretTarget.cell}"][data-segment-index="${at.segmentIndex}"][data-piece-start]`,
+        ),
+      ]
+      let piece: HTMLElement | undefined
+      for (const p of pieces) {
+        if (Number(p.dataset.pieceStart) <= at.offsetInSegment) piece = p
+      }
+      if (!piece) return
+      const inPiece = at.offsetInSegment - Number(piece.dataset.pieceStart)
+
+      let field: HTMLTextAreaElement | HTMLInputElement | null = null
+      let caret = inPiece
+      if (piece.dataset.pieceKind === 'table') {
+        const cell = locateTableCell(piece.dataset.pieceRaw ?? '', inPiece)
+        field = piece.querySelector<HTMLTextAreaElement | HTMLInputElement>(
+          `[data-link-row="${cell.row}"][data-link-col="${cell.col}"] :is(textarea, input)`,
+        )
+        caret = cell.caret
+        // Showing its source instead of the grid: the table's one textarea.
+        if (!field) {
+          field = piece.querySelector('textarea')
+          caret = inPiece
+        }
+      } else if (piece instanceof HTMLTextAreaElement) {
+        field = piece
+      }
+      if (!field) return
+      caret = Math.min(field.value.length, Math.max(0, caret))
+      field.focus({ preventScroll: true })
+      field.setSelectionRange(caret, caret)
+      field.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+    return () => window.clearTimeout(timer)
+    // Only a new request moves the caret — not every keystroke's new content.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caretTarget])
 
   const emit = useCallback(
     (next: EditorDoc) => {
@@ -1666,6 +1727,12 @@ function RichTextBlock({
 }) {
   const { t } = useI18n()
   const pieces = splitTextWithImagesAndTables(value)
+  /** Offset of each piece in `value` — pieces concatenate back to it. */
+  const pieceStarts: number[] = []
+  pieces.reduce((at, p) => {
+    pieceStarts.push(at)
+    return at + (p.kind === 'text' ? p.text : p.raw).length
+  }, 0)
 
   // Latest text this block knows about — edits compose off this rather than off
   // `value`, which is still catching up while the user types.
@@ -1710,6 +1777,7 @@ function RichTextBlock({
             className="hybrid-text-block"
             data-segment-index={segmentIndex}
             data-cell-index={cellIndex}
+            data-piece-start={0}
             value={value}
             rows={Math.min(28, Math.max(3, value.split('\n').length + 1))}
             onValueChange={onChange}
@@ -1751,15 +1819,27 @@ function RichTextBlock({
         }
         if (p.kind === 'table') {
           return (
-            <MarkdownTableEditor
+            // `display: contents` — only here to carry the piece's address
+            // for double-click-to-edit, not to change the block's layout.
+            <div
               key={`tbl-${i}`}
-              raw={p.raw}
-              onChange={(nextRaw) => updatePieceRaw(i, nextRaw)}
-              onRemove={() => onRemovePiece(p.raw)}
-            />
+              style={{ display: 'contents' }}
+              data-segment-index={segmentIndex}
+              data-cell-index={cellIndex}
+              data-piece-start={pieceStarts[i]}
+              data-piece-kind="table"
+              data-piece-raw={p.raw}
+            >
+              <MarkdownTableEditor
+                raw={p.raw}
+                onChange={(nextRaw) => updatePieceRaw(i, nextRaw)}
+                onRemove={() => onRemovePiece(p.raw)}
+              />
+            </div>
           )
         }
         if (!p.text && i > 0 && i < pieces.length - 1) return null
+        const pieceStart = pieceStarts[i]
         const rows = Math.min(20, Math.max(2, p.text.split('\n').length + 1))
         return (
           <AiAssistField key={`t-${i}`} context={pageContext}>
@@ -1767,6 +1847,7 @@ function RichTextBlock({
               className="hybrid-text-block hybrid-text-piece"
               data-segment-index={segmentIndex}
               data-cell-index={cellIndex}
+              data-piece-start={pieceStart}
               value={p.text}
               rows={rows}
               onValueChange={(next) => updatePieceText(i, next)}
