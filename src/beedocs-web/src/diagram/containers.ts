@@ -193,7 +193,8 @@ export type DiagramPaintItem =
 /**
  * Interleave nodes and edges so connections inside a container paint *after*
  * that container's opaque fill (and before / among its children). Root-level
- * edges still paint before root shapes, matching the previous flat order.
+ * edges still paint before root shapes, matching the previous flat order —
+ * except edges that leave a container, which paint after its whole subtree.
  *
  * Nodes are emitted in {@link restackContainers} order.
  */
@@ -201,12 +202,30 @@ export function diagramPaintOrder(nodes: BeeNode[], edges: BeeEdge[]): DiagramPa
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const ordered = restackContainers(nodes)
 
+  // Last paint index of each node's subtree (restack emits subtrees contiguously).
+  const subtreeEnd = new Map<string, number>()
+  ordered.forEach((node, i) => {
+    for (const id of ancestorChain(node.id, byId)) {
+      subtreeEnd.set(id, Math.max(subtreeEnd.get(id) ?? i, i))
+    }
+  })
+
   const byLayer = new Map<string | null, BeeEdge[]>()
+  const afterIndex = new Map<number, BeeEdge[]>()
   for (const edge of edges) {
     if (!byId.has(edge.from) || !byId.has(edge.to)) continue
     const layer = edgeLayerId(edge, byId)
-    const list = byLayer.get(layer)
+    // An edge leaving a container (endpoint nested below the layer's direct
+    // child) must paint after that container's subtree, or its fill hides it.
+    let lift = -1
+    for (const end of [edge.from, edge.to]) {
+      const chain = ancestorChain(end, byId)
+      const at = layer === null ? chain.length : chain.indexOf(layer)
+      if (at > 1) lift = Math.max(lift, subtreeEnd.get(chain[at - 1]) ?? -1)
+    }
+    const list = lift >= 0 ? afterIndex.get(lift) : byLayer.get(layer)
     if (list) list.push(edge)
+    else if (lift >= 0) afterIndex.set(lift, [edge])
     else byLayer.set(layer, [edge])
   }
 
@@ -214,12 +233,15 @@ export function diagramPaintOrder(nodes: BeeNode[], edges: BeeEdge[]): DiagramPa
   for (const edge of byLayer.get(null) ?? []) {
     out.push({ kind: 'edge', edge })
   }
-  for (const node of ordered) {
+  ordered.forEach((node, i) => {
     out.push({ kind: 'node', node })
     for (const edge of byLayer.get(node.id) ?? []) {
       out.push({ kind: 'edge', edge })
     }
-  }
+    for (const edge of afterIndex.get(i) ?? []) {
+      out.push({ kind: 'edge', edge })
+    }
+  })
   return out
 }
 
