@@ -16,6 +16,8 @@ import type { SlideEditorState } from './SlideCanvas'
 import type { KanbanEditorState } from './KanbanCanvas'
 import type { ProjectEditorState } from './ProjectCanvas'
 import type { NoteEditorState } from './NoteCanvas'
+import type { AnimationEditorState } from './AnimationCanvas'
+import { ExplainerDialog } from './ExplainerDialog'
 import type { AttachmentEditorState } from './AttachmentCanvas'
 import { ATTACHMENT_ACCEPT, attachmentIcon } from '../media/attachments'
 import { useAttachmentUpload } from '../hooks/useAttachmentUpload'
@@ -30,6 +32,7 @@ export type WorkspaceView =
   | 'kanban'
   | 'project'
   | 'note'
+  | 'animation'
   | 'attachment'
   | 'settings'
   | 'users'
@@ -48,6 +51,7 @@ type Props = {
   boardId?: string
   planId?: string
   noteId?: string
+  animationId?: string
   attachmentId?: string
   pageState?: PageEditorState | null
   diagramState?: DiagramEditorState | null
@@ -55,6 +59,7 @@ type Props = {
   kanbanState?: KanbanEditorState | null
   projectState?: ProjectEditorState | null
   noteState?: NoteEditorState | null
+  animationState?: AnimationEditorState | null
   attachmentState?: AttachmentEditorState | null
 }
 
@@ -174,6 +179,12 @@ const ICONS = {
       <path d="M5 6h6M5 8.5h6M5 11h3.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
     </Icon>
   ),
+  animation: (
+    <Icon>
+      <rect x="2" y="3.2" width="12" height="9.6" rx="1.2" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M6.6 5.9v4.2L10.2 8 6.6 5.9Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    </Icon>
+  ),
   settings: (
     <Icon>
       <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.35" />
@@ -241,6 +252,7 @@ export function WorkspaceToolbar({
   boardId,
   planId,
   noteId,
+  animationId,
   attachmentId,
   pageState,
   diagramState,
@@ -248,6 +260,7 @@ export function WorkspaceToolbar({
   kanbanState,
   projectState,
   noteState,
+  animationState,
   attachmentState,
 }: Props) {
   const {
@@ -266,6 +279,7 @@ export function WorkspaceToolbar({
     createKanbanBoard,
     createProjectPlan,
     createNote,
+    createAnimation,
     deleteBook,
     deletePage,
     deleteFolder,
@@ -274,6 +288,7 @@ export function WorkspaceToolbar({
     deleteKanbanBoard,
     deleteProjectPlan,
     deleteNote,
+    deleteAnimation,
     deleteAttachment,
     renameFolder,
     movePage,
@@ -287,6 +302,7 @@ export function WorkspaceToolbar({
   const { t } = useI18n()
   const [importOpen, setImportOpen] = useState<{ targetBookId?: string } | null>(null)
   const [namePrompt, setNamePrompt] = useState<NamePrompt | null>(null)
+  const [explainer, setExplainer] = useState<{ bookId: string; pageId: string; title: string } | null>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const uploadBookRef = useRef<string | null>(null)
   const { uploadingIn, error: uploadError, clearError, upload } = useAttachmentUpload()
@@ -308,9 +324,26 @@ export function WorkspaceToolbar({
         boardId,
         planId,
         noteId,
+        animationId,
         attachmentId,
       ),
-    [view, selection, books, shelves, t, shelfId, bookId, pageId, diagramId, deckId, boardId, planId, noteId, attachmentId],
+    [
+      view,
+      selection,
+      books,
+      shelves,
+      t,
+      shelfId,
+      bookId,
+      pageId,
+      diagramId,
+      deckId,
+      boardId,
+      planId,
+      noteId,
+      animationId,
+      attachmentId,
+    ],
   )
 
   if (view === 'settings' || view === 'users' || view === 'stats' || view === 'help') {
@@ -672,6 +705,24 @@ export function WorkspaceToolbar({
                 <button
                   type="button"
                   className="btn ghost sm"
+                  onClick={() =>
+                    setNamePrompt({
+                      title: t('shell.newAnimation'),
+                      label: t('shell.animationTitle'),
+                      placeholder: t('shell.animationPlaceholder'),
+                      confirmLabel: t('shell.createAnimation'),
+                      run: async (title) => {
+                        const a = await createAnimation(context.bookId, title)
+                        void navigate(`/books/${context.bookId}/animations/${a.id}`)
+                      },
+                    })
+                  }
+                >
+                  {t('shell.newAnimation')}
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost sm"
                   disabled={uploading}
                   onClick={() => {
                     uploadBookRef.current = context.bookId
@@ -836,6 +887,18 @@ export function WorkspaceToolbar({
           <Sep />
           <Group>
             <ExportMenu scope="page" id={context.pageId} title={context.title} />
+            {canWrite && (
+              <button
+                type="button"
+                className="btn ghost sm"
+                title={t('shell.explainPageTooltip')}
+                onClick={() =>
+                  setExplainer({ bookId: context.bookId, pageId: context.pageId, title: context.title })
+                }
+              >
+                🎬 {t('shell.explainPage')}
+              </button>
+            )}
           </Group>
           {pageState?.dirty && (
             <>
@@ -1090,6 +1153,48 @@ export function WorkspaceToolbar({
         </>
       )}
 
+      {context.kind === 'animation' && (
+        <>
+          <Group>
+            {(view !== 'animation' || animationId !== context.animationId) && (
+              <button
+                type="button"
+                className="btn primary sm"
+                onClick={() =>
+                  void navigate(`/books/${context.bookId}/animations/${context.animationId}`)
+                }
+              >
+                {t('common.open')}
+              </button>
+            )}
+          </Group>
+          {animationState?.dirty && (
+            <>
+              <Sep />
+              <span className="ws-toolbar-status muted sm">{t('shell.unsavedChanges')}</span>
+            </>
+          )}
+          <span className="ws-toolbar-spacer" />
+          {canWrite && (
+            <Group>
+              <button
+                type="button"
+                className="btn ghost danger sm"
+                onClick={() => {
+                  if (!confirm(t('shell.deleteAnimationConfirm', { name: context.title }))) return
+                  void deleteAnimation(context.animationId, context.bookId).then(() => {
+                    setSelection({ kind: 'book', bookId: context.bookId })
+                    if (animationId === context.animationId) void navigate(`/books/${context.bookId}`)
+                  })
+                }}
+              >
+                {t('shell.deleteAnimation')}
+              </button>
+            </Group>
+          )}
+        </>
+      )}
+
       {context.kind === 'attachment' && (
         <>
           <Group>
@@ -1173,6 +1278,16 @@ export function WorkspaceToolbar({
         </span>
       )}
 
+      {explainer && (
+        <ExplainerDialog
+          bookId={explainer.bookId}
+          pageId={explainer.pageId}
+          pageTitle={explainer.title}
+          pageState={view === 'page' && pageId === explainer.pageId ? pageState : null}
+          onClose={() => setExplainer(null)}
+        />
+      )}
+
       {importOpen && (
         <ImportDialog
           defaultTargetBookId={importOpen.targetBookId}
@@ -1206,6 +1321,7 @@ type BookLike = {
   kanbanBoards: { id: string; title: string }[]
   projectPlans: { id: string; title: string }[]
   notes: { id: string; title: string }[]
+  animations: { id: string; title: string }[]
   attachments: { id: string; title: string; fileName: string; contentType: string; sizeBytes: number }[]
   chapters: { id: string; title: string }[]
 }
@@ -1286,6 +1402,14 @@ type ToolbarContext =
       dirtyHint?: string
     }
   | {
+      kind: 'animation'
+      icon: ReactNode
+      title: string
+      bookId: string
+      animationId: string
+      dirtyHint?: string
+    }
+  | {
       kind: 'attachment'
       icon: ReactNode
       title: string
@@ -1311,6 +1435,7 @@ function resolveToolbarContext(
   boardId?: string,
   planId?: string,
   noteId?: string,
+  animationId?: string,
   attachmentId?: string,
 ): ToolbarContext {
   if (selection.kind === 'folder') {
@@ -1407,6 +1532,20 @@ function resolveToolbarContext(
       title: note?.title ?? t('common.note'),
       bookId: bId,
       noteId: nId,
+    }
+  }
+
+  if (selection.kind === 'animation' || (view === 'animation' && bookId && animationId)) {
+    const bId = selection.kind === 'animation' ? selection.bookId : bookId!
+    const aId = selection.kind === 'animation' ? selection.animationId : animationId!
+    const book = books.find((b) => b.id === bId)
+    const anim = book?.animations.find((d) => d.id === aId)
+    return {
+      kind: 'animation',
+      icon: ICONS.animation,
+      title: anim?.title ?? t('common.animation'),
+      bookId: bId,
+      animationId: aId,
     }
   }
 

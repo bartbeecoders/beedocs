@@ -134,6 +134,25 @@ public sealed class BeeDocsApiClient(HttpClient http)
     public Task DeleteKanbanBoardAsync(string id, CancellationToken ct = default)
         => SendAsync(HttpMethod.Delete, $"/api/kanban/{Uri.EscapeDataString(id)}", null, ct);
 
+    public Task<JsonElement> ListAnimationsAsync(string bookId, CancellationToken ct = default)
+        => GetAsync($"/api/books/{Uri.EscapeDataString(bookId)}/animations", ct);
+
+    public Task<JsonElement> GetAnimationAsync(string id, CancellationToken ct = default)
+        => GetAsync($"/api/animations/{Uri.EscapeDataString(id)}", ct);
+
+    public Task<JsonElement> CreateAnimationAsync(string bookId, object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Post, $"/api/books/{Uri.EscapeDataString(bookId)}/animations", body, ct);
+
+    /// <summary>AI explainer — synchronous on the API side, up to ~3 minutes.</summary>
+    public Task<JsonElement> CreateAnimationFromPageAsync(string bookId, object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Post, $"/api/books/{Uri.EscapeDataString(bookId)}/animations/from-page", body, ct);
+
+    public Task<JsonElement> UpdateAnimationAsync(string id, object body, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Put, $"/api/animations/{Uri.EscapeDataString(id)}", body, ct);
+
+    public Task DeleteAnimationAsync(string id, CancellationToken ct = default)
+        => SendAsync(HttpMethod.Delete, $"/api/animations/{Uri.EscapeDataString(id)}", null, ct);
+
     public Task<JsonElement> ListProjectPlansAsync(string bookId, CancellationToken ct = default)
         => GetAsync($"/api/books/{Uri.EscapeDataString(bookId)}/project", ct);
 
@@ -567,6 +586,10 @@ public static class BeeDocsApiClientFactory
         builder.ConfigureHttpClient(client =>
         {
             client.BaseAddress = new Uri(ResolveBaseUrl() + "/");
+            // Above HttpClient's 100 s default: the AI explainer endpoint
+            // (animations/from-page) answers only once its completion is done,
+            // which the API budgets at up to 180 s.
+            client.Timeout = TimeSpan.FromMinutes(5);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             // X-Api-Key rather than Authorization: the HTTP transport already

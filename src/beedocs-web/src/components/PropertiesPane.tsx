@@ -13,6 +13,7 @@ import type { SlideEditorState } from './SlideCanvas'
 import type { KanbanEditorState } from './KanbanCanvas'
 import type { ProjectEditorState } from './ProjectCanvas'
 import type { NoteEditorState } from './NoteCanvas'
+import type { AnimationEditorState } from './AnimationCanvas'
 import type { AttachmentEditorState } from './AttachmentCanvas'
 import { OwnerField } from './OwnerField'
 import { useGitRepos } from '../hooks/useGitRepos'
@@ -31,6 +32,7 @@ type Props = {
   kanbanState: KanbanEditorState | null
   projectState: ProjectEditorState | null
   noteState: NoteEditorState | null
+  animationState: AnimationEditorState | null
   attachmentState: AttachmentEditorState | null
   view:
     | 'welcome'
@@ -42,6 +44,7 @@ type Props = {
     | 'kanban'
     | 'project'
     | 'note'
+    | 'animation'
     | 'attachment'
     | 'settings'
     | 'users'
@@ -58,6 +61,7 @@ export function PropertiesPane({
   kanbanState,
   projectState,
   noteState,
+  animationState,
   attachmentState,
   view,
 }: Props) {
@@ -453,6 +457,68 @@ export function PropertiesPane({
     )
   }
 
+  if (view === 'animation' && animationState) {
+    const a = animationState.animation
+    const snippet = `\`\`\`animation-ref\n${a?.id ?? ''}\n\`\`\``
+    return (
+      <div className="props-pane">
+        <h3>{t('props.animation')}</h3>
+        <Field label={t('common.title')}>
+          {canWrite ? (
+            <SyncedInput value={animationState.title} onValueChange={animationState.setTitle} />
+          ) : (
+            <span>{animationState.title}</span>
+          )}
+        </Field>
+        <Field label={t('props.scenes')}>
+          <span>{animationState.sceneCount}</span>
+        </Field>
+        <Field label={t('props.updated')}>
+          <span className="sm">{a ? new Date(a.updatedAt).toLocaleString() : '—'}</span>
+        </Field>
+        {a && (
+          <PrivacyField
+            isPrivate={!!a.isPrivate}
+            ownerId={a.ownerId}
+            onChange={async (next) => {
+              await api.updateAnimation(a.id, { title: animationState.title, isPrivate: next })
+              await renameInTree()
+            }}
+          />
+        )}
+        <div className="props-actions">
+          {canWrite && (
+            <>
+              <button
+                type="button"
+                className="btn primary sm"
+                disabled={animationState.saving || !animationState.dirty}
+                onClick={() => void animationState.save()}
+              >
+                {animationState.saving ? t('common.saving') : t('props.saveAnimation')}
+              </button>
+              <button
+                type="button"
+                className="btn danger ghost sm"
+                onClick={() => void animationState.deleteAnimation()}
+              >
+                {t('common.delete')}
+              </button>
+            </>
+          )}
+        </div>
+        <div className="props-hint">
+          <h4>{t('props.markdownEmbed')}</h4>
+          <pre className="embed-snippet sm">{snippet}</pre>
+          <button type="button" className="btn sm" onClick={() => void navigator.clipboard.writeText(snippet)}>
+            {t('props.copyEmbed')}
+          </button>
+          <p className="muted sm">{t('props.animationHint')}</p>
+        </div>
+      </div>
+    )
+  }
+
   if (view === 'project' && projectState) {
     const p = projectState.plan
     return (
@@ -817,6 +883,9 @@ export function PropertiesPane({
         </Field>
         <Field label={t('common.notes')}>
           <span>{book.notes.length}</span>
+        </Field>
+        <Field label={t('common.animations')}>
+          <span>{book.animations.length}</span>
         </Field>
         <Field label={t('common.owner')}>
           <BookOwnerField bookId={book.id} title={book.title} ownerId={book.ownerId ?? ''} ownerName={book.ownerName} />

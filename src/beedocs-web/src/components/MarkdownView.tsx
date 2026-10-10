@@ -47,6 +47,13 @@ import { NoteView } from '../notes/NoteView'
 
 // Lazy so only pages that actually embed an isometric diagram load its module.
 const IsometricView = lazy(() => import('../isometric/IsometricView'))
+// Same for animations: the player/editor only load on pages that embed one.
+const AnimationView = lazy(() =>
+  import('../animation/AnimationView').then((m) => ({ default: m.AnimationView })),
+)
+const AnimationEditor = lazy(() =>
+  import('../animation/AnimationEditor').then((m) => ({ default: m.AnimationEditor })),
+)
 
 mermaid.initialize({
   startOnLoad: false,
@@ -425,6 +432,141 @@ function KanbanRefPreview({
         )}
       </div>
       <KanbanView source={source} title={title} compact />
+    </figure>
+  )
+}
+
+function InlineAnimationEditor({
+  source,
+  fenceLang,
+  fenceIndex,
+  contentRef,
+  onContentChange,
+  draft,
+  onDraftChange,
+}: {
+  source: string
+  fenceLang: string
+  fenceIndex: number
+  contentRef: React.MutableRefObject<string>
+  onContentChange: (next: string) => void
+  draft: string | undefined
+  onDraftChange: (next: string) => void
+}) {
+  const { t } = useI18n()
+  const live = draft ?? source
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  const commitSource = useCallback(
+    (next: string) => {
+      onDraftChange(next)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => {
+        onContentChange(replaceFenceBody(contentRef.current, fenceLang, fenceIndex, next))
+      }, 400)
+    },
+    [contentRef, fenceIndex, fenceLang, onContentChange, onDraftChange],
+  )
+
+  return (
+    <figure className="inline-diagram is-editing animation-embed">
+      <div className="inline-diagram-head">
+        <div>
+          <span className="inline-diagram-badge">{t('editor.insert.animation')}</span>
+          <figcaption className="inline-diagram-title">{t('editor.animation.title')}</figcaption>
+        </div>
+        <span className="muted sm">{t('editor.animation.hint')}</span>
+      </div>
+      <div className="inline-diagram-body">
+        <Suspense fallback={<p className="muted sm">{t('editor.loadingAnimation')}</p>}>
+          <AnimationEditor source={live} onChange={commitSource} compact />
+        </Suspense>
+      </div>
+    </figure>
+  )
+}
+
+function AnimationRefPreview({
+  animationId,
+  bookId,
+  editable,
+}: {
+  animationId: string
+  bookId?: string
+  editable?: boolean
+}) {
+  const { t } = useI18n()
+  const id = animationId.trim().split(/\s+/)[0] ?? ''
+  const [source, setSource] = useState<string | null>(null)
+  const [title, setTitle] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const saveRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void api
+      .getAnimation(id)
+      .then((a) => {
+        if (cancelled) return
+        setSource(a.source)
+        setTitle(a.title)
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  useEffect(() => {
+    return () => {
+      if (saveRef.current) clearTimeout(saveRef.current)
+    }
+  }, [])
+
+  if (error) {
+    return <div className="banner error compact">{t('editor.animationError', { id, error })}</div>
+  }
+  if (source == null) {
+    return <p className="muted sm">{t('editor.loadingAnimation')}</p>
+  }
+  return (
+    <figure className="animation-embed">
+      <div className="inline-diagram-head">
+        <span className="inline-diagram-badge">{t('editor.animation.linkedBadge')}</span>
+        <figcaption className="inline-diagram-title">{title}</figcaption>
+        {editable && bookId && (
+          <Link className="btn ghost sm" to={`/books/${bookId}/animations/${id}`}>
+            {t('editor.animation.open')}
+          </Link>
+        )}
+      </div>
+      <Suspense fallback={<p className="muted sm">{t('editor.loadingAnimation')}</p>}>
+        {editable ? (
+          <AnimationEditor
+            source={source}
+            title={title}
+            compact
+            onChange={(next) => {
+              setSource(next)
+              // Editing the embed edits the stored item; debounce so a drag is one write.
+              if (saveRef.current) clearTimeout(saveRef.current)
+              saveRef.current = setTimeout(() => {
+                void api.updateAnimation(id, { title, source: next }).catch(() => {})
+              }, 600)
+            }}
+          />
+        ) : (
+          <AnimationView source={source} title={title} compact />
+        )}
+      </Suspense>
     </figure>
   )
 }
@@ -1341,6 +1483,44 @@ const MarkdownBody = memo(function MarkdownBody({
             <figure className="note-embed">
               <NoteView source={code} compact />
             </figure>,
+          )
+        }
+
+        if (lang === 'animation') {
+          const idx = nextIndex(lang)
+          if (editable && onContentChange) {
+            const key = `animation:${idx}`
+            return wrapOutline(
+              lang,
+              idx,
+              <InlineAnimationEditor
+                source={code}
+                fenceLang={lang}
+                fenceIndex={idx}
+                contentRef={contentRef}
+                onContentChange={handleContentChange}
+                draft={beeDrafts[key]}
+                onDraftChange={(next) => setBeeDraft(key, next)}
+              />,
+            )
+          }
+          return wrapOutline(
+            lang,
+            idx,
+            <figure className="animation-embed">
+              <Suspense fallback={<p className="muted sm">{t('editor.loadingAnimation')}</p>}>
+                <AnimationView source={code} compact />
+              </Suspense>
+            </figure>,
+          )
+        }
+
+        if (lang === 'animation-ref') {
+          const idx = nextIndex('animation-ref')
+          return wrapOutline(
+            'animation-ref',
+            idx,
+            <AnimationRefPreview animationId={code} bookId={bookId} editable={editable} />,
           )
         }
 

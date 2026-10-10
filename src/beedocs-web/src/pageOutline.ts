@@ -1,7 +1,7 @@
 import { splitMarkdownSegments, type ContentSegment } from './markdownFences'
 import { parsePageLayout } from './pageLayout'
 
-export type PageOutlineKind = 'heading' | 'diagram' | 'freedraw' | 'excelgrid' | 'kanban' | 'project' | 'note' | 'media' | 'code' | 'block'
+export type PageOutlineKind = 'heading' | 'diagram' | 'freedraw' | 'excelgrid' | 'kanban' | 'project' | 'note' | 'animation' | 'media' | 'code' | 'block'
 
 export type PageOutlineItem = {
   /** Stable DOM id used for scroll targets (`page-ol-N`). */
@@ -78,6 +78,15 @@ function outlineItemForSegment(seg: ContentSegment, blockIndex: number): PageOut
   }
   if (lang === 'note' || lang === 'note-ref') {
     return { id, blockIndex, level: 7, label: lang === 'note-ref' ? 'Linked note' : 'Note', kind: 'note' }
+  }
+  if (lang === 'animation' || lang === 'animation-ref') {
+    return {
+      id,
+      blockIndex,
+      level: 7,
+      label: lang === 'animation-ref' ? 'Linked animation' : 'Animation',
+      kind: 'animation',
+    }
   }
   if (lang === 'pdf' || lang === 'glb' || lang === 'gltf' || lang === 'obj' || lang === 'model') {
     return {

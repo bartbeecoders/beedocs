@@ -10,7 +10,7 @@ import { KIND_ICON } from '../searchKinds'
 export type LinkTarget = { kind: SearchKind; id: string; title: string; url: string; bookTitle?: string | null }
 
 /** Kinds worth linking from prose: documents with a route of their own. */
-const LINKABLE: SearchKind[] = ['page', 'diagram', 'slides', 'kanban', 'project', 'note', 'attachment', 'book', 'shelf']
+const LINKABLE: SearchKind[] = ['page', 'diagram', 'slides', 'kanban', 'project', 'note', 'animation', 'attachment', 'book', 'shelf']
 
 type Props = {
   bookId?: string
@@ -50,6 +50,7 @@ export function LinkDocumentDialog({ bookId, pageId, onPick, onClose }: Props) {
       ...book.kanbanBoards.map((d) => ({ kind: 'kanban' as const, id: d.id, title: d.title, url: `${base}/kanban/${d.id}` })),
       ...book.projectPlans.map((d) => ({ kind: 'project' as const, id: d.id, title: d.title, url: `${base}/project/${d.id}` })),
       ...book.notes.map((d) => ({ kind: 'note' as const, id: d.id, title: d.title, url: `${base}/notes/${d.id}` })),
+      ...book.animations.map((d) => ({ kind: 'animation' as const, id: d.id, title: d.title, url: `${base}/animations/${d.id}` })),
       ...book.attachments.map((d) => ({ kind: 'attachment' as const, id: d.id, title: d.title, url: `${base}/files/${d.id}` })),
     ]
   }, [book, pageId])

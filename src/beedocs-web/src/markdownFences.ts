@@ -56,6 +56,9 @@ export const PROJECT_FENCE_LANGS = new Set(['project', 'project-ref'])
 /** OneNote-style note: inline JSON (`note`) or a stored note id (`note-ref`) */
 export const NOTE_FENCE_LANGS = new Set(['note', 'note-ref'])
 
+/** Animation (moving explanation): inline JSON (`animation`) or a stored id (`animation-ref`) */
+export const ANIMATION_FENCE_LANGS = new Set(['animation', 'animation-ref'])
+
 /** PDF / 3D model fence languages — hybrid editor shows MediaEmbed, not source-only */
 export const MEDIA_FENCE_LANGS = new Set(['pdf', 'glb', 'gltf', 'obj', 'model'])
 
@@ -192,6 +195,10 @@ export function isProjectFenceLang(lang: string): boolean {
 
 export function isNoteFenceLang(lang: string): boolean {
   return NOTE_FENCE_LANGS.has(lang.toLowerCase())
+}
+
+export function isAnimationFenceLang(lang: string): boolean {
+  return ANIMATION_FENCE_LANGS.has(lang.toLowerCase())
 }
 
 export function isMediaFenceLang(lang: string): boolean {

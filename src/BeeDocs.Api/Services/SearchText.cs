@@ -40,6 +40,10 @@ public static class SearchText
     private static readonly HashSet<string> NoteFences =
         new(StringComparer.OrdinalIgnoreCase) { "note" };
 
+    /// <summary>Fence languages whose body is an animation JSON document (not an animation id).</summary>
+    private static readonly HashSet<string> AnimationFences =
+        new(StringComparer.OrdinalIgnoreCase) { "animation" };
+
     /// <summary>Plain text for a Markdown page body.</summary>
     public static string FromMarkdown(string? markdown)
     {
@@ -183,6 +187,52 @@ public static class SearchText
     }
 
     /// <summary>
+    /// Plain text for a stored animation: scene titles, scene narration and
+    /// every element's <c>text</c> (labels, captions, emoji). Geometry, colours,
+    /// cues and keyframes stay out of the index.
+    /// </summary>
+    public static string FromAnimationSource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source) || !LooksLikeJson(source)) return "";
+        try
+        {
+            using var doc = JsonDocument.Parse(source);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return "";
+            if (!doc.RootElement.TryGetProperty("scenes", out var scenes)
+                || scenes.ValueKind != JsonValueKind.Array)
+            {
+                return "";
+            }
+
+            var sb = new StringBuilder();
+            foreach (var scene in scenes.EnumerateArray())
+            {
+                if (scene.ValueKind != JsonValueKind.Object) continue;
+                if (scene.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
+                    Append(sb, title.GetString());
+                if (scene.TryGetProperty("narration", out var narration) && narration.ValueKind == JsonValueKind.String)
+                    Append(sb, narration.GetString());
+                if (!scene.TryGetProperty("elements", out var elements) || elements.ValueKind != JsonValueKind.Array)
+                    continue;
+                foreach (var el in elements.EnumerateArray())
+                {
+                    if (el.ValueKind == JsonValueKind.Object
+                        && el.TryGetProperty("text", out var text)
+                        && text.ValueKind == JsonValueKind.String)
+                    {
+                        Append(sb, text.GetString());
+                    }
+                }
+            }
+            return Normalize(sb.ToString());
+        }
+        catch (JsonException)
+        {
+            return "";
+        }
+    }
+
+    /// <summary>
     /// Plain text for a stored project plan: task titles and assignee names.
     /// Dates, ids and progress stay out of the index.
     /// </summary>
@@ -306,6 +356,13 @@ public static class SearchText
 
         if (NoteFences.Contains(lang))
             return LooksLikeJson(body) ? FromNoteSource(body) : "";
+
+        if (AnimationFences.Contains(lang))
+            return LooksLikeJson(body) ? FromAnimationSource(body) : "";
+
+        // The body of an animation-ref is the stored animation's id — noise.
+        if (lang.Equals("animation-ref", StringComparison.OrdinalIgnoreCase))
+            return "";
 
         return body;
     }

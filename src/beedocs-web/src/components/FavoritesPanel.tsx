@@ -15,6 +15,7 @@ const KIND_ICONS: Record<FavoriteKind, string> = {
   kanban: '📋',
   project: '📊',
   note: '📝',
+  animation: '🎬',
   attachment: '📎',
 }
 
@@ -35,6 +36,8 @@ function favoritePath(f: Favorite): string | null {
       return `/books/${f.bookId}/project/${f.entityId}`
     case 'note':
       return `/books/${f.bookId}/notes/${f.entityId}`
+    case 'animation':
+      return `/books/${f.bookId}/animations/${f.entityId}`
     case 'attachment':
       return `/books/${f.bookId}/files/${f.entityId}`
   }
@@ -56,6 +59,8 @@ function favoriteSelection(f: Favorite): TreeSelection {
       return { kind: 'project', bookId: f.bookId!, planId: f.entityId }
     case 'note':
       return { kind: 'note', bookId: f.bookId!, noteId: f.entityId }
+    case 'animation':
+      return { kind: 'animation', bookId: f.bookId!, animationId: f.entityId }
     case 'attachment':
       return { kind: 'attachment', bookId: f.bookId!, attachmentId: f.entityId }
   }

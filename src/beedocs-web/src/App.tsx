@@ -107,6 +107,7 @@ const router = createBrowserRouter(
             { path: '/books/:bookId/kanban/:boardId', element: <WorkspaceShell /> },
             { path: '/books/:bookId/project/:planId', element: <WorkspaceShell /> },
             { path: '/books/:bookId/notes/:noteId', element: <WorkspaceShell /> },
+            { path: '/books/:bookId/animations/:animationId', element: <WorkspaceShell /> },
             { path: '/books/:bookId/files/:attachmentId', element: <WorkspaceShell /> },
             // Git repos: the splat carries the file path, slashes and all.
             { path: '/git/:repoId', element: <WorkspaceShell /> },

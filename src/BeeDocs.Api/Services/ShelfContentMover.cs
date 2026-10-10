@@ -91,6 +91,7 @@ public sealed class ShelfContentMover(
             ("kanban_board", "source", "book_id = $book_id", ContentRef.KanbanKey),
             ("project_plan", "source", "book_id = $book_id", ContentRef.ProjectKey),
             ("note", "source", "book_id = $book_id", ContentRef.NoteKey),
+            ("animation", "source", "book_id = $book_id", ContentRef.AnimationKey),
         };
 
         foreach (var (table, column, where, key) in sources)

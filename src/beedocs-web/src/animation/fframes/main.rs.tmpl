@@ -1,0 +1,30 @@
+use fframes::cli::clap; // the derive below expands to `clap::...`
+use fframes::{EncoderOptions, RenderOptions, cli};
+use {{lib_name}}::{{Struct}}Video;
+use std::process::ExitCode;
+
+/// Flags of this video next to the standard ones of `fframes::cli` (render, frame, strip,
+/// inspect, svg, ...). Run `cargo run --release -- --help`.
+#[derive(Debug, clap::Args)]
+struct VideoArgs {}
+
+fn main() -> ExitCode {
+    let args = cli::parse::<VideoArgs>();
+    let video = {{Struct}}Video::new();
+
+    cli::new(
+        &video,
+        RenderOptions {
+            // Text uses the fonts installed on this machine (Inter / Segoe UI / Helvetica...).
+            load_system_fonts: true,
+            video_encoder_options: EncoderOptions {
+                preferred_encoder: Some("libx264"),
+                codec_params: Some(&[("crf", "20"), ("preset", "medium"), ("tune", "animation")]),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    )
+    .args(args)
+    .run()
+}

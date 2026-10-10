@@ -166,6 +166,8 @@ function kindGlyph(kind: PageOutlineItem['kind']): string {
       return '▦'
     case 'note':
       return '✎'
+    case 'animation':
+      return '▶'
     case 'media':
       return '▣'
     case 'code':

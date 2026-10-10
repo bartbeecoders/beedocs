@@ -223,6 +223,12 @@ public sealed partial class SearchIndexService(
             WHERE d.id IS NULL OR d.updated_at <> n.updated_at;
 
             INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+            SELECT 'animation', an.id, 'upsert', datetime('now')
+            FROM animation an
+            LEFT JOIN search_doc d ON d.kind = 'animation' AND d.entity_id = an.id
+            WHERE d.id IS NULL OR d.updated_at <> an.updated_at;
+
+            INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
             SELECT 'attachment', a.id, 'upsert', datetime('now')
             FROM attachment a
             LEFT JOIN search_doc d ON d.kind = 'attachment' AND d.entity_id = a.id
@@ -255,6 +261,7 @@ public sealed partial class SearchIndexService(
                OR (d.kind = 'kanban'  AND NOT EXISTS (SELECT 1 FROM kanban_board WHERE id = d.entity_id))
                OR (d.kind = 'project' AND NOT EXISTS (SELECT 1 FROM project_plan WHERE id = d.entity_id))
                OR (d.kind = 'note'    AND NOT EXISTS (SELECT 1 FROM note WHERE id = d.entity_id))
+               OR (d.kind = 'animation' AND NOT EXISTS (SELECT 1 FROM animation WHERE id = d.entity_id))
                OR (d.kind = 'attachment' AND NOT EXISTS (SELECT 1 FROM attachment WHERE id = d.entity_id))
                OR (d.kind = 'book'    AND NOT EXISTS (SELECT 1 FROM book    WHERE id = d.entity_id))
                OR (d.kind = 'folder'  AND NOT EXISTS (SELECT 1 FROM chapter WHERE id = d.entity_id))
@@ -435,6 +442,7 @@ public sealed partial class SearchIndexService(
             "kanban" => "SELECT title, source, book_id, updated_at, content_ref FROM kanban_board WHERE id = $id",
             "project" => "SELECT title, source, book_id, updated_at, content_ref FROM project_plan WHERE id = $id",
             "note" => "SELECT title, source, book_id, updated_at, content_ref FROM note WHERE id = $id",
+            "animation" => "SELECT title, source, book_id, updated_at, content_ref FROM animation WHERE id = $id",
             // Metadata only: the bytes are an opaque binary nobody can index, so
             // an attachment is found by what a person called it and by its
             // description and file name.
@@ -501,6 +509,7 @@ public sealed partial class SearchIndexService(
                     contentRef = SqliteHelpers.GetNullableString(reader, 4);
                     break;
                 case "note":
+                case "animation":
                     body = SqliteHelpers.GetNullableString(reader, 1);
                     bookId = SqliteHelpers.GetNullableString(reader, 2);
                     updatedAt = reader.GetString(3);
@@ -565,6 +574,7 @@ public sealed partial class SearchIndexService(
             "kanban" => new IndexDoc(kind, id, bookId, null, title, SearchText.FromKanbanSource(body), updatedAt),
             "project" => new IndexDoc(kind, id, bookId, null, title, SearchText.FromProjectSource(body), updatedAt),
             "note" => new IndexDoc(kind, id, bookId, null, title, SearchText.FromNoteSource(body), updatedAt),
+            "animation" => new IndexDoc(kind, id, bookId, null, title, SearchText.FromAnimationSource(body), updatedAt),
             "attachment" => new IndexDoc(kind, id, bookId, null, title, body ?? "", updatedAt),
             "book" => new IndexDoc(kind, id, bookId, null, title, body ?? "", updatedAt),
             "folder" => new IndexDoc(kind, id, bookId, chapterId, title, "", updatedAt),
@@ -781,6 +791,7 @@ public sealed partial class SearchIndexService(
         "kanban" when bookId is not null => $"/books/{bookId}/kanban/{entityId}",
         "project" when bookId is not null => $"/books/{bookId}/project/{entityId}",
         "note" when bookId is not null => $"/books/{bookId}/notes/{entityId}",
+        "animation" when bookId is not null => $"/books/{bookId}/animations/{entityId}",
         "attachment" when bookId is not null => $"/books/{bookId}/files/{entityId}",
         "folder" when bookId is not null => $"/books/{bookId}",
         "book" => $"/books/{entityId}",
@@ -938,11 +949,12 @@ public sealed partial class SearchIndexService(
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'book'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'folder'),
               (SELECT COUNT(*) FROM search_doc WHERE kind = 'shelf'),
-              (SELECT MAX(indexed_at) FROM search_doc)
+              (SELECT MAX(indexed_at) FROM search_doc),
+              (SELECT COUNT(*) FROM search_doc WHERE kind = 'animation')
             """;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))
-            return new SearchStatusDto(_fts ? "fts5" : "like", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null);
+            return new SearchStatusDto(_fts ? "fts5" : "like", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null);
 
         var lastIndexed = SqliteHelpers.GetNullableString(reader, 12) is { } raw
             && DateTimeOffset.TryParse(raw, out var parsed)
@@ -959,6 +971,7 @@ public sealed partial class SearchIndexService(
             KanbanBoards: reader.GetInt32(5),
             ProjectPlans: reader.GetInt32(6),
             Notes: reader.GetInt32(7),
+            Animations: reader.GetInt32(13),
             Attachments: reader.GetInt32(8),
             Books: reader.GetInt32(9),
             Folders: reader.GetInt32(10),

@@ -23,6 +23,7 @@ import { SlideCanvas, type SlideEditorState } from './SlideCanvas'
 import { KanbanCanvas, type KanbanEditorState } from './KanbanCanvas'
 import { ProjectCanvas, type ProjectEditorState } from './ProjectCanvas'
 import { NoteCanvas, type NoteEditorState } from './NoteCanvas'
+import { AnimationCanvas, type AnimationEditorState } from './AnimationCanvas'
 import { AttachmentCanvas, type AttachmentEditorState } from './AttachmentCanvas'
 import { PropertiesPane } from './PropertiesPane'
 import { SettingsPanel } from './SettingsPanel'
@@ -59,6 +60,7 @@ export function WorkspaceShell() {
   const [kanbanState, setKanbanState] = useState<KanbanEditorState | null>(null)
   const [projectState, setProjectState] = useState<ProjectEditorState | null>(null)
   const [noteState, setNoteState] = useState<NoteEditorState | null>(null)
+  const [animationState, setAnimationState] = useState<AnimationEditorState | null>(null)
   const [attachmentState, setAttachmentState] = useState<AttachmentEditorState | null>(null)
   const [version, setVersion] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -139,6 +141,7 @@ export function WorkspaceShell() {
     if (params.boardId) return 'kanban' as const
     if (params.planId) return 'project' as const
     if (params.noteId) return 'note' as const
+    if (params.animationId) return 'animation' as const
     if (params.attachmentId) return 'attachment' as const
     if (params.bookId) return 'book' as const
     if (params.shelfId) return 'shelf' as const
@@ -154,6 +157,7 @@ export function WorkspaceShell() {
     params.boardId,
     params.planId,
     params.noteId,
+    params.animationId,
     params.attachmentId,
   ])
 
@@ -169,6 +173,7 @@ export function WorkspaceShell() {
       boardId: params.boardId,
       planId: params.planId,
       noteId: params.noteId,
+      animationId: params.animationId,
       attachmentId: params.attachmentId,
     })
   }, [
@@ -181,6 +186,7 @@ export function WorkspaceShell() {
     params.boardId,
     params.planId,
     params.noteId,
+    params.animationId,
     params.attachmentId,
     syncSelectionFromRoute,
   ])
@@ -242,6 +248,9 @@ export function WorkspaceShell() {
       } else if (params.noteId) {
         const note = book.notes.find((d) => d.id === params.noteId)
         crumbs.push({ label: note?.title ?? noteState?.title ?? t('common.note') })
+      } else if (params.animationId) {
+        const anim = book.animations.find((d) => d.id === params.animationId)
+        crumbs.push({ label: anim?.title ?? animationState?.title ?? t('common.animation') })
       } else if (params.attachmentId) {
         const file = book.attachments.find((a) => a.id === params.attachmentId)
         crumbs.push({ label: file?.title ?? attachmentState?.title ?? t('shell.file') })
@@ -257,6 +266,7 @@ export function WorkspaceShell() {
     pageState?.title,
     diagramState?.title,
     slideState?.title,
+    animationState?.title,
     attachmentState?.title,
     t,
   ])
@@ -320,6 +330,7 @@ export function WorkspaceShell() {
         boardId={params.boardId}
         planId={params.planId}
         noteId={params.noteId}
+        animationId={params.animationId}
         attachmentId={params.attachmentId}
         pageState={pageState}
         diagramState={diagramState}
@@ -327,6 +338,7 @@ export function WorkspaceShell() {
         kanbanState={kanbanState}
         projectState={projectState}
         noteState={noteState}
+        animationState={animationState}
         attachmentState={attachmentState}
       />
 
@@ -369,6 +381,7 @@ export function WorkspaceShell() {
           {view === 'kanban' && <KanbanCanvas onStateChange={setKanbanState} />}
           {view === 'project' && <ProjectCanvas onStateChange={setProjectState} />}
           {view === 'note' && <NoteCanvas onStateChange={setNoteState} />}
+          {view === 'animation' && <AnimationCanvas onStateChange={setAnimationState} />}
           {view === 'attachment' && <AttachmentCanvas onStateChange={setAttachmentState} />}
           {view === 'gitRepo' && <GitRepoCanvas />}
           {view === 'gitFile' && <GitFileCanvas />}
@@ -391,6 +404,7 @@ export function WorkspaceShell() {
             kanbanState={kanbanState}
             projectState={projectState}
             noteState={noteState}
+            animationState={animationState}
             attachmentState={attachmentState}
             view={view}
           />
@@ -723,10 +737,12 @@ function BookOverview({ bookId, onSearch }: { bookId: string; onSearch: (word: s
   const navigate = useNavigate()
   const { canWrite } = useAuth()
   const { t } = useI18n()
-  const { books, createPage, createDiagram, createSlideDeck, createKanbanBoard, createProjectPlan, createNote } =
+  const { books, createPage, createDiagram, createSlideDeck, createKanbanBoard, createProjectPlan, createNote, createAnimation } =
     useWorkspace()
   const book = books.find((b) => b.id === bookId)
-  const [prompt, setPrompt] = useState<'page' | 'diagram' | 'slides' | 'kanban' | 'project' | 'note' | null>(null)
+  const [prompt, setPrompt] = useState<
+    'page' | 'diagram' | 'slides' | 'kanban' | 'project' | 'note' | 'animation' | null
+  >(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const { uploadingIn, error: uploadError, clearError, upload, handleFiles, dialog: mdDropDialog } =
     useLibraryFileDrop()
@@ -787,6 +803,10 @@ function BookOverview({ bookId, onSearch }: { bookId: string; onSearch: (word: s
           <span className="stat-label">{t('common.notes')}</span>
         </div>
         <div className="stat">
+          <span className="stat-value">{book.animations.length}</span>
+          <span className="stat-label">{t('common.animations')}</span>
+        </div>
+        <div className="stat">
           <span className="stat-value">{book.attachments.length}</span>
           <span className="stat-label">{t('shell.files')}</span>
         </div>
@@ -835,6 +855,9 @@ function BookOverview({ bookId, onSearch }: { bookId: string; onSearch: (word: s
           </button>
           <button type="button" className="btn sm" onClick={() => setPrompt('note')}>
             {t('shell.newNote')}
+          </button>
+          <button type="button" className="btn sm" onClick={() => setPrompt('animation')}>
+            {t('shell.newAnimation')}
           </button>
           <button
             type="button"
@@ -937,6 +960,18 @@ function BookOverview({ bookId, onSearch }: { bookId: string; onSearch: (word: s
         }}
         onClose={() => setPrompt(null)}
       />
+      <NamePromptDialog
+        open={prompt === 'animation'}
+        title={t('shell.newAnimation')}
+        label={t('shell.animationTitle')}
+        placeholder={t('shell.animationPlaceholder')}
+        confirmLabel={t('shell.createAnimation')}
+        onSubmit={async (title) => {
+          const a = await createAnimation(bookId, title)
+          void navigate(`/books/${bookId}/animations/${a.id}`)
+        }}
+        onClose={() => setPrompt(null)}
+      />
     </div>
   )
 }
@@ -948,7 +983,7 @@ function BookOverview({ bookId, onSearch }: { bookId: string; onSearch: (word: s
 function bookContentKey(book: TreeBook): string {
   return [
     book.pages.map((p) => `${p.id}:${p.version}:${p.title}`).join(','),
-    [book.diagrams, book.slideDecks, book.kanbanBoards, book.projectPlans, book.notes, book.attachments]
+    [book.diagrams, book.slideDecks, book.kanbanBoards, book.projectPlans, book.notes, book.animations, book.attachments]
       .map((list) => list.map((x) => `${x.id}:${x.title}`).join(','))
       .join('|'),
   ].join('#')

@@ -370,6 +370,22 @@ export function HelpPanel() {
               </td>
               <td>{t('helpdoc.pg.fenceNotesRef')}</td>
             </tr>
+            <tr>
+              <td>
+                <code>```animation</code>
+              </td>
+              <td>
+                {t('helpdoc.pg.fenceAnimation1')}
+                <strong>{t('helpdoc.pg.fenceAnimationMenu')}</strong>
+                {t('helpdoc.pg.fenceAnimation2')}
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>```animation-ref</code>
+              </td>
+              <td>{t('helpdoc.pg.fenceAnimationRef')}</td>
+            </tr>
           </tbody>
         </table>
         <p className="muted sm">

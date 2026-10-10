@@ -91,6 +91,7 @@ public sealed class BackupService(
         ["kanban_board"] = "source",
         ["project_plan"] = "source",
         ["note"] = "source",
+        ["animation"] = "source",
     };
 
     private static readonly string AppVersion = (Assembly.GetExecutingAssembly()

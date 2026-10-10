@@ -35,7 +35,7 @@ public sealed partial class WordCloudService(
     private const int MaxCharsPerDocument = 200_000;
 
     /// <summary>The documents a book holds — not the book/folder/shelf rows, whose text is only a description.</summary>
-    private const string DocumentKinds = "'page', 'diagram', 'slides', 'kanban', 'project', 'note', 'attachment'";
+    private const string DocumentKinds = "'page', 'diagram', 'slides', 'kanban', 'project', 'note', 'animation', 'attachment'";
 
     private readonly ConcurrentDictionary<string, (string Signature, WordCloudDto Cloud)> _cache = new();
 

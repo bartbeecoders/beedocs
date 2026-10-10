@@ -28,6 +28,8 @@ import { word } from './messages/word'
 import { sectionMenu } from './messages/sectionMenu'
 import { reorganize } from './messages/reorganize'
 import { cloud } from './messages/cloud'
+import { animation } from './messages/animation'
+import { explainer } from './messages/explainer'
 
 export { LANGUAGES, type Lang, type LangDef } from './langs'
 
@@ -74,6 +76,8 @@ const MESSAGES = {
   sectionMenu,
   reorganize,
   cloud,
+  animation,
+  explainer,
 } as const
 
 type NsMap = typeof MESSAGES
