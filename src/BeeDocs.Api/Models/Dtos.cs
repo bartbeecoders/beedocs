@@ -565,6 +565,58 @@ public sealed record UpdateKanbanBoardRequest(
     bool? IsPrivate = null
 );
 
+public sealed record AnimationDto(
+    string Id,
+    string BookId,
+    string Title,
+    /// <summary>JSON animation document — see src/beedocs-web/src/animation/animModel.ts.</summary>
+    string Source,
+    string? OwnerId,
+    string? OwnerName,
+    bool IsPrivate,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="SceneCount">Scenes in the stored document.</param>
+public sealed record AnimationSummaryDto(
+    string Id,
+    string BookId,
+    string Title,
+    int SceneCount,
+    string? OwnerId,
+    bool IsPrivate,
+    DateTimeOffset UpdatedAt
+);
+
+/// <param name="Source">Omit to start with one empty scene.</param>
+public sealed record CreateAnimationRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Source,
+    string? OwnerId = null,
+    bool? IsPrivate = null
+);
+
+/// <param name="Source">null leaves the stored document untouched.</param>
+public sealed record UpdateAnimationRequest(
+    [property: Required, MinLength(1)] string Title,
+    string? Source,
+    string? OwnerId = null,
+    bool? IsPrivate = null
+);
+
+/// <summary>Ask the default LLM provider to turn a page into an animated explainer.</summary>
+/// <param name="PageId">The page to explain; must be visible to the caller.</param>
+/// <param name="Title">Animation title; defaults to "&lt;page title&gt; — explained".</param>
+/// <param name="SceneCount">Target number of scenes (clamped 2–12); omit to let the model choose 3–8.</param>
+/// <param name="Instructions">Extra guidance for the model (audience, tone, focus).</param>
+public sealed record CreateAnimationFromPageRequest(
+    [property: Required, MinLength(1)] string PageId,
+    string? Title = null,
+    int? SceneCount = null,
+    string? Instructions = null
+);
+
 public sealed record ProjectPlanDto(
     string Id,
     string BookId,
@@ -795,6 +847,7 @@ public sealed record SearchStatusDto(
     int KanbanBoards,
     int ProjectPlans,
     int Notes,
+    int Animations,
     int Attachments,
     int Books,
     int Folders,
@@ -1257,7 +1310,7 @@ public sealed record AuthStateDto(
     string? RbaBaseUrl = null
 );
 
-/// <summary>How many of each thing the library holds. Total counts content documents (pages + diagrams + slide decks + kanban boards + project plans + notes + attachments), not the containers around them.</summary>
+/// <summary>How many of each thing the library holds. Total counts content documents (pages + diagrams + slide decks + kanban boards + project plans + notes + animations + attachments), not the containers around them.</summary>
 public sealed record DocumentCountsDto(
     int Shelves,
     int Books,
@@ -1268,6 +1321,7 @@ public sealed record DocumentCountsDto(
     int KanbanBoards,
     int ProjectPlans,
     int Notes,
+    int Animations,
     int Attachments,
     int Total
 );

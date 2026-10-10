@@ -31,7 +31,7 @@ public sealed class SystemTools(BeeDocsApiClient client)
         apiBaseUrl = client.BaseUrl,
         entities = new[]
         {
-            "shelf", "book", "chapter (folder)", "page", "diagram", "slide deck", "kanban board", "project plan", "note", "attachment", "upload",
+            "shelf", "book", "chapter (folder)", "page", "diagram", "slide deck", "kanban board", "project plan", "note", "animation", "attachment", "upload",
         },
         hierarchy = "shelf → book → chapter (folder) → page. Only the book level is required: "
             + "a book sits on at most one shelf, and an unshelved book sits at the library root.",
@@ -108,6 +108,8 @@ public sealed class SystemTools(BeeDocsApiClient client)
             projectRef = "```project-ref\\nPLAN_ID\\n```",
             noteInline = "```note\\n{\"version\":1,\"background\":\"plain\",\"paper\":\"white\",\"blocks\":[{\"id\":\"blk-1\",\"kind\":\"text\",\"x\":48,\"y\":40,\"w\":460,\"h\":null,\"text\":\"# Meeting notes\",\"tag\":null}]}\\n```",
             noteRef = "```note-ref\\nNOTE_ID\\n```",
+            animationRef = "```animation-ref\\nANIMATION_ID\\n```",
+            animationInline = "```animation\\n{\"version\":1,\"scenes\":[{\"id\":\"s1\",\"title\":\"Intro\",\"duration\":4,\"elements\":[]}]}\\n```",
             image = "![alt](/uploads/...)",
         },
         slides = new
@@ -124,6 +126,12 @@ public sealed class SystemTools(BeeDocsApiClient client)
             colors = new[] { "accent", "info", "ok", "warn", "danger", "muted" },
             tools = "beedocs_create_kanban_board_with_columns / beedocs_update_kanban_board_columns (structured), or raw JSON via beedocs_create_kanban_board",
             embed = "```kanban-ref\\nBOARD_ID\\n``` on a page; the same board is a tree item at /books/{bookId}/kanban/{boardId}",
+        },
+        animation = new
+        {
+            model = "A moving explanation: scenes played back to back on a 1280×720 stage, each a list of timed elements (text, box, circle, line, arrow, icon, image, path) with enter/emphasis/exit cues and keyframes. Every frame is a pure function of time (fframes-style).",
+            tools = "beedocs_create_animation_from_page (AI turns a page into an explainer), or author the JSON yourself with beedocs_create_animation / beedocs_update_animation",
+            embed = "```animation-ref\\nANIMATION_ID\\n``` on a page; the same animation is a tree item at /books/{bookId}/animations/{animationId}",
         },
         project = new
         {
@@ -166,6 +174,7 @@ public sealed class SystemTools(BeeDocsApiClient client)
             slides = "beedocs_create_slide_deck_with_slides for presentations; present from the UI at /books/{bookId}/slides/{deckId}",
             kanban = "beedocs_create_kanban_board_with_columns for a board; embed with ```kanban-ref on a page or open /books/{bookId}/kanban/{boardId}",
             project = "beedocs_create_project_plan_with_tasks for a Gantt plan; embed with ```project-ref on a page or open /books/{bookId}/project/{planId}",
+            animations = "beedocs_create_animation_from_page turns a page into an animated explainer; embed with ```animation-ref on a page or open /books/{bookId}/animations/{animationId}",
             notes = "beedocs_create_note_with_blocks for a free-form OneNote-style page; embed with ```note-ref on a page or open /books/{bookId}/notes/{noteId}",
             attachments = "beedocs_upload_attachment files a document in a book; beedocs_link_attachment_in_page references it from the docs that discuss it",
             export = "beedocs_export_book or beedocs_export_library_snapshot",

@@ -1,0 +1,50 @@
+//! {{title}} — exported from BeeDocs as an fframes video.
+//!
+//! The animation is `animation.json`, the same document BeeDocs stores, and
+//! `beedocs_anim.rs` is the BeeDocs renderer ported to Rust: every frame is
+//! `render_frame_svg(doc, seconds)`, an SVG string fframes rasterises and
+//! encodes. Edit the JSON (or re-export from BeeDocs) to change the video, or
+//! replace `render_frame` with hand-written `svgr!` scenes to take it further.
+mod beedocs_anim;
+
+use beedocs_anim::{AnimDoc, render_frame_svg};
+use fframes::{AudioMap, Duration, FFramesContext, Frame, Svgr, Video};
+
+pub const WIDTH: usize = {{width}};
+pub const HEIGHT: usize = {{height}};
+
+const SOURCE: &str = include_str!("../animation.json");
+
+pub struct {{Struct}}Video {
+    doc: AnimDoc,
+}
+
+impl {{Struct}}Video {
+    pub fn new() -> Self {
+        Self { doc: AnimDoc::parse(SOURCE) }
+    }
+}
+
+impl Default for {{Struct}}Video {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Video for {{Struct}}Video {
+    const FPS: usize = {{fps}};
+    const WIDTH: usize = WIDTH;
+    const HEIGHT: usize = HEIGHT;
+
+    fn duration(&self) -> Duration<'_> {
+        Duration::Seconds(self.doc.total_duration())
+    }
+
+    fn audio(&self) -> AudioMap<'_> {
+        AudioMap::none()
+    }
+
+    fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
+        Svgr::from(render_frame_svg(&self.doc, frame.seconds()))
+    }
+}

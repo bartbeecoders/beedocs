@@ -337,7 +337,7 @@ public sealed class UserService(SqliteConnectionFactory db, ILogger<UserService>
         foreach (var table in new[]
                  {
                      "shelf", "book", "page", "diagram", "slide_deck",
-                     "kanban_board", "project_plan", "note", "attachment",
+                     "kanban_board", "project_plan", "note", "animation", "attachment",
                  })
         {
             await using var unlock = conn.CreateCommand();

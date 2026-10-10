@@ -49,6 +49,9 @@ public sealed class LlmClient(
     /// <summary>DocDraft writes a whole document — an editing budget would cut it off.</summary>
     private static readonly TimeSpan DocDraftTimeout = TimeSpan.FromSeconds(240);
 
+    /// <summary>An explainer answers with a whole multi-scene animation document as JSON.</summary>
+    private static readonly TimeSpan ExplainerTimeout = TimeSpan.FromSeconds(180);
+
     /// <summary>A reorganisation plan reads a whole book or shelf and answers with its entire new outline.</summary>
     private static readonly TimeSpan ReorgPlanTimeout = TimeSpan.FromSeconds(360);
 
@@ -137,6 +140,7 @@ public sealed class LlmClient(
         var timeout = task switch
         {
             LlmPrompts.ReorgPlan => ReorgPlanTimeout,
+            LlmPrompts.Explainer => ExplainerTimeout,
             LlmPrompts.DocDraft or LlmPrompts.Logo or LlmPrompts.ReorgMerge => DocDraftTimeout,
             _ => CompleteTimeout,
         };
@@ -228,7 +232,7 @@ public sealed class LlmClient(
         // asking for minutes. DocDraft treats empty as a failure further up.
         var text = ReadChoiceText(root) ?? string.Empty;
         var (promptTokens, completionTokens) = ReadUsage(root);
-        if (text.Length == 0 && task is LlmPrompts.BookOutline or LlmPrompts.ReorgPlan)
+        if (text.Length == 0 && task is LlmPrompts.BookOutline or LlmPrompts.ReorgPlan or LlmPrompts.Explainer)
         {
             // qwen-3.8-27b on Cerebras puts the reply in message.reasoning and
             // leaves content empty. That is chain-of-thought for a document, but
@@ -299,7 +303,7 @@ public sealed class LlmClient(
     /// </summary>
     private static void ApplyJsonResponseFormat(Dictionary<string, object?> payload, string kind, string task)
     {
-        if (task is not (LlmPrompts.BookOutline or LlmPrompts.ReorgPlan)) return;
+        if (task is not (LlmPrompts.BookOutline or LlmPrompts.ReorgPlan or LlmPrompts.Explainer)) return;
         if (kind is not (LlmProviderKinds.OpenRouter or LlmProviderKinds.XAi
             or LlmProviderKinds.OpenAi or LlmProviderKinds.Cerebras))
         {
@@ -667,8 +671,15 @@ public static class LlmPrompts
     /// </summary>
     public const string ReorgMerge = "reorgmerge";
 
+    /// <summary>
+    /// "Turn this page into a moving explanation" (AnimationExplainerService):
+    /// the context is one page's Markdown, the answer is a complete animation
+    /// document as JSON — the schema of src/beedocs-web/src/animation/animModel.ts.
+    /// </summary>
+    public const string Explainer = "explainer";
+
     public static readonly IReadOnlyList<string> Tasks =
-        [Continue, Rewrite, Grammar, Format, Summarize, DocDraft, BookOutline, Logo, ReorgPlan, ReorgMerge];
+        [Continue, Rewrite, Grammar, Format, Summarize, DocDraft, BookOutline, Logo, ReorgPlan, ReorgMerge, Explainer];
 
     /// <summary>Enough context to be grounded, not enough to blow up the bill.</summary>
     private const int MaxContextChars = 6000;
@@ -694,6 +705,7 @@ public static class LlmPrompts
             "logo" or "icon" => Logo,
             "reorgplan" or "reorganize" or "reorganise" => ReorgPlan,
             "reorgmerge" => ReorgMerge,
+            "explainer" or "explain" or "animation" => Explainer,
             _ => null,
         };
 
@@ -868,12 +880,75 @@ public static class LlmPrompts
               wrap the whole answer in a code fence.
             """,
 
+        Explainer => ExplainerSystem,
+
         _ => "You are a concise writing assistant. Reply with only the requested text.",
     };
 
+    /// <summary>
+    /// The animation schema, taught to the model. Must stay in step with
+    /// animModel.ts — the web parser is tolerant, but anything it does not know
+    /// is silently dropped, so a field missing here is a feature the model never uses.
+    /// </summary>
+    private const string ExplainerSystem = """
+        You are a motion designer and teacher. You turn a documentation page into a
+        short animated explainer video: a sequence of scenes in which shapes, text and
+        arrows appear and move, step by step, while a narration explains the idea.
+
+        Reply with ONLY one JSON object — no preamble, no commentary, no Markdown fence.
+
+        Document shape:
+        {"version":1,"width":1280,"height":720,"fps":30,"background":"#0f172a","accent":"#f59e0b","captions":true,
+         "scenes":[{"id":"s1","title":"...","duration":6,"narration":"...","transition":"fade","background":"#0f172a",
+           "elements":[ ... ]}]}
+
+        Scene fields: id, title (short), duration (seconds, 4–9), narration (1–3 spoken
+        sentences explaining what the viewer sees — shown as captions at the bottom),
+        transition (how it arrives from the previous scene: "none" | "fade" | "slide" | "zoom"),
+        optional background (hex colour).
+
+        Element fields (all coordinates in pixels on the 1280×720 stage, origin top-left):
+        - id (unique string), type: "text" | "box" | "circle" | "line" | "arrow" | "icon" | "image" | "path"
+        - x, y, w, h: the element's box (top-left + size). For "line"/"arrow": x,y is the start,
+          x2,y2 the end (set w = x2-x, h = 1).
+        - text: the words (text: body, may contain \n; box/circle: label inside; arrow: label above;
+          icon: ONE emoji such as "🔒" or "⚙️").
+        - fontSize (px), font: "sans" | "serif" | "mono", bold (bool), align: "start" | "middle" | "end",
+          color (text colour), fill, stroke, strokeWidth, radius (box corners), opacity (0–1),
+          dashed (bool), src (image URL — only if the page itself contains one),
+          d (SVG path data for "path", RELATIVE to the element box: 0,0 is its top-left; x/y/w/h position it).
+        - enter: {"preset":P,"at":seconds,"duration":seconds,"easing":E} — how and when it appears.
+          P: "none" | "fade" | "rise" | "drop" | "slide-left" | "slide-right" | "pop" | "zoom" | "draw" | "type" | "wipe".
+          "draw" traces lines/arrows/outlines; "type" types text out letter by letter; "pop" bounces in.
+        - emphasis: {"preset":"pulse" | "shake" | "glow" | "spin","at":seconds,"duration":seconds} — draws the eye.
+        - exit: {"preset":"none" | "fade" | "sink" | "shrink" | "slide-left" | "slide-right","at":seconds,"duration":seconds}
+        - keyframes: [{"t":seconds,"x":..,"y":..,"opacity":..,"scale":..,"rotate":..,"easing":E}] — moves the
+          element over time (x,y are its new top-left). Use for things that travel, e.g. a packet moving along an arrow.
+        E: "linear" | "easeIn" | "easeOut" | "easeInOut" | "easeOutBack" | "easeOutElastic" | "easeOutBounce".
+        All "at" and "t" values are seconds from the START OF THAT SCENE, and must be less than its duration.
+        Elements are drawn in array order (later = on top).
+
+        How to make it good:
+        - Follow the page's logic: one idea per scene, in the order a newcomer needs them.
+          Open with a title scene, end with a short recap scene.
+        - Build each scene up step by step: stagger enter cues (0.3–0.8 s apart) in reading order so
+          the picture assembles as the narration speaks. Leave the last ~1.5 s of a scene calm.
+        - Show, don't print: on-screen text is short (labels of 1–4 words, titles under 8 words);
+          the full explanation goes in "narration".
+        - Flows and architectures: boxes with labels connected by arrows that "draw" in after the boxes pop in.
+          Key sentences: a "text" with enter "type". Give every idea an "icon" emoji.
+        - Keep everything inside the stage with a 60 px margin, and keep the bottom 110 px free —
+          captions are drawn there. Do not overlap elements unless one sits deliberately on another.
+        - Readable sizes: titles 56–72 px, labels 26–36 px, body text 28–34 px. Boxes at least 200×90.
+        - Colours: light text (#f8fafc, #94a3b8) on the dark background; the accent colour for the
+          most important element of each scene; a small consistent palette (#38bdf8, #34d399, #f472b6, #a78bfa)
+          for the rest. Dark text (#0f172a) on bright fills.
+        - Invent nothing that contradicts the page. Write narration in the page's language.
+        """;
+
     public static string UserMessage(string task, LlmCompleteRequest request)
     {
-        if (task is DocDraft or BookOutline or ReorgPlan or ReorgMerge)
+        if (task is DocDraft or BookOutline or ReorgPlan or ReorgMerge or Explainer)
         {
             // Head, not Tail: the bundle is ordered most-important-first
             // (README, manifests, docs, then source), so the start must survive
@@ -886,6 +961,7 @@ public static class LlmPrompts
                     {
                         ReorgPlan => "The library as it is now — books, folders and page excerpts:\n\n",
                         ReorgMerge => "Source pages:\n\n",
+                        Explainer => "The documentation page to explain:\n\n",
                         _ => "Source material — the repository's file tree and file excerpts:\n\n",
                     })
                     .Append(material)
@@ -947,6 +1023,7 @@ public static class LlmPrompts
         Grammar or Format => 0.1,
         Rewrite or DocDraft => 0.4,
         BookOutline or ReorgPlan => 0.2,
+        Explainer => 0.5,
         ReorgMerge => 0.3,
         // Creative work — identical retries of a rejected logo would be useless.
         Logo => 0.8,
@@ -964,7 +1041,7 @@ public static class LlmPrompts
     /// </summary>
     public static string ReasoningEffort(string task) => task switch
     {
-        Rewrite or Summarize or DocDraft or Logo or ReorgMerge => "low",
+        Rewrite or Summarize or DocDraft or Logo or ReorgMerge or Explainer => "low",
         _ => "none",
     };
 
@@ -988,6 +1065,8 @@ public static class LlmPrompts
         ReorgPlan => 16000,
         // One consolidated page, possibly several sources' worth.
         ReorgMerge => 8192,
+        // Several scenes of a dozen elements each, all spelled out as JSON.
+        Explainer => 12000,
         // SVG path data is token-hungry; a modest mark still runs long.
         Logo => 4096,
         // Roughly two tokens of headroom per token of input, since these tasks

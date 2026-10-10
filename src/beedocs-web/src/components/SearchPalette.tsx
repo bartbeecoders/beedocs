@@ -19,6 +19,7 @@ const KIND_ORDER: SearchKind[] = [
   'kanban',
   'project',
   'note',
+  'animation',
   'attachment',
   'book',
   'folder',

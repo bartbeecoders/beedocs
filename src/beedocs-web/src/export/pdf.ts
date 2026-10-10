@@ -6,6 +6,7 @@ import { excelGridToHtml } from '../excelgrid/model'
 import { kanbanToHtml } from '../kanban/kanbanModel'
 import { projectToHtml } from '../project/projectModel'
 import { noteToHtml } from '../notes/noteModel'
+import { animationToHtml } from '../animation/animModel'
 import { freeDrawToSvg } from '../freedraw/model'
 import {
   cellStyleClass,
@@ -354,6 +355,18 @@ async function renderFence(
       return noteToHtml(note.source, note.title)
     } catch {
       return `<div class="export-error">Missing note ${esc(id)}</div>`
+    }
+  }
+  if (lang === 'animation') {
+    return animationToHtml(body)
+  }
+  if (lang === 'animation-ref') {
+    const id = body.trim().split(/\s+/)[0] ?? ''
+    try {
+      const anim = await api.getAnimation(id)
+      return animationToHtml(anim.source, anim.title)
+    } catch {
+      return `<div class="export-error">Missing animation ${esc(id)}</div>`
     }
   }
   if (lang === 'plantuml') {
@@ -738,6 +751,31 @@ const PRINT_CSS = `
   .export-project-table tr[data-color="warn"] td:first-child { border-left-color: #f59e0b; }
   .export-project-table tr[data-color="danger"] td:first-child { border-left-color: #ef4444; }
   .export-project-table tr[data-color="muted"] td:first-child { border-left-color: #9aa0ab; }
+  .export-animation-scenes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+  }
+  .export-animation-scene {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .export-animation-frame {
+    border: 1px solid #d0d4dc;
+    border-radius: 8px;
+    overflow: hidden;
+    line-height: 0;
+  }
+  .export-animation-frame svg, .export-animation-frame img { display: block; width: 100%; height: auto; }
+  .export-animation-text { font-size: 12px; line-height: 1.45; }
+  .export-animation-text strong { display: block; margin-bottom: 4px; font-size: 13px; }
+  .export-animation-narration { margin: 0; color: #3b4150; }
   .export-note-page { border: 1px solid #d0d4dc; border-radius: 6px; overflow: hidden; max-width: 100%; }
   .export-note-block { position: absolute; font-size: 12px; line-height: 1.45; }
   .export-note-text p, .export-note-text h1, .export-note-text h2, .export-note-text h3 { margin: 0 0 4px; }

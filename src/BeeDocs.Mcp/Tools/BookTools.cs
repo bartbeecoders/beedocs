@@ -58,12 +58,12 @@ public sealed class BookTools(BeeDocsApiClient client)
         });
 
     [McpServerTool(Name = "beedocs_get_book_tree", Title = "Get book tree"),
-     Description("Return folders (chapters) and pages grouped for tree navigation (root pages + per-folder pages + diagrams + slide decks + kanban boards + project plans + notes + attachments).")]
+     Description("Return folders (chapters) and pages grouped for tree navigation (root pages + per-folder pages + diagrams + slide decks + kanban boards + project plans + notes + animations + attachments).")]
     public Task<string> GetBookTree(string bookId, CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () => ToolHelpers.Json(await BuildTreeAsync(client, bookId, ct)));
 
     [McpServerTool(Name = "beedocs_export_book", Title = "Export book (structured)"),
-     Description("Export one book with chapters, full pages, diagrams, slide decks, kanban boards, project plans, notes, and attachment metadata as JSON. Prefer this before generating PDF/HTML offline.")]
+     Description("Export one book with chapters, full pages, diagrams, slide decks, kanban boards, project plans, notes, animations, and attachment metadata as JSON. Prefer this before generating PDF/HTML offline.")]
     public Task<string> ExportBook(
         string bookId,
         [Description("Default true")] bool includePageContent = true,
@@ -72,6 +72,7 @@ public sealed class BookTools(BeeDocsApiClient client)
         [Description("Default true")] bool includeKanbanSource = true,
         [Description("Default true")] bool includeProjectSource = true,
         [Description("Default true")] bool includeNoteSource = true,
+        [Description("Default true")] bool includeAnimationSource = true,
         CancellationToken ct = default) =>
         ToolHelpers.RunAsync(async () =>
         {
@@ -136,6 +137,15 @@ public sealed class BookTools(BeeDocsApiClient client)
                     : n);
             }
 
+            var animationSummary = await client.ListAnimationsAsync(bookId, ct);
+            var animations = new List<JsonElement>();
+            foreach (var a in animationSummary.EnumerateArray())
+            {
+                animations.Add(includeAnimationSource
+                    ? await client.GetAnimationAsync(BeeDocsApiClient.Prop(a, "id"), ct)
+                    : a);
+            }
+
             // Metadata only, always: an attachment's payload is an opaque file,
             // and inlining base64 for every PDF in a book would swamp the export
             // it is meant to make readable. beedocs_read_attachment fetches one.
@@ -152,6 +162,7 @@ public sealed class BookTools(BeeDocsApiClient client)
                 kanbanBoards,
                 projectPlans,
                 notes,
+                animations,
                 attachments,
                 note = "Open the book in the BeeDocs UI and use Export PDF for a browser print-to-PDF. This tool returns structured content for agents.",
             });
@@ -168,7 +179,8 @@ public sealed class BookTools(BeeDocsApiClient client)
         var projectTask = client.ListProjectPlansAsync(bookId, ct);
         var notesTask = client.ListNotesAsync(bookId, ct);
         var attachmentsTask = client.ListAttachmentsAsync(bookId, ct);
-        await Task.WhenAll(bookTask, chaptersTask, pagesTask, diagramsTask, slideDecksTask, kanbanTask, projectTask, notesTask, attachmentsTask);
+        var animationsTask = client.ListAnimationsAsync(bookId, ct);
+        await Task.WhenAll(bookTask, chaptersTask, pagesTask, diagramsTask, slideDecksTask, kanbanTask, projectTask, notesTask, attachmentsTask, animationsTask);
 
         var book = await bookTask;
         var chapters = (await chaptersTask).EnumerateArray()
@@ -202,6 +214,7 @@ public sealed class BookTools(BeeDocsApiClient client)
             kanbanBoards = await kanbanTask,
             projectPlans = await projectTask,
             notes = await notesTask,
+            animations = await animationsTask,
             attachments = await attachmentsTask,
         };
     }

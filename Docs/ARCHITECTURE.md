@@ -41,7 +41,11 @@ full-screen presentation mode — see [SLIDES.md](./SLIDES.md)),
 **project plans** (tasks, milestones and a Gantt chart, as a tree item or a
 page embed — see [PROJECT.md](./PROJECT.md)),
 **notes** (OneNote-style free-form pages: click anywhere to type, checklists,
-images and pen ink, as a tree item or a page embed — see [NOTES.md](./NOTES.md)) and
+images and pen ink, as a tree item or a page embed — see [NOTES.md](./NOTES.md)),
+**animations** (moving explanations: scenes of keyframed shapes, arrows and
+text with narration captions, rendered fframes-style as a pure function of
+time, exportable as MP4/WebM or as an fframes Rust crate, and draftable from a
+page by the LLM — see [ANIMATIONS.md](./ANIMATIONS.md)) and
 **attachments** (uploaded PDFs, Word/PowerPoint/Excel documents and archives,
 searchable by the text inside them — see [ATTACHMENTS.md](./ATTACHMENTS.md)).
 

@@ -1,0 +1,1008 @@
+/* Animations: player, page embed, editor (stage · timeline · format panel). */
+
+/* ---- frame ---------------------------------------------------------------- */
+
+.anim-frame,
+.anim-thumb-frame {
+  width: 100%;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.anim-frame svg,
+.anim-thumb-frame svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- player --------------------------------------------------------------- */
+
+.anim-player {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  outline: none;
+}
+
+.anim-player:focus-visible .anim-player-stage {
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+.anim-player-stage {
+  position: relative;
+  border-radius: var(--r10);
+  overflow: hidden;
+  background: #000;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+.anim-player:fullscreen {
+  background: #000;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.anim-player:fullscreen .anim-player-stage {
+  max-height: calc(100vh - 4rem);
+  aspect-ratio: auto;
+}
+
+.anim-player:fullscreen .anim-frame {
+  max-height: calc(100vh - 4rem);
+}
+
+.anim-player:fullscreen .anim-controls {
+  color: #f8fafc;
+}
+
+.anim-bigplay {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: var(--r-pill);
+  border: none;
+  background: color-mix(in srgb, var(--accent) 88%, transparent);
+  color: var(--accent-fg);
+  font-size: 1.6rem;
+  padding-left: 0.3rem;
+  cursor: pointer;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease;
+}
+
+.anim-bigplay:hover {
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.anim-player-title {
+  font-weight: 600;
+}
+
+.anim-controls,
+.anim-transport {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.anim-ctl {
+  flex: 0 0 auto;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r6);
+  background: var(--bg-elevated);
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.anim-ctl:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.anim-ctl.is-on {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-elevated));
+  border-color: var(--accent);
+}
+
+.anim-time {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.anim-scene-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anim-player.is-compact .anim-ctl {
+  min-width: 1.8rem;
+  height: 1.8rem;
+}
+
+/* ---- scrubber ------------------------------------------------------------- */
+
+.anim-scrubber {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 4rem;
+  height: 1.6rem;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+.anim-scrubber-track {
+  position: absolute;
+  inset: 50% 0 auto 0;
+  height: 0.4rem;
+  transform: translateY(-50%);
+  background: var(--bg-soft);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.anim-scrubber-scene {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-right: 2px solid var(--bg-elevated);
+}
+
+.anim-scrubber-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.anim-scrubber-thumb {
+  position: absolute;
+  top: 50%;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  border: 2px solid var(--bg-elevated);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.anim-scrubber:focus-visible .anim-scrubber-thumb {
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+/* ---- export menu ---------------------------------------------------------- */
+
+.anim-export {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.anim-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.35rem);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: 18rem;
+  padding: 0.3rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r10);
+  box-shadow: var(--shadow-pop, 0 12px 32px rgba(0, 0, 0, 0.25));
+}
+
+.anim-toolbar .anim-menu {
+  top: calc(100% + 0.35rem);
+  bottom: auto;
+}
+
+.anim-menu button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.45rem 0.6rem;
+  border: none;
+  border-radius: var(--r6);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.anim-menu button:hover:not(:disabled) {
+  background: var(--bg-soft);
+}
+
+.anim-menu button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.anim-export-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.anim-export-bar {
+  width: 5rem;
+  height: 0.35rem;
+  background: var(--bg-soft);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.anim-export-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.anim-export-error {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.3rem);
+  z-index: 40;
+  width: max-content;
+  max-width: 18rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--r6);
+  background: color-mix(in srgb, var(--danger) 14%, var(--bg-elevated));
+  color: var(--danger);
+  cursor: pointer;
+}
+
+.anim-json .anim-export-error {
+  position: static;
+}
+
+/* ---- page embed ----------------------------------------------------------- */
+
+.anim-embed {
+  position: relative;
+  max-width: 960px;
+}
+
+.anim-embed-edit {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  background: var(--bg-elevated);
+}
+
+.anim-embed:hover .anim-embed-edit,
+.anim-embed-edit:focus-visible {
+  opacity: 1;
+}
+
+/* ---- editor --------------------------------------------------------------- */
+
+.anim-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 30rem;
+  outline: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r10);
+  overflow: hidden;
+}
+
+.anim-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.anim-toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.anim-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 2rem;
+  padding: 0 0.55rem;
+  border: 1px solid transparent;
+  border-radius: var(--r6);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.anim-tool:hover:not(:disabled) {
+  background: var(--bg-soft);
+  border-color: var(--border);
+}
+
+.anim-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.anim-tool.is-on {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-elevated));
+  border-color: var(--accent);
+}
+
+.anim-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr) 17rem;
+}
+
+/* scenes */
+
+.anim-scenes {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-pane);
+}
+
+.anim-scenes ol {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.5rem;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.anim-scenes li {
+  position: relative;
+  border-radius: var(--r8);
+  border: 2px solid transparent;
+}
+
+.anim-scenes li.is-active {
+  border-color: var(--accent);
+}
+
+.anim-scene-thumb {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.anim-scene-thumb .anim-thumb-frame {
+  border-radius: var(--r6);
+  pointer-events: none;
+}
+
+.anim-scene-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.2rem 0.15rem 0.1rem;
+  font-size: 0.75rem;
+}
+
+.anim-scene-num {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.anim-scene-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anim-scene-actions {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  display: none;
+  gap: 0.1rem;
+}
+
+.anim-scenes li:hover .anim-scene-actions,
+.anim-scenes li:focus-within .anim-scene-actions {
+  display: flex;
+}
+
+.anim-scene-actions button {
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--r4);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.anim-scene-actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.anim-scenes-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+/* center */
+
+.anim-center {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.6rem;
+  gap: 0.5rem;
+  overflow: auto;
+}
+
+.anim-stage-wrap {
+  flex: 1 1 auto;
+  min-height: 12rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+}
+
+.anim-stage {
+  position: relative;
+  width: min(100cqw, calc(100cqh * var(--anim-ratio, 1.7778)));
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--r6);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  background: #000;
+}
+
+.anim-select-layer {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.anim-hit {
+  position: absolute;
+  border: 1px dashed transparent;
+  cursor: move;
+}
+
+.anim-hit:hover {
+  border-color: color-mix(in srgb, #fff 55%, transparent);
+}
+
+.anim-hit.is-hidden {
+  border-color: color-mix(in srgb, #fff 18%, transparent);
+}
+
+.anim-hit.is-selected {
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.anim-handle {
+  position: absolute;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: var(--r2);
+  background: var(--accent);
+  border: 2px solid #fff;
+}
+
+.anim-handle.is-resize {
+  right: -0.45rem;
+  bottom: -0.45rem;
+  cursor: nwse-resize;
+}
+
+.anim-handle.is-point {
+  border-radius: var(--r-pill);
+  transform: translate(-50%, -50%);
+  cursor: crosshair;
+}
+
+/* timeline */
+
+.anim-timeline {
+  --tl-label: 9rem;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r8);
+  background: var(--bg-elevated);
+  font-size: 0.75rem;
+  user-select: none;
+}
+
+.anim-tl-rows {
+  position: relative;
+  max-height: 11rem;
+  overflow-y: auto;
+}
+
+.anim-tl-row {
+  display: grid;
+  grid-template-columns: var(--tl-label) minmax(0, 1fr);
+  align-items: center;
+  min-height: 1.6rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.anim-tl-row.is-selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.anim-tl-ruler-row {
+  border-top: none;
+}
+
+.anim-tl-label {
+  padding: 0 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.anim-tl-icon {
+  display: inline-block;
+  width: 1.1rem;
+  color: var(--muted);
+}
+
+.anim-tl-ruler {
+  position: relative;
+  height: 1.5rem;
+  margin-right: 0.6rem;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.anim-tl-tick {
+  position: absolute;
+  top: 0.25rem;
+  padding-left: 0.2rem;
+  border-left: 1px solid var(--border-strong);
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.1rem;
+}
+
+.anim-tl-track {
+  position: relative;
+  height: 1.6rem;
+  margin-right: 0.6rem;
+}
+
+.anim-tl-bar {
+  position: absolute;
+  top: 0.35rem;
+  height: 0.9rem;
+  min-width: 4px;
+  border-radius: var(--r4);
+  background: color-mix(in srgb, var(--accent) 45%, var(--bg-soft));
+  cursor: grab;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.anim-tl-row.is-selected .anim-tl-bar {
+  background: color-mix(in srgb, var(--accent) 70%, var(--bg-soft));
+}
+
+.anim-tl-cue {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.anim-tl-cue.is-enter {
+  left: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent-strong) 85%, transparent), transparent);
+}
+
+.anim-tl-cue.is-exit {
+  right: 0;
+  background: linear-gradient(270deg, color-mix(in srgb, var(--danger) 60%, transparent), transparent);
+}
+
+.anim-tl-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.anim-tl-grip.is-start {
+  left: 0;
+}
+
+.anim-tl-grip.is-end {
+  right: 0;
+}
+
+.anim-tl-grip:hover {
+  background: color-mix(in srgb, var(--text) 35%, transparent);
+}
+
+.anim-tl-emphasis {
+  position: absolute;
+  bottom: 0.1rem;
+  height: 0.2rem;
+  border-radius: var(--r-pill);
+  background: #38bdf8;
+  pointer-events: none;
+}
+
+.anim-tl-key {
+  position: absolute;
+  top: 0.55rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--text);
+  transform: translateX(-50%) rotate(45deg);
+  pointer-events: none;
+}
+
+.anim-tl-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--danger);
+  pointer-events: none;
+}
+
+.anim-tl-empty {
+  padding: 0.6rem 0.75rem;
+}
+
+/* format panel */
+
+.anim-format {
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--bg-pane);
+}
+
+.anim-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.6rem 0.7rem 1rem;
+  font-size: 0.82rem;
+}
+
+.anim-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.anim-panel-actions {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.anim-mini {
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r4);
+  background: var(--bg-elevated);
+  color: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.anim-mini.is-danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.anim-mini-link {
+  align-self: flex-end;
+  padding: 0.2rem 0;
+  border: none;
+  background: none;
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.anim-mini-link:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.anim-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.anim-field > span:first-child {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.anim-field input,
+.anim-field select,
+.anim-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r5);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+}
+
+.anim-field textarea {
+  resize: vertical;
+}
+
+.anim-field input:focus,
+.anim-field select:focus,
+.anim-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+.anim-color-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.anim-color-row input[type='color'] {
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 1.8rem;
+  padding: 0.1rem;
+}
+
+.anim-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+.anim-row-tight {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.anim-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  padding-bottom: 0.3rem;
+}
+
+.anim-seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--r5);
+  overflow: hidden;
+}
+
+.anim-seg button {
+  width: 2rem;
+  height: 1.7rem;
+  border: none;
+  background: var(--bg-elevated);
+  color: inherit;
+  cursor: pointer;
+}
+
+.anim-seg button + button {
+  border-left: 1px solid var(--border);
+}
+
+.anim-seg button.is-on {
+  background: color-mix(in srgb, var(--accent) 25%, var(--bg-elevated));
+}
+
+.anim-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.5rem 0.55rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r8);
+}
+
+.anim-group legend {
+  padding: 0 0.3rem;
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.anim-key {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px dashed var(--border);
+}
+
+.anim-hint {
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* JSON pane */
+
+.anim-json {
+  flex: 1 1 auto;
+  min-height: 16rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.anim-json p {
+  margin: 0;
+}
+
+.anim-json textarea {
+  flex: 1;
+  min-height: 14rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r8);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  resize: none;
+}
+
+.anim-json-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* narrow screens: panels stack under the stage */
+
+@media (max-width: 1100px) {
+  .anim-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .anim-scenes {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .anim-scenes ol {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .anim-scenes li {
+    flex: 0 0 9rem;
+  }
+
+  .anim-format {
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: 22rem;
+  }
+
+  .anim-tool-label {
+    display: none;
+  }
+}
+
+
+/* ---- hosts: book canvas and page blocks ----------------------------------- */
+
+.animation-canvas {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.animation-canvas-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.75rem;
+}
+
+.animation-canvas-body > .anim-editor {
+  height: 100%;
+}
+
+.animation-canvas-body > .anim-player {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* Inline in a page the editor has no host height, so give it one. */
+.anim-editor {
+  height: clamp(34rem, 78vh, 56rem);
+}
+
+.hybrid-focus .hybrid-animation-block .anim-editor,
+.hybrid-focus .animation-embed .anim-editor {
+  height: var(--focus-h, 80vh);
+}
+
+.animation-embed .anim-player,
+.hybrid-animation-block .anim-embed {
+  max-width: 960px;
+}

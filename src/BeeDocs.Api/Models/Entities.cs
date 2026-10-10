@@ -278,6 +278,36 @@ public sealed class KanbanBoard
 }
 
 /// <summary>
+/// An animation ("moving explanation"): scenes of timed, keyframed shapes,
+/// stored as one JSON document. Lives in a book next to pages, diagrams and
+/// decks. The engine is fframes-style — every frame is a pure function of
+/// time — and lives entirely in the web app; the server stores the document.
+/// </summary>
+public sealed class Animation
+{
+    public string Id { get; set; } = string.Empty;
+    public string BookId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    /// <summary>
+    /// JSON document: <c>{"version":1,"width","height","fps","background","accent","captions","scenes":[{id,title,duration,narration,transition,elements:[…]}]}</c>
+    /// — see <c>src/beedocs-web/src/animation/animModel.ts</c> for the schema.
+    /// </summary>
+    public string Source { get; set; } = string.Empty;
+    /// <summary>Same convention as <see cref="Page.ContentRef"/>.</summary>
+    public string? ContentRef { get; set; }
+    /// <summary>Same convention as <see cref="Page.ContentSize"/>.</summary>
+    public long? ContentSize { get; set; }
+    /// <summary>Scene count maintained on every save (tree badge without loading the source).</summary>
+    public int? SceneCount { get; set; }
+    /// <summary><see cref="User.Id"/> responsible for this animation. Inherited from the book on create.</summary>
+    public string? OwnerId { get; set; }
+    /// <summary>When true, only the owner (and admins) can see this animation.</summary>
+    public bool IsPrivate { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
 /// An MS Project-style plan: tasks, milestones and a Gantt chart, stored as one
 /// JSON document. Lives in a book next to pages, diagrams, decks and boards.
 /// </summary>

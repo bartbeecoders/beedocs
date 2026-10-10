@@ -60,8 +60,8 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_create_book` | `title`, `description?`, `slug?`, `shelfId?` | Create book (optionally on a shelf) |
 | `beedocs_update_book` | `bookId`, `title`, `description?`, `slug?`, `sortOrder?`, `shelfId?`, `isPrivate?` | Update book (omitted fields are left alone; `shelfId: ""` unshelves; `isPrivate` is owner-only visibility) |
 | `beedocs_delete_book` | `bookId` | Delete book (+ cascade pages/chapters) |
-| `beedocs_get_book_tree` | `bookId` | Folders + root pages + diagrams + slide decks + kanban boards + project plans + notes tree |
-| `beedocs_export_book` | `bookId`, `includePageContent?`, `includeDiagramSource?`, `includeSlideSource?`, `includeKanbanSource?`, `includeProjectSource?`, `includeNoteSource?` | Structured export of one book |
+| `beedocs_get_book_tree` | `bookId` | Folders + root pages + diagrams + slide decks + kanban boards + project plans + notes + animations tree |
+| `beedocs_export_book` | `bookId`, `includePageContent?`, `includeDiagramSource?`, `includeSlideSource?`, `includeKanbanSource?`, `includeProjectSource?`, `includeNoteSource?`, `includeAnimationSource?` | Structured export of one book |
 
 ### Chapters (folders)
 
@@ -262,6 +262,37 @@ Pages embed a stored board with ```` ```kanban-ref\nBOARD_ID\n``` ````, or an
 inline copy with ```` ```kanban\n{json}\n``` ````. The full document format is
 documented in [KANBAN.md](./KANBAN.md).
 
+### Animations
+
+Moving explanations: scenes of timed, keyframed shapes, arrows and text with a
+narration caption. The document is video-as-code in the fframes sense: every
+frame is computed from the document and the time, so an agent can author one
+directly, or have BeeDocs' LLM draft one from a page.
+
+| Tool | Args | Description |
+|------|------|-------------|
+| `beedocs_list_animations` | `bookId` | Animation summaries incl. `sceneCount` |
+| `beedocs_get_animation` | `animationId` | Full animation + JSON document |
+| `beedocs_create_animation` | `bookId`, `title`, `source?` | Create from a JSON document you author; omit source for one empty scene. Returns `workspaceUrl` + `embedFence` |
+| `beedocs_create_animation_from_page` | `bookId`, `pageId`, `title?`, `sceneCount?`, `instructions?` | AI explainer: the default LLM provider turns the page into a multi-scene animation (up to ~3 min; needs a configured provider) |
+| `beedocs_update_animation` | `animationId`, `title?`, `source?` | Update title and/or document (null keeps current) |
+| `beedocs_delete_animation` | `animationId` | Delete animation |
+
+Document shape:
+
+- **Top level:** `{version:1, width:1280, height:720, fps:30, background,
+  accent, captions, scenes:[…]}`.
+- **Scene:** `{id, title, duration, narration?, transition?, elements:[…]}`.
+- **Element:** `{id, type, x, y, w, h, …}`, with `type` one of `text`, `box`,
+  `circle`, `line`, `arrow`, `icon`, `image`, `path`.
+  - Timing: `enter`, `emphasis` and `exit` cues plus `keyframes`, all in
+    seconds from the start of the scene.
+  - `path`'s `d` is relative to its element box.
+
+Pages embed a stored animation with ```` ```animation-ref\nANIMATION_ID\n``` ````,
+or an inline copy with ```` ```animation\n{json}\n``` ````. The full format,
+presets and the fframes export are documented in [ANIMATIONS.md](./ANIMATIONS.md).
+
 ### Project plans
 
 | Tool | Args | Description |
@@ -387,7 +418,7 @@ Indexed repos also surface in `beedocs_search` as kind `gitfile` (id
 | `beedocs://books/{bookId}/pages` | Page summaries |
 | `beedocs://books/{bookId}/chapters` | Folder list |
 | `beedocs://books/{bookId}/attachments` | Attachment metadata (contents via `beedocs_read_attachment`) |
-| `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams + slide decks + kanban boards + project plans + notes + attachments |
+| `beedocs://books/{bookId}/tree` | Folders + root pages + diagrams + slide decks + kanban boards + project plans + notes + animations + attachments |
 | `beedocs://pages/{pageId}` | Full page |
 | `beedocs://diagram/catalog` | Every shape, Azure stencil, palette group, anchor, route and arrow head |
 | `beedocs://diagrams/{diagramId}` | Full diagram |
@@ -395,6 +426,7 @@ Indexed repos also surface in `beedocs_search` as kind `gitfile` (id
 | `beedocs://kanban/{boardId}` | Full kanban board |
 | `beedocs://project/{planId}` | Full project plan |
 | `beedocs://notes/{noteId}` | Full note |
+| `beedocs://animation/{animationId}` | Full animation |
 
 ---
 

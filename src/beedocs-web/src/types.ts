@@ -50,7 +50,16 @@ export type Book = {
 }
 
 /** What a favorite can point at. `slides` names a slide deck, as in search. */
-export type FavoriteKind = 'book' | 'page' | 'diagram' | 'slides' | 'kanban' | 'project' | 'note' | 'attachment'
+export type FavoriteKind =
+  | 'book'
+  | 'page'
+  | 'diagram'
+  | 'slides'
+  | 'kanban'
+  | 'project'
+  | 'note'
+  | 'animation'
+  | 'attachment'
 
 /**
  * One starred item as GET /api/favorites returns it: the target, its live
@@ -175,6 +184,7 @@ export type SearchKind =
   | 'kanban'
   | 'project'
   | 'note'
+  | 'animation'
   | 'attachment'
   | 'book'
   | 'folder'
@@ -277,6 +287,7 @@ export type SearchStatus = {
   kanbanBoards: number
   projectPlans: number
   notes: number
+  animations: number
   attachments: number
   books: number
   folders: number
@@ -429,6 +440,34 @@ export type ProjectPlanSummary = {
 
 /** The full plan. No `taskCount` — the client holding `source` can count for itself. */
 export type ProjectPlan = {
+  id: string
+  bookId: string
+  title: string
+  source: string
+  ownerId?: string | null
+  ownerName?: string | null
+  isPrivate: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * An animated explanation stored in a book next to pages and diagrams.
+ * `source` is a JSON scene/timeline document — see animation/animModel.ts.
+ */
+export type AnimationSummary = {
+  id: string
+  bookId: string
+  title: string
+  /** Scenes in the animation, counted server-side from the stored document. */
+  sceneCount: number
+  ownerId?: string | null
+  isPrivate: boolean
+  updatedAt: string
+}
+
+/** The full animation. No `sceneCount` — the client holding `source` can count for itself. */
+export type Animation = {
   id: string
   bookId: string
   title: string
@@ -1080,8 +1119,9 @@ export type DocumentCounts = {
   kanbanBoards: number
   projectPlans: number
   notes: number
+  animations: number
   attachments: number
-  /** Content documents only: pages + diagrams + slide decks + kanban boards + project plans + notes + attachments. */
+  /** Content documents only: pages + diagrams + slide decks + kanban boards + project plans + notes + animations + attachments. */
   total: number
 }
 

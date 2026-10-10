@@ -37,6 +37,7 @@ public sealed class FavoriteService(SqliteConnectionFactory db, ICurrentUserAcce
         ["kanban"] = "kanban_board",
         ["project"] = "project_plan",
         ["note"] = "note",
+        ["animation"] = "animation",
         ["attachment"] = "attachment",
     };
 
@@ -58,8 +59,8 @@ public sealed class FavoriteService(SqliteConnectionFactory db, ICurrentUserAcce
         // blank panel entry.
         cmd.CommandText = $"""
             SELECT f.kind, f.entity_id,
-                   COALESCE(b.title, p.title, d.title, s.title, k.title, pr.title, n.title, a.title) AS title,
-                   COALESCE(p.book_id, d.book_id, s.book_id, k.book_id, pr.book_id, n.book_id, a.book_id) AS book_id,
+                   COALESCE(b.title, p.title, d.title, s.title, k.title, pr.title, n.title, an.title, a.title) AS title,
+                   COALESCE(p.book_id, d.book_id, s.book_id, k.book_id, pr.book_id, n.book_id, an.book_id, a.book_id) AS book_id,
                    f.created_at
             FROM favorite f
             LEFT JOIN book b ON f.kind = 'book' AND b.id = f.entity_id
@@ -69,9 +70,10 @@ public sealed class FavoriteService(SqliteConnectionFactory db, ICurrentUserAcce
             LEFT JOIN kanban_board k ON f.kind = 'kanban' AND k.id = f.entity_id
             LEFT JOIN project_plan pr ON f.kind = 'project' AND pr.id = f.entity_id
             LEFT JOIN note n ON f.kind = 'note' AND n.id = f.entity_id
+            LEFT JOIN animation an ON f.kind = 'animation' AND an.id = f.entity_id
             LEFT JOIN attachment a ON f.kind = 'attachment' AND a.id = f.entity_id
             WHERE f.user_id = $user
-              AND COALESCE(b.title, p.title, d.title, s.title, k.title, pr.title, n.title, a.title) IS NOT NULL
+              AND COALESCE(b.title, p.title, d.title, s.title, k.title, pr.title, n.title, an.title, a.title) IS NOT NULL
               {Privacy.OptionalItemSql("b", actor)}
               {Privacy.OptionalItemSql("p", actor)}
               {Privacy.OptionalItemSql("d", actor)}
@@ -79,9 +81,10 @@ public sealed class FavoriteService(SqliteConnectionFactory db, ICurrentUserAcce
               {Privacy.OptionalItemSql("k", actor)}
               {Privacy.OptionalItemSql("pr", actor)}
               {Privacy.OptionalItemSql("n", actor)}
+              {Privacy.OptionalItemSql("an", actor)}
               {Privacy.OptionalItemSql("a", actor)}
-              {Privacy.BookSql("COALESCE(p.book_id, d.book_id, s.book_id, k.book_id, pr.book_id, n.book_id, a.book_id)", actor)}
-              {Privacy.ShelfViaBookSql("COALESCE(p.book_id, d.book_id, s.book_id, k.book_id, pr.book_id, n.book_id, a.book_id)", actor)}
+              {Privacy.BookSql("COALESCE(p.book_id, d.book_id, s.book_id, k.book_id, pr.book_id, n.book_id, an.book_id, a.book_id)", actor)}
+              {Privacy.ShelfViaBookSql("COALESCE(p.book_id, d.book_id, s.book_id, k.book_id, pr.book_id, n.book_id, an.book_id, a.book_id)", actor)}
               {Privacy.ShelfSql("b.shelf_id", actor)}
             ORDER BY f.created_at DESC, f.entity_id
             """;

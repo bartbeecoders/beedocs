@@ -13,6 +13,7 @@ import {
   isKanbanFenceLang,
   isProjectFenceLang,
   isNoteFenceLang,
+  isAnimationFenceLang,
   isMediaFenceLang,
   isVisualFenceLang,
   joinMarkdownSegments,
@@ -58,6 +59,8 @@ import {
   segmentsForLinkedKanban,
   segmentsForLinkedProject,
   segmentsForLinkedNote,
+  segmentsForLinkedAnimation,
+  animationStarterLabels,
   type InsertKind,
 } from '../pageBlocks'
 import {
@@ -102,6 +105,13 @@ import { LinkDocumentDialog } from './LinkDocumentDialog'
 
 // Lazy so pages without an isometric section don't load the iso editor module.
 const IsometricEditor = lazy(() => import('../isometric/IsometricEditor'))
+// Same for animations: the editor/player load only where a page embeds one.
+const AnimationEditor = lazy(() =>
+  import('../animation/AnimationEditor').then((m) => ({ default: m.AnimationEditor })),
+)
+const AnimationView = lazy(() =>
+  import('../animation/AnimationView').then((m) => ({ default: m.AnimationView })),
+)
 
 function IsometricLoading() {
   const { t } = useI18n()
@@ -522,11 +532,35 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
 
   const handleInsert = useCallback(
     async (
-      kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked' | 'note-linked',
+      kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked' | 'note-linked' | 'animation-linked',
       at?: InsertTarget,
     ) => {
       setInsertError(null)
       const target = at ?? { cell: activeCellRef.current, at: 'end' as const }
+      if (kind === 'animation-linked') {
+        if (!bookId) {
+          setInsertError(t('editor.linkedNeedBook'))
+          return
+        }
+        const title = window
+          .prompt(t('editor.promptAnimationTitle'), t('editor.animationTitleDefault'))
+          ?.trim()
+        if (!title) return
+        setBusy(true)
+        try {
+          const starter = segmentsForInsert('animation', { animationLabels: animationStarterLabels(t) }).find(
+            (s): s is FenceSegment => s.type === 'fence',
+          )
+          const anim = await api.createAnimation(bookId, { title, source: starter?.body })
+          insertAt(target, segmentsForLinkedAnimation(anim.id))
+          await renameInTree()
+        } catch (e) {
+          setInsertError(e instanceof Error ? e.message : String(e))
+        } finally {
+          setBusy(false)
+        }
+        return
+      }
       if (kind === 'note-linked') {
         if (!bookId) {
           setInsertError(t('editor.linkedNeedBook'))
@@ -640,7 +674,10 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
         return
       }
 
-      insertAt(target, segmentsForInsert(kind))
+      insertAt(
+        target,
+        segmentsForInsert(kind, kind === 'animation' ? { animationLabels: animationStarterLabels(t) } : undefined),
+      )
     },
     [bookId, insertAt, pageId, renameInTree, t],
   )
@@ -1299,6 +1336,13 @@ export function HybridPageEditor({ content, onChange, bookId, pageId, placeholde
             onBodyChange={(body) => updateFenceBody(cellIdx, index, body)}
             onRemove={() => removeSegment(cellIdx, index)}
           />
+        ) : isAnimationFenceLang(seg.lang) ? (
+          <AnimationFenceBlock
+            segment={seg}
+            bookId={bookId}
+            onBodyChange={(body) => updateFenceBody(cellIdx, index, body)}
+            onRemove={() => removeSegment(cellIdx, index)}
+          />
         ) : isIsometricFenceLang(seg.lang) ? (
           <IsometricFenceBlock
             segment={seg}
@@ -1875,7 +1919,7 @@ function InsertToolbar({
   /** Current layout as "COLSxROWS" ("1x1" = single flow). */
   layoutSpec: string
   onLayoutChange: (spec: string) => void
-  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked' | 'note-linked') => void
+  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked' | 'note-linked' | 'animation-linked') => void
   onPickImage?: () => void
   onPickPdf?: () => void
   onPickModel?: () => void
@@ -1938,6 +1982,15 @@ function InsertToolbar({
           title={t('editor.insert.noteTitle')}
         >
           {t('editor.insert.note')}
+        </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
+          onClick={() => onInsert('animation')}
+          title={t('editor.insert.animationTitle')}
+        >
+          {t('editor.insert.animation')}
         </button>
         <button type="button" className="btn sm" disabled={busy} onClick={() => onInsert('callout')}>
           {t('editor.insert.callout')}
@@ -2024,6 +2077,15 @@ function InsertToolbar({
           type="button"
           className="btn sm"
           disabled={busy}
+          onClick={() => onInsert('animation-linked')}
+          title={t('editor.insert.linkedAnimationTitle')}
+        >
+          {t('editor.insert.linkedAnimation')}
+        </button>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={busy}
           onClick={() => onInsert('isometric')}
           title={t('editor.insert.isometricTitle')}
         >
@@ -2075,7 +2137,7 @@ function InsertToolbar({
 }
 
 /** What the "+" between blocks (and the section menu's "Add block below") can insert. */
-function gapInsertItems(t: TFunction): [InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked' | 'note-linked', string][] {
+function gapInsertItems(t: TFunction): [InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked' | 'note-linked' | 'animation-linked', string][] {
   return [
     ['section', t('editor.insert.section')],
     ['subsection', t('editor.insert.subsection')],
@@ -2090,6 +2152,8 @@ function gapInsertItems(t: TFunction): [InsertKind | 'beediagram-linked' | 'kanb
     ['project-linked', t('editor.insert.linkedProject')],
     ['note', t('editor.insert.note')],
     ['note-linked', t('editor.insert.linkedNote')],
+    ['animation', t('editor.insert.animation')],
+    ['animation-linked', t('editor.insert.linkedAnimation')],
     ['mermaid-flow', t('editor.insert.flowchart')],
     ['mermaid-sequence', t('editor.insert.sequence')],
     ['table', t('editor.insert.table')],
@@ -2108,7 +2172,7 @@ function InsertGap({
   reorderActive,
 }: {
   busy: boolean
-  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked' | 'note-linked') => void
+  onInsert: (kind: InsertKind | 'beediagram-linked' | 'kanban-linked' | 'project-linked' | 'note-linked' | 'animation-linked') => void
   label?: string
   dropSlot?: string
   dropLabel?: string
@@ -2495,6 +2559,143 @@ function KanbanRefFence({
           ) : (
             <KanbanView source={source} compact={!fullPage} />
           )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function AnimationFenceBlock({
+  segment,
+  bookId,
+  onBodyChange,
+  onRemove,
+}: {
+  segment: FenceSegment
+  bookId?: string
+  onBodyChange: (body: string) => void
+  onRemove: () => void
+}) {
+  const { t } = useI18n()
+  const fullPage = useFullPage()
+  if (segment.lang === 'animation-ref') {
+    return (
+      <AnimationRefFence
+        animationId={segment.body.trim().split(/\s+/)[0] ?? ''}
+        bookId={bookId}
+        onRemove={onRemove}
+      />
+    )
+  }
+
+  return (
+    <div className="hybrid-visual-diagram hybrid-animation-block">
+      <div className="hybrid-fence-chrome">
+        <span className="inline-diagram-badge">{t('editor.insert.animation')}</span>
+        <span className="hybrid-fence-title">{t('editor.animation.storedTitle')}</span>
+        <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+          {t('common.remove')}
+        </button>
+      </div>
+      <div className="hybrid-visual-body">
+        <Suspense fallback={<p className="muted sm">{t('editor.loadingAnimation')}</p>}>
+          <AnimationEditor source={segment.body} onChange={onBodyChange} compact={!fullPage} />
+        </Suspense>
+      </div>
+    </div>
+  )
+}
+
+function AnimationRefFence({
+  animationId,
+  bookId,
+  onRemove,
+}: {
+  animationId: string
+  bookId?: string
+  onRemove: () => void
+}) {
+  const { t } = useI18n()
+  const fullPage = useFullPage()
+  const { canWrite } = useAuth()
+  const [source, setSource] = useState<string | null>(null)
+  const [title, setTitle] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pending = useRef<{ title: string; source: string } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setError(null)
+    void api
+      .getAnimation(animationId)
+      .then((a) => {
+        if (cancelled) return
+        setSource(a.source)
+        setTitle(a.title)
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [animationId])
+
+  const flush = useCallback(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = null
+    const next = pending.current
+    pending.current = null
+    if (!next) return
+    void api.updateAnimation(animationId, next).catch((e) => {
+      setError(e instanceof Error ? e.message : String(e))
+    })
+  }, [animationId])
+
+  // Editing the embed edits the stored item. Debounced, latest-wins — a drag
+  // on the stage emits a change per pointer move — and flushed on unmount so
+  // leaving the page right after an edit does not drop it.
+  useEffect(() => flush, [flush])
+
+  return (
+    <div className="hybrid-visual-diagram hybrid-animation-block">
+      <div className="hybrid-fence-chrome">
+        <span className="inline-diagram-badge">{t('editor.animation.linkedBadge')}</span>
+        <span className="hybrid-fence-title">{title || t('editor.insert.linkedAnimation')}</span>
+        {bookId && (
+          <Link className="btn ghost sm" to={`/books/${bookId}/animations/${animationId}`}>
+            {t('editor.animation.open')}
+          </Link>
+        )}
+        <button type="button" className="btn ghost sm danger" onClick={onRemove}>
+          {t('common.remove')}
+        </button>
+      </div>
+      {error && (
+        <div className="banner error compact">{t('editor.animationError', { id: animationId, error })}</div>
+      )}
+      {source == null && !error ? (
+        <p className="muted sm">{t('editor.loadingAnimation')}</p>
+      ) : source != null ? (
+        <div className="hybrid-visual-body">
+          <Suspense fallback={<p className="muted sm">{t('editor.loadingAnimation')}</p>}>
+            {canWrite ? (
+              <AnimationEditor
+                source={source}
+                title={title}
+                compact={!fullPage}
+                onChange={(next) => {
+                  setSource(next)
+                  pending.current = { title, source: next }
+                  if (saveTimer.current) clearTimeout(saveTimer.current)
+                  saveTimer.current = setTimeout(flush, 600)
+                }}
+              />
+            ) : (
+              <AnimationView source={source} title={title} compact={!fullPage} />
+            )}
+          </Suspense>
         </div>
       ) : null}
     </div>

@@ -48,6 +48,8 @@ import type {
   SlideDeckSummary,
   KanbanBoard,
   KanbanBoardSummary,
+  Animation,
+  AnimationSummary,
   ProjectPlan,
   ProjectPlanSummary,
   Note,
@@ -608,6 +610,31 @@ export const api = {
   updateNote: (id: string, body: { title: string; source?: string; isPrivate?: boolean }) =>
     request<Note>(`/api/notes/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteNote: (id: string) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
+
+  /** Animations (moving explanations). `source` is the JSON scene/timeline document. */
+  listAnimations: (bookId: string) => request<AnimationSummary[]>(`/api/books/${bookId}/animations`),
+  getAnimation: (id: string) => request<Animation>(`/api/animations/${id}`),
+  createAnimation: (bookId: string, body: { title: string; source?: string }) =>
+    request<Animation>(`/api/books/${bookId}/animations`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateAnimation: (id: string, body: { title: string; source?: string; isPrivate?: boolean }) =>
+    request<Animation>(`/api/animations/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteAnimation: (id: string) => request<void>(`/api/animations/${id}`, { method: 'DELETE' }),
+  /**
+   * Turn a page into an animated explainer with the default LLM provider. One
+   * completion for the whole storyboard, so it gets minutes, not the shared 30s.
+   */
+  createAnimationFromPage: (
+    bookId: string,
+    body: { pageId: string; title?: string; sceneCount?: number; instructions?: string },
+  ) =>
+    request<Animation>(`/api/books/${bookId}/animations/from-page`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      timeoutMs: 240_000,
+    }),
   /**
    * Server-rendered PowerPoint download. The same file imports into Google
    * Slides (Drive converts .pptx), so both export flows point here.

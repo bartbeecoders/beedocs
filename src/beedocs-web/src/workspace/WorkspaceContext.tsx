@@ -22,11 +22,15 @@ import type {
   KanbanBoardSummary,
   ProjectPlanSummary,
   NoteSummary,
+  AnimationSummary,
 } from '../types'
 import { parseDeck, starterDeckSource } from '../slides/slideModel'
 import { countCards, parseBoard, starterBoardSource } from '../kanban/kanbanModel'
 import { countTasks, parsePlan, starterPlanSource } from '../project/projectModel'
 import { countBlocks, parseNote, starterNoteSource } from '../notes/noteModel'
+import { countScenes, parseAnimation, starterAnimationSource } from '../animation/animModel'
+import { animationStarterLabels } from '../pageBlocks'
+import { useI18n } from '../i18n'
 import {
   selectionEquals,
   selectionFromRoute,
@@ -43,6 +47,7 @@ export type TreeBook = Book & {
   kanbanBoards: KanbanBoardSummary[]
   projectPlans: ProjectPlanSummary[]
   notes: NoteSummary[]
+  animations: AnimationSummary[]
   attachments: AttachmentSummary[]
   chapters: Chapter[]
   expanded: boolean
@@ -97,6 +102,10 @@ type WorkspaceCtx = {
   createKanbanBoard: (bookId: string, title: string) => Promise<KanbanBoardSummary>
   createProjectPlan: (bookId: string, title: string) => Promise<ProjectPlanSummary>
   createNote: (bookId: string, title: string) => Promise<NoteSummary>
+  /** `source` defaults to the starter explainer; pass one to file a ready-made document. */
+  createAnimation: (bookId: string, title: string, source?: string) => Promise<AnimationSummary>
+  /** Add an animation the server created (AI explainer) to the tree without refetching. */
+  addAnimationToTree: (summary: AnimationSummary) => void
   /** Upload a file into a book. Rejects with the server's message on a bad type or size. */
   uploadAttachment: (bookId: string, file: File) => Promise<AttachmentSummary>
   /** A blank .docx filed against the book, opened in the Word editor. */
@@ -122,6 +131,7 @@ type WorkspaceCtx = {
   deleteKanbanBoard: (boardId: string, bookId: string) => Promise<void>
   deleteProjectPlan: (planId: string, bookId: string) => Promise<void>
   deleteNote: (noteId: string, bookId: string) => Promise<void>
+  deleteAnimation: (animationId: string, bookId: string) => Promise<void>
   deleteAttachment: (attachmentId: string, bookId: string) => Promise<void>
   renameFolder: (chapterId: string, bookId: string, title: string) => Promise<void>
   /** Move page into folder (or root) and/or reorder among siblings */
@@ -146,6 +156,7 @@ function sortAttachments(list: AttachmentSummary[]): AttachmentSummary[] {
 }
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
+  const { t } = useI18n()
   const [books, setBooks] = useState<TreeBook[]>([])
   const [shelves, setShelves] = useState<TreeShelf[]>([])
   const [favorites, setFavorites] = useState<Favorite[]>([])
@@ -199,7 +210,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const syncSelectionFromRoute = useCallback((params: RouteSelectionParams) => {
-    const key = `${params.view ?? ''}|${params.bookId ?? ''}|${params.pageId ?? ''}|${params.diagramId ?? ''}|${params.deckId ?? ''}|${params.boardId ?? ''}|${params.planId ?? ''}|${params.noteId ?? ''}`
+    const key = `${params.view ?? ''}|${params.bookId ?? ''}|${params.pageId ?? ''}|${params.diagramId ?? ''}|${params.deckId ?? ''}|${params.boardId ?? ''}|${params.planId ?? ''}|${params.noteId ?? ''}|${params.animationId ?? ''}`
     // Same route: keep tree-only selections (folders) that have no route of their own.
     if (lastRouteKeyRef.current === key) return
     lastRouteKeyRef.current = key
@@ -208,17 +219,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const loadChildren = async (bookId: string) => {
-    const [pages, diagrams, slideDecks, kanbanBoards, projectPlans, notes, attachments, chapters] = await Promise.all([
+    const [pages, diagrams, slideDecks, kanbanBoards, projectPlans, notes, animations, attachments, chapters] = await Promise.all([
       api.listPages(bookId),
       api.listDiagrams(bookId),
       api.listSlideDecks(bookId),
       api.listKanbanBoards(bookId),
       api.listProjectPlans(bookId),
       api.listNotes(bookId),
+      api.listAnimations(bookId),
       api.listAttachments(bookId),
       api.listChapters(bookId),
     ])
-    return { pages, diagrams, slideDecks, kanbanBoards, projectPlans, notes, attachments, chapters }
+    return { pages, diagrams, slideDecks, kanbanBoards, projectPlans, notes, animations, attachments, chapters }
   }
 
   const refreshTree = useCallback(async () => {
@@ -245,6 +257,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               kanbanBoards: [],
               projectPlans: [],
               notes: [],
+              animations: [],
               attachments: [],
               chapters: [],
               expanded: false,
@@ -270,6 +283,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               kanbanBoards: [],
               projectPlans: [],
               notes: [],
+              animations: [],
               attachments: [],
               chapters: [],
               expanded: true,
@@ -406,6 +420,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           kanbanBoards: [],
           projectPlans: [],
           notes: [],
+          animations: [],
           attachments: [],
           chapters: [],
           expanded: false,
@@ -866,6 +881,52 @@ graph LR
     return summary
   }, [])
 
+  const addAnimationToTree = useCallback((summary: AnimationSummary) => {
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.id === summary.bookId
+          ? {
+              ...b,
+              expanded: true,
+              animations: [summary, ...b.animations.filter((a) => a.id !== summary.id)],
+            }
+          : b,
+      ),
+    )
+    setExpandedIds((s) => new Set(s).add(summary.bookId))
+  }, [])
+
+  const createAnimation = useCallback(
+    async (bookId: string, title: string, source?: string) => {
+      const anim = await api.createAnimation(bookId, {
+        title,
+        source: source ?? starterAnimationSource(animationStarterLabels(t)),
+      })
+      const summary: AnimationSummary = {
+        id: anim.id,
+        bookId: anim.bookId,
+        title: anim.title,
+        sceneCount: countScenes(parseAnimation(anim.source)),
+        ownerId: anim.ownerId,
+        isPrivate: anim.isPrivate,
+        updatedAt: anim.updatedAt,
+      }
+      addAnimationToTree(summary)
+      return summary
+    },
+    [addAnimationToTree, t],
+  )
+
+  const deleteAnimation = useCallback(async (animationId: string, bookId: string) => {
+    await api.deleteAnimation(animationId)
+    setBooks((prev) =>
+      prev.map((b) =>
+        b.id === bookId ? { ...b, animations: b.animations.filter((d) => d.id !== animationId) } : b,
+      ),
+    )
+    setFavorites((prev) => prev.filter((f) => !(f.kind === 'animation' && f.entityId === animationId)))
+  }, [])
+
   const deleteNote = useCallback(async (noteId: string, bookId: string) => {
     await api.deleteNote(noteId)
     setBooks((prev) =>
@@ -1133,6 +1194,8 @@ graph LR
       createKanbanBoard,
       createProjectPlan,
       createNote,
+      createAnimation,
+      addAnimationToTree,
       uploadAttachment,
       createWordDocument,
       patchAttachment,
@@ -1150,6 +1213,7 @@ graph LR
       deleteKanbanBoard,
       deleteProjectPlan,
       deleteNote,
+      deleteAnimation,
       deleteAttachment,
       renameFolder,
       movePage,
@@ -1182,6 +1246,8 @@ graph LR
       createKanbanBoard,
       createProjectPlan,
       createNote,
+      createAnimation,
+      addAnimationToTree,
       uploadAttachment,
       createWordDocument,
       patchAttachment,
@@ -1199,6 +1265,7 @@ graph LR
       deleteKanbanBoard,
       deleteProjectPlan,
       deleteNote,
+      deleteAnimation,
       deleteAttachment,
       renameFolder,
       movePage,

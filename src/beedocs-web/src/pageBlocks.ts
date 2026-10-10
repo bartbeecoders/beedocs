@@ -3,6 +3,8 @@ import { serializeExcelGridDoc, starterExcelGridDoc } from './excelgrid/model'
 import { serializeBoard, starterBoard } from './kanban/kanbanModel'
 import { serializePlan, starterPlan } from './project/projectModel'
 import { serializeNote, starterNote } from './notes/noteModel'
+import { starterAnimationSource, type StarterLabels } from './animation/animModel'
+import type { TFunction } from './i18n'
 import { serializeFreeDrawDoc, EMPTY_FREE_DRAW_DOC } from './freedraw/model'
 import type { ContentSegment } from './markdownFences'
 
@@ -21,6 +23,7 @@ export type InsertKind =
   | 'kanban'
   | 'project'
   | 'note'
+  | 'animation'
   | 'mermaid-flow'
   | 'mermaid-sequence'
   | 'mermaid-er'
@@ -62,7 +65,10 @@ function starterIsoSource(): string {
 }
 
 /** Markdown/fence segments to append for a given insert kind */
-export function segmentsForInsert(kind: InsertKind, opts?: { diagramId?: string; title?: string }): ContentSegment[] {
+export function segmentsForInsert(
+  kind: InsertKind,
+  opts?: { diagramId?: string; title?: string; animationLabels?: Partial<StarterLabels> },
+): ContentSegment[] {
   const title = opts?.title?.trim() || 'New section'
   switch (kind) {
     case 'section':
@@ -144,6 +150,14 @@ export function segmentsForInsert(kind: InsertKind, opts?: { diagramId?: string;
           body: serializeNote(starterNote()),
         },
       ]
+    case 'animation':
+      return [
+        {
+          type: 'fence',
+          lang: 'animation',
+          body: starterAnimationSource(opts?.animationLabels),
+        },
+      ]
     case 'mermaid-flow':
       return [
         {
@@ -188,4 +202,21 @@ export function segmentsForLinkedProject(planId: string): ContentSegment[] {
 
 export function segmentsForLinkedNote(noteId: string): ContentSegment[] {
   return [{ type: 'fence', lang: 'note-ref', body: noteId }]
+}
+
+/** The starter animation's copy in the UI language — stamped at insert time, like other starters. */
+export function animationStarterLabels(t: TFunction): StarterLabels {
+  return {
+    title: t('animation.starter.title'),
+    subtitle: t('animation.starter.subtitle'),
+    step1: t('animation.starter.step1'),
+    step2: t('animation.starter.step2'),
+    step3: t('animation.starter.step3'),
+    narration1: t('animation.starter.narration1'),
+    narration2: t('animation.starter.narration2'),
+  }
+}
+
+export function segmentsForLinkedAnimation(animationId: string): ContentSegment[] {
+  return [{ type: 'fence', lang: 'animation-ref', body: animationId }]
 }

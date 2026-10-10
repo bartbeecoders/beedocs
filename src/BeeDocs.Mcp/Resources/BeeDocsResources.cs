@@ -102,6 +102,14 @@ public sealed class BeeDocsResources(BeeDocsApiClient client)
         return Text($"beedocs://kanban/{boardId}", board);
     }
 
+    [McpServerResource(UriTemplate = "beedocs://animation/{animationId}", Name = "beedocs-animation", MimeType = "application/json")]
+    [Description("Full animation (moving explanation) including its JSON document.")]
+    public async Task<TextResourceContents> Animation(string animationId, CancellationToken ct = default)
+    {
+        var animation = await client.GetAnimationAsync(animationId, ct);
+        return Text($"beedocs://animation/{animationId}", animation);
+    }
+
     [McpServerResource(UriTemplate = "beedocs://project/{planId}", Name = "beedocs-project-plan", MimeType = "application/json")]
     [Description("Full project plan including its JSON document.")]
     public async Task<TextResourceContents> ProjectPlan(string planId, CancellationToken ct = default)

@@ -7,6 +7,7 @@ import { bookshelfSitePath } from '../markdownLinks'
 import { exportToDocx } from '../export/docx'
 import { exportBookToPdf, exportChapterToPdf, exportPageToPdf } from '../export/pdf'
 import { ImportDialog } from './ImportDialog'
+import { ExplainerDialog } from './ExplainerDialog'
 import { ReorganizeDialog } from './ReorganizeDialog'
 import type { ExportFormat } from '../types'
 import { useAuth } from '../auth/AuthContext'
@@ -25,6 +26,7 @@ import type {
   KanbanBoardSummary,
   ProjectPlanSummary,
   NoteSummary,
+  AnimationSummary,
 } from '../types'
 import { ATTACHMENT_ACCEPT, attachmentIcon, dragHasFiles, formatFileSize } from '../media/attachments'
 import { useLibraryFileDrop } from '../hooks/useLibraryFileDrop'
@@ -106,6 +108,14 @@ type CtxMenu =
       y: number
     }
   | {
+      kind: 'animation'
+      bookId: string
+      animationId: string
+      title: string
+      x: number
+      y: number
+    }
+  | {
       kind: 'attachment'
       bookId: string
       attachmentId: string
@@ -132,6 +142,7 @@ type Creating =
   | { bookId: string; kind: 'kanban' }
   | { bookId: string; kind: 'project' }
   | { bookId: string; kind: 'note' }
+  | { bookId: string; kind: 'animation' }
   | { bookId: string; kind: 'word' }
   | { bookId: string; kind: 'folder' }
 
@@ -164,6 +175,7 @@ export function NavTree() {
     createKanbanBoard,
     createProjectPlan,
     createNote,
+    createAnimation,
     createWordDocument,
     deleteBook,
     deleteShelf,
@@ -176,6 +188,7 @@ export function NavTree() {
     deleteKanbanBoard,
     deleteProjectPlan,
     deleteNote,
+    deleteAnimation,
     deleteAttachment,
     renameFolder,
     movePage,
@@ -202,6 +215,7 @@ export function NavTree() {
   const [busyExport, setBusyExport] = useState(false)
   const [importOpen, setImportOpen] = useState<{ targetBookId?: string } | null>(null)
   const [reorgOpen, setReorgOpen] = useState<{ scope: 'book' | 'shelf'; id: string; title: string } | null>(null)
+  const [explainer, setExplainer] = useState<{ bookId: string; pageId: string; title: string } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   /**
    * One hidden file input for the whole tree, retargeted per book. Rendering one
@@ -375,6 +389,11 @@ export function NavTree() {
       setChildTitle('')
       setCreatingIn(null)
       void navigate(`/books/${bookId}/notes/${note.id}`)
+    } else if (kind === 'animation') {
+      const anim = await createAnimation(bookId, childTitle.trim())
+      setChildTitle('')
+      setCreatingIn(null)
+      void navigate(`/books/${bookId}/animations/${anim.id}`)
     } else if (kind === 'word') {
       const file = await createWordDocument(bookId, childTitle.trim())
       setChildTitle('')
@@ -774,6 +793,11 @@ export function NavTree() {
                 onClick={() => beginCreateInBook({ bookId: menu.bookId, kind: 'note' })}
               />
               <MenuItem
+                label={t('nav.newAnimation')}
+                write
+                onClick={() => beginCreateInBook({ bookId: menu.bookId, kind: 'animation' })}
+              />
+              <MenuItem
                 label={t('nav.newWord')}
                 write
                 onClick={() => beginCreateInBook({ bookId: menu.bookId, kind: 'word' })}
@@ -894,6 +918,14 @@ export function NavTree() {
                 }}
               />
               <FavoriteMenuItem kind="page" entityId={menu.pageId} onDone={() => setMenu(null)} />
+              <MenuItem
+                label={`🎬 ${t('nav.explainPage')}`}
+                write
+                onClick={() => {
+                  setExplainer({ bookId: menu.bookId, pageId: menu.pageId, title: menu.title })
+                  setMenu(null)
+                }}
+              />
               <MenuItem
                 label={t('nav.moveToBookRoot')}
                 write
@@ -1072,6 +1104,34 @@ export function NavTree() {
               />
             </>
           )}
+          {menu.kind === 'animation' && (
+            <>
+              <div className="tree-context-heading">🎬 {menu.title}</div>
+              <MenuItem
+                label={t('common.open')}
+                onClick={() => {
+                  void navigate(`/books/${menu.bookId}/animations/${menu.animationId}`)
+                  setMenu(null)
+                }}
+              />
+              <FavoriteMenuItem kind="animation" entityId={menu.animationId} onDone={() => setMenu(null)} />
+              <div className="tree-context-sep" />
+              <MenuItem
+                label={t('nav.deleteAnimation')}
+                write
+                danger
+                onClick={() => {
+                  if (confirm(t('nav.deleteAnimationConfirm', { title: menu.title }))) {
+                    void deleteAnimation(menu.animationId, menu.bookId).then(() => {
+                      if (params.animationId === menu.animationId)
+                        void navigate(`/books/${menu.bookId}`)
+                    })
+                  }
+                  setMenu(null)
+                }}
+              />
+            </>
+          )}
           {menu.kind === 'attachment' && (
             <>
               <div className="tree-context-heading">
@@ -1153,6 +1213,15 @@ export function NavTree() {
         <ImportDialog
           defaultTargetBookId={importOpen.targetBookId}
           onClose={() => setImportOpen(null)}
+        />
+      )}
+      {explainer && (
+        <ExplainerDialog
+          bookId={explainer.bookId}
+          pageId={explainer.pageId}
+          pageTitle={explainer.title}
+          embedAvailable={params.pageId !== explainer.pageId}
+          onClose={() => setExplainer(null)}
         />
       )}
     </div>
@@ -1558,6 +1627,8 @@ function BookNode({
                               ? t('nav.projectTitle')
                               : creatingIn.kind === 'note'
                                 ? t('nav.noteTitle')
+                                : creatingIn.kind === 'animation'
+                                  ? t('nav.animationTitle')
                                 : creatingIn.kind === 'word'
                                   ? t('nav.wordTitle')
                             : t('nav.diagramTitle')
@@ -1697,6 +1768,23 @@ function BookNode({
             />
           ))}
 
+          {book.animations.length > 0 && <li className="tree-group-label">{t('common.animations')}</li>}
+          {book.animations.map((a) => (
+            <AnimationRow
+              key={a.id}
+              bookId={book.id}
+              animation={a}
+              active={
+                params.animationId === a.id ||
+                (selection.kind === 'animation' && selection.animationId === a.id)
+              }
+              openMenu={openMenu}
+              onSelect={() =>
+                setSelection({ kind: 'animation', bookId: book.id, animationId: a.id })
+              }
+            />
+          ))}
+
           {book.attachments.length > 0 && <li className="tree-group-label">{t('nav.groupFiles')}</li>}
           {book.attachments.map((a) => (
             <AttachmentRow
@@ -1722,6 +1810,7 @@ function BookNode({
             book.kanbanBoards.length === 0 &&
             book.projectPlans.length === 0 &&
             book.notes.length === 0 &&
+            book.animations.length === 0 &&
             book.attachments.length === 0 &&
             book.chapters.length === 0 &&
             creatingIn?.bookId !== book.id && (
@@ -2136,6 +2225,49 @@ function NoteRow({
           <span className="tree-text">{note.title}</span>
           <PrivateBadge on={note.isPrivate} />
           <span className="muted sm">({note.blockCount})</span>
+        </NavLink>
+      </div>
+    </li>
+  )
+}
+
+function AnimationRow({
+  bookId,
+  animation,
+  active,
+  openMenu,
+  onSelect,
+}: {
+  bookId: string
+  animation: AnimationSummary
+  active: boolean
+  openMenu: (e: React.MouseEvent, next: CtxMenu) => void
+  onSelect: () => void
+}) {
+  return (
+    <li>
+      <div
+        className={`tree-row child ${active ? 'active' : ''}`}
+        onContextMenu={(e) =>
+          openMenu(e, {
+            kind: 'animation',
+            bookId,
+            animationId: animation.id,
+            title: animation.title,
+            x: e.clientX,
+            y: e.clientY,
+          })
+        }
+      >
+        <NavLink
+          to={`/books/${bookId}/animations/${animation.id}`}
+          className="tree-label"
+          onClick={onSelect}
+        >
+          <span className="tree-icon">🎬</span>
+          <span className="tree-text">{animation.title}</span>
+          <PrivateBadge on={animation.isPrivate} />
+          <span className="muted sm">({animation.sceneCount})</span>
         </NavLink>
       </div>
     </li>

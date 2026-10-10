@@ -147,6 +147,22 @@ public static class DatabaseInitializer
               updated_at TEXT NOT NULL
             );
 
+            -- Animations (moving explanations). One JSON document per animation,
+            -- same storage shape as kanban_board; scene_count kept on save.
+            CREATE TABLE IF NOT EXISTS animation (
+              id TEXT PRIMARY KEY NOT NULL,
+              book_id TEXT NOT NULL,
+              title TEXT NOT NULL,
+              source TEXT NOT NULL DEFAULT '',
+              content_ref TEXT,
+              content_size INTEGER,
+              scene_count INTEGER NOT NULL DEFAULT 0,
+              owner_id TEXT,
+              is_private INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
             -- Project plans (MS Project-style Gantt). One JSON document per plan.
             CREATE TABLE IF NOT EXISTS project_plan (
               id TEXT PRIMARY KEY NOT NULL,
@@ -330,6 +346,7 @@ public static class DatabaseInitializer
             CREATE INDEX IF NOT EXISTS idx_diagram_page ON diagram(page_id);
             CREATE INDEX IF NOT EXISTS idx_slide_deck_book ON slide_deck(book_id);
             CREATE INDEX IF NOT EXISTS idx_kanban_board_book ON kanban_board(book_id);
+            CREATE INDEX IF NOT EXISTS idx_animation_book ON animation(book_id);
             CREATE INDEX IF NOT EXISTS idx_project_plan_book ON project_plan(book_id);
             CREATE INDEX IF NOT EXISTS idx_note_book ON note(book_id);
             CREATE INDEX IF NOT EXISTS idx_attachment_book ON attachment(book_id);
@@ -716,6 +733,19 @@ public static class DatabaseInitializer
           VALUES ('slides', old.id, 'delete', datetime('now'));
         END;
 
+        CREATE TRIGGER IF NOT EXISTS trg_animation_search_insert AFTER INSERT ON animation BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('animation', new.id, 'upsert', datetime('now'));
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_animation_search_update AFTER UPDATE ON animation BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('animation', new.id, 'upsert', datetime('now'));
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_animation_search_delete AFTER DELETE ON animation BEGIN
+          INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
+          VALUES ('animation', old.id, 'delete', datetime('now'));
+        END;
+
         CREATE TRIGGER IF NOT EXISTS trg_kanban_board_search_insert AFTER INSERT ON kanban_board BEGIN
           INSERT OR REPLACE INTO search_queue (kind, entity_id, op, queued_at)
           VALUES ('kanban', new.id, 'upsert', datetime('now'));
@@ -828,6 +858,9 @@ public static class DatabaseInitializer
         END;
         CREATE TRIGGER IF NOT EXISTS trg_slide_deck_favorite_delete AFTER DELETE ON slide_deck BEGIN
           DELETE FROM favorite WHERE kind = 'slides' AND entity_id = old.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_animation_favorite_delete AFTER DELETE ON animation BEGIN
+          DELETE FROM favorite WHERE kind = 'animation' AND entity_id = old.id;
         END;
         CREATE TRIGGER IF NOT EXISTS trg_kanban_board_favorite_delete AFTER DELETE ON kanban_board BEGIN
           DELETE FROM favorite WHERE kind = 'kanban' AND entity_id = old.id;

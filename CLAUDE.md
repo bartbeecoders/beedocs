@@ -95,17 +95,17 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `/api/books`,
   `/api/books/{id}/chapters`, `/api/books/{id}/pages`, `/api/pages/{id}`,
   `/api/books/{id}/diagrams`, `/api/diagrams/{id}`, `/api/books/{id}/slides`,
-  `/api/slides/{id}`, `/api/books/{id}/kanban`, `/api/kanban/{id}`, `/api/books/{id}/project`, `/api/project/{id}`, `/api/books/{id}/notes`, `/api/notes/{id}`, `/api/books/{id}/attachments`, `/api/attachments/{id}`,
+  `/api/slides/{id}`, `/api/books/{id}/kanban`, `/api/kanban/{id}`, `/api/books/{id}/project`, `/api/project/{id}`, `/api/books/{id}/notes`, `/api/notes/{id}`, `/api/books/{id}/animations`, `/api/animations/{id}`, `/api/books/{id}/attachments`, `/api/attachments/{id}`,
   `/api/uploads`, `/api/search`,
   `/api/auth/*`, `/api/users/*`, `/api/stats`, plus `/api/health` and `/api/version`.
   Business logic lives in `Services/`
   (`DocumentService` for shelves/books/chapters/pages, `DiagramService` for
   diagrams, `SlideDeckService` for slide decks, `KanbanBoardService` for kanban
   boards, `ProjectPlanService` for Gantt plans, `NoteService` for OneNote-style
-  notes, `AttachmentService` for uploaded
+  notes, `AnimationService` for animations, `AttachmentService` for uploaded
   documents);
   entities are in `Models/Entities.cs` (`Shelf`, `Book`, `Chapter`, `Page`,
-  `PageRevision`, `Diagram`, `SlideDeck`, `KanbanBoard`, `ProjectPlan`, `Note`, `Attachment` — plain POCOs with string
+  `PageRevision`, `Diagram`, `SlideDeck`, `KanbanBoard`, `ProjectPlan`, `Note`, `Animation`, `Attachment` — plain POCOs with string
   ids).
 - **Shelves** are the level above books: `shelf` rows plus a nullable
   `book.shelf_id`, so a book sits on at most one shelf and a book with no shelf
@@ -135,7 +135,7 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   UI gives it a 600s timeout) and configured at `/api/storage-providers` (admin;
   the Google callback is the one anonymous route — its HMAC-signed `state` is the
   auth). **Only bodies move** (`page.content`, `page_revision.content`,
-  `diagram.source`, `slide_deck.source`, `kanban_board.source`, `project_plan.source`, `note.source`); tree, metadata, `updated_at` and the
+  `diagram.source`, `slide_deck.source`, `kanban_board.source`, `project_plan.source`, `note.source`, `animation.source`); tree, metadata, `updated_at` and the
   search index stay local. The load-bearing invariant is the per-row
   `content_ref` column: NULL = body inline (pre-feature behavior), else
   `"{providerId}:{key}"` — readers resolve the ref via `ContentResolver`, never
@@ -180,7 +180,7 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   (diagram JSON contributes only its shape labels, and uploaded documents are run
   through `AttachmentTextExtractor` so a PDF or .docx is searchable by its
   contents). Nothing calls the indexer to
-  register a write: triggers on `page`/`diagram`/`slide_deck`/`kanban_board`/`project_plan`/`note`/`attachment`/`book`/
+  register a write: triggers on `page`/`diagram`/`slide_deck`/`kanban_board`/`project_plan`/`note`/`animation`/`attachment`/`book`/
   `chapter`/`shelf` record changes in `search_queue`, and the queue is drained at
   startup and before each search,
   so the index stays correct whoever wrote the row — UI, MCP, import, or direct
@@ -346,6 +346,33 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   `beedocs_create_note_with_blocks` / `beedocs_update_note_blocks` (text,
   checklist and image blocks, auto-stacked when no coordinates are given).
   See `Docs/NOTES.md`.
+- **Animations** (`animation` table, same storage shape as `kanban_board` /
+  `note`) are "moving explanations": scenes played back to back, each a list
+  of timed elements (text, box, circle, line, arrow, icon, image, path) with
+  `enter`/`emphasis`/`exit` cues and keyframes, plus a narration caption, in
+  one JSON document whose source of truth is
+  `src/beedocs-web/src/animation/animModel.ts`. The server stores it verbatim
+  and reads only scene titles, narration and element text (search) and the
+  scene count (tree badge). The engine borrows fframes' model
+  (github.com/dmtrKovalenko/fframes) rather than its runtime: **a frame is a
+  pure function of time**. `renderFrameSvg(doc, t)` is the whole renderer,
+  shared by the editor stage, player, page embeds, PDF export (one poster
+  frame per scene) and the in-browser MP4/WebM export, so any instant renders on
+  its own. fframes itself is a Rust crate per video, which is why it is
+  reached by **export** instead: "Export as fframes project" generates a crate
+  (verified against fframes 1.2.1-rc.14; colour-emoji `icon`s don't render
+  there). A `path` element's `d` is relative to its element box. A tree item
+  at `/books/{bookId}/animations/{id}` and/or a page embed: inline
+  ` ```animation ` or ` ```animation-ref `. **AI explainer**: `POST
+  /api/books/{id}/animations/from-page` (`AnimationExplainerService`, the
+  `explainer` task in `LlmPrompts`, 180s budget, synchronous) turns a page
+  into a new animation. Fences are swapped for `[embedded lang]` via
+  `ReorgText.Excerpt`, and the reply is validated (outermost JSON object,
+  non-empty `scenes`, ids filled and de-duplicated); an unusable answer → 502.
+  The schema is taught to the model in `ExplainerSystem` (`LlmClient.cs`) and
+  to agents in `AnimationTools.cs`; keep both in step with `animModel.ts`.
+  Agents use `beedocs_create_animation` (JSON they author) or
+  `beedocs_create_animation_from_page`. See `Docs/ANIMATIONS.md`.
 - **Attachments** are another thing a book holds (`attachment` table,
   `Services/AttachmentService.cs`, `components/AttachmentCanvas.tsx`, route
   `/books/{bookId}/files/{id}`): an uploaded PDF, Word/PowerPoint/Excel or
@@ -447,7 +474,7 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   admins only. See `Docs/REORGANIZE.md`.
 - **Favorites** (`favorite` table, `Services/FavoriteService.cs`, UI
   `FavoritesPanel.tsx` above the tree in the left pane) — per-user starred items
-  (kinds `book | page | diagram | slides | kanban | project | note | attachment`, the search queue's
+  (kinds `book | page | diagram | slides | kanban | project | note | animation | attachment`, the search queue's
   names), keyed `(user_id, kind, entity_id)` with `user_id = ''` when sign-in is
   off or the caller is the API key — one shared list for an open instance, the
   same degradation ownership follows. `GET /api/favorites` returns the list
@@ -461,7 +488,7 @@ UI (React+Vite, :5173/:5200) --/api proxy--> BeeDocs.Api (.NET, :5080) --Microso
   the panel (which renders nothing while empty, and collapses via
   `beedocs-favorites-collapsed` in localStorage) opens and unstars.
 - **Privacy** — `is_private` on shelf, book, page, diagram, slide_deck,
-  kanban_board, project_plan, note and attachment. The owner (or an admin) flips
+  kanban_board, project_plan, note, animation and attachment. The owner (or an admin) flips
   it via the ordinary update (`isPrivate`, null leaves it). A private item is
   hidden from every signed-in account except its owner; admins and the API key
   still see it; sign-in off does not filter. Direct URLs 404. Privacy inherits
@@ -715,6 +742,7 @@ bumped csproj after deploying so the pill maps to a known commit.
 - `Docs/KANBAN.md` — kanban boards: document format, page embed, book-tree item.
 - `Docs/PROJECT.md` — project plans: WBS + Gantt, page embed, book-tree item.
 - `Docs/NOTES.md` — notes: OneNote-style free-form pages (text, checklists, images, ink), page embed, book-tree item.
+- `Docs/ANIMATIONS.md` — animations: fframes-style moving explanations, AI page → explainer, MP4/WebM and fframes-crate export.
 - `Docs/ATTACHMENTS.md` — book attachments: storage, upload rules, and why they are not uploads.
 - `Docs/WORD.md` — Word documents: the .docx editor, the HTML dialect, what survives a save.
 - `Docs/GIT-INTEGRATION.md` — git/DevOps repos browsed as books; clones, security, search.

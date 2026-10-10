@@ -1,0 +1,138 @@
+import type { Lang } from '../langs'
+
+/** ExplainerDialog — turning a page into an animation with the LLM provider. */
+const en = {
+  'explainer.title': 'Explain as animation',
+  'explainer.defaultTitle': '{title} — explained',
+  'explainer.intro': 'The AI provider reads “{title}” and storyboards it into an animated explainer: scenes with narration, shapes and arrows that appear in step with the story. The result is a new animation in this book that you can edit freely; the page itself is not changed.',
+  'explainer.nameLabel': 'Animation title',
+  'explainer.scenesLabel': 'Number of scenes',
+  'explainer.scenesAuto': 'Automatic (based on the page)',
+  'explainer.scenesN': '{count} scenes',
+  'explainer.instructionsLabel': 'Instructions (optional)',
+  'explainer.instructionsPlaceholder': 'Audience, tone, what to focus on — e.g. “for new developers, focus on the request lifecycle”',
+  'explainer.embedLabel': 'Embed in the page',
+  'explainer.embedHint': 'Appends the animation at the end of the page.',
+  'explainer.embedFailed': 'The animation was created, but embedding it in the page failed: {error}',
+  'explainer.working': 'Writing the storyboard… this usually takes under a minute.',
+  'explainer.elapsed': '{seconds} s elapsed',
+  'explainer.generating': 'Generating…',
+  'explainer.generate': 'Generate animation',
+} as const
+
+const fr: Record<keyof typeof en, string> = {
+  'explainer.title': 'Expliquer en animation',
+  'explainer.defaultTitle': '{title} — en animation',
+  'explainer.intro': 'Le fournisseur d’IA lit « {title} » et le découpe en une explication animée : des scènes narrées, avec des formes et des flèches qui apparaissent au fil du récit. Le résultat est une nouvelle animation dans ce livre, librement modifiable ; la page elle-même n’est pas modifiée.',
+  'explainer.nameLabel': 'Titre de l’animation',
+  'explainer.scenesLabel': 'Nombre de scènes',
+  'explainer.scenesAuto': 'Automatique (selon la page)',
+  'explainer.scenesN': '{count} scènes',
+  'explainer.instructionsLabel': 'Instructions (facultatif)',
+  'explainer.instructionsPlaceholder': 'Public, ton, points clés — ex. « pour de nouveaux développeurs, axé sur le cycle de vie d’une requête »',
+  'explainer.embedLabel': 'Intégrer dans la page',
+  'explainer.embedHint': 'Ajoute l’animation à la fin de la page.',
+  'explainer.embedFailed': 'L’animation a été créée, mais son intégration dans la page a échoué : {error}',
+  'explainer.working': 'Écriture du scénario… cela prend généralement moins d’une minute.',
+  'explainer.elapsed': '{seconds} s écoulées',
+  'explainer.generating': 'Génération…',
+  'explainer.generate': 'Générer l’animation',
+}
+
+const de: Record<keyof typeof en, string> = {
+  'explainer.title': 'Als Animation erklären',
+  'explainer.defaultTitle': '{title} — erklärt',
+  'explainer.intro': 'Der KI-Anbieter liest „{title}“ und macht daraus ein Storyboard für eine animierte Erklärung: Szenen mit Erzähltext, Formen und Pfeilen, die passend zur Geschichte erscheinen. Das Ergebnis ist eine neue, frei bearbeitbare Animation in diesem Buch; die Seite selbst bleibt unverändert.',
+  'explainer.nameLabel': 'Titel der Animation',
+  'explainer.scenesLabel': 'Anzahl der Szenen',
+  'explainer.scenesAuto': 'Automatisch (je nach Seite)',
+  'explainer.scenesN': '{count} Szenen',
+  'explainer.instructionsLabel': 'Anweisungen (optional)',
+  'explainer.instructionsPlaceholder': 'Zielgruppe, Ton, Schwerpunkt — z. B. „für neue Entwickler, Fokus auf den Lebenszyklus einer Anfrage“',
+  'explainer.embedLabel': 'In die Seite einbetten',
+  'explainer.embedHint': 'Hängt die Animation am Ende der Seite an.',
+  'explainer.embedFailed': 'Die Animation wurde erstellt, aber das Einbetten in die Seite ist fehlgeschlagen: {error}',
+  'explainer.working': 'Storyboard wird geschrieben… das dauert meist weniger als eine Minute.',
+  'explainer.elapsed': '{seconds} s vergangen',
+  'explainer.generating': 'Wird erzeugt…',
+  'explainer.generate': 'Animation erzeugen',
+}
+
+const es: Record<keyof typeof en, string> = {
+  'explainer.title': 'Explicar como animación',
+  'explainer.defaultTitle': '{title} — explicado',
+  'explainer.intro': 'El proveedor de IA lee «{title}» y lo convierte en un guion de explicación animada: escenas con narración, formas y flechas que aparecen al ritmo de la historia. El resultado es una nueva animación en este libro que puedes editar libremente; la página no se modifica.',
+  'explainer.nameLabel': 'Título de la animación',
+  'explainer.scenesLabel': 'Número de escenas',
+  'explainer.scenesAuto': 'Automático (según la página)',
+  'explainer.scenesN': '{count} escenas',
+  'explainer.instructionsLabel': 'Instrucciones (opcional)',
+  'explainer.instructionsPlaceholder': 'Público, tono, en qué centrarse — p. ej. «para desarrolladores nuevos, centrado en el ciclo de vida de una petición»',
+  'explainer.embedLabel': 'Incrustar en la página',
+  'explainer.embedHint': 'Añade la animación al final de la página.',
+  'explainer.embedFailed': 'La animación se creó, pero no se pudo incrustar en la página: {error}',
+  'explainer.working': 'Escribiendo el guion… suele tardar menos de un minuto.',
+  'explainer.elapsed': '{seconds} s transcurridos',
+  'explainer.generating': 'Generando…',
+  'explainer.generate': 'Generar animación',
+}
+
+const nl: Record<keyof typeof en, string> = {
+  'explainer.title': 'Uitleggen als animatie',
+  'explainer.defaultTitle': '{title} — uitgelegd',
+  'explainer.intro': 'De AI-provider leest ‘{title}’ en maakt er een storyboard van voor een geanimeerde uitleg: scènes met vertelling, vormen en pijlen die meebewegen met het verhaal. Het resultaat is een nieuwe animatie in dit boek die je vrij kunt bewerken; de pagina zelf verandert niet.',
+  'explainer.nameLabel': 'Titel van de animatie',
+  'explainer.scenesLabel': 'Aantal scènes',
+  'explainer.scenesAuto': 'Automatisch (op basis van de pagina)',
+  'explainer.scenesN': '{count} scènes',
+  'explainer.instructionsLabel': 'Instructies (optioneel)',
+  'explainer.instructionsPlaceholder': 'Doelgroep, toon, focus — bijv. ‘voor nieuwe ontwikkelaars, focus op de levenscyclus van een verzoek’',
+  'explainer.embedLabel': 'Insluiten in de pagina',
+  'explainer.embedHint': 'Voegt de animatie toe aan het einde van de pagina.',
+  'explainer.embedFailed': 'De animatie is gemaakt, maar het insluiten in de pagina is mislukt: {error}',
+  'explainer.working': 'Storyboard wordt geschreven… dit duurt meestal minder dan een minuut.',
+  'explainer.elapsed': '{seconds} s verstreken',
+  'explainer.generating': 'Genereren…',
+  'explainer.generate': 'Animatie genereren',
+}
+
+const ja: Record<keyof typeof en, string> = {
+  'explainer.title': 'アニメーションで説明',
+  'explainer.defaultTitle': '{title} — 解説',
+  'explainer.intro': 'AI プロバイダーが「{title}」を読み取り、アニメーション解説の絵コンテを作成します。ナレーション付きのシーンに、話の流れに合わせて図形や矢印が現れます。結果はこの本の新しいアニメーションとして自由に編集でき、ページ自体は変更されません。',
+  'explainer.nameLabel': 'アニメーションのタイトル',
+  'explainer.scenesLabel': 'シーン数',
+  'explainer.scenesAuto': '自動（ページに応じて）',
+  'explainer.scenesN': '{count} シーン',
+  'explainer.instructionsLabel': '指示（任意）',
+  'explainer.instructionsPlaceholder': '対象者、トーン、重点 — 例:「新人開発者向けに、リクエストのライフサイクルを中心に」',
+  'explainer.embedLabel': 'ページに埋め込む',
+  'explainer.embedHint': 'ページの末尾にアニメーションを追加します。',
+  'explainer.embedFailed': 'アニメーションは作成されましたが、ページへの埋め込みに失敗しました: {error}',
+  'explainer.working': '絵コンテを作成中… 通常 1 分以内に終わります。',
+  'explainer.elapsed': '経過 {seconds} 秒',
+  'explainer.generating': '生成中…',
+  'explainer.generate': 'アニメーションを生成',
+}
+
+const zh: Record<keyof typeof en, string> = {
+  'explainer.title': '生成动画讲解',
+  'explainer.defaultTitle': '{title} — 讲解',
+  'explainer.intro': 'AI 提供商会读取“{title}”并将其编排成动画讲解：带旁白的场景，图形和箭头随讲述依次出现。结果会作为本书中的新动画保存，可自由编辑；页面本身不会被修改。',
+  'explainer.nameLabel': '动画标题',
+  'explainer.scenesLabel': '场景数量',
+  'explainer.scenesAuto': '自动（根据页面）',
+  'explainer.scenesN': '{count} 个场景',
+  'explainer.instructionsLabel': '说明（可选）',
+  'explainer.instructionsPlaceholder': '受众、语气、重点 — 例如“面向新开发者，重点讲解请求的生命周期”',
+  'explainer.embedLabel': '嵌入到页面',
+  'explainer.embedHint': '将动画追加到页面末尾。',
+  'explainer.embedFailed': '动画已创建，但嵌入页面失败：{error}',
+  'explainer.working': '正在编写分镜… 通常不到一分钟。',
+  'explainer.elapsed': '已用时 {seconds} 秒',
+  'explainer.generating': '正在生成…',
+  'explainer.generate': '生成动画',
+}
+
+export const explainer = { en, fr, de, es, nl, ja, zh } as const
+export type { Lang }

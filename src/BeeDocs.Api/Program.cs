@@ -125,6 +125,8 @@ builder.Services.AddSingleton<IDocumentService, DocumentService>();
 builder.Services.AddSingleton<IDiagramService, DiagramService>();
 builder.Services.AddSingleton<ISlideDeckService, SlideDeckService>();
 builder.Services.AddSingleton<IKanbanBoardService, KanbanBoardService>();
+builder.Services.AddSingleton<IAnimationService, AnimationService>();
+builder.Services.AddSingleton<AnimationExplainerService>();
 builder.Services.AddSingleton<IProjectPlanService, ProjectPlanService>();
 builder.Services.AddSingleton<INoteService, NoteService>();
 builder.Services.AddSingleton<IAttachmentService, AttachmentService>();
@@ -1681,6 +1683,84 @@ api.MapPut("/kanban/{id}", async (string id, UpdateKanbanBoardRequest body, IKan
 api.MapDelete("/kanban/{id}", async (string id, IKanbanBoardService boards, CancellationToken ct) =>
 {
     var ok = await boards.DeleteAsync(id, ct);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
+// --- Animations (moving explanations) ---
+api.MapGet("/books/{bookId}/animations", async (string bookId, IAnimationService animations, CancellationToken ct) =>
+    Results.Ok(await animations.ListByBookAsync(bookId, ct)));
+
+api.MapPost("/books/{bookId}/animations", async (string bookId, CreateAnimationRequest body, IAnimationService animations, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    try
+    {
+        var created = await animations.CreateAsync(bookId, body, ct);
+        return Results.Created($"/api/animations/{created.Id}", created);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+
+// The AI explainer: one page in, one new animation out. Synchronous — the
+// completion takes up to ~3 minutes, so clients give it a long timeout.
+api.MapPost("/books/{bookId}/animations/from-page", async (string bookId, CreateAnimationFromPageRequest body, AnimationExplainerService explainer, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.PageId))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["pageId"] = ["Page id is required."] });
+
+    try
+    {
+        var created = await explainer.CreateFromPageAsync(bookId, body, ct);
+        return Results.Created($"/api/animations/{created.Id}", created);
+    }
+    catch (KeyNotFoundException e)
+    {
+        return Results.NotFound(new { error = e.Message });
+    }
+    catch (ArgumentException e)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["pageId"] = [e.Message] });
+    }
+    catch (LlmException e)
+    {
+        return LlmFailure(e);
+    }
+});
+
+api.MapGet("/animations/{id}", async (string id, IAnimationService animations, CancellationToken ct) =>
+{
+    var animation = await animations.GetAsync(id, ct);
+    return animation is null ? Results.NotFound() : Results.Ok(animation);
+});
+
+api.MapPut("/animations/{id}", async (string id, UpdateAnimationRequest body, IAnimationService animations, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Title))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["title"] = ["Title is required."] });
+
+    try
+    {
+        var updated = await animations.UpdateAsync(id, body, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (UnauthorizedAccessException e)
+    {
+        return Forbidden(e);
+    }
+    catch (ArgumentException e) when (e.ParamName is "isPrivate")
+    {
+        return PrivacyProblem(e);
+    }
+});
+
+api.MapDelete("/animations/{id}", async (string id, IAnimationService animations, CancellationToken ct) =>
+{
+    var ok = await animations.DeleteAsync(id, ct);
     return ok ? Results.NoContent() : Results.NotFound();
 });
 

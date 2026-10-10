@@ -117,7 +117,7 @@ public sealed class StorageProviderService(SqliteConnectionFactory db) : IStorag
         + "s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, s3_path_style, s3_prefix";
 
     /// <summary>The tables whose bodies can point at a provider.</summary>
-    public static readonly string[] ContentTables = ["page", "page_revision", "diagram", "slide_deck", "kanban_board", "project_plan", "note"];
+    public static readonly string[] ContentTables = ["page", "page_revision", "diagram", "slide_deck", "kanban_board", "project_plan", "note", "animation"];
 
     public async Task<IReadOnlyList<StorageProviderDto>> ListAsync(CancellationToken ct = default)
     {

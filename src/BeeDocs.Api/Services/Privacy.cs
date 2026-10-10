@@ -217,6 +217,7 @@ public static class Privacy
                  AND NOT EXISTS (SELECT 1 FROM project_plan x WHERE d.kind = 'project' AND x.id = d.entity_id AND x.is_private = 1)
                  AND NOT EXISTS (SELECT 1 FROM attachment x WHERE d.kind = 'attachment' AND x.id = d.entity_id AND x.is_private = 1)
                  AND NOT EXISTS (SELECT 1 FROM note x WHERE d.kind = 'note' AND x.id = d.entity_id AND x.is_private = 1)
+                 AND NOT EXISTS (SELECT 1 FROM animation x WHERE d.kind = 'animation' AND x.id = d.entity_id AND x.is_private = 1)
                  AND (d.book_id IS NULL OR NOT EXISTS (SELECT 1 FROM book x WHERE x.id = d.book_id AND x.is_private = 1))
                  AND (d.book_id IS NULL OR NOT EXISTS (
                    SELECT 1 FROM book x JOIN shelf s ON s.id = x.shelf_id
@@ -236,6 +237,7 @@ public static class Privacy
              AND NOT EXISTS (SELECT 1 FROM project_plan x WHERE d.kind = 'project' AND x.id = d.entity_id AND x.is_private = 1 AND (x.owner_id IS NULL OR x.owner_id != $viewer_id))
              AND NOT EXISTS (SELECT 1 FROM attachment x WHERE d.kind = 'attachment' AND x.id = d.entity_id AND x.is_private = 1 AND (x.owner_id IS NULL OR x.owner_id != $viewer_id))
              AND NOT EXISTS (SELECT 1 FROM note x WHERE d.kind = 'note' AND x.id = d.entity_id AND x.is_private = 1 AND (x.owner_id IS NULL OR x.owner_id != $viewer_id))
+             AND NOT EXISTS (SELECT 1 FROM animation x WHERE d.kind = 'animation' AND x.id = d.entity_id AND x.is_private = 1 AND (x.owner_id IS NULL OR x.owner_id != $viewer_id))
              AND (d.book_id IS NULL OR NOT EXISTS (
                SELECT 1 FROM book x WHERE x.id = d.book_id AND x.is_private = 1
                  AND (x.owner_id IS NULL OR x.owner_id != $viewer_id)))
