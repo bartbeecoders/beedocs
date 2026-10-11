@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BeeDocs — self-hosted systems documentation with a diagram studio inside</title>
-  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks, OneNote-style notes, kanban boards, Gantt project plans, searchable file attachments, an in-browser Word editor, AI reorganisation of whole books, scheduled backups to any S3-compatible bucket — and an MCP server so AI agents write docs alongside you." />
+  <meta name="description" content="BeeDocs is a free, MIT-licensed, self-hosted documentation platform for software and hardware systems: a library of Markdown books with a draw.io-class diagram studio, isometric architecture views, grid page layouts, slide decks, OneNote-style notes, kanban boards, Gantt project plans, animated explainers, searchable file attachments, an in-browser Word editor, AI reorganisation of whole books, scheduled backups to any S3-compatible bucket — and an MCP server so AI agents write docs alongside you." />
   <meta property="og:title" content="BeeDocs — documentation that draws its own architecture" />
-  <meta property="og:description" content="Self-hosted docs for systems teams: Markdown books, BeeDiagram Studio, isometric views, slides, OneNote-style notes, kanban boards, Gantt plans, searchable file attachments, full-text search, and an MCP server for AI agents. One container, SQLite inside. MIT-licensed and free forever." />
+  <meta property="og:description" content="Self-hosted docs for systems teams: Markdown books, BeeDiagram Studio, isometric views, slides, OneNote-style notes, kanban boards, Gantt plans, animations, searchable file attachments, full-text search, and an MCP server for AI agents. One container, SQLite inside. MIT-licensed and free forever." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://beedocshome.hideterms.com/" />
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
@@ -48,7 +48,7 @@
       <a href="#agents">Agents</a>
       <a href="#desktop">Desktop</a>
       <a href="#selfhost">Self-host</a>
-      <a href="releases.html">Releases<span class="nav-badge">v1.0</span></a>
+      <a href="releases.html">Releases<span class="nav-badge">v1.1</span></a>
     </nav>
     <div class="head-actions">
       <a class="btn btn-ghost" href="https://github.com/bartbeecoders/beedocs" rel="noopener">
@@ -72,8 +72,8 @@
       <div class="hero-copy">
         <p class="eyebrow"><span class="dot" aria-hidden="true"></span>self-hosted · single container · SQLite inside</p>
         <a class="release-flag" href="releases.html">
-          <span class="flag-badge">v1.0</span>
-          <span>New: reorganise with AI, a Word editor, cloud points</span>
+          <span class="flag-badge">v1.1</span>
+          <span>New: animated explainers, UI styles, double-click to edit</span>
           <span class="flag-arrow" aria-hidden="true">→</span>
         </a>
         <h1>Documentation that draws its own architecture.</h1>
@@ -81,7 +81,8 @@
           BeeDocs is a self-hosted platform for documenting software and hardware
           systems: a library of books and Markdown pages with a draw.io-class
           diagram studio, isometric architecture views, slide decks, OneNote-style
-          notes, kanban boards and Gantt plans built in. It ships an MCP server
+          notes, kanban boards, Gantt plans and animated explainers built in.
+          It ships an MCP server
           too, so your AI agents write docs right next to you.
         </p>
         <div class="cta-row">
@@ -227,8 +228,9 @@
           <h3>Markdown with live diagrams</h3>
           <p>Mermaid, C4 and BeeDiagram fences render inline as you type.
              Autosave runs every 1.5&nbsp;seconds; history keeps one revision per
-             sitting, not per keystroke. Open any block full page to work on it
-             alone.</p>
+             sitting, not per keystroke. Double-click the preview to jump
+             straight into the text you clicked, or open any block full page to
+             work on it alone.</p>
         </article>
         <article class="card">
           <h3>Grid page layouts</h3>
@@ -272,6 +274,15 @@
              <span class="mono">note-ref</span>, the same shape as boards.</p>
         </article>
         <article class="card">
+          <h3>Animated explainers</h3>
+          <p>Scenes of boxes, arrows, text and icons that appear, move and
+             pulse in step with a narration caption. Let your AI provider turn
+             a page into one, embed it with
+             <span class="mono">animation</span> or
+             <span class="mono">animation-ref</span>, and export MP4/WebM — or
+             a ready-to-build fframes Rust project.</p>
+        </article>
+        <article class="card">
           <h3>Attachments a book keeps</h3>
           <p>Drop PDFs, Office and OpenDocument files onto a book and they file
              themselves there — versioned, behind the API gate, links surviving
@@ -299,15 +310,16 @@
         </article>
         <article class="card">
           <h3>Favorites at hand</h3>
-          <p>Star any book, page, diagram, deck, board, plan, note or attachment
+          <p>Star any book, page, diagram, deck, board, plan, note, animation or attachment
              and it waits in a panel above the tree. Personal, per-account, and
              open to read-only viewers too.</p>
         </article>
         <article class="card">
           <h3>Your name on the door</h3>
           <p>Rename the instance, swap the mark for a logo — uploaded or drafted
-             by your AI provider — and pick from thirteen colour themes. The UI
-             ships in seven languages; documents stay exactly as you wrote them.</p>
+             by your AI provider — and pick from sixteen colour themes (or your
+             Omarchy desktop palette) and four UI styles, from rounded to
+             square. The UI ships in seven languages; documents stay exactly as you wrote them.</p>
         </article>
         <article class="card">
           <h3>Accounts when you want them</h3>
@@ -436,7 +448,8 @@
         <h2>Your agents write here too.</h2>
         <p>BeeDocs ships an MCP server that wraps the whole API: create books,
            write pages, build BeeDiagrams and isometric views, assemble slide
-           decks, jot a note, stand up a kanban board or a Gantt plan, search the library
+           decks, jot a note, stand up a kanban board or a Gantt plan, turn a
+           page into an animated explainer, search the library
            — and work the git shelf, from reading a file at any ref to
            branching, committing and pushing. Add a shape to the palette and a
            generated catalog carries it to your agents — no second edit.</p>
@@ -448,6 +461,7 @@
           <li class="mono">beedocs_create_note_with_blocks</li>
           <li class="mono">beedocs_create_kanban_board_with_columns</li>
           <li class="mono">beedocs_create_project_plan_with_tasks</li>
+          <li class="mono">beedocs_create_animation_from_page</li>
           <li class="mono">beedocs_search</li>
           <li class="mono">beedocs_git_commit</li>
         </ul>

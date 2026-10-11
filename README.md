@@ -1,29 +1,93 @@
 # BeeDocs
 
 Self-hosted documentation platform for software + hardware systems architecture.
+**Version 1.1.0** · MIT-licensed · one .NET process with SQLite inside.
 
-MVP: **Books → Pages**, Markdown editor, **Mermaid** (incl. C4-style) diagrams, embedded **SQLite**, **.NET 10** API + **React/Vite** UI.
+Website: **https://beedocshome.hideterms.com** · release notes in
+[`beedocshome/releases.html`](beedocshome/releases.html).
+
+## Features
+
+**The library**
+
+- **Shelves → Books → Chapters → Pages**, with a published shelf served as its own
+  reader site. Favorites, per-item privacy, owners and a page change log with
+  optional full revision copies.
+- **Markdown editor** with live Mermaid/C4, BeeDiagram, isometric, kanban, Gantt,
+  note and animation embeds; **grid page layouts** (2×1 … 3×2 cells, drag blocks
+  between them); a right-click **section menu**; full-page blocks; and
+  **double-click the preview** to edit at the clicked character.
+- **Full-text search** (SQLite FTS5, `Ctrl+K`) over every kind of document,
+  including the text inside attached PDFs and Office files, and **cloud points**
+  (word clouds) on book and shelf overviews.
+
+**Things a book can hold**
+
+| Kind | What it is | Docs |
+|------|------------|------|
+| BeeDiagram | draw.io-style **Studio** editor (+ classic canvas), Azure stencils | [DIAGRAM-STUDIO](Docs/DIAGRAM-STUDIO.md) |
+| Isometric | 2:1 dimetric architecture views, built from scratch | — |
+| Slides | deck designer, presenter, templates, `.pptx` export | [SLIDES](Docs/SLIDES.md) |
+| Kanban | columns of cards, WIP limits, assignees | [KANBAN](Docs/KANBAN.md) |
+| Project plan | WBS + Gantt, dependencies, zoom months → hours | [PROJECT](Docs/PROJECT.md) |
+| Note | OneNote-style canvas: text, checklists, images, ink | [NOTES](Docs/NOTES.md) |
+| **Animation** *(new in 1.1)* | fframes-style moving explainers: timed scenes + narration, MP4/WebM and fframes-crate export, **AI page → explainer** | [ANIMATIONS](Docs/ANIMATIONS.md) |
+| Attachment | PDF/Office/OpenDocument/zip/images, searchable by content | [ATTACHMENTS](Docs/ATTACHMENTS.md) |
+| Word document | `.docx` edited in place in a Word-like editor | [WORD](Docs/WORD.md) |
+
+**AI and integrations**
+
+- **MCP server** wrapping the whole API — agents create pages, diagrams, decks,
+  boards, plans, notes, animations and work git repos. [MCP-SERVER](Docs/MCP-SERVER.md) ·
+  [MCP-TOOLS](Docs/MCP-TOOLS.md)
+- **LLM writing help** (autocomplete, rewrite, summarize), **AI reorganisation**
+  of a book or shelf, AI-drafted repo docs and logos — through OpenRouter, OpenAI,
+  xAI, Cerebras, LM Studio or a local `claude`/`grok` CLI.
+  [LLM-PROVIDERS](Docs/LLM-PROVIDERS.md) · [REORGANIZE](Docs/REORGANIZE.md)
+- **Git repos on the shelf** — browse, edit, commit, push, history and diffs.
+  [GIT-INTEGRATION](Docs/GIT-INTEGRATION.md)
+- **REST publish API** for other applications. [REST-API](Docs/REST-API.md)
+
+**Operations**
+
+- Accounts with admin/editor/viewer roles (opt-in), optional delegated RBA sign-in.
+  [USERS-AND-ROLES](Docs/USERS-AND-ROLES.md) · [RBA-INTEGRATION](Docs/RBA-INTEGRATION.md)
+- Storage providers (Azure Blob, Google Drive, S3-compatible) per shelf, and
+  scheduled **backup & restore**. [BACKUP-RESTORE](Docs/BACKUP-RESTORE.md)
+- Export/import: PDF, Markdown, Word, lossless `.beedocs` archive. [EXPORT-IMPORT](Docs/EXPORT-IMPORT.md)
+- Branding, 16 colour themes (+ your Omarchy desktop palette), **four UI styles**
+  (rounded / soft / clean / square), seven UI languages.
+  [BRANDING](Docs/BRANDING.md) · [I18N](Docs/I18N.md)
 
 ## Architecture (C4-style)
 
 ```mermaid
 C4Container
-    title BeeDocs — Container view (MVP)
+    title BeeDocs — Container view
 
     Person(writer, "Engineer", "Authors architecture docs")
+    Person_Ext(agent, "AI agent", "Claude Code, Cursor, …")
 
     System_Boundary(beedocs, "BeeDocs") {
-        Container(web, "beedocs-web", "React + Vite", "Books list, page editor, Markdown + Mermaid preview")
-        Container(api, "BeeDocs.Api", "ASP.NET Core 10", "REST API, CRUD, revision snapshots")
-        ContainerDb(db, "SQLite", "File-backed", "Books, pages, chapters, page_revisions")
+        Container(web, "beedocs-web", "React 19 + Vite", "Workspace UI: library tree, editors, presenter")
+        Container(api, "BeeDocs.Api", "ASP.NET Core 10", "REST API, search, export, auth, LLM proxy")
+        Container(mcp, "BeeDocs.Mcp", ".NET 10 MCP server", "stdio or Streamable HTTP")
+        ContainerDb(db, "SQLite", "File-backed", "Library, search index, settings")
     }
 
+    System_Ext(cloud, "Storage providers", "Azure Blob / Google Drive / S3")
+    System_Ext(llm, "LLM provider", "OpenAI-compatible or local CLI")
+
     Rel(writer, web, "Uses")
+    Rel(agent, mcp, "MCP")
     Rel(web, api, "JSON /api/*")
+    Rel(mcp, api, "JSON /api/*")
     Rel(api, db, "Microsoft.Data.Sqlite")
+    Rel(api, cloud, "Offloaded bodies, backups")
+    Rel(api, llm, "Writing help, reorganise, explainers")
 ```
 
-**Context:** team documentation for systems architecture (C4, networks, hardware inventories — later).
+See [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md) for the one-page summary.
 
 ## Project structure
 
@@ -112,11 +176,14 @@ local install).
 
 | Entity | Purpose |
 |--------|---------|
-| `Book` | Shelf of related docs |
-| `Chapter` | Optional grouping (API ready; UI light) |
-| `Page` | Markdown body + version counter |
-| `PageRevision` | Snapshot on each update |
-| `Diagram` | Model reserved for custom diagram editor |
+| `Shelf` | Groups books; can be published as a reader site |
+| `Book` | A body of related documents |
+| `Chapter` | Folder inside a book |
+| `Page` | Markdown body (optionally a grid layout) |
+| `PageRevision` | Change log — one row per sitting |
+| `Diagram` | BeeDiagram or isometric JSON document |
+| `SlideDeck` / `KanbanBoard` / `ProjectPlan` / `Note` / `Animation` | One JSON document each, schema owned by the web app |
+| `Attachment` | Uploaded file stored on disk, text-indexed |
 
 ## Run locally (dev)
 
@@ -159,11 +226,13 @@ Single-page professional layout:
 | Area | Role |
 |------|------|
 | **Header** | Brand, breadcrumbs, settings |
-| **Left** | Library tree (books → pages / diagrams), resizable & collapsible |
-| **Center** | Page/diagram editor canvas |
+| **Left** | Favorites + library tree (shelves → books → everything they hold), resizable & collapsible |
+| **Center** | Editor canvas for the selected item |
 | **Right** | Context properties & actions, resizable & collapsible |
 
-Open **Settings** for color themes (Honey Light/Dark, Slate, Ocean, Forest, Violet, High contrast), density, and pane reset.
+Open **Settings → Appearance** for the colour theme (16 built in, plus your
+Omarchy desktop palette when present), the UI style (rounded / soft / clean /
+square), language, density and pane reset.
 
 **Help** (top right, or `/help`) is the in-app guide: workspace basics, Markdown
 fences, the diagram studio, keyboard shortcuts, troubleshooting — and a
@@ -220,7 +289,7 @@ no separate database container.
 
 `MAJOR.MINOR.BUILD` in `src/BeeDocs.Api/BeeDocs.Api.csproj`. The **last digit is
 the build number and `deploy-k3s.sh` increments it on every deploy**, so the
-`v0.1.1` pill in the app header identifies exactly which build is live. The API
+version pill in the app header identifies exactly which build is live. The API
 serves it at `/api/version` and includes it in `/api/health`; the SPA fetches it
 once at startup.
 
@@ -253,24 +322,20 @@ must block the NodePorts, or Cloudflare Access can be bypassed entirely.
 > SQLite is a single-writer file store on a ReadWriteOnce volume, so a rolling
 > second pod would contend for the same database file.
 
-## API (MVP)
+## API (overview)
+
+The full route list lives in `src/BeeDocs.Api/Program.cs`; the highlights:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/health` | Health check (includes build version) |
-| GET | `/api/version` | Build version shown in the app header |
-| GET/POST | `/api/books` | List / create books |
-| GET/PUT/DELETE | `/api/books/{id}` | Book CRUD |
-| GET/POST | `/api/books/{bookId}/pages` | List / create pages |
-| GET/PUT/DELETE | `/api/pages/{id}` | Page CRUD |
-| GET/POST | `/api/books/{bookId}/chapters` | Chapters |
-| GET/POST | `/api/books/{bookId}/diagrams` | List / create diagrams |
-| GET/PUT/DELETE | `/api/diagrams/{id}` | Diagram CRUD |
-| GET | `/api/pages/{pageId}/diagrams` | Diagrams linked to a page |
-| GET | `/api/books/{id}/export?format=` | Export a book — `archive`, `markdown`, `docx` |
-| GET | `/api/pages/{id}/export?format=` | Export one document — same formats |
-| POST | `/api/import/inspect` | Describe an import file without writing |
-| POST | `/api/import` | Import an archive, a Markdown zip, or a single `.md` |
+| GET | `/api/health`, `/api/version` | Health check / build version |
+| GET/POST, GET/PUT/DELETE | `/api/shelves`, `/api/books`, `/api/pages/{id}` … | Library CRUD |
+| GET/POST | `/api/books/{id}/{diagrams,slides,kanban,project,notes,animations,attachments}` | Items a book holds |
+| POST | `/api/books/{id}/animations/from-page` | AI: turn a page into an animated explainer |
+| GET | `/api/search` | Full-text search |
+| GET | `/api/books/{id}/export?format=`, `/api/pages/{id}/export?format=` | `archive`, `markdown`, `docx` |
+| POST | `/api/import/inspect`, `/api/import` | Inspect / import an archive, Markdown zip or `.md` |
+| PUT | `/api/v1/publish` | Slug-based publish for external apps |
 
 ### Export & import
 
@@ -318,19 +383,6 @@ Or inline JSON:
 {"version":1,"nodes":[...],"edges":[...]}
 ```
 ```
-
-## Next iteration prompts
-
-1. Serve SPA static files from API + SPA fallback route (production single-port).
-2. Full-text search across page content.
-3. Page history UI (list revisions + diff).
-4. AuthN/Z (public read, team edit, admin).
-5. Image upload + gallery.
-6. Export PDF / Markdown / HTML.
-7. Custom diagram editor (own canvas, store as `Diagram`).
-8. PlantUML / diagrams.net embed.
-9. Hardware inventory templates (BOM, rack, config matrices).
-10. Optional Git sync.
 
 ## Vibe
 

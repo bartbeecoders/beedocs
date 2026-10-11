@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BeeDocs releases — every version and what it brought</title>
-  <meta name="description" content="The BeeDocs release history: AI reorganisation of whole books, an in-browser Word editor, word clouds, kanban boards, Gantt project plans, git repos on the shelf, grid page layouts, the isometric editor, slide decks — version by version, all in the same free MIT-licensed build." />
+  <meta name="description" content="The BeeDocs release history: animated explainers, UI styles, AI reorganisation of whole books, an in-browser Word editor, word clouds, kanban boards, Gantt project plans, git repos on the shelf, grid page layouts, the isometric editor, slide decks — version by version, all in the same free MIT-licensed build." />
   <meta property="og:title" content="BeeDocs releases" />
   <meta property="og:description" content="Every BeeDocs version and what it brought — from the first commit to kanban boards and Gantt plans. All features ship in the same free, MIT-licensed build." />
   <meta property="og:type" content="website" />
@@ -48,7 +48,7 @@
       <a href="index.html#agents">Agents</a>
       <a href="index.html#desktop">Desktop</a>
       <a href="index.html#selfhost">Self-host</a>
-      <a href="releases.html" aria-current="page">Releases<span class="nav-badge">v1.0</span></a>
+      <a href="releases.html" aria-current="page">Releases<span class="nav-badge">v1.1</span></a>
     </nav>
     <div class="head-actions">
       <a class="btn btn-ghost" href="https://github.com/bartbeecoders/beedocs" rel="noopener">
@@ -77,12 +77,60 @@
 
       <ol class="timeline" reversed>
 
-        <!-- ================================================== v1.0 -->
+        <!-- ================================================== v1.1 -->
         <li class="release release--latest">
           <div class="release-head">
-            <span class="release-badge release-badge--latest mono">v1.0</span>
+            <span class="release-badge release-badge--latest mono">v1.1</span>
+            <h2>Animated explainers, UI styles, and double-click to edit</h2>
+            <p class="release-date mono">11 Oct 2026 · latest · 1.1.0</p>
+          </div>
+          <p>Books can now hold moving explanations next to their pages and
+             diagrams, and the workspace learns to look the way you like it —
+             rounder, flatter or square.</p>
+          <ul class="release-list">
+            <li><strong>Animations</strong>: a new book item made of scenes
+                in which boxes, circles, arrows, text, icons, images and paths
+                appear, move and get emphasised in step with a narration
+                caption. Every frame is a pure function of time, so the editor,
+                the player, page embeds
+                (<span class="mono">animation</span> /
+                <span class="mono">animation-ref</span> fences) and the PDF
+                export's poster frames all draw from the same renderer.
+                Export an MP4 or WebM straight from the browser, or a
+                ready-to-build <a href="https://github.com/dmtrKovalenko/fframes" rel="noopener">fframes</a>
+                Rust project for GPU-quality renders.</li>
+            <li><strong>Page → explainer with AI</strong>: point your AI
+                provider at a page and it drafts an animation from it — scenes,
+                narration and all — that you then refine in the editor. Agents
+                get the same move as
+                <span class="mono">beedocs_create_animation_from_page</span>,
+                plus tools to author animations from JSON.</li>
+            <li><strong>Animations everywhere else too</strong>: search,
+                favorites, privacy, storage providers, backups and statistics
+                all know the new kind.</li>
+            <li><strong>UI styles</strong>: a second appearance axis next to the
+                colour theme — rounded (default), soft, clean or square — that
+                reshapes every corner and flattens drop shadows in the
+                cleaner styles.</li>
+            <li><strong>Three new themes</strong>: Paper, Ink and Graphite, neutral
+                palettes for people who want the content to do the talking.
+                That makes sixteen, plus your Omarchy desktop palette.</li>
+            <li><strong>Double-click to edit</strong>: double-click any prose in
+                a page preview and the editor opens with the caret on the
+                character you clicked — even inside a grid cell or a table.</li>
+            <li><strong>Fixes</strong>: BeeDiagram arrows leaving a container
+                now paint above its fill instead of disappearing behind it;
+                menus stay inside the viewport; static assets are cached so an
+                upgrade never serves a stale bundle.</li>
+          </ul>
+        </li>
+
+        <!-- ================================================== v1.0 -->
+        <li class="release">
+          <div class="release-head">
+            <span class="release-badge mono">v1.0</span>
             <h2>AI that tidies the library, Word in the browser, and cloud points</h2>
-            <p class="release-date mono">22 Sep 2026 · latest · 1.0.0</p>
+            <p class="release-date mono">22 Sep 2026 · 1.0.0–1.0.3</p>
           </div>
           <p>BeeDocs turns 1.0. Your AI provider can now read a whole book and
              propose how to make it simpler. Word documents open and save in
