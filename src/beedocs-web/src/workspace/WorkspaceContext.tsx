@@ -124,6 +124,8 @@ type WorkspaceCtx = {
   setBookPrivate: (bookId: string, isPrivate: boolean) => Promise<void>
   /** Move a book onto a shelf, or to the library root when `shelfId` is null. */
   moveBookToShelf: (bookId: string, shelfId: string | null) => Promise<void>
+  /** Copy a page (body included) into a new page right after it; omit `title` for "{title} (copy)". */
+  duplicatePage: (pageId: string, bookId: string, title?: string) => Promise<PageSummary>
   deletePage: (pageId: string, bookId: string) => Promise<void>
   deleteFolder: (chapterId: string, bookId: string) => Promise<void>
   deleteDiagram: (diagramId: string, bookId: string) => Promise<void>
@@ -786,6 +788,15 @@ graph LR
     [books],
   )
 
+  const duplicatePage = useCallback(async (pageId: string, bookId: string, title?: string) => {
+    const copy = await api.duplicatePage(pageId, title)
+    // The server shifted the siblings after the source to make room, so take
+    // the whole list back rather than patching one row in.
+    const pages = await api.listPages(bookId)
+    setBooks((prev) => prev.map((b) => (b.id === bookId ? { ...b, pages } : b)))
+    return copy
+  }, [])
+
   const deletePage = useCallback(async (pageId: string, bookId: string) => {
     await api.deletePage(pageId)
     setBooks((prev) =>
@@ -1206,6 +1217,7 @@ graph LR
       setShelfPrivate,
       setBookPrivate,
       moveBookToShelf,
+      duplicatePage,
       deletePage,
       deleteFolder,
       deleteDiagram,
@@ -1258,6 +1270,7 @@ graph LR
       setShelfPrivate,
       setBookPrivate,
       moveBookToShelf,
+      duplicatePage,
       deletePage,
       deleteFolder,
       deleteDiagram,

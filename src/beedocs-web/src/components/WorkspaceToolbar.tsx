@@ -281,6 +281,7 @@ export function WorkspaceToolbar({
     createNote,
     createAnimation,
     deleteBook,
+    duplicatePage,
     deletePage,
     deleteFolder,
     deleteDiagram,
@@ -881,6 +882,26 @@ export function WorkspaceToolbar({
                     {t('shell.moveToRoot')}
                   </button>
                 )}
+              <button
+                type="button"
+                className="btn ghost sm"
+                title={t('shell.duplicatePageTooltip')}
+                onClick={() => {
+                  void (async () => {
+                    // The copy is made server-side from the saved page, so
+                    // flush pending edits first or they'd be left behind.
+                    if (view === 'page' && pageId === context.pageId && pageState?.dirty) await pageState.save()
+                    const copy = await duplicatePage(
+                      context.pageId,
+                      context.bookId,
+                      t('shell.duplicatePageTitle', { name: context.title }),
+                    )
+                    void navigate(`/books/${context.bookId}/pages/${copy.id}`)
+                  })()
+                }}
+              >
+                {t('shell.duplicatePage')}
+              </button>
             </>
           )}
           </Group>

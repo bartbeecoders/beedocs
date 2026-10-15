@@ -70,6 +70,15 @@ public sealed class PageTools(BeeDocsApiClient client)
             return ToolHelpers.Json(await client.UpdatePageAsync(pageId, body, ct));
         });
 
+    [McpServerTool(Name = "beedocs_duplicate_page", Title = "Duplicate page"),
+     Description("Copy a page (full Markdown body) into a new page placed right after it in the same book and folder. " +
+                 "Embedded *-ref fences still point at the same diagrams/boards/etc.; inline fences are copied with the text.")]
+    public Task<string> DuplicatePage(
+        string pageId,
+        [Description("Title of the copy (default: \"{original title} (copy)\")")] string? title = null,
+        CancellationToken ct = default) =>
+        ToolHelpers.RunAsync(async () => ToolHelpers.Json(await client.DuplicatePageAsync(pageId, title, ct)));
+
     [McpServerTool(Name = "beedocs_delete_page", Title = "Delete page", Destructive = true),
      Description("Permanently delete a page by id.")]
     public Task<string> DeletePage(string pageId, CancellationToken ct = default) =>

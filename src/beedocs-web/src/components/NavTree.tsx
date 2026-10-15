@@ -181,6 +181,7 @@ export function NavTree() {
     deleteShelf,
     renameShelf,
     moveBookToShelf,
+    duplicatePage,
     deletePage,
     deleteFolder,
     deleteDiagram,
@@ -923,6 +924,18 @@ export function NavTree() {
                 write
                 onClick={() => {
                   setExplainer({ bookId: menu.bookId, pageId: menu.pageId, title: menu.title })
+                  setMenu(null)
+                }}
+              />
+              <MenuItem
+                label={t('nav.duplicatePage')}
+                write
+                onClick={() => {
+                  void duplicatePage(
+                    menu.pageId,
+                    menu.bookId,
+                    t('nav.duplicatePageTitle', { title: menu.title }),
+                  ).then((copy) => navigate(`/books/${menu.bookId}/pages/${copy.id}`))
                   setMenu(null)
                 }}
               />

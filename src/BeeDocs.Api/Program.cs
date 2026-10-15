@@ -1482,6 +1482,20 @@ api.MapPut("/pages/{id}", async (string id, UpdatePageRequest body, IDocumentSer
     }
 });
 
+// Copy a page (body included) into a new page placed right after it.
+api.MapPost("/pages/{id}/duplicate", async (string id, DuplicatePageRequest? body, IDocumentService docs, CancellationToken ct) =>
+{
+    try
+    {
+        var created = await docs.DuplicatePageAsync(id, body, ct);
+        return created is null ? Results.NotFound() : Results.Created($"/api/pages/{created.Id}", created);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+
 // Who changed this page, and when. Newest first; the first entry matches the
 // page's live version.
 api.MapGet("/pages/{id}/history", async (string id, int? limit, IDocumentService docs, CancellationToken ct) =>

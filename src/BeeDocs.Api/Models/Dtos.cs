@@ -175,6 +175,9 @@ public sealed record CreatePageRequest(
     bool? IsPrivate = null
 );
 
+/// <param name="Title">Title of the copy. Omit for "{original title} (copy)".</param>
+public sealed record DuplicatePageRequest(string? Title = null);
+
 /// <param name="OwnerId">null leaves the owner untouched; "" clears it; anything else replaces it.</param>
 /// <param name="TrackChanges">null leaves it untouched. Changing it needs the page's owner or an admin.</param>
 /// <param name="MaxRevisions">null leaves it untouched; 0 = unlimited. Changing it needs the page's owner or an admin.</param>

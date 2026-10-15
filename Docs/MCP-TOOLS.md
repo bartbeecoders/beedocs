@@ -81,6 +81,7 @@ root. Deleting a shelf keeps every book on it — they return to the root.
 | `beedocs_get_page` | `pageId` | Full page + content |
 | `beedocs_create_page` | `bookId`, `title`, `content?`, `slug?`, `chapterId?`, `sortOrder?` | Create page (optionally in folder) |
 | `beedocs_update_page` | `pageId`, `title`, `content?`, `slug?`, `chapterId?`, `sortOrder?`, `isPrivate?` | Update (revision saved; `isPrivate` is owner-only visibility) |
+| `beedocs_duplicate_page` | `pageId`, `title?` | Copy a page into a new page right after it (default title "… (copy)") |
 | `beedocs_delete_page` | `pageId` | Delete page |
 | `beedocs_append_page_content` | `pageId`, `markdown`, `separator?` | Append Markdown and save |
 | `beedocs_move_page` | `pageId`, `chapterId?`, `clearFolder?`, `sortOrder?`, `bookId?` | Move into/out of folder, into another book, or reorder |

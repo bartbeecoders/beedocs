@@ -83,6 +83,9 @@ public sealed class BeeDocsApiClient(HttpClient http)
     public Task<JsonElement> UpdatePageAsync(string id, Dictionary<string, object?> body, CancellationToken ct = default)
         => SendJsonAsync(HttpMethod.Put, $"/api/pages/{Uri.EscapeDataString(id)}", body, ct);
 
+    public Task<JsonElement> DuplicatePageAsync(string id, string? title, CancellationToken ct = default)
+        => SendJsonAsync(HttpMethod.Post, $"/api/pages/{Uri.EscapeDataString(id)}/duplicate", new { title }, ct);
+
     public Task DeletePageAsync(string id, CancellationToken ct = default)
         => SendAsync(HttpMethod.Delete, $"/api/pages/{Uri.EscapeDataString(id)}", null, ct);
 

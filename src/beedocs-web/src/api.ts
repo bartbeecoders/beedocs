@@ -529,6 +529,12 @@ export const api = {
       isPrivate?: boolean
     },
   ) => request<Page>(`/api/pages/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  /** Copy a page into a new one right after it. Omit `title` for "{title} (copy)". */
+  duplicatePage: (id: string, title?: string) =>
+    request<Page>(`/api/pages/${id}/duplicate`, {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    }),
   deletePage: (id: string) => request<void>(`/api/pages/${id}`, { method: 'DELETE' }),
 
   /**

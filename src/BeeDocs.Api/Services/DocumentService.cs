@@ -53,6 +53,11 @@ public interface IDocumentService
     Task<PageDto?> GetPageBySlugAsync(string bookId, string pageSlug, CancellationToken ct = default);
     Task<PageDto> CreatePageAsync(string bookId, CreatePageRequest request, CancellationToken ct = default);
     Task<PageDto?> UpdatePageAsync(string id, UpdatePageRequest request, CancellationToken ct = default);
+    /// <summary>
+    /// Copy a page into a new page right after it (same book and folder).
+    /// Null when the source is missing or not visible to the caller.
+    /// </summary>
+    Task<PageDto?> DuplicatePageAsync(string id, DuplicatePageRequest? request, CancellationToken ct = default);
     Task<bool> DeletePageAsync(string id, CancellationToken ct = default);
     /// <summary>Create or update a page under a book by stable slug (external publish API).
     /// A non-null <paramref name="chapterId"/> places the page in that chapter; null leaves
@@ -1049,6 +1054,41 @@ public sealed class DocumentService(
 
         var dto = ToDto(page, await OwnerNameAsync(conn, page.OwnerId, ct), actor.Id, actor.Name);
         return dto with { Content = body };
+    }
+
+    public async Task<PageDto?> DuplicatePageAsync(string id, DuplicatePageRequest? request, CancellationToken ct = default)
+    {
+        // GetPageAsync applies the privacy filter and resolves an offloaded body,
+        // so the copy always starts from the text the caller can actually see.
+        var source = await GetPageAsync(id, ct);
+        if (source is null) return null;
+
+        // Open a slot directly after the source so the copy lands next to it.
+        await using (var conn = await db.OpenConnectionAsync(ct))
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE page SET sort_order = sort_order + 1
+                WHERE book_id = $book_id AND chapter_id IS $chapter_id AND sort_order > $sort_order
+                """;
+            SqliteHelpers.Add(cmd, "$book_id", source.BookId);
+            SqliteHelpers.Add(cmd, "$chapter_id", source.ChapterId);
+            SqliteHelpers.Add(cmd, "$sort_order", source.SortOrder);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        var title = string.IsNullOrWhiteSpace(request?.Title) ? $"{source.Title} (copy)" : request.Title.Trim();
+        // A private page's copy stays private to the same owner — duplicating must
+        // never be a way to publish what was hidden. A public copy takes the
+        // ordinary new-page owner (the book's, else the caller).
+        return await CreatePageAsync(source.BookId, new CreatePageRequest(
+            title,
+            Slug: null,
+            Content: source.Content,
+            ChapterId: source.ChapterId,
+            SortOrder: source.SortOrder + 1,
+            OwnerId: source.IsPrivate ? source.OwnerId : null,
+            IsPrivate: source.IsPrivate), ct);
     }
 
     public async Task<PageDto?> UpdatePageAsync(string id, UpdatePageRequest request, CancellationToken ct = default)
